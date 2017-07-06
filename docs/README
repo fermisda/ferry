@@ -1,0 +1,5 @@
+Ferry Overview
+Frontier Experiments RegistRY (FERRY).
+The primary goal of this project is to create account registry and quota management for Fermilab experimenters. FERRY will allow various services, including GPGrid Batch, dCache, EOS, NIS, POMS and many others, that provide users with authorized access to computing and storage systems to get a user account, current quota and relevant paths to home directory or storage from one centralized place. Instead of currently used multiple repositories that are serving as a source for users' account mapping, we propose to gather and store all information in a central repository. We will provide Restful API that will allow all existing services to pull this information from the central repository. We will also automate as much a possible the workflows that are initiated from Service Now as requests for an account, storage, and quota increase.
+
+The goals for the FERRY include Vulcan, CS UserDb, dCache storage authz-db replacement.
