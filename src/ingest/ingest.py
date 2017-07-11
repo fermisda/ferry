@@ -7,6 +7,7 @@ from Configuration import Configuration
 from MySQLUtils import MySQLUtils
 import xml.etree.ElementTree as ET
 
+
 class VOMS:
     """
     VOMS presents information about VOMS instance groups and roles
@@ -14,43 +15,50 @@ class VOMS:
     experiment could be either a VO name or subgroup as in case of fermilab VO
     It is planning to address any generic case it just deal with what we have now
     """
-    def __init__(self,url,voname, experiment):
+    def __init__(self, vurl, vo_name, experiment):
         self.name = experiment
-        self.url = url
-        if experiment != voname:
-            self.url = "%s/%s" % (url,experiment)
+        self.url = vurl
+        if experiment != vo_name:
+            self.url = "%s/%s" % (url, experiment)
         self.gid = 0
         self.roles = []
 
     def add_unix_gid(self, gid):
         self.gid = gid
 
-    def add_roles (self, rnames):
+    def add_roles(self, rnames):
         self.roles = rnames
+
 
 class VOUserGroup:
     """
     GUMS mapping from configuration file
     """
 
-    def __init__(self,vomsUserGroup,vomsServer,voGroup,role):
-        self.user_group = vomsUserGroup
-        self.server = vomsServer
-        self.group = voGroup
+    def __init__(self, voms_user_group, voms_server, vo_group, role):
+        self.user_group = voms_user_group
+        self.server = voms_server
+        self.group = vo_group
         self.role = role
         self.uname = None
         self.account_mappers = None
         self.gid = None
 
 
-class Certificate:
+class Certificates:
     """
     Certificate class stores cert issuer, subject and experiment (name and url)
     """
-    def __init__(self,subject, issuer, vomsname,vomsurl):
-        self.vomsid = (vomsname, vomsurl)
-        self.subject = subject
-        self.issuer = issuer
+    def __init__(self, subject, issuer, vomsname, vurl):
+        self.vomsid = (vomsname, vurl)
+        self.subjects = [subject,]
+        self.issuers = [issuer,]
+
+    def add_cert(self,subject, issuer):
+        if subject not in self.subjects:
+            self.subjects.append(subject)
+            self.issuers.append(issuer)
+
 
 class User:
     """
@@ -60,86 +68,92 @@ class User:
     def __init__(self, uid, last_name, first_name, uname):
         self.uid = uid
         if last_name.find("'") > 0:
-            tmp=last_name.split("'")
-            last_name = "%s'%s" % (tmp[0],tmp[1].capitalize())
-        self.last_name = last_name.replace("'","\\'")
-        self.first_name = first_name.replace("'","\\'")
+            tmp = last_name.split("'")
+            last_name = "%s'%s" % (tmp[0], tmp[1].capitalize())
+        self.last_name = last_name.replace("'", "\\'")
+        self.first_name = first_name.replace("'", "\\'")
         self.uname = uname
         self.gids = []
         self.expiration_date = None
-        self.certs=[]
-        self.status = 1
+        self.certs = []
+        self.status = True
         self.vo_membership = {}
         self.is_k5login = False
 
-    def add_to_vo(self,voname,vomsurl):
-        if not self.vo_membership.has_key((voname,vomsurl)):
-            self.vo_membership[(voname,vomsurl)] = []
+    def add_to_vo(self, vname, vurl):
+        if not self.vo_membership.has_key((vname, vurl)):
+            self.vo_membership[(vname, vurl)] = []
 
-    def add_to_vo_role(self,voname,vomsurl,gums_mapping):
-        self.vo_membership[(voname,vomsurl)].append(gums_mapping)
+    def add_to_vo_role(self, vname, vurl, gums_mapping):
+        self.vo_membership[(vname, vurl)].append(gums_mapping)
 
     def add_group(self, gid):
         self.gids.append(gid)
 
-    def set_expiration_date(self,dt):
+    def set_expiration_date(self, dt):
         self.expiration_date = dt
 
-    def set_status(self,status):
+    def set_status(self, status):
         self.status = status
 
-    def add_certs(self,subject,issuer,vomsname,vomsurl):
-        subject = subject.replace("'","\\'")
-        cert = Certificate(subject,issuer,vomsname,vomsurl)
+    def add_certs(self, subject, issuer, vname, vurl):
+        subject = subject.replace("'", "\\'")
         for c in self.certs:
-            if c.vomsid == (vomsname,vomsurl):
+            if c.vomsid == (vname, vurl):
+                c.add_cert(subject, issuer)
                 return
+        cert = Certificates(subject, issuer, vname, vurl)
         self.certs.append(cert)
+
 
 def read_uid(fname):
     fd = open(fname)
-    users = {}
+    usrs = {}
     for line in fd.readlines():
-        try:
-            if  not len(line[:-1]):
+        #try:
+            if not len(line[:-1]):
                 continue
-            tmp=line[:-1].split("\t\t")
-            if not users.has_key(tmp[4].strip().lower()):
-                users[tmp[4].strip().lower()]=User(tmp[0].strip(), tmp[2].strip().lower().capitalize(),
-                                                   tmp[3].strip().lower().capitalize(),tmp[4].strip().lower())
-                users[tmp[4].strip().lower()].add_group((tmp[1].strip().lower()))
-        except:
-            print >> sys.stderr, "Failed ", line
-    return users
+            tmp = line[:-1].split("\t\t")
+            if not usrs.has_key(tmp[4].strip().lower()):
+                usrs[tmp[4].strip().lower()] = User(tmp[0].strip(), tmp[2].strip().lower().capitalize(),
+                                                     tmp[3].strip().lower().capitalize(), tmp[4].strip().lower())
+                usrs[tmp[4].strip().lower()].add_group((tmp[1].strip().lower()))
+        #except:
+        #    print >> sys.stderr, "Failed ", line
+    return usrs
+
 
 def read_gid(fname):
     fd = open(fname)
-    gids = {}
+    groupids = {}
     for line in fd.readlines():
-        if  not len(line[:-1]):
+        if not len(line[:-1]):
             continue
         try:
-            tmp=line[:-1].strip("\t").split("\t")
-            gids[tmp[1].strip().lower()] = tmp[0].strip()
+            tmp = line[:-1].strip("\t").split("\t")
+            groupids[tmp[1].strip().lower()] = tmp[0].strip()
 
         except:
             print >> sys.stderr, " group Failed ", line
-    return gids
+    return groupids
 
 
-def populate_db(config,users,gids,vomss,roles):
+def populate_db(config, users, gids, vomss, roles):
     """
     create mysql dump for ferry database
-    :param config:
-    :param users:
-    :param gids:
-    :param vos:
-    :param roles:
-    :return:
+    Args:
+        config:
+        users:
+        gids:
+        vomss:
+        roles:
+
+    Returns:
+
     """
-    mysql_client_cfg=MySQLUtils.createClientConfig("main_db",config)
-    connect_str=MySQLUtils.getDbConnection("main_db",mysql_client_cfg,config)
-    fd=open("ferry.sql","w")
+    mysql_client_cfg = MySQLUtils.createClientConfig("main_db", config)
+    connect_str = MySQLUtils.getDbConnection("main_db", mysql_client_cfg, config)
+    fd = open("ferry.sql", "w")
     command = ""
     for user in users.values():
         if not user.expiration_date:
@@ -149,140 +163,148 @@ def populate_db(config,users,gids,vomss,roles):
         elif user.expiration_date == "No Expiration date":
             user.expiration_date = "\'2038-01-01\'"
         else:
-            user.expiration_date = ("\'%s\'") % user.expiration_date
-        fd.write("insert into users values (%d,\'%s\',\'%s\',\'%s\',\'%s\',\'%s.fnal.gov\',%d,%s, NOW());\n"
-                 % (int(user.uid), user.uname,user.first_name, "",user.last_name, user.uname,user.status,
+            user.expiration_date = "\'%s\'" % user.expiration_date
+        fd.write("insert into users values (%d,\'%s\',\'%s\',\'%s\',\'%s\',\'%s.fnal.gov\',%s,%s, NOW());\n"
+                 % (int(user.uid), user.uname, user.first_name, "", user.last_name, user.uname, user.status,
                     user.expiration_date))
         # for now will just create ferry.sql file
         # results,return_code=MySQLUtils.RunQuery(command,connect_str)
         # if return_code!=0:
         #    print >> sys.stderr,'Error ', command
 
-    for gname,id in gids.items():
-        fd.write("insert into groups values (%d,\'%s\','UnixGroup');\n" % (int(id),gname))
+    for gname, index in gids.items():
+        fd.write("insert into groups values (%d,\'%s\','UnixGroup');\n" % (int(index), gname))
         # results,return_code=MySQLUtils.RunQuery(command,connect_str)
         # if return_code!=0:
         #    print >> sys.stderr,'Error ', command
     fd.flush()
-    i=1
+    i = 1
     for role in roles:
         if not role:
             continue
-        fd.write("insert into experiment_roles (roleid, role_name) values (%d,\'%s\');\n" % (i,role))
-        i +=1
+        fd.write("insert into experiment_roles (roleid, role_name) values (%d,\'%s\');\n" % (i, role))
+        i += 1
     fd.flush()
     i = 0
     for vos in vomss:
-        for voname,vo in vos.items():
+        for vname, vo in vos.items():
             i += 1
-            fd.write("insert into experiments (expid,experiment_name,gid,voms_url,last_updated) values (%d,\'%s\',%d,"
-                     "\'%s\',"
-                     "NOW());\n" % (i,voname, int(vo.gid), vo.url))
+            fd.write("insert into experiments (expid,experiment_name,voms_url,last_updated) values (%d,\'%s\',"
+                     "\'%s\'," "NOW());\n" % (i, vname, "https://"+vo.url))
             for uname, user in users.items():
-                if user.vo_membership.has_key((voname,vo.url)):
-                    for map in  user.vo_membership[(voname,vo.url)]:
-                        if map.role:
-                            rid=roles.index(map.role)
-                            fd.write("insert into experiment_membership values  (%d,%d,%d,0,0,\'%s\',NOW(),%d);\n" % (int(
-                                user.uid),i,rid,map.uname,int(map.gid)))
+                if user.vo_membership.has_key((vname,"https://"+vo.url)):
+
+                    for umap in user.vo_membership[(vname, "https://"+vo.url)]:
+                        if umap.role:
+                            rid = roles.index(umap.role)
+                            fd.write("insert into experiment_membership values  (%d,%d,%d,False,False,\'%s\',NOW(),"
+                                     "%d);\n" % (int(user.uid), i, rid, umap.uname, int(umap.gid)))
                         else:
-                            fd.write("insert into experiment_membership values  (%d,%d,NULL,0,0,\'%s\',NOW(),%d);\n" % (int(
-                                user.uid),i,map.uname,int(map.gid)))
-                        for cert in user.certs:
-                            if cert.vomsid == (voname,vo.url):
-                                fd.write("insert into user_certificate values (%d,\'%s\',\'%s\', NOW(),%d);\n" % (int(
-                                user.uid), cert.subject,cert.issuer,i))
+                            fd.write("insert into experiment_membership values  (%d,%d,NULL,False,False,\'%s\',NOW(),%d);\n"
+                                     % (int(user.uid), i, umap.uname, int(umap.gid)))
+                            for certs in user.certs:
+                                if certs.vomsid == (vname, "https://"+vo.url):
+                                    for k in range (0,len(certs.subjects)):
+                                        fd.write("insert into user_certificate values (%d,\'%s\',\'%s\', NOW(),%d);\n"
+                                             % (int(user.uid), certs.subjects[k], certs.issuers[k], i))
                         fd.flush()
     for uname, user in users.items():
-        is_primary = 1
+        is_primary = False
         for gid in user.gids:
-            fd.write("insert into user_group values (%d,%d,%d);\n" % (int(user.uid),int(gid),is_primary))
-            is_primary = 0
+            fd.write("insert into user_group values (%d,%d,%s);\n" % (int(user.uid), int(gid), is_primary))
     fd.flush()
     fd.close()
 
-def read_services_users(fname,users):
+
+def read_services_users(fname, users):
     fd = open(fname)
     for line in fd.readlines():
 
         if line.startswith("#"):
             continue
         try:
-            tmp=line[:-1].split(",")
+            tmp = line[:-1].split(",")
             if users.has_key(tmp[0]):
                 if tmp[2] != "No Expiration date":
-                    if  tmp[2] =="EXPIRED":
+                    if tmp[2] == "EXPIRED":
                         users[tmp[0]].set_status(0)
                 users[tmp[0]].set_expiration_date(tmp[2].strip())
                 users[tmp[0]].is_k5login = True
         except:
             print >> sys.stderr, "csv Failed ", line
 
-def get_vos(config, vn, host,voname,gids):
+
+def get_vos(config, vn, vname,vurl, gids):
     """
     Read data from VOMS databases
-    :param config:
-    :param host:
-    :param voname:
-    :param gids:
-    :return:
+    Args:
+        config:
+        vn:
+        vname:
+        vurl:
+        gids:
+
+    Returns:
+
     """
     mysql_client_cfg = MySQLUtils.createClientConfig("voms_db_%s" % (vn,), config)
     connect_str = MySQLUtils.getDbConnection("voms_db_%s" % (vn,), mysql_client_cfg, config)
     command = "select dn from groups"
-    groups,return_code = MySQLUtils.RunQuery(command, connect_str)
-    vos={}
+    groups, return_code = MySQLUtils.RunQuery(command, connect_str)
+    volist = {}
     for g in groups:
         exp = g[1:].strip().split('/')
         if exp[0] == 'fermilab':
             if len(exp) == 1:
                 name = exp[0]
             elif len(exp) > 2:
-                name = exp[1]+exp[2] # this is to handle marsmu2e
+                name = exp[1] + exp[2]  # this is to handle marsmu2e
             else:
                 name = exp[1]
         else:
             name = exp[0]
 
-        try:
-            if not vos.has_key(name):
-                vos[name] =  VOMS(vomsurl, voname, name)
-            if gids.has_key(name):
-                vos[name].add_unix_gid(gids[name])
-        except:
-            print  >> sys.stderr,"group is not defined ", name
-    return vos
+        #try:
+        if not volist.has_key(name):
+            volist[name] = VOMS(vurl, vname, name)
+        if gids.has_key(name):
+            volist[name].add_unix_gid(gids[name])
+        #except:
+        #    print >> sys.stderr, "group is not defined ", name
+    return volist
 
-def assign_vos(config, vn, vomsurl, host, voname, vos, roles, users, gids, gums):
+
+def assign_vos(config, vn, vurl, rls, usrs, gums_map):
     """
     From VOMS database tries to get information about each user, certificate and group and role affiliation
-    :param config:
-    :param host:
-    :param voname:
-    :param vos:
-    :param roles:
-    :param users:
-    :param gids:
-    :param gums:
-    :return:
-    """
-    mysql_client_cfg=MySQLUtils.createClientConfig("voms_db_%s" % (vn,),config)
-    connect_str=MySQLUtils.getDbConnection("voms_db_%s" % (vn,),mysql_client_cfg,config)
-    # for all users in user-services.csv
-    counter=0
-    total =0
+    Args:
+        config:
+        vn:
+        vurl:
+        rls:
+        usrs:
+        gums_map:
 
-    for uname,user in users.items():
+    Returns:
+
+    """
+    mysql_client_cfg = MySQLUtils.createClientConfig("voms_db_%s" % (vn,), config)
+    connect_str = MySQLUtils.getDbConnection("voms_db_%s" % (vn,), mysql_client_cfg, config)
+    # for all users in user-services.csv
+
+    total = 0
+
+    for uname, user in usrs.items():
         # do we want to have expired users in VOMS?
         total += 1
         if not user.is_k5login:
             continue
 
-        command = "select u.userid,d.subject_string,c.subject_string from certificate d, ca c, usr u where u.userid = " \
-              "d.usr_id and c.cid=d.ca_id and (c.subject_string not like \'%HSM%\' and c.subject_string not like " \
-              "\'%Digi%\' and c.subject_string  not like \'%DOE%\') and u.dn like \'/DC=org/DC=cilogon/C=US/O=Fermi " \
-                  "National Accelerator Laboratory/OU=People/CN=%/CN=UID:"+user.uname+"\';"
-        members,return_code = MySQLUtils.RunQuery(command,connect_str,False)
+        command = "select u.userid,d.subject_string,c.subject_string from certificate d, ca c, usr u where u.userid = "\
+                  "d.usr_id and c.cid=d.ca_id and (c.subject_string not like \'%HSM%\' and c.subject_string not like " \
+                  "\'%Digi%\' and c.subject_string  not like \'%DOE%\') and u.dn like \'/DC=org/DC=cilogon/C=US/O=" \
+                  "Fermi National Accelerator Laboratory/OU=People/CN=%/CN=UID:"+user.uname+"\';"
+        members, return_code = MySQLUtils.RunQuery(command, connect_str, False)
         # user is not a member of VO
         if len(members[0].strip()) == 0:
             continue
@@ -292,19 +314,18 @@ def assign_vos(config, vn, vomsurl, host, voname, vos, roles, users, gids, gums)
         # add all additional certificates
 
         for m in members:
-            member=m.split("\t")
+            member = m.split("\t")
             if member[0] not in mids:
-                mids.append(member[0])
-
+                mids.append(member[0].strip())
 
         for mid in mids:
             command = "select distinct g.dn from m m, groups  g where g.gid=m.gid and " \
                       "m.userid =" + mid+";"
-            affiliation,return_code = MySQLUtils.RunQuery(command,connect_str)
+            affiliation, return_code = MySQLUtils.RunQuery(command, connect_str)
 
             command = "select g.dn,r.role from m m, roles r, groups  g where  r.rid=m.rid and g.gid=m.gid and " \
-                      "m.userid =" + member[0].strip()+" and r.role!=\'VO-Admin\';"
-            group_role,return_code = MySQLUtils.RunQuery(command,connect_str)
+                      "m.userid =" + mid +" and r.role!=\'VO-Admin\';"
+            group_role, return_code = MySQLUtils.RunQuery(command, connect_str)
 
             affiliation = affiliation+group_role
 
@@ -314,68 +335,76 @@ def assign_vos(config, vn, vomsurl, host, voname, vos, roles, users, gids, gums)
                 groups = subgroup.split('/')
                 if len(groups) > 1 and groups[0] == 'fermilab':
                     group = "".join(groups[1:])
-                    url = "%s/%s" % (vomsurl,group)
+                    vurl = "%s/%s" % (vomsurl, group)
                 else:
                     group = groups[0]
-                    url=vomsurl
-                user.add_to_vo(group,url)
+                    vurl = vomsurl
+                user.add_to_vo(group, vurl)
                 for m in members:
-                    member=m.split("\t")
+                    member = m.split("\t")
                     if member[0] == mid:
                         subject = member[1].strip()
-                        issuer =  member[2].strip()
-                        user.add_certs(subject,issuer,group,url)
+                        issuer = member[2].strip()
+                        user.add_certs(subject, issuer, group, vurl)
                 if len(tmp) > 1:
-                    role=tmp[1].strip()
+                    role = tmp[1].strip()
                 else:
                     role = None
 
-                for key,map in gums.items():
+                for key, umap in gums_map.items():
 
-                    if "/%s" % (subgroup,) == map.group and role == map.role:
-                        if not map.uname:
+                    if "/%s" % (subgroup,) == umap.group and role == umap.role:
+                        if not umap.uname:
                             account_name = user.uname
                         else:
-                            account_name = map.uname
+                            account_name = umap.uname
 
-                        new_map=VOUserGroup(map.user_group,map.server,map.group,map.role)
-                        new_map.uname=account_name
-                        new_map.gid=map.gid
-                        if map.gid not in user.gids:
-                            user.gids.append(map.gid)
-                        user.add_to_vo_role(group,url, new_map)
+                        new_umap = VOUserGroup(umap.user_group, umap.server, umap.group, umap.role)
+                        new_umap.uname = account_name
+                        new_umap.gid = umap.gid
+                        if umap.gid not in user.gids:
+                            user.gids.append(umap.gid)
+                        user.add_to_vo_role(group, vurl, new_umap)
 
                         break
-                if role not in roles:
-                    roles.append(role)
+                if role not in rls:
+                    rls.append(role)
 
 
-def read_gums_config(config, vn):
-    gums_fn = config.config.get("voms_db_%s" % (vn,), "gums_config")
+def read_gums_config(config, vname):
+    """
+
+    Args:
+        config:
+        vname:
+
+    Returns:
+
+    """
+    gums_fn = config.config.get("voms_db_%s" % (vname,), "gums_config")
     tree = ET.parse(gums_fn)
-    gums={}
+    gums_mapping = {}
     # key vomsUserGroup
     root = tree.getroot()
     for child in root:
         if child.tag == "userGroups":
             for element in child.getchildren():
-                vomsUserGroup = element.attrib.get('name')
-                vomsServer = element.attrib.get('vomsServer')
-                voGroup = element.attrib.get('voGroup')
-                if not voGroup:
+                voms_user_group = element.attrib.get('name')
+                voms_server = element.attrib.get('vomsServer')
+                vo_group = element.attrib.get('voGroup')
+                if not vo_group:
                     continue
                 role = element.attrib.get('role')
-                userGroup = VOUserGroup(vomsUserGroup,vomsServer,voGroup,role)
-                gums[vomsUserGroup]=userGroup
+                gums_mapping[voms_user_group] = VOUserGroup(voms_user_group, voms_server, vo_group, role)
 
-    for key,gmap in gums.items():
+    for key, gmap in gums_mapping.items():
         for child in root:
             if child.tag == "groupToAccountMappings":
                 for element in child.getchildren():
                     if element.attrib.get('userGroups') == key:
                         gmap.account_mappers = element.attrib.get('accountMappers')
                 break
-    for key,gmap in gums.items():
+    for key, gmap in gums_mapping.items():
         for child in root:
             if child.tag == "accountMappers":
                 for element in child.getchildren():
@@ -383,11 +412,11 @@ def read_gums_config(config, vn):
                         gmap.gid = element.attrib.get('groupName')
                         gmap.uname = element.attrib.get('accountName')
                         break
-    return gums
-
+    return gums_mapping
 
 
 if __name__ == "__main__":
+    import os
     config = Configuration()
     config.configure(sys.argv[1])
     # read all information about users from uid.lis file
@@ -397,10 +426,10 @@ if __name__ == "__main__":
     gids = read_gid(config.config.get("user_db", "gid_file"))
 
     # read services_user_files.csv and add this information to users containers
-    read_services_users(config.config.get("user_db", "services_user_file"),users)
+    read_services_users(config.config.get("user_db", "services_user_file"), users)
 
     # process voms information
-    voms_instances =config.config.get("voms_instances", "list")
+    voms_instances = config.config.get("voms_instances", "list")
     voms_list = voms_instances.split(",")
     voms_list.sort()
     vomss = []
@@ -411,9 +440,17 @@ if __name__ == "__main__":
         url = vomsurl[8:]
         host = url[:url.find(":")]
         voname = url[url.rfind("/")+1:]
-        # reads vo related informatmation from VOMS
-        vos = get_vos(config.config, vn, host, voname, gids)
+        # reads vo related information from VOMS
+        vos = get_vos(config.config, vn, voname, url, gids)
         vomss.append(vos)
         gums = read_gums_config(config, vn)
-        assign_vos(config.config, vn, vomsurl,host, voname, vos, roles, users, gids, gums)
+        assign_vos(config.config, vn, vomsurl, roles, users, gums)
+    for uname, user in users.items():
+            if user.uname == "kherner":
+                print user.uname
+                for c in user.certs:
+                    print c.__dict__
+                for k,v in user.vo_membership.items():
+                    for l in v:
+                        print k, l.__dict__
     populate_db(config.config, users, gids, vomss, roles)
