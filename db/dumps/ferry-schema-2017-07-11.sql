@@ -70,7 +70,7 @@ COMMENT ON TABLE batch_priority IS 'table describes condor quota and priority pe
 
 CREATE TABLE condor_quota (
     id bigint NOT NULL,
-    resourceid bigint DEFAULT 0::bigint NOT NULL,
+    resourceid bigint DEFAULT (0)::bigint NOT NULL,
     uid bigint NOT NULL,
     gid bigint NOT NULL,
     condor_quota character varying(255),
@@ -86,9 +86,8 @@ ALTER TABLE public.condor_quota OWNER TO ferry;
 
 CREATE TABLE experiment_group (
     expid bigint NOT NULL,
-    gid bigint NOT NULL,
-    is_primary smallint,
-    leader bigint
+    groupid bigint NOT NULL,
+    is_primary smallint
 );
 
 
@@ -209,7 +208,8 @@ ALTER SEQUENCE experiments_expid_seq OWNED BY experiments.expid;
 CREATE TABLE groups (
     gid bigint NOT NULL,
     group_name character varying(100) NOT NULL,
-    group_type groups_group_type NOT NULL
+    group_type groups_group_type NOT NULL,
+    groupid bigint NOT NULL
 );
 
 
@@ -333,8 +333,9 @@ ALTER TABLE public.user_certificate OWNER TO ferry;
 
 CREATE TABLE user_group (
     uid bigint NOT NULL,
-    gid bigint NOT NULL,
-    is_primary boolean
+    groupid bigint NOT NULL,
+    is_primary boolean,
+    is_leader boolean
 );
 
 
@@ -430,7 +431,7 @@ ALTER TABLE ONLY experiments
 --
 
 ALTER TABLE ONLY experiment_group
-    ADD CONSTRAINT idx_22246_primary PRIMARY KEY (expid, gid);
+    ADD CONSTRAINT idx_22246_primary PRIMARY KEY (expid, groupid);
 
 
 --
@@ -439,14 +440,6 @@ ALTER TABLE ONLY experiment_group
 
 ALTER TABLE ONLY experiment_roles
     ADD CONSTRAINT idx_22254_primary PRIMARY KEY (roleid);
-
-
---
--- Name: idx_22258_primary; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
---
-
-ALTER TABLE ONLY groups
-    ADD CONSTRAINT idx_22258_primary PRIMARY KEY (gid);
 
 
 --
@@ -494,7 +487,7 @@ ALTER TABLE ONLY user_certificate
 --
 
 ALTER TABLE ONLY user_group
-    ADD CONSTRAINT idx_22287_primary PRIMARY KEY (uid, gid);
+    ADD CONSTRAINT idx_22287_primary PRIMARY KEY (uid, groupid);
 
 
 --
@@ -503,6 +496,22 @@ ALTER TABLE ONLY user_group
 
 ALTER TABLE ONLY experiment_membership
     ADD CONSTRAINT idx_experiment_membership UNIQUE (expid, uid, roleid);
+
+
+--
+-- Name: idx_groups_gid; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
+--
+
+ALTER TABLE ONLY groups
+    ADD CONSTRAINT idx_groups_gid UNIQUE (gid);
+
+
+--
+-- Name: pk_groups; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
+--
+
+ALTER TABLE ONLY groups
+    ADD CONSTRAINT pk_groups PRIMARY KEY (groupid);
 
 
 --
@@ -562,13 +571,6 @@ CREATE INDEX idx_22236_idx_condor_quota ON condor_quota USING btree (is_quota_of
 
 
 --
--- Name: idx_22246_idx_experiment_group; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
---
-
-CREATE INDEX idx_22246_idx_experiment_group ON experiment_group USING btree (leader);
-
-
---
 -- Name: idx_22246_idx_user_group_1; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
@@ -579,7 +581,7 @@ CREATE INDEX idx_22246_idx_user_group_1 ON experiment_group USING btree (expid);
 -- Name: idx_22246_idx_user_group_2; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
-CREATE INDEX idx_22246_idx_user_group_2 ON experiment_group USING btree (gid);
+CREATE INDEX idx_22246_idx_user_group_2 ON experiment_group USING btree (groupid);
 
 
 --
@@ -601,13 +603,6 @@ CREATE INDEX idx_22249_idx_experiment_membership_0 ON experiment_membership USIN
 --
 
 CREATE INDEX idx_22249_idx_experiment_membership_1 ON experiment_membership USING btree (roleid);
-
-
---
--- Name: idx_22258_pk_unix_group; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
---
-
-CREATE UNIQUE INDEX idx_22258_pk_unix_group ON groups USING btree (group_name);
 
 
 --
@@ -712,7 +707,14 @@ CREATE INDEX idx_22287_idx_user_group ON user_group USING btree (uid);
 -- Name: idx_22287_idx_user_group_0; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
-CREATE INDEX idx_22287_idx_user_group_0 ON user_group USING btree (gid);
+CREATE INDEX idx_22287_idx_user_group_0 ON user_group USING btree (groupid);
+
+
+--
+-- Name: idx_groups_group_name; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
+--
+
+CREATE UNIQUE INDEX idx_groups_group_name ON groups USING btree (group_name);
 
 
 --
@@ -760,15 +762,7 @@ ALTER TABLE ONLY experiment_group
 --
 
 ALTER TABLE ONLY experiment_group
-    ADD CONSTRAINT fk_experiment_group_groups FOREIGN KEY (gid) REFERENCES groups(gid);
-
-
---
--- Name: fk_experiment_group_users; Type: FK CONSTRAINT; Schema: public; Owner: ferry
---
-
-ALTER TABLE ONLY experiment_group
-    ADD CONSTRAINT fk_experiment_group_users FOREIGN KEY (leader) REFERENCES users(uid);
+    ADD CONSTRAINT fk_experiment_group_groups FOREIGN KEY (groupid) REFERENCES groups(groupid);
 
 
 --
@@ -928,7 +922,7 @@ ALTER TABLE ONLY user_certificate
 --
 
 ALTER TABLE ONLY user_group
-    ADD CONSTRAINT fk_user_group_groups FOREIGN KEY (gid) REFERENCES groups(gid);
+    ADD CONSTRAINT fk_user_group_groups FOREIGN KEY (groupid) REFERENCES groups(groupid);
 
 
 --
@@ -940,13 +934,13 @@ ALTER TABLE ONLY user_group
 
 
 --
--- Name: public; Type: ACL; Schema: -; Owner: ferry
+-- Name: public; Type: ACL; Schema: -; Owner: postgres
 --
 
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
-REVOKE ALL ON SCHEMA public FROM ferry;
-GRANT ALL ON SCHEMA public TO ferry;
+REVOKE ALL ON SCHEMA public FROM postgres;
 GRANT ALL ON SCHEMA public TO postgres;
+GRANT ALL ON SCHEMA public TO ferry;
 GRANT ALL ON SCHEMA public TO PUBLIC;
 
 
