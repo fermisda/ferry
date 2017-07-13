@@ -81,6 +81,20 @@ CREATE TABLE condor_quota (
 ALTER TABLE public.condor_quota OWNER TO ferry;
 
 --
+-- Name: experiment_fqan; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
+--
+
+CREATE TABLE experiment_fqan (
+    fqanid bigint NOT NULL,
+    fqan character varying(300) NOT NULL,
+    mapped_user character varying(100) NOT NULL,
+    mapped_group character varying(100) NOT NULL
+);
+
+
+ALTER TABLE public.experiment_fqan OWNER TO ferry;
+
+--
 -- Name: experiment_group; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
 --
 
@@ -92,36 +106,6 @@ CREATE TABLE experiment_group (
 
 
 ALTER TABLE public.experiment_group OWNER TO ferry;
-
---
--- Name: experiment_membership; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
---
-
-CREATE TABLE experiment_membership (
-    uid bigint NOT NULL,
-    expid bigint NOT NULL,
-    roleid bigint,
-    is_superuser boolean,
-    is_banned boolean,
-    mapped_uname character varying(100),
-    last_updated date NOT NULL,
-    mapped_group bigint
-);
-
-
-ALTER TABLE public.experiment_membership OWNER TO ferry;
-
---
--- Name: experiment_roles; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
---
-
-CREATE TABLE experiment_roles (
-    roleid bigint NOT NULL,
-    role_name character varying(100) NOT NULL
-);
-
-
-ALTER TABLE public.experiment_roles OWNER TO ferry;
 
 --
 -- Name: experiment_roles_roleid_seq; Type: SEQUENCE; Schema: public; Owner: ferry
@@ -141,7 +125,7 @@ ALTER TABLE public.experiment_roles_roleid_seq OWNER TO ferry;
 -- Name: experiment_roles_roleid_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: ferry
 --
 
-ALTER SEQUENCE experiment_roles_roleid_seq OWNED BY experiment_roles.roleid;
+ALTER SEQUENCE experiment_roles_roleid_seq OWNED BY experiment_fqan.fqanid;
 
 
 --
@@ -200,6 +184,22 @@ ALTER TABLE public.experiments_expid_seq OWNER TO ferry;
 
 ALTER SEQUENCE experiments_expid_seq OWNED BY experiments.expid;
 
+
+--
+-- Name: grid_access; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
+--
+
+CREATE TABLE grid_access (
+    uid bigint NOT NULL,
+    expid bigint NOT NULL,
+    fqanid bigint NOT NULL,
+    is_superuser boolean,
+    is_banned boolean,
+    last_updated date NOT NULL
+);
+
+
+ALTER TABLE public.grid_access OWNER TO ferry;
 
 --
 -- Name: groups; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
@@ -389,10 +389,10 @@ COMMENT ON COLUMN users.primary_email IS 'user''s preffered email address';
 
 
 --
--- Name: roleid; Type: DEFAULT; Schema: public; Owner: ferry
+-- Name: fqanid; Type: DEFAULT; Schema: public; Owner: ferry
 --
 
-ALTER TABLE ONLY experiment_roles ALTER COLUMN roleid SET DEFAULT nextval('experiment_roles_roleid_seq'::regclass);
+ALTER TABLE ONLY experiment_fqan ALTER COLUMN fqanid SET DEFAULT nextval('experiment_roles_roleid_seq'::regclass);
 
 
 --
@@ -400,132 +400,6 @@ ALTER TABLE ONLY experiment_roles ALTER COLUMN roleid SET DEFAULT nextval('exper
 --
 
 ALTER TABLE ONLY experiments ALTER COLUMN expid SET DEFAULT nextval('experiments_expid_seq'::regclass);
-
-
---
--- Data for Name: batch_priority; Type: TABLE DATA; Schema: public; Owner: ferry
---
-
-COPY batch_priority (uid, gid, expid, resourceid, priority, last_updated) FROM stdin;
-\.
-
-
---
--- Data for Name: condor_quota; Type: TABLE DATA; Schema: public; Owner: ferry
---
-
-COPY condor_quota (id, resourceid, uid, gid, condor_quota, is_quota_of) FROM stdin;
-\.
-
-
---
--- Data for Name: experiment_group; Type: TABLE DATA; Schema: public; Owner: ferry
---
-
-COPY experiment_group (expid, groupid, is_primary) FROM stdin;
-\.
-
-
---
--- Data for Name: experiment_membership; Type: TABLE DATA; Schema: public; Owner: ferry
---
-
-COPY experiment_membership (uid, expid, roleid, is_superuser, is_banned, mapped_uname, last_updated, mapped_group) FROM stdin;
-\.
-
-
---
--- Data for Name: experiment_roles; Type: TABLE DATA; Schema: public; Owner: ferry
---
-
-COPY experiment_roles (roleid, role_name) FROM stdin;
-\.
-
-
---
--- Name: experiment_roles_roleid_seq; Type: SEQUENCE SET; Schema: public; Owner: ferry
---
-
-SELECT pg_catalog.setval('experiment_roles_roleid_seq', 1, false);
-
-
---
--- Data for Name: experiments; Type: TABLE DATA; Schema: public; Owner: ferry
---
-
-COPY experiments (expid, experiment_name, voms_url, alternative_name, last_updated) FROM stdin;
-\.
-
-
---
--- Name: experiments_expid_seq; Type: SEQUENCE SET; Schema: public; Owner: ferry
---
-
-SELECT pg_catalog.setval('experiments_expid_seq', 1, false);
-
-
---
--- Data for Name: groups; Type: TABLE DATA; Schema: public; Owner: ferry
---
-
-COPY groups (gid, group_name, group_type, groupid) FROM stdin;
-\.
-
-
---
--- Data for Name: interactive_access; Type: TABLE DATA; Schema: public; Owner: ferry
---
-
-COPY interactive_access (resourceid, uid, gid, expid, shell, last_updated) FROM stdin;
-\.
-
-
---
--- Data for Name: resources; Type: TABLE DATA; Schema: public; Owner: ferry
---
-
-COPY resources (id, name, path, shell, type, capacity, unit) FROM stdin;
-\.
-
-
---
--- Data for Name: storage_quota; Type: TABLE DATA; Schema: public; Owner: ferry
---
-
-COPY storage_quota (uid, gid, resourceid, is_group, path, last_updated, expid, shell, value, unit, valid_until, is_quota_of, id) FROM stdin;
-\.
-
-
---
--- Data for Name: user_affiliation; Type: TABLE DATA; Schema: public; Owner: ferry
---
-
-COPY user_affiliation (uid, affilation_attribute, affiliation_value) FROM stdin;
-\.
-
-
---
--- Data for Name: user_certificate; Type: TABLE DATA; Schema: public; Owner: ferry
---
-
-COPY user_certificate (uid, dn, issuer_ca, last_update, expid) FROM stdin;
-\.
-
-
---
--- Data for Name: user_group; Type: TABLE DATA; Schema: public; Owner: ferry
---
-
-COPY user_group (uid, groupid, is_primary, is_leader) FROM stdin;
-\.
-
-
---
--- Data for Name: users; Type: TABLE DATA; Schema: public; Owner: ferry
---
-
-COPY users (uid, uname, first_name, middle_name, last_name, primary_email, status, expiration_date, last_updated) FROM stdin;
-\.
 
 
 --
@@ -564,8 +438,8 @@ ALTER TABLE ONLY experiment_group
 -- Name: idx_22254_primary; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
 --
 
-ALTER TABLE ONLY experiment_roles
-    ADD CONSTRAINT idx_22254_primary PRIMARY KEY (roleid);
+ALTER TABLE ONLY experiment_fqan
+    ADD CONSTRAINT idx_22254_primary PRIMARY KEY (fqanid);
 
 
 --
@@ -617,11 +491,11 @@ ALTER TABLE ONLY user_group
 
 
 --
--- Name: idx_experiment_membership; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
+-- Name: idx_grid_access; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
 --
 
-ALTER TABLE ONLY experiment_membership
-    ADD CONSTRAINT idx_experiment_membership UNIQUE (expid, uid, roleid);
+ALTER TABLE ONLY grid_access
+    ADD CONSTRAINT idx_grid_access PRIMARY KEY (expid, uid, fqanid);
 
 
 --
@@ -630,6 +504,14 @@ ALTER TABLE ONLY experiment_membership
 
 ALTER TABLE ONLY groups
     ADD CONSTRAINT idx_groups_gid UNIQUE (gid);
+
+
+--
+-- Name: idx_users_uname; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
+--
+
+ALTER TABLE ONLY users
+    ADD CONSTRAINT idx_users_uname UNIQUE (uname);
 
 
 --
@@ -714,21 +596,21 @@ CREATE INDEX idx_22246_idx_user_group_2 ON experiment_group USING btree (groupid
 -- Name: idx_22249_idx_experiment_membership; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
-CREATE INDEX idx_22249_idx_experiment_membership ON experiment_membership USING btree (uid);
+CREATE INDEX idx_22249_idx_experiment_membership ON grid_access USING btree (uid);
 
 
 --
 -- Name: idx_22249_idx_experiment_membership_0; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
-CREATE INDEX idx_22249_idx_experiment_membership_0 ON experiment_membership USING btree (expid);
+CREATE INDEX idx_22249_idx_experiment_membership_0 ON grid_access USING btree (expid);
 
 
 --
 -- Name: idx_22249_idx_experiment_membership_1; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
-CREATE INDEX idx_22249_idx_experiment_membership_1 ON experiment_membership USING btree (roleid);
+CREATE INDEX idx_22249_idx_experiment_membership_1 ON grid_access USING btree (fqanid);
 
 
 --
@@ -837,6 +719,20 @@ CREATE INDEX idx_22287_idx_user_group_0 ON user_group USING btree (groupid);
 
 
 --
+-- Name: idx_experiment_fqan; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
+--
+
+CREATE INDEX idx_experiment_fqan ON experiment_fqan USING btree (mapped_group);
+
+
+--
+-- Name: idx_experiment_roles; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
+--
+
+CREATE INDEX idx_experiment_roles ON experiment_fqan USING btree (mapped_user);
+
+
+--
 -- Name: idx_groups_group_name; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
@@ -876,6 +772,14 @@ ALTER TABLE ONLY condor_quota
 
 
 --
+-- Name: fk_experiment_fqan_groups; Type: FK CONSTRAINT; Schema: public; Owner: ferry
+--
+
+ALTER TABLE ONLY experiment_fqan
+    ADD CONSTRAINT fk_experiment_fqan_groups FOREIGN KEY (mapped_group) REFERENCES groups(group_name);
+
+
+--
 -- Name: fk_experiment_group_experiments; Type: FK CONSTRAINT; Schema: public; Owner: ferry
 --
 
@@ -895,15 +799,15 @@ ALTER TABLE ONLY experiment_group
 -- Name: fk_experiment_membership_experiment_roles; Type: FK CONSTRAINT; Schema: public; Owner: ferry
 --
 
-ALTER TABLE ONLY experiment_membership
-    ADD CONSTRAINT fk_experiment_membership_experiment_roles FOREIGN KEY (roleid) REFERENCES experiment_roles(roleid);
+ALTER TABLE ONLY grid_access
+    ADD CONSTRAINT fk_experiment_membership_experiment_roles FOREIGN KEY (fqanid) REFERENCES experiment_fqan(fqanid);
 
 
 --
 -- Name: fk_experiment_membership_experiments; Type: FK CONSTRAINT; Schema: public; Owner: ferry
 --
 
-ALTER TABLE ONLY experiment_membership
+ALTER TABLE ONLY grid_access
     ADD CONSTRAINT fk_experiment_membership_experiments FOREIGN KEY (expid) REFERENCES experiments(expid);
 
 
@@ -911,8 +815,16 @@ ALTER TABLE ONLY experiment_membership
 -- Name: fk_experiment_membership_users; Type: FK CONSTRAINT; Schema: public; Owner: ferry
 --
 
-ALTER TABLE ONLY experiment_membership
+ALTER TABLE ONLY grid_access
     ADD CONSTRAINT fk_experiment_membership_users FOREIGN KEY (uid) REFERENCES users(uid);
+
+
+--
+-- Name: fk_experiment_roles_users; Type: FK CONSTRAINT; Schema: public; Owner: ferry
+--
+
+ALTER TABLE ONLY experiment_fqan
+    ADD CONSTRAINT fk_experiment_roles_users FOREIGN KEY (mapped_user) REFERENCES users(uname);
 
 
 --
