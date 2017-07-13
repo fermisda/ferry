@@ -22,6 +22,7 @@ class VOMS:
             self.url = "%s/%s" % (url, experiment)
         self.gid = 0
         self.roles = []
+        self.expid = 0
 
     def add_unix_gid(self, gid):
         self.gid = gid
@@ -29,6 +30,8 @@ class VOMS:
     def add_roles(self, rnames):
         self.roles = rnames
 
+    def set_id(self, index):
+        self.expid = index
 
 class VOUserGroup:
     """
@@ -43,6 +46,10 @@ class VOUserGroup:
         self.uname = None
         self.account_mappers = None
         self.gid = None
+        self.fqanid = 0
+
+    def set_id(self, index):
+        self.fqanid = index
 
 
 class Certificates:
@@ -138,7 +145,7 @@ def read_gid(fname):
     return groupids
 
 
-def populate_db(config, users, gids, vomss, roles):
+def populate_db(config, users, gids, vomss, gums, roles):
     """
     create mysql dump for ferry database
     Args:
@@ -156,6 +163,8 @@ def populate_db(config, users, gids, vomss, roles):
     fd = open("ferry.sql", "w")
     command = ""
     for user in users.values():
+        if user.uname!='kherner':
+            continue
         if not user.expiration_date:
             user.expiration_date = "NULL"
         elif user.expiration_date == "EXPIRED":
@@ -172,45 +181,65 @@ def populate_db(config, users, gids, vomss, roles):
         # if return_code!=0:
         #    print >> sys.stderr,'Error ', command
 
+    group_counter = 1
     for gname, index in gids.items():
         fd.write("insert into groups values (%d,\'%s\','UnixGroup');\n" % (int(index), gname))
+        group_counter += 1
         # results,return_code=MySQLUtils.RunQuery(command,connect_str)
         # if return_code!=0:
         #    print >> sys.stderr,'Error ', command
     fd.flush()
-    i = 1
-    for role in roles:
-        if not role:
-            continue
-        fd.write("insert into experiment_roles (roleid, role_name) values (%d,\'%s\');\n" % (i, role))
-        i += 1
+    # populating experiment_fqan table
+    # GUMS darksidepro {'group': '/fermilab/darkside', 'server': 'fermilab', 'uname': 'darksidepro', 'gid': '9985', 'role': 'Production', 'user_group': 'darksidepro', 'account_mappers': 'darksidepro'}
+    # experiment_fqan(fqanid, fqan, mapped_user,mapped_group);
+    fqan_counter = 0
+    for key, gmap in gums.items():
+        fqan_counter += 1
+        gname = gids.keys()[gids.values().index(gmap.gid)]
+        un=gmap.uname
+        if gmap.uname:
+            un = "\'%s\'" % (gmap.uname)
+        fd.write("insert into experiment_fqan values(\'%s/Role=%s\',%s,\'%s\')" % (gmap.group,gmap.role,un,gname))
+        print "insert into experiment_fqan values(\'%s/Role=%s\',%s,\'%s\')" % (gmap.group,gmap.role,un,gname)
+        gmap.set_id(fqan_counter)
     fd.flush()
-    i = 0
+
+
+
+    experiment_counter = 0
     for vos in vomss:
         for vname, vo in vos.items():
-            i += 1
-            fd.write("insert into experiments (expid,experiment_name,voms_url,last_updated) values (%d,\'%s\',"
-                     "\'%s\'," "NOW());\n" % (i, vname, "https://"+vo.url))
+            experiment_counter += 1
+            fd.write("insert into experiments (experiment_name,voms_url,"",last_updated) values (\'%s\',"
+                     "\'%s\'," "NOW());\n" % (vname, vo.url))
+            print "insert into experiments values (\'%s\',\'%s\'," "NOW());\n" % (vname, vo.url)
+            vo.set_id(experiment_counter)
             for uname, user in users.items():
-                if user.vo_membership.has_key((vname,"https://"+vo.url)):
-
-                    for umap in user.vo_membership[(vname, "https://"+vo.url)]:
-                        if umap.role:
-                            rid = roles.index(umap.role)
-                            fd.write("insert into experiment_membership values  (%d,%d,%d,False,False,\'%s\',NOW(),"
-                                     "%d);\n" % (int(user.uid), i, rid, umap.uname, int(umap.gid)))
-                        else:
-                            fd.write("insert into experiment_membership values  (%d,%d,NULL,False,False,\'%s\',NOW(),%d);\n"
-                                     % (int(user.uid), i, umap.uname, int(umap.gid)))
-                            for certs in user.certs:
+                if uname!='kherner':
+                    continue
+                if user.vo_membership.has_key((vname,vo.url)):
+                    for umap in user.vo_membership[(vname, vo.url)]:
+                        fqanid = 0
+                        for gmap in gums.values():
+                            # print  umap.group,gmap.group,umap.role,gmap.role
+                            if  umap.group == gmap.group and umap.role == gmap.role:
+                                fqanid = gmap.fqanid
+                                break
+                        fd.write("insert into grid_access values  (%d,%d,%d,False,False,NOW());\n" % \
+                                 (experiment_counter, int(user.uid), fqanid, ))
+                        print "insert into grid_access values  (%d,%d,%d,False,False,NOW());\n" % (experiment_counter, int(user.uid), fqanid, )
+                        for certs in user.certs:
                                 if certs.vomsid == (vname, "https://"+vo.url):
                                     for k in range (0,len(certs.subjects)):
                                         fd.write("insert into user_certificate values (%d,\'%s\',\'%s\', NOW(),%d);\n"
                                              % (int(user.uid), certs.subjects[k], certs.issuers[k], i))
                         fd.flush()
     for uname, user in users.items():
+        # if uname!='kherner':
+        #    continue
         is_primary = False
         for gid in user.gids:
+            print user.gids
             fd.write("insert into user_group values (%d,%d,%s);\n" % (int(user.uid), int(gid), is_primary))
     fd.flush()
     fd.close()
@@ -234,7 +263,7 @@ def read_services_users(fname, users):
             print >> sys.stderr, "csv Failed ", line
 
 
-def get_vos(config, vn, vname,vurl, gids):
+def get_vos(config, vn, vurl, gids):
     """
     Read data from VOMS databases
     Args:
@@ -250,27 +279,27 @@ def get_vos(config, vn, vname,vurl, gids):
     mysql_client_cfg = MySQLUtils.createClientConfig("voms_db_%s" % (vn,), config)
     connect_str = MySQLUtils.getDbConnection("voms_db_%s" % (vn,), mysql_client_cfg, config)
     command = "select dn from groups"
-    groups, return_code = MySQLUtils.RunQuery(command, connect_str)
+    groups, return_code = MySQLUtils.RunQuery(command, connect_str,False)
     volist = {}
+    if return_code:
+        print >> sys.stderr, "Failed to select dn from table group from voms_db_%s %s" % (vn, groups)
+        return volist
     for g in groups:
         exp = g[1:].strip().split('/')
         if exp[0] == 'fermilab':
             if len(exp) == 1:
                 name = exp[0]
-            elif len(exp) > 2:
-                name = exp[1] + exp[2]  # this is to handle marsmu2e
             else:
                 name = exp[1]
         else:
             name = exp[0]
-
-        #try:
-        if not volist.has_key(name):
-            volist[name] = VOMS(vurl, vname, name)
-        if gids.has_key(name):
-            volist[name].add_unix_gid(gids[name])
-        #except:
-        #    print >> sys.stderr, "group is not defined ", name
+        try:
+            if not volist.has_key(name):
+                volist[name] = VOMS(vurl, vn, name)
+            if gids.has_key(name):
+                volist[name].add_unix_gid(gids[name])
+        except:
+            print >> sys.stderr, "group is not defined ", name
     return volist
 
 
@@ -279,8 +308,8 @@ def assign_vos(config, vn, vurl, rls, usrs, gums_map):
     From VOMS database tries to get information about each user, certificate and group and role affiliation
     Args:
         config:
-        vn:
-        vurl:
+        vn: VO name
+        vurl: VO url
         rls:
         usrs:
         gums_map:
@@ -295,6 +324,8 @@ def assign_vos(config, vn, vurl, rls, usrs, gums_map):
     total = 0
 
     for uname, user in usrs.items():
+        #if uname!='kherner':
+        #    continue
         # do we want to have expired users in VOMS?
         total += 1
         if not user.is_k5login:
@@ -305,28 +336,37 @@ def assign_vos(config, vn, vurl, rls, usrs, gums_map):
                   "\'%Digi%\' and c.subject_string  not like \'%DOE%\') and u.dn like \'/DC=org/DC=cilogon/C=US/O=" \
                   "Fermi National Accelerator Laboratory/OU=People/CN=%/CN=UID:"+user.uname+"\';"
         members, return_code = MySQLUtils.RunQuery(command, connect_str, False)
+        if return_code:
+            print >> sys.stderr, "Failed to extract information from VOMS %s for user %s" % (vn, user.uname)
+            continue
         # user is not a member of VO
         if len(members[0].strip()) == 0:
             continue
 
         mids = []
 
-        # add all additional certificates
-
+        # stores all voms uids
         for m in members:
             member = m.split("\t")
             if member[0] not in mids:
                 mids.append(member[0].strip())
 
         for mid in mids:
+            # gets all the groups that this user is a member
             command = "select distinct g.dn from m m, groups  g where g.gid=m.gid and " \
                       "m.userid =" + mid+";"
             affiliation, return_code = MySQLUtils.RunQuery(command, connect_str)
-
+            if return_code:
+                print >> sys.stderr, "Failed to extract information from VOMS %s m and g tables for user %s" % (vn,
+                                                                                                          user.uname)
+                continue
+            # gets all roles
             command = "select g.dn,r.role from m m, roles r, groups  g where  r.rid=m.rid and g.gid=m.gid and " \
                       "m.userid =" + mid +" and r.role!=\'VO-Admin\';"
             group_role, return_code = MySQLUtils.RunQuery(command, connect_str)
-
+            if return_code:
+                print >> sys.stderr, "Failed to extract information from VOMS %s g and g tables for user %s" % (vn,
+                                                                                                          user.uname)
             affiliation = affiliation+group_role
 
             for aff in affiliation:
@@ -335,43 +375,47 @@ def assign_vos(config, vn, vurl, rls, usrs, gums_map):
                 groups = subgroup.split('/')
                 if len(groups) > 1 and groups[0] == 'fermilab':
                     group = "".join(groups[1:])
-                    vurl = "%s/%s" % (vomsurl, group)
+                    url = "%s/%s" % (vurl, group)
                 else:
                     group = groups[0]
-                    vurl = vomsurl
-                user.add_to_vo(group, vurl)
+                    url = vurl
+                user.add_to_vo(group, url)
                 for m in members:
                     member = m.split("\t")
                     if member[0] == mid:
                         subject = member[1].strip()
                         issuer = member[2].strip()
-                        user.add_certs(subject, issuer, group, vurl)
+                        user.add_certs(subject, issuer, group, url)
                 if len(tmp) > 1:
                     role = tmp[1].strip()
                 else:
                     role = None
-
+                # print "%s /%s %s %s" % (user.uname, subgroup, role, url)
                 for key, umap in gums_map.items():
-
+                    # if "/%s" % (subgroup,) == umap.group:
+                    #    print "gums_dict", umap.__dict__
                     if "/%s" % (subgroup,) == umap.group and role == umap.role:
+                        # print "found ",umap.group, umap.role
                         if not umap.uname:
                             account_name = user.uname
                         else:
                             account_name = umap.uname
-
                         new_umap = VOUserGroup(umap.user_group, umap.server, umap.group, umap.role)
                         new_umap.uname = account_name
                         new_umap.gid = umap.gid
+                        if not umap.gid:
+                            print "disaster", new_umap.__dict__
+                            sys.exit(1)
                         if umap.gid not in user.gids:
                             user.gids.append(umap.gid)
-                        user.add_to_vo_role(group, vurl, new_umap)
+                        user.add_to_vo_role(group, url, new_umap)
 
                         break
                 if role not in rls:
                     rls.append(role)
 
 
-def read_gums_config(config, vname):
+def read_gums_config(config):
     """
 
     Args:
@@ -381,34 +425,46 @@ def read_gums_config(config, vname):
     Returns:
 
     """
-    gums_fn = config.config.get("voms_db_%s" % (vname,), "gums_config")
+    gums_fn = config.config.get("gums_config", "gums_config")
     tree = ET.parse(gums_fn)
     gums_mapping = {}
+    vo_groups={}
     # key vomsUserGroup
     root = tree.getroot()
     for child in root:
         if child.tag == "userGroups":
             for element in child.getchildren():
-                voms_user_group = element.attrib.get('name')
+                voms_user_group = element.attrib.get('name')   # this is an unique name of VOMSUserGroup
                 voms_server = element.attrib.get('vomsServer')
                 vo_group = element.attrib.get('voGroup')
                 if not vo_group:
                     continue
                 role = element.attrib.get('role')
+                # print voms_user_group,vo_group, role
+                if not vo_groups.has_key(vo_group):
+                    vo_groups[vo_group] = []
+                vo_groups[vo_group].append(role)
                 gums_mapping[voms_user_group] = VOUserGroup(voms_user_group, voms_server, vo_group, role)
 
+
+    #for key,vug in vo_groups.items():
+    #    if not None in vug:
+    #        print key, vug, "needs role None"
+    #        # it means that FQAN does not have a None Role, we need to create a new Group
     for key, gmap in gums_mapping.items():
         for child in root:
             if child.tag == "groupToAccountMappings":
                 for element in child.getchildren():
                     if element.attrib.get('userGroups') == key:
+                        #print "found UserGroups",key,element.attrib.get('accountMappers')
                         gmap.account_mappers = element.attrib.get('accountMappers')
                 break
-    for key, gmap in gums_mapping.items():
+
         for child in root:
             if child.tag == "accountMappers":
                 for element in child.getchildren():
                     if element.attrib.get('name') == gmap.account_mappers:
+                        #print "found accountMappers", gmap.account_mappers,element.attrib.get('groupName')
                         gmap.gid = element.attrib.get('groupName')
                         gmap.uname = element.attrib.get('accountName')
                         break
@@ -428,23 +484,20 @@ if __name__ == "__main__":
     # read services_user_files.csv and add this information to users containers
     read_services_users(config.config.get("user_db", "services_user_file"), users)
 
-    # process voms information
+    # process voms information; list of VOMS instances should be in configuration file
     voms_instances = config.config.get("voms_instances", "list")
     voms_list = voms_instances.split(",")
     voms_list.sort()
-    vomss = []
+    vomss = [] # list of VOs from VOMS instances
     roles = []
+    gums = read_gums_config(config) # List of GUMS group mapping
     for vn in voms_list:
-        vomsurl = config.config.get("voms_db_%s" % (vn,), "url")
-
-        url = vomsurl[8:]
-        host = url[:url.find(":")]
-        voname = url[url.rfind("/")+1:]
+        url = config.config.get("voms_db_%s" % (vn,), "url")
         # reads vo related information from VOMS
-        vos = get_vos(config.config, vn, voname, url, gids)
+        vos = get_vos(config.config, vn, url, gids)
         vomss.append(vos)
-        gums = read_gums_config(config, vn)
-        assign_vos(config.config, vn, vomsurl, roles, users, gums)
+        assign_vos(config.config, vn, url, roles, users, gums)
+
     for uname, user in users.items():
             if user.uname == "kherner":
                 print user.uname
@@ -453,4 +506,4 @@ if __name__ == "__main__":
                 for k,v in user.vo_membership.items():
                     for l in v:
                         print k, l.__dict__
-    populate_db(config.config, users, gids, vomss, roles)
+    populate_db(config.config, users, gids, vomss, gums, roles)
