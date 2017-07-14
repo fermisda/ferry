@@ -49,9 +49,9 @@ CREATE TABLE batch_priority (
     uid bigint NOT NULL,
     gid bigint NOT NULL,
     expid bigint NOT NULL,
-    resourceid bigint NOT NULL,
     priority bigint NOT NULL,
-    last_updated date NOT NULL
+    last_updated date DEFAULT ('now'::text)::date NOT NULL,
+    compid bigint NOT NULL
 );
 
 
@@ -65,16 +65,47 @@ COMMENT ON TABLE batch_priority IS 'table describes condor quota and priority pe
 
 
 --
+-- Name: compute_access; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
+--
+
+CREATE TABLE compute_access (
+    compid bigint NOT NULL,
+    uid bigint NOT NULL,
+    gid bigint NOT NULL,
+    shell character varying(30) DEFAULT '/bin/bash'::character varying NOT NULL,
+    last_updated date DEFAULT ('now'::text)::date NOT NULL
+);
+
+
+ALTER TABLE public.compute_access OWNER TO ferry;
+
+--
+-- Name: compute_resource; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
+--
+
+CREATE TABLE compute_resource (
+    id bigint NOT NULL,
+    name character varying(100),
+    default_shell character varying(100),
+    comp_type character varying(100),
+    expid integer,
+    last_updated date DEFAULT ('now'::text)::date
+);
+
+
+ALTER TABLE public.compute_resource OWNER TO ferry;
+
+--
 -- Name: condor_quota; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
 --
 
 CREATE TABLE condor_quota (
     id bigint NOT NULL,
-    resourceid bigint DEFAULT (0)::bigint NOT NULL,
-    uid bigint NOT NULL,
     gid bigint NOT NULL,
-    condor_quota character varying(255),
-    is_quota_of bigint
+    is_quota_of bigint,
+    quota character varying(255),
+    last_updated date DEFAULT ('now'::text)::date,
+    compid bigint DEFAULT (0)::bigint NOT NULL
 );
 
 
@@ -87,8 +118,9 @@ ALTER TABLE public.condor_quota OWNER TO ferry;
 CREATE TABLE experiment_fqan (
     fqanid bigint NOT NULL,
     fqan character varying(300) NOT NULL,
-    mapped_user character varying(100) NOT NULL,
-    mapped_group character varying(100) NOT NULL
+    mapped_user character varying(100),
+    mapped_group character varying(100) NOT NULL,
+    last_updated date DEFAULT ('now'::text)::date
 );
 
 
@@ -101,7 +133,8 @@ ALTER TABLE public.experiment_fqan OWNER TO ferry;
 CREATE TABLE experiment_group (
     expid bigint NOT NULL,
     groupid bigint NOT NULL,
-    is_primary smallint
+    is_primary smallint,
+    last_updated date DEFAULT ('now'::text)::date
 );
 
 
@@ -137,7 +170,7 @@ CREATE TABLE experiments (
     experiment_name character varying(100) NOT NULL,
     voms_url character varying(200) NOT NULL,
     alternative_name character varying(100),
-    last_updated date
+    last_updated date DEFAULT ('now'::text)::date
 );
 
 
@@ -195,7 +228,7 @@ CREATE TABLE grid_access (
     fqanid bigint NOT NULL,
     is_superuser boolean,
     is_banned boolean,
-    last_updated date NOT NULL
+    last_updated date DEFAULT ('now'::text)::date NOT NULL
 );
 
 
@@ -209,7 +242,8 @@ CREATE TABLE groups (
     gid bigint NOT NULL,
     group_name character varying(100) NOT NULL,
     group_type groups_group_type NOT NULL,
-    groupid bigint NOT NULL
+    groupid bigint NOT NULL,
+    last_updated date DEFAULT ('now'::text)::date
 );
 
 
@@ -237,56 +271,20 @@ COMMENT ON COLUMN groups.group_name IS 'unix group name';
 
 
 --
--- Name: interactive_access; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
---
-
-CREATE TABLE interactive_access (
-    resourceid bigint NOT NULL,
-    uid bigint NOT NULL,
-    gid bigint NOT NULL,
-    expid bigint NOT NULL,
-    shell character varying(30) DEFAULT '/bin/bash'::character varying NOT NULL,
-    last_updated date NOT NULL
-);
-
-
-ALTER TABLE public.interactive_access OWNER TO ferry;
-
---
--- Name: resources; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
---
-
-CREATE TABLE resources (
-    id bigint NOT NULL,
-    name character varying(100) NOT NULL,
-    path character varying(255),
-    shell character varying(255),
-    type character varying(255) NOT NULL,
-    capacity character varying(100),
-    unit character varying(100)
-);
-
-
-ALTER TABLE public.resources OWNER TO ferry;
-
---
 -- Name: storage_quota; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
 --
 
 CREATE TABLE storage_quota (
-    uid bigint,
     gid bigint NOT NULL,
-    resourceid bigint,
-    is_group boolean,
     path text NOT NULL,
-    last_updated date NOT NULL,
-    expid bigint NOT NULL,
+    last_updated date DEFAULT ('now'::text)::date NOT NULL,
     shell character varying(255),
     value text NOT NULL,
     unit character varying(100) NOT NULL,
     valid_until date,
     is_quota_of bigint,
-    id bigint NOT NULL
+    id bigint NOT NULL,
+    storageid bigint
 );
 
 
@@ -300,13 +298,30 @@ COMMENT ON TABLE storage_quota IS 'table store quota per user in various storage
 
 
 --
+-- Name: storage_resource; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
+--
+
+CREATE TABLE storage_resource (
+    id bigint NOT NULL,
+    name character varying(100) NOT NULL,
+    storage_type character varying(255) NOT NULL,
+    default_path character varying(255),
+    default_quota bigint,
+    last_updated date DEFAULT ('now'::text)::date
+);
+
+
+ALTER TABLE public.storage_resource OWNER TO ferry;
+
+--
 -- Name: user_affiliation; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
 --
 
 CREATE TABLE user_affiliation (
     uid bigint NOT NULL,
-    affilation_attribute character varying(100) NOT NULL,
-    affiliation_value character varying(100)
+    affiliation_value character varying(100),
+    last_updated date DEFAULT ('now'::text)::date,
+    affiliation_attribute character varying(100) NOT NULL
 );
 
 
@@ -320,7 +335,7 @@ CREATE TABLE user_certificate (
     uid bigint NOT NULL,
     dn character varying(300) NOT NULL,
     issuer_ca character varying(120) NOT NULL,
-    last_update timestamp with time zone DEFAULT now() NOT NULL,
+    last_update date DEFAULT ('now'::text)::date NOT NULL,
     expid bigint NOT NULL
 );
 
@@ -335,7 +350,8 @@ CREATE TABLE user_group (
     uid bigint NOT NULL,
     groupid bigint NOT NULL,
     is_primary boolean,
-    is_leader boolean
+    is_leader boolean,
+    last_updated date DEFAULT ('now'::text)::date
 );
 
 
@@ -354,7 +370,7 @@ CREATE TABLE users (
     primary_email character varying(30) NOT NULL,
     status boolean,
     expiration_date date,
-    last_updated date NOT NULL
+    last_updated date DEFAULT ('now'::text)::date NOT NULL
 );
 
 
@@ -406,7 +422,23 @@ ALTER TABLE ONLY experiments ALTER COLUMN expid SET DEFAULT nextval('experiments
 -- Data for Name: batch_priority; Type: TABLE DATA; Schema: public; Owner: ferry
 --
 
-COPY batch_priority (uid, gid, expid, resourceid, priority, last_updated) FROM stdin;
+COPY batch_priority (uid, gid, expid, priority, last_updated, compid) FROM stdin;
+\.
+
+
+--
+-- Data for Name: compute_access; Type: TABLE DATA; Schema: public; Owner: ferry
+--
+
+COPY compute_access (compid, uid, gid, shell, last_updated) FROM stdin;
+\.
+
+
+--
+-- Data for Name: compute_resource; Type: TABLE DATA; Schema: public; Owner: ferry
+--
+
+COPY compute_resource (id, name, default_shell, comp_type, expid, last_updated) FROM stdin;
 \.
 
 
@@ -414,7 +446,7 @@ COPY batch_priority (uid, gid, expid, resourceid, priority, last_updated) FROM s
 -- Data for Name: condor_quota; Type: TABLE DATA; Schema: public; Owner: ferry
 --
 
-COPY condor_quota (id, resourceid, uid, gid, condor_quota, is_quota_of) FROM stdin;
+COPY condor_quota (id, gid, is_quota_of, quota, last_updated, compid) FROM stdin;
 \.
 
 
@@ -422,7 +454,7 @@ COPY condor_quota (id, resourceid, uid, gid, condor_quota, is_quota_of) FROM std
 -- Data for Name: experiment_fqan; Type: TABLE DATA; Schema: public; Owner: ferry
 --
 
-COPY experiment_fqan (fqanid, fqan, mapped_user, mapped_group) FROM stdin;
+COPY experiment_fqan (fqanid, fqan, mapped_user, mapped_group, last_updated) FROM stdin;
 \.
 
 
@@ -430,7 +462,7 @@ COPY experiment_fqan (fqanid, fqan, mapped_user, mapped_group) FROM stdin;
 -- Data for Name: experiment_group; Type: TABLE DATA; Schema: public; Owner: ferry
 --
 
-COPY experiment_group (expid, groupid, is_primary) FROM stdin;
+COPY experiment_group (expid, groupid, is_primary, last_updated) FROM stdin;
 \.
 
 
@@ -468,23 +500,7 @@ COPY grid_access (uid, expid, fqanid, is_superuser, is_banned, last_updated) FRO
 -- Data for Name: groups; Type: TABLE DATA; Schema: public; Owner: ferry
 --
 
-COPY groups (gid, group_name, group_type, groupid) FROM stdin;
-\.
-
-
---
--- Data for Name: interactive_access; Type: TABLE DATA; Schema: public; Owner: ferry
---
-
-COPY interactive_access (resourceid, uid, gid, expid, shell, last_updated) FROM stdin;
-\.
-
-
---
--- Data for Name: resources; Type: TABLE DATA; Schema: public; Owner: ferry
---
-
-COPY resources (id, name, path, shell, type, capacity, unit) FROM stdin;
+COPY groups (gid, group_name, group_type, groupid, last_updated) FROM stdin;
 \.
 
 
@@ -492,7 +508,15 @@ COPY resources (id, name, path, shell, type, capacity, unit) FROM stdin;
 -- Data for Name: storage_quota; Type: TABLE DATA; Schema: public; Owner: ferry
 --
 
-COPY storage_quota (uid, gid, resourceid, is_group, path, last_updated, expid, shell, value, unit, valid_until, is_quota_of, id) FROM stdin;
+COPY storage_quota (gid, path, last_updated, shell, value, unit, valid_until, is_quota_of, id, storageid) FROM stdin;
+\.
+
+
+--
+-- Data for Name: storage_resource; Type: TABLE DATA; Schema: public; Owner: ferry
+--
+
+COPY storage_resource (id, name, storage_type, default_path, default_quota, last_updated) FROM stdin;
 \.
 
 
@@ -500,7 +524,7 @@ COPY storage_quota (uid, gid, resourceid, is_group, path, last_updated, expid, s
 -- Data for Name: user_affiliation; Type: TABLE DATA; Schema: public; Owner: ferry
 --
 
-COPY user_affiliation (uid, affilation_attribute, affiliation_value) FROM stdin;
+COPY user_affiliation (uid, affiliation_value, last_updated, affiliation_attribute) FROM stdin;
 \.
 
 
@@ -516,7 +540,7 @@ COPY user_certificate (uid, dn, issuer_ca, last_update, expid) FROM stdin;
 -- Data for Name: user_group; Type: TABLE DATA; Schema: public; Owner: ferry
 --
 
-COPY user_group (uid, groupid, is_primary, is_leader) FROM stdin;
+COPY user_group (uid, groupid, is_primary, is_leader, last_updated) FROM stdin;
 \.
 
 
@@ -533,7 +557,7 @@ COPY users (uid, uname, first_name, middle_name, last_name, primary_email, statu
 --
 
 ALTER TABLE ONLY batch_priority
-    ADD CONSTRAINT idx_22233_primary PRIMARY KEY (uid, gid, expid, resourceid);
+    ADD CONSTRAINT idx_22233_primary PRIMARY KEY (uid, gid, expid, compid);
 
 
 --
@@ -572,15 +596,15 @@ ALTER TABLE ONLY experiment_fqan
 -- Name: idx_22261_primary; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
 --
 
-ALTER TABLE ONLY interactive_access
-    ADD CONSTRAINT idx_22261_primary PRIMARY KEY (resourceid, uid, expid);
+ALTER TABLE ONLY compute_access
+    ADD CONSTRAINT idx_22261_primary PRIMARY KEY (compid, uid);
 
 
 --
 -- Name: idx_22265_primary; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
 --
 
-ALTER TABLE ONLY resources
+ALTER TABLE ONLY storage_resource
     ADD CONSTRAINT idx_22265_primary PRIMARY KEY (id);
 
 
@@ -641,6 +665,14 @@ ALTER TABLE ONLY users
 
 
 --
+-- Name: pk_compute_resource; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
+--
+
+ALTER TABLE ONLY compute_resource
+    ADD CONSTRAINT pk_compute_resource PRIMARY KEY (id);
+
+
+--
 -- Name: pk_groups; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
 --
 
@@ -666,7 +698,7 @@ CREATE INDEX idx_22233_idx_batch_user_quota_0 ON batch_priority USING btree (exp
 -- Name: idx_22233_idx_batch_user_quota_1; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
-CREATE INDEX idx_22233_idx_batch_user_quota_1 ON batch_priority USING btree (resourceid);
+CREATE INDEX idx_22233_idx_batch_user_quota_1 ON batch_priority USING btree (compid);
 
 
 --
@@ -674,13 +706,6 @@ CREATE INDEX idx_22233_idx_batch_user_quota_1 ON batch_priority USING btree (res
 --
 
 CREATE INDEX idx_22233_idx_priority_factor ON batch_priority USING btree (gid);
-
-
---
--- Name: idx_22236_idx_compute_resource; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
---
-
-CREATE INDEX idx_22236_idx_compute_resource ON condor_quota USING btree (uid);
 
 
 --
@@ -694,7 +719,7 @@ CREATE INDEX idx_22236_idx_compute_resource_0 ON condor_quota USING btree (gid);
 -- Name: idx_22236_idx_compute_resource_1; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
-CREATE INDEX idx_22236_idx_compute_resource_1 ON condor_quota USING btree (resourceid);
+CREATE INDEX idx_22236_idx_compute_resource_1 ON condor_quota USING btree (compid);
 
 
 --
@@ -743,35 +768,14 @@ CREATE INDEX idx_22249_idx_experiment_membership_1 ON grid_access USING btree (f
 -- Name: idx_22261_fk_interactive_access_groups; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
-CREATE INDEX idx_22261_fk_interactive_access_groups ON interactive_access USING btree (gid);
+CREATE INDEX idx_22261_fk_interactive_access_groups ON compute_access USING btree (gid);
 
 
 --
 -- Name: idx_22261_idx_interactive_access; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
-CREATE INDEX idx_22261_idx_interactive_access ON interactive_access USING btree (uid);
-
-
---
--- Name: idx_22261_idx_interactive_access_1; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
---
-
-CREATE INDEX idx_22261_idx_interactive_access_1 ON interactive_access USING btree (expid);
-
-
---
--- Name: idx_22271_fk_storage_quota_experiments; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
---
-
-CREATE INDEX idx_22271_fk_storage_quota_experiments ON storage_quota USING btree (expid);
-
-
---
--- Name: idx_22271_idx_quota; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
---
-
-CREATE INDEX idx_22271_idx_quota ON storage_quota USING btree (uid);
+CREATE INDEX idx_22261_idx_interactive_access ON compute_access USING btree (uid);
 
 
 --
@@ -792,7 +796,7 @@ CREATE INDEX idx_22271_idx_storage_quota_2 ON storage_quota USING btree (is_quot
 -- Name: idx_22271_idx_storage_quota_3; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
-CREATE INDEX idx_22271_idx_storage_quota_3 ON storage_quota USING btree (resourceid);
+CREATE INDEX idx_22271_idx_storage_quota_3 ON storage_quota USING btree (storageid);
 
 
 --
@@ -845,6 +849,13 @@ CREATE INDEX idx_22287_idx_user_group_0 ON user_group USING btree (groupid);
 
 
 --
+-- Name: idx_compute_resource; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
+--
+
+CREATE INDEX idx_compute_resource ON compute_resource USING btree (expid);
+
+
+--
 -- Name: idx_experiment_fqan; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
@@ -866,27 +877,27 @@ CREATE UNIQUE INDEX idx_groups_group_name ON groups USING btree (group_name);
 
 
 --
+-- Name: fk_compute_resource_compute_resource; Type: FK CONSTRAINT; Schema: public; Owner: ferry
+--
+
+ALTER TABLE ONLY condor_quota
+    ADD CONSTRAINT fk_compute_resource_compute_resource FOREIGN KEY (compid) REFERENCES compute_resource(id);
+
+
+--
+-- Name: fk_compute_resource_experiments; Type: FK CONSTRAINT; Schema: public; Owner: ferry
+--
+
+ALTER TABLE ONLY compute_resource
+    ADD CONSTRAINT fk_compute_resource_experiments FOREIGN KEY (expid) REFERENCES experiments(expid);
+
+
+--
 -- Name: fk_compute_resource_groups; Type: FK CONSTRAINT; Schema: public; Owner: ferry
 --
 
 ALTER TABLE ONLY condor_quota
     ADD CONSTRAINT fk_compute_resource_groups FOREIGN KEY (gid) REFERENCES groups(gid);
-
-
---
--- Name: fk_compute_resource_resources; Type: FK CONSTRAINT; Schema: public; Owner: ferry
---
-
-ALTER TABLE ONLY condor_quota
-    ADD CONSTRAINT fk_compute_resource_resources FOREIGN KEY (resourceid) REFERENCES resources(id);
-
-
---
--- Name: fk_compute_resource_users; Type: FK CONSTRAINT; Schema: public; Owner: ferry
---
-
-ALTER TABLE ONLY condor_quota
-    ADD CONSTRAINT fk_compute_resource_users FOREIGN KEY (uid) REFERENCES users(uid);
 
 
 --
@@ -903,6 +914,14 @@ ALTER TABLE ONLY condor_quota
 
 ALTER TABLE ONLY experiment_fqan
     ADD CONSTRAINT fk_experiment_fqan_groups FOREIGN KEY (mapped_group) REFERENCES groups(group_name);
+
+
+--
+-- Name: fk_experiment_fqan_users; Type: FK CONSTRAINT; Schema: public; Owner: ferry
+--
+
+ALTER TABLE ONLY experiment_fqan
+    ADD CONSTRAINT fk_experiment_fqan_users FOREIGN KEY (mapped_user) REFERENCES users(uname);
 
 
 --
@@ -946,43 +965,35 @@ ALTER TABLE ONLY grid_access
 
 
 --
--- Name: fk_experiment_roles_users; Type: FK CONSTRAINT; Schema: public; Owner: ferry
+-- Name: fk_interactive_access_compute_resource; Type: FK CONSTRAINT; Schema: public; Owner: ferry
 --
 
-ALTER TABLE ONLY experiment_fqan
-    ADD CONSTRAINT fk_experiment_roles_users FOREIGN KEY (mapped_user) REFERENCES users(uname);
-
-
---
--- Name: fk_interactive_access_experiments; Type: FK CONSTRAINT; Schema: public; Owner: ferry
---
-
-ALTER TABLE ONLY interactive_access
-    ADD CONSTRAINT fk_interactive_access_experiments FOREIGN KEY (expid) REFERENCES experiments(expid);
+ALTER TABLE ONLY compute_access
+    ADD CONSTRAINT fk_interactive_access_compute_resource FOREIGN KEY (compid) REFERENCES compute_resource(id);
 
 
 --
 -- Name: fk_interactive_access_groups; Type: FK CONSTRAINT; Schema: public; Owner: ferry
 --
 
-ALTER TABLE ONLY interactive_access
+ALTER TABLE ONLY compute_access
     ADD CONSTRAINT fk_interactive_access_groups FOREIGN KEY (gid) REFERENCES groups(gid);
-
-
---
--- Name: fk_interactive_access_resources; Type: FK CONSTRAINT; Schema: public; Owner: ferry
---
-
-ALTER TABLE ONLY interactive_access
-    ADD CONSTRAINT fk_interactive_access_resources FOREIGN KEY (resourceid) REFERENCES resources(id);
 
 
 --
 -- Name: fk_interactive_access_users; Type: FK CONSTRAINT; Schema: public; Owner: ferry
 --
 
-ALTER TABLE ONLY interactive_access
+ALTER TABLE ONLY compute_access
     ADD CONSTRAINT fk_interactive_access_users FOREIGN KEY (uid) REFERENCES users(uid);
+
+
+--
+-- Name: fk_priority_factor_comp_resources; Type: FK CONSTRAINT; Schema: public; Owner: ferry
+--
+
+ALTER TABLE ONLY batch_priority
+    ADD CONSTRAINT fk_priority_factor_comp_resources FOREIGN KEY (compid) REFERENCES compute_resource(id);
 
 
 --
@@ -1002,27 +1013,11 @@ ALTER TABLE ONLY batch_priority
 
 
 --
--- Name: fk_priority_factor_resources; Type: FK CONSTRAINT; Schema: public; Owner: ferry
---
-
-ALTER TABLE ONLY batch_priority
-    ADD CONSTRAINT fk_priority_factor_resources FOREIGN KEY (resourceid) REFERENCES resources(id);
-
-
---
 -- Name: fk_priority_factor_users; Type: FK CONSTRAINT; Schema: public; Owner: ferry
 --
 
 ALTER TABLE ONLY batch_priority
     ADD CONSTRAINT fk_priority_factor_users FOREIGN KEY (uid) REFERENCES users(uid);
-
-
---
--- Name: fk_storage_quota_experiments; Type: FK CONSTRAINT; Schema: public; Owner: ferry
---
-
-ALTER TABLE ONLY storage_quota
-    ADD CONSTRAINT fk_storage_quota_experiments FOREIGN KEY (expid) REFERENCES experiments(expid);
 
 
 --
@@ -1038,7 +1033,7 @@ ALTER TABLE ONLY storage_quota
 --
 
 ALTER TABLE ONLY storage_quota
-    ADD CONSTRAINT fk_storage_quota_resources FOREIGN KEY (resourceid) REFERENCES resources(id);
+    ADD CONSTRAINT fk_storage_quota_resources FOREIGN KEY (storageid) REFERENCES storage_resource(id);
 
 
 --
@@ -1047,14 +1042,6 @@ ALTER TABLE ONLY storage_quota
 
 ALTER TABLE ONLY storage_quota
     ADD CONSTRAINT fk_storage_quota_storage_quota FOREIGN KEY (is_quota_of) REFERENCES storage_quota(id);
-
-
---
--- Name: fk_storage_quota_users; Type: FK CONSTRAINT; Schema: public; Owner: ferry
---
-
-ALTER TABLE ONLY storage_quota
-    ADD CONSTRAINT fk_storage_quota_users FOREIGN KEY (uid) REFERENCES users(uid);
 
 
 --
