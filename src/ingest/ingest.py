@@ -163,8 +163,8 @@ def populate_db(config, users, gids, vomss, gums, roles):
     fd = open("ferry.sql", "w")
     command = ""
     for user in users.values():
-        if user.uname!='kherner':
-            continue
+        #if user.uname!='kherner':
+        #    continue
         if not user.expiration_date:
             user.expiration_date = "NULL"
         elif user.expiration_date == "EXPIRED":
@@ -182,8 +182,11 @@ def populate_db(config, users, gids, vomss, gums, roles):
         #    print >> sys.stderr,'Error ', command
 
     group_counter = 1
+    gid_map = {}
     for gname, index in gids.items():
-        fd.write("insert into groups values (%d,\'%s\','UnixGroup');\n" % (int(index), gname))
+        fd.write("insert into groups (gid,group_name,group_type,groupid) values (%d,\'%s\','UnixGroup',%d);\n" % (int(
+            index), gname,group_counter))
+        gid_map[index] = group_counter
         group_counter += 1
         # results,return_code=MySQLUtils.RunQuery(command,connect_str)
         # if return_code!=0:
@@ -199,48 +202,47 @@ def populate_db(config, users, gids, vomss, gums, roles):
         un=gmap.uname
         if gmap.uname:
             un = "\'%s\'" % (gmap.uname)
-        fd.write("insert into experiment_fqan values(\'%s/Role=%s\',%s,\'%s\')" % (gmap.group,gmap.role,un,gname))
-        print "insert into experiment_fqan values(\'%s/Role=%s\',%s,\'%s\')" % (gmap.group,gmap.role,un,gname)
+        else:
+            un='NULL'
+        fd.write("insert into experiment_fqan (fqan,mapped_user,mapped_group) values(\'%s/Role=%s\',%s,\'%s\');\n" % (gmap.group,gmap.role,un,gname))
         gmap.set_id(fqan_counter)
     fd.flush()
-
-
 
     experiment_counter = 0
     for vos in vomss:
         for vname, vo in vos.items():
             experiment_counter += 1
-            fd.write("insert into experiments (experiment_name,voms_url,"",last_updated) values (\'%s\',"
-                     "\'%s\'," "NOW());\n" % (vname, vo.url))
-            print "insert into experiments values (\'%s\',\'%s\'," "NOW());\n" % (vname, vo.url)
+            fd.write("insert into experiments (experiment_name,voms_url,alternative_name,last_updated) values (\'%s\',"
+                     "\'%s\',\'\',NOW());\n" % (vname, vo.url))
             vo.set_id(experiment_counter)
             for uname, user in users.items():
-                if uname!='kherner':
-                    continue
+                #if uname!='kherner':
+                #    continue
                 if user.vo_membership.has_key((vname,vo.url)):
                     for umap in user.vo_membership[(vname, vo.url)]:
                         fqanid = 0
                         for gmap in gums.values():
-                            # print  umap.group,gmap.group,umap.role,gmap.role
+
                             if  umap.group == gmap.group and umap.role == gmap.role:
                                 fqanid = gmap.fqanid
                                 break
                         fd.write("insert into grid_access values  (%d,%d,%d,False,False,NOW());\n" % \
-                                 (experiment_counter, int(user.uid), fqanid, ))
-                        print "insert into grid_access values  (%d,%d,%d,False,False,NOW());\n" % (experiment_counter, int(user.uid), fqanid, )
-                        for certs in user.certs:
-                                if certs.vomsid == (vname, "https://"+vo.url):
-                                    for k in range (0,len(certs.subjects)):
-                                        fd.write("insert into user_certificate values (%d,\'%s\',\'%s\', NOW(),%d);\n"
-                                             % (int(user.uid), certs.subjects[k], certs.issuers[k], i))
-                        fd.flush()
+                                 (int(user.uid),experiment_counter, fqanid, ))
+
+                    for certs in user.certs:
+                        if certs.vomsid == (vname, vo.url):
+                            for k in range (0,len(certs.subjects)):
+                                fd.write("insert into user_certificate values (%d,\'%s\',\'%s\', NOW(),%d);\n"
+                                     % (int(user.uid), certs.subjects[k], certs.issuers[k], experiment_counter))
+
+                    fd.flush()
     for uname, user in users.items():
-        # if uname!='kherner':
+        #if uname!='kherner':
         #    continue
         is_primary = False
         for gid in user.gids:
-            print user.gids
-            fd.write("insert into user_group values (%d,%d,%s);\n" % (int(user.uid), int(gid), is_primary))
+            groupid = gid_map[gid]
+            fd.write("insert into user_group values (%d,%d,%s,False);\n" % (int(user.uid), groupid, is_primary))
     fd.flush()
     fd.close()
 
