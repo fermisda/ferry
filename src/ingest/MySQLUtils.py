@@ -70,7 +70,7 @@ class MySQLUtils:
 
         """
         mysql="/usr/bin/mysql"
-        mysql = "/usr/local/mysql/bin/mysql"
+        #mysql = "/usr/local/mysql/bin/mysql"
         command_line="echo \"%s\" | %s %s" % (select,mysql,connectString)
         return MySQLUtils.executeCmd(command_line,verbose)
 
