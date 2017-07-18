@@ -47,7 +47,7 @@ SET default_with_oids = false;
 
 CREATE TABLE batch_priority (
     uid bigint NOT NULL,
-    gid bigint NOT NULL,
+    groupid bigint NOT NULL,
     expid bigint NOT NULL,
     priority bigint NOT NULL,
     last_updated date DEFAULT ('now'::text)::date NOT NULL,
@@ -71,9 +71,10 @@ COMMENT ON TABLE batch_priority IS 'table describes condor quota and priority pe
 CREATE TABLE compute_access (
     compid bigint NOT NULL,
     uid bigint NOT NULL,
-    gid bigint NOT NULL,
+    groupid bigint NOT NULL,
     shell character varying(30) DEFAULT '/bin/bash'::character varying NOT NULL,
-    last_updated date DEFAULT ('now'::text)::date NOT NULL
+    last_updated date DEFAULT ('now'::text)::date NOT NULL,
+    home_dir character varying(100)
 );
 
 
@@ -89,7 +90,8 @@ CREATE TABLE compute_resource (
     default_shell character varying(100),
     comp_type character varying(100),
     expid integer,
-    last_updated date DEFAULT ('now'::text)::date
+    last_updated date DEFAULT ('now'::text)::date,
+    default_home_dir character varying(100)
 );
 
 
@@ -101,7 +103,7 @@ ALTER TABLE public.compute_resource OWNER TO ferry;
 
 CREATE TABLE condor_quota (
     id bigint NOT NULL,
-    gid bigint NOT NULL,
+    groupid bigint NOT NULL,
     is_quota_of bigint,
     quota character varying(255),
     last_updated date DEFAULT ('now'::text)::date,
@@ -275,7 +277,7 @@ COMMENT ON COLUMN groups.group_name IS 'unix group name';
 --
 
 CREATE TABLE storage_quota (
-    gid bigint NOT NULL,
+    groupid bigint NOT NULL,
     path text NOT NULL,
     last_updated date DEFAULT ('now'::text)::date NOT NULL,
     shell character varying(255),
@@ -349,7 +351,6 @@ ALTER TABLE public.user_certificate OWNER TO ferry;
 CREATE TABLE user_group (
     uid bigint NOT NULL,
     groupid bigint NOT NULL,
-    is_primary boolean,
     is_leader boolean,
     last_updated date DEFAULT ('now'::text)::date
 );
@@ -367,7 +368,6 @@ CREATE TABLE users (
     first_name character varying(100),
     middle_name character varying(100),
     last_name character varying(100) NOT NULL,
-    primary_email character varying(30) NOT NULL,
     status boolean,
     expiration_date date,
     last_updated date DEFAULT ('now'::text)::date NOT NULL
@@ -398,13 +398,6 @@ COMMENT ON COLUMN users.last_name IS 'user''s last name';
 
 
 --
--- Name: COLUMN users.primary_email; Type: COMMENT; Schema: public; Owner: ferry
---
-
-COMMENT ON COLUMN users.primary_email IS 'user''s preffered email address';
-
-
---
 -- Name: fqanid; Type: DEFAULT; Schema: public; Owner: ferry
 --
 
@@ -422,7 +415,7 @@ ALTER TABLE ONLY experiments ALTER COLUMN expid SET DEFAULT nextval('experiments
 -- Data for Name: batch_priority; Type: TABLE DATA; Schema: public; Owner: ferry
 --
 
-COPY batch_priority (uid, gid, expid, priority, last_updated, compid) FROM stdin;
+COPY batch_priority (uid, groupid, expid, priority, last_updated, compid) FROM stdin;
 \.
 
 
@@ -430,7 +423,7 @@ COPY batch_priority (uid, gid, expid, priority, last_updated, compid) FROM stdin
 -- Data for Name: compute_access; Type: TABLE DATA; Schema: public; Owner: ferry
 --
 
-COPY compute_access (compid, uid, gid, shell, last_updated) FROM stdin;
+COPY compute_access (compid, uid, groupid, shell, last_updated, home_dir) FROM stdin;
 \.
 
 
@@ -438,7 +431,7 @@ COPY compute_access (compid, uid, gid, shell, last_updated) FROM stdin;
 -- Data for Name: compute_resource; Type: TABLE DATA; Schema: public; Owner: ferry
 --
 
-COPY compute_resource (id, name, default_shell, comp_type, expid, last_updated) FROM stdin;
+COPY compute_resource (id, name, default_shell, comp_type, expid, last_updated, default_home_dir) FROM stdin;
 \.
 
 
@@ -446,7 +439,7 @@ COPY compute_resource (id, name, default_shell, comp_type, expid, last_updated) 
 -- Data for Name: condor_quota; Type: TABLE DATA; Schema: public; Owner: ferry
 --
 
-COPY condor_quota (id, gid, is_quota_of, quota, last_updated, compid) FROM stdin;
+COPY condor_quota (id, groupid, is_quota_of, quota, last_updated, compid) FROM stdin;
 \.
 
 
@@ -508,7 +501,7 @@ COPY groups (gid, group_name, group_type, groupid, last_updated) FROM stdin;
 -- Data for Name: storage_quota; Type: TABLE DATA; Schema: public; Owner: ferry
 --
 
-COPY storage_quota (gid, path, last_updated, shell, value, unit, valid_until, is_quota_of, id, storageid) FROM stdin;
+COPY storage_quota (groupid, path, last_updated, shell, value, unit, valid_until, is_quota_of, id, storageid) FROM stdin;
 \.
 
 
@@ -540,7 +533,7 @@ COPY user_certificate (uid, dn, issuer_ca, last_update, expid) FROM stdin;
 -- Data for Name: user_group; Type: TABLE DATA; Schema: public; Owner: ferry
 --
 
-COPY user_group (uid, groupid, is_primary, is_leader, last_updated) FROM stdin;
+COPY user_group (uid, groupid, is_leader, last_updated) FROM stdin;
 \.
 
 
@@ -548,7 +541,7 @@ COPY user_group (uid, groupid, is_primary, is_leader, last_updated) FROM stdin;
 -- Data for Name: users; Type: TABLE DATA; Schema: public; Owner: ferry
 --
 
-COPY users (uid, uname, first_name, middle_name, last_name, primary_email, status, expiration_date, last_updated) FROM stdin;
+COPY users (uid, uname, first_name, middle_name, last_name, status, expiration_date, last_updated) FROM stdin;
 \.
 
 
@@ -557,7 +550,7 @@ COPY users (uid, uname, first_name, middle_name, last_name, primary_email, statu
 --
 
 ALTER TABLE ONLY batch_priority
-    ADD CONSTRAINT idx_22233_primary PRIMARY KEY (uid, gid, expid, compid);
+    ADD CONSTRAINT idx_22233_primary PRIMARY KEY (uid, groupid, expid, compid);
 
 
 --
@@ -681,6 +674,14 @@ ALTER TABLE ONLY groups
 
 
 --
+-- Name: pk_user_affiliation; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
+--
+
+ALTER TABLE ONLY user_affiliation
+    ADD CONSTRAINT pk_user_affiliation PRIMARY KEY (uid);
+
+
+--
 -- Name: idx_22233_idx_batch_user_quota; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
@@ -705,14 +706,14 @@ CREATE INDEX idx_22233_idx_batch_user_quota_1 ON batch_priority USING btree (com
 -- Name: idx_22233_idx_priority_factor; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
-CREATE INDEX idx_22233_idx_priority_factor ON batch_priority USING btree (gid);
+CREATE INDEX idx_22233_idx_priority_factor ON batch_priority USING btree (groupid);
 
 
 --
 -- Name: idx_22236_idx_compute_resource_0; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
-CREATE INDEX idx_22236_idx_compute_resource_0 ON condor_quota USING btree (gid);
+CREATE INDEX idx_22236_idx_compute_resource_0 ON condor_quota USING btree (groupid);
 
 
 --
@@ -768,7 +769,7 @@ CREATE INDEX idx_22249_idx_experiment_membership_1 ON grid_access USING btree (f
 -- Name: idx_22261_fk_interactive_access_groups; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
-CREATE INDEX idx_22261_fk_interactive_access_groups ON compute_access USING btree (gid);
+CREATE INDEX idx_22261_fk_interactive_access_groups ON compute_access USING btree (groupid);
 
 
 --
@@ -782,7 +783,7 @@ CREATE INDEX idx_22261_idx_interactive_access ON compute_access USING btree (uid
 -- Name: idx_22271_idx_quota_0; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
-CREATE INDEX idx_22271_idx_quota_0 ON storage_quota USING btree (gid);
+CREATE INDEX idx_22271_idx_quota_0 ON storage_quota USING btree (groupid);
 
 
 --
@@ -797,20 +798,6 @@ CREATE INDEX idx_22271_idx_storage_quota_2 ON storage_quota USING btree (is_quot
 --
 
 CREATE INDEX idx_22271_idx_storage_quota_3 ON storage_quota USING btree (storageid);
-
-
---
--- Name: idx_22277_pk_users_0; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
---
-
-CREATE UNIQUE INDEX idx_22277_pk_users_0 ON users USING btree (primary_email);
-
-
---
--- Name: idx_22280_idx_user_affiliation; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
---
-
-CREATE INDEX idx_22280_idx_user_affiliation ON user_affiliation USING btree (uid);
 
 
 --
@@ -897,7 +884,7 @@ ALTER TABLE ONLY compute_resource
 --
 
 ALTER TABLE ONLY condor_quota
-    ADD CONSTRAINT fk_compute_resource_groups FOREIGN KEY (gid) REFERENCES groups(gid);
+    ADD CONSTRAINT fk_compute_resource_groups FOREIGN KEY (groupid) REFERENCES groups(groupid);
 
 
 --
@@ -977,7 +964,7 @@ ALTER TABLE ONLY compute_access
 --
 
 ALTER TABLE ONLY compute_access
-    ADD CONSTRAINT fk_interactive_access_groups FOREIGN KEY (gid) REFERENCES groups(gid);
+    ADD CONSTRAINT fk_interactive_access_groups FOREIGN KEY (groupid) REFERENCES groups(groupid);
 
 
 --
@@ -1009,7 +996,7 @@ ALTER TABLE ONLY batch_priority
 --
 
 ALTER TABLE ONLY batch_priority
-    ADD CONSTRAINT fk_priority_factor_groups FOREIGN KEY (gid) REFERENCES groups(gid);
+    ADD CONSTRAINT fk_priority_factor_groups FOREIGN KEY (groupid) REFERENCES groups(groupid);
 
 
 --
@@ -1025,7 +1012,7 @@ ALTER TABLE ONLY batch_priority
 --
 
 ALTER TABLE ONLY storage_quota
-    ADD CONSTRAINT fk_storage_quota_groups FOREIGN KEY (gid) REFERENCES groups(gid);
+    ADD CONSTRAINT fk_storage_quota_groups FOREIGN KEY (groupid) REFERENCES groups(groupid);
 
 
 --
