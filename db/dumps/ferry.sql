@@ -104,10 +104,10 @@ ALTER TABLE public.compute_resource OWNER TO ferry;
 CREATE TABLE condor_quota (
     id bigint NOT NULL,
     groupid bigint NOT NULL,
-    is_quota_of bigint,
     quota character varying(255),
     last_updated date DEFAULT ('now'::text)::date,
-    compid bigint DEFAULT (0)::bigint NOT NULL
+    compid bigint DEFAULT (0)::bigint NOT NULL,
+    name character varying(300) NOT NULL
 );
 
 
@@ -241,7 +241,7 @@ ALTER TABLE public.grid_access OWNER TO ferry;
 --
 
 CREATE TABLE groups (
-    gid bigint NOT NULL,
+    gid bigint,
     group_name character varying(100) NOT NULL,
     group_type groups_group_type NOT NULL,
     groupid bigint NOT NULL,
@@ -284,7 +284,6 @@ CREATE TABLE storage_quota (
     value text NOT NULL,
     unit character varying(100) NOT NULL,
     valid_until date,
-    is_quota_of bigint,
     id bigint NOT NULL,
     storageid bigint
 );
@@ -439,7 +438,7 @@ COPY compute_resource (id, name, default_shell, comp_type, expid, last_updated, 
 -- Data for Name: condor_quota; Type: TABLE DATA; Schema: public; Owner: ferry
 --
 
-COPY condor_quota (id, groupid, is_quota_of, quota, last_updated, compid) FROM stdin;
+COPY condor_quota (id, groupid, quota, last_updated, compid, name) FROM stdin;
 \.
 
 
@@ -501,7 +500,7 @@ COPY groups (gid, group_name, group_type, groupid, last_updated) FROM stdin;
 -- Data for Name: storage_quota; Type: TABLE DATA; Schema: public; Owner: ferry
 --
 
-COPY storage_quota (groupid, path, last_updated, shell, value, unit, valid_until, is_quota_of, id, storageid) FROM stdin;
+COPY storage_quota (groupid, path, last_updated, shell, value, unit, valid_until, id, storageid) FROM stdin;
 \.
 
 
@@ -724,13 +723,6 @@ CREATE INDEX idx_22236_idx_compute_resource_1 ON condor_quota USING btree (compi
 
 
 --
--- Name: idx_22236_idx_condor_quota; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
---
-
-CREATE INDEX idx_22236_idx_condor_quota ON condor_quota USING btree (is_quota_of);
-
-
---
 -- Name: idx_22246_idx_user_group_1; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
@@ -784,13 +776,6 @@ CREATE INDEX idx_22261_idx_interactive_access ON compute_access USING btree (uid
 --
 
 CREATE INDEX idx_22271_idx_quota_0 ON storage_quota USING btree (groupid);
-
-
---
--- Name: idx_22271_idx_storage_quota_2; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
---
-
-CREATE INDEX idx_22271_idx_storage_quota_2 ON storage_quota USING btree (is_quota_of);
 
 
 --
@@ -885,14 +870,6 @@ ALTER TABLE ONLY compute_resource
 
 ALTER TABLE ONLY condor_quota
     ADD CONSTRAINT fk_compute_resource_groups FOREIGN KEY (groupid) REFERENCES groups(groupid);
-
-
---
--- Name: fk_condor_quota_condor_quota; Type: FK CONSTRAINT; Schema: public; Owner: ferry
---
-
-ALTER TABLE ONLY condor_quota
-    ADD CONSTRAINT fk_condor_quota_condor_quota FOREIGN KEY (is_quota_of) REFERENCES condor_quota(id);
 
 
 --
@@ -1021,14 +998,6 @@ ALTER TABLE ONLY storage_quota
 
 ALTER TABLE ONLY storage_quota
     ADD CONSTRAINT fk_storage_quota_resources FOREIGN KEY (storageid) REFERENCES storage_resource(id);
-
-
---
--- Name: fk_storage_quota_storage_quota; Type: FK CONSTRAINT; Schema: public; Owner: ferry
---
-
-ALTER TABLE ONLY storage_quota
-    ADD CONSTRAINT fk_storage_quota_storage_quota FOREIGN KEY (is_quota_of) REFERENCES storage_quota(id);
 
 
 --
