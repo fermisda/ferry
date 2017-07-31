@@ -6,6 +6,8 @@ import sys
 from Configuration import Configuration
 from MySQLUtils import MySQLUtils
 import xml.etree.ElementTree as ET
+import psycopg2 as pg
+import psycopg2.extras
 
 
 class VOMS:
@@ -94,8 +96,8 @@ class User:
     def add_to_vo_role(self, vname, vurl, gums_mapping):
         self.vo_membership[(vname, vurl)].append(gums_mapping)
 
-    def add_group(self, gid):
-        self.gids.append(gid)
+    def add_group(self, gid, leader = False):
+        self.gids.append((str(gid), leader))
 
     def set_expiration_date(self, dt):
         self.expiration_date = dt
@@ -239,8 +241,7 @@ def populate_db(config, users, gids, vomss, gums, roles):
     for uname, user in users.items():
         #if uname!='kherner':
         #    continue
-        is_primary = False
-        for gid in user.gids:
+        for gid, is_primary in user.gids:
             groupid = gid_map[gid]
             fd.write("insert into user_group values (%d,%d,%s,False);\n" % (int(user.uid), groupid, is_primary))
     fd.flush()
@@ -409,7 +410,7 @@ def assign_vos(config, vn, vurl, rls, usrs, gums_map):
                             print "disaster", new_umap.__dict__
                             sys.exit(1)
                         if umap.gid not in user.gids:
-                            user.gids.append(umap.gid)
+                            user.add_group(umap.gid)
                         user.add_to_vo_role(group, url, new_umap)
 
                         break
@@ -472,6 +473,38 @@ def read_gums_config(config):
                         break
     return gums_mapping
 
+def read_vulcan_user_group(config, users):
+    config = config.config._sections["vulcan"]
+    conn_string = "host='%s' dbname='%s' user='%s' password='%s'" % \
+                  (config["hostname"], config["database"], config["username"], config["password"])
+
+    conn = pg.connect(conn_string)
+    cursor = conn.cursor(cursor_factory=pg.extras.DictCursor)
+
+    cursor.execute("select u.*, a.auth_string from user_group_t1 as u left join auth_tokens_t1 as a on u.userid = a.userid where a.auth_method = 'UNIX'")
+    rows = cursor.fetchall()
+
+    validGroups = []
+    for line in open(config["validgroups"], "r").readlines():
+        validGroups.append(line.split()[0])
+
+    for row in rows:
+        if row["auth_string"] in users:
+            if str(row["groupid"]) in validGroups:
+               if  (str(row["groupid"]), True) not in users[row["auth_string"]].gids \
+               and (str(row["groupid"]), False) not in users[row["auth_string"]].gids:
+                   users[row["auth_string"]].add_group(row["groupid"], False)
+
+    cursor.execute("select l.*, a.auth_string from leader_group_t1 as l left join auth_tokens_t1 as a on l.userid = a.userid where a.auth_method = 'UNIX'")
+    rows = cursor.fetchall()
+
+    for row in rows:
+        if row["auth_string"] in users:
+            for i in range(0, len(users[row["auth_string"]].gids)):
+                if users[row["auth_string"]].gids[i][0] == str(row["groupid"]):
+                    del users[row["auth_string"]].gids[i]
+                    users[row["auth_string"]].add_group(row["groupid"], True)
+
 
 if __name__ == "__main__":
     import os
@@ -485,6 +518,9 @@ if __name__ == "__main__":
 
     # read services_user_files.csv and add this information to users containers
     read_services_users(config.config.get("user_db", "services_user_file"), users)
+
+    # read Vulcan group memberships and add this information to users containers
+    read_vulcan_user_group(config, users)
 
     # process voms information; list of VOMS instances should be in configuration file
     voms_instances = config.config.get("voms_instances", "list")
