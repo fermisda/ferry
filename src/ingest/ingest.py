@@ -79,8 +79,8 @@ class User:
         if last_name.find("'") > 0:
             tmp = last_name.split("'")
             last_name = "%s'%s" % (tmp[0], tmp[1].capitalize())
-        self.last_name = last_name.replace("'", "\\'")
-        self.first_name = first_name.replace("'", "\\'")
+        self.last_name = last_name.replace("'", "''")
+        self.first_name = first_name.replace("'", "''")
         self.uname = uname
         self.gids = []
         self.expiration_date = None
@@ -97,7 +97,10 @@ class User:
         self.vo_membership[(vname, vurl)].append(gums_mapping)
 
     def add_group(self, gid, leader = False):
-        self.gids.append((str(gid), leader))
+        if (str(gid), leader) not in self.gids:
+            self.gids.append((str(gid), leader))
+        if (str(gid), not leader) in self.gids:
+            self.gids.remove((str(gid), not leader))
 
     def set_expiration_date(self, dt):
         self.expiration_date = dt
@@ -106,7 +109,7 @@ class User:
         self.status = status
 
     def add_certs(self, subject, issuer, vname, vurl):
-        subject = subject.replace("'", "\\'")
+        subject = subject.replace("'", "''")
         for c in self.certs:
             if c.vomsid == (vname, vurl):
                 c.add_cert(subject, issuer)
@@ -175,8 +178,8 @@ def populate_db(config, users, gids, vomss, gums, roles):
             user.expiration_date = "\'2038-01-01\'"
         else:
             user.expiration_date = "\'%s\'" % user.expiration_date
-        fd.write("insert into users values (%d,\'%s\',\'%s\',\'%s\',\'%s\',\'%s.fnal.gov\',%s,%s, NOW());\n"
-                 % (int(user.uid), user.uname, user.first_name, "", user.last_name, user.uname, user.status,
+        fd.write("insert into users values (%d,\'%s\',\'%s\',\'%s\',\'%s\',%s,%s, NOW());\n"
+                 % (int(user.uid), user.uname, user.first_name, "", user.last_name, user.status,
                     user.expiration_date))
         # for now will just create ferry.sql file
         # results,return_code=MySQLUtils.RunQuery(command,connect_str)
@@ -206,7 +209,7 @@ def populate_db(config, users, gids, vomss, gums, roles):
             un = "\'%s\'" % (gmap.uname)
         else:
             un='NULL'
-        fd.write("insert into experiment_fqan (fqan,mapped_user,mapped_group) values(\'%s/Role=%s\',%s,\'%s\');\n" % (gmap.group,gmap.role,un,gname))
+        fd.write("insert into experiment_fqan (fqanid,fqan,mapped_user,mapped_group) values(%d,\'%s/Role=%s\',%s,\'%s\');\n" % (fqan_counter,gmap.group,gmap.role,un,gname))
         gmap.set_id(fqan_counter)
     fd.flush()
 
@@ -214,8 +217,8 @@ def populate_db(config, users, gids, vomss, gums, roles):
     for vos in vomss:
         for vname, vo in vos.items():
             experiment_counter += 1
-            fd.write("insert into experiments (experiment_name,voms_url,alternative_name,last_updated) values (\'%s\',"
-                     "\'%s\',\'\',NOW());\n" % (vname, vo.url))
+            fd.write("insert into collaboration_unit (unitid,experiment_name,voms_url,alternative_name,last_updated) values (%d,\'%s\',"
+                     "\'%s\',\'\',NOW());\n" % (experiment_counter,vname, vo.url))
             vo.set_id(experiment_counter)
             for uname, user in users.items():
                 #if uname!='kherner':
@@ -243,7 +246,7 @@ def populate_db(config, users, gids, vomss, gums, roles):
         #    continue
         for gid, is_primary in user.gids:
             groupid = gid_map[gid]
-            fd.write("insert into user_group values (%d,%d,%s,False);\n" % (int(user.uid), groupid, is_primary))
+            fd.write("insert into user_group values (%d,%d,%s);\n" % (int(user.uid), groupid, is_primary))
     fd.flush()
     fd.close()
 
@@ -251,7 +254,6 @@ def populate_db(config, users, gids, vomss, gums, roles):
 def read_services_users(fname, users):
     fd = open(fname)
     for line in fd.readlines():
-
         if line.startswith("#"):
             continue
         try:
@@ -261,6 +263,9 @@ def read_services_users(fname, users):
                     if tmp[2] == "EXPIRED":
                         users[tmp[0]].set_status(0)
                 users[tmp[0]].set_expiration_date(tmp[2].strip())
+                if '.' in tmp[2].strip():
+                    print tmp
+                    print line
                 users[tmp[0]].is_k5login = True
         except:
             print >> sys.stderr, "csv Failed ", line
@@ -481,6 +486,7 @@ def read_vulcan_user_group(config, users):
     conn = pg.connect(conn_string)
     cursor = conn.cursor(cursor_factory=pg.extras.DictCursor)
 
+    # fetch user_group from vulcan
     cursor.execute("select u.*, a.auth_string from user_group_t1 as u left join auth_tokens_t1 as a on u.userid = a.userid where a.auth_method = 'UNIX'")
     rows = cursor.fetchall()
 
@@ -491,19 +497,24 @@ def read_vulcan_user_group(config, users):
     for row in rows:
         if row["auth_string"] in users:
             if str(row["groupid"]) in validGroups:
-               if  (str(row["groupid"]), True) not in users[row["auth_string"]].gids \
-               and (str(row["groupid"]), False) not in users[row["auth_string"]].gids:
-                   users[row["auth_string"]].add_group(row["groupid"], False)
+                users[row["auth_string"]].add_group(row["groupid"], False)
 
+    # ensure all Vulcan users are in us_cms (5063) group in Ferry
+    cursor.execute("select u.userid, a.auth_string from users_t1 as u left join auth_tokens_t1 as a on u.userid = a.userid where a.auth_method = 'UNIX'")
+    rows = cursor.fetchall()
+
+    for row in rows:
+        if row["auth_string"] in users:
+            users[row["auth_string"]].add_group('5063', False)
+
+    # fetch group leadership from vulcan
     cursor.execute("select l.*, a.auth_string from leader_group_t1 as l left join auth_tokens_t1 as a on l.userid = a.userid where a.auth_method = 'UNIX'")
     rows = cursor.fetchall()
 
     for row in rows:
         if row["auth_string"] in users:
-            for i in range(0, len(users[row["auth_string"]].gids)):
-                if users[row["auth_string"]].gids[i][0] == str(row["groupid"]):
-                    del users[row["auth_string"]].gids[i]
-                    users[row["auth_string"]].add_group(row["groupid"], True)
+            if str(row["groupid"]) in (item[0] for item in users[row["auth_string"]].gids):
+                users[row["auth_string"]].add_group(row["groupid"], True)
 
 
 if __name__ == "__main__":
