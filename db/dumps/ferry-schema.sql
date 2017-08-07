@@ -46,7 +46,6 @@ SET default_with_oids = false;
 --
 
 CREATE TABLE batch_priority (
-    uid bigint NOT NULL,
     groupid bigint NOT NULL,
     unitid bigint NOT NULL,
     priority bigint NOT NULL,
@@ -70,7 +69,7 @@ COMMENT ON TABLE batch_priority IS 'table describes condor quota and priority pe
 
 CREATE TABLE collaboration_unit (
     unitid bigint NOT NULL,
-    experiment_name character varying(100) NOT NULL,
+    unit_name character varying(100) NOT NULL,
     voms_url character varying(200),
     alternative_name character varying(100),
     last_updated date DEFAULT ('now'::text)::date
@@ -164,10 +163,10 @@ CREATE TABLE condor_quota (
 ALTER TABLE public.condor_quota OWNER TO ferry;
 
 --
--- Name: experiment_fqan; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
+-- Name: grid_fqan; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
 --
 
-CREATE TABLE experiment_fqan (
+CREATE TABLE grid_fqan (
     fqanid bigint NOT NULL,
     fqan character varying(300) NOT NULL,
     mapped_user character varying(100),
@@ -176,7 +175,7 @@ CREATE TABLE experiment_fqan (
 );
 
 
-ALTER TABLE public.experiment_fqan OWNER TO ferry;
+ALTER TABLE public.grid_fqan OWNER TO ferry;
 
 --
 -- Name: experiment_roles_roleid_seq; Type: SEQUENCE; Schema: public; Owner: ferry
@@ -196,7 +195,7 @@ ALTER TABLE public.experiment_roles_roleid_seq OWNER TO ferry;
 -- Name: experiment_roles_roleid_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: ferry
 --
 
-ALTER SEQUENCE experiment_roles_roleid_seq OWNED BY experiment_fqan.fqanid;
+ALTER SEQUENCE experiment_roles_roleid_seq OWNED BY grid_fqan.fqanid;
 
 
 --
@@ -285,7 +284,8 @@ CREATE TABLE storage_quota (
     unit character varying(100) NOT NULL,
     valid_until date,
     id bigint NOT NULL,
-    storageid bigint
+    storageid bigint,
+    uid bigint
 );
 
 
@@ -407,15 +407,7 @@ ALTER TABLE ONLY collaboration_unit ALTER COLUMN unitid SET DEFAULT nextval('exp
 -- Name: fqanid; Type: DEFAULT; Schema: public; Owner: ferry
 --
 
-ALTER TABLE ONLY experiment_fqan ALTER COLUMN fqanid SET DEFAULT nextval('experiment_roles_roleid_seq'::regclass);
-
-
---
--- Name: idx_22233_primary; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
---
-
-ALTER TABLE ONLY batch_priority
-    ADD CONSTRAINT idx_22233_primary PRIMARY KEY (uid, groupid, unitid, compid);
+ALTER TABLE ONLY grid_fqan ALTER COLUMN fqanid SET DEFAULT nextval('experiment_roles_roleid_seq'::regclass);
 
 
 --
@@ -446,7 +438,7 @@ ALTER TABLE ONLY collaboration_unit_group
 -- Name: idx_22254_primary; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
 --
 
-ALTER TABLE ONLY experiment_fqan
+ALTER TABLE ONLY grid_fqan
     ADD CONSTRAINT idx_22254_primary PRIMARY KEY (fqanid);
 
 
@@ -544,13 +536,6 @@ ALTER TABLE ONLY groups
 
 ALTER TABLE ONLY user_affiliation
     ADD CONSTRAINT pk_user_affiliation PRIMARY KEY (uid);
-
-
---
--- Name: idx_22233_idx_batch_user_quota; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
---
-
-CREATE INDEX idx_22233_idx_batch_user_quota ON batch_priority USING btree (uid);
 
 
 --
@@ -697,14 +682,14 @@ CREATE INDEX idx_compute_resource ON compute_resource USING btree (unitid);
 -- Name: idx_experiment_fqan; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
-CREATE INDEX idx_experiment_fqan ON experiment_fqan USING btree (mapped_group);
+CREATE INDEX idx_experiment_fqan ON grid_fqan USING btree (mapped_group);
 
 
 --
 -- Name: idx_experiment_roles; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
-CREATE INDEX idx_experiment_roles ON experiment_fqan USING btree (mapped_user);
+CREATE INDEX idx_experiment_roles ON grid_fqan USING btree (mapped_user);
 
 
 --
@@ -712,6 +697,13 @@ CREATE INDEX idx_experiment_roles ON experiment_fqan USING btree (mapped_user);
 --
 
 CREATE UNIQUE INDEX idx_groups_group_name ON groups USING btree (group_name);
+
+
+--
+-- Name: idx_storage_quota; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
+--
+
+CREATE INDEX idx_storage_quota ON storage_quota USING btree (uid);
 
 
 --
@@ -742,7 +734,7 @@ ALTER TABLE ONLY condor_quota
 -- Name: fk_experiment_fqan_groups; Type: FK CONSTRAINT; Schema: public; Owner: ferry
 --
 
-ALTER TABLE ONLY experiment_fqan
+ALTER TABLE ONLY grid_fqan
     ADD CONSTRAINT fk_experiment_fqan_groups FOREIGN KEY (mapped_group) REFERENCES groups(group_name);
 
 
@@ -750,7 +742,7 @@ ALTER TABLE ONLY experiment_fqan
 -- Name: fk_experiment_fqan_users; Type: FK CONSTRAINT; Schema: public; Owner: ferry
 --
 
-ALTER TABLE ONLY experiment_fqan
+ALTER TABLE ONLY grid_fqan
     ADD CONSTRAINT fk_experiment_fqan_users FOREIGN KEY (mapped_user) REFERENCES users(uname);
 
 
@@ -775,7 +767,7 @@ ALTER TABLE ONLY collaboration_unit_group
 --
 
 ALTER TABLE ONLY grid_access
-    ADD CONSTRAINT fk_experiment_membership_experiment_roles FOREIGN KEY (fqanid) REFERENCES experiment_fqan(fqanid);
+    ADD CONSTRAINT fk_experiment_membership_experiment_roles FOREIGN KEY (fqanid) REFERENCES grid_fqan(fqanid);
 
 
 --
@@ -843,14 +835,6 @@ ALTER TABLE ONLY batch_priority
 
 
 --
--- Name: fk_priority_factor_users; Type: FK CONSTRAINT; Schema: public; Owner: ferry
---
-
-ALTER TABLE ONLY batch_priority
-    ADD CONSTRAINT fk_priority_factor_users FOREIGN KEY (uid) REFERENCES users(uid);
-
-
---
 -- Name: fk_storage_quota_groups; Type: FK CONSTRAINT; Schema: public; Owner: ferry
 --
 
@@ -864,6 +848,14 @@ ALTER TABLE ONLY storage_quota
 
 ALTER TABLE ONLY storage_quota
     ADD CONSTRAINT fk_storage_quota_resources FOREIGN KEY (storageid) REFERENCES storage_resource(id);
+
+
+--
+-- Name: fk_storage_quota_users; Type: FK CONSTRAINT; Schema: public; Owner: ferry
+--
+
+ALTER TABLE ONLY storage_quota
+    ADD CONSTRAINT fk_storage_quota_users FOREIGN KEY (uid) REFERENCES users(uid);
 
 
 --
