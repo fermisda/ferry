@@ -6,8 +6,8 @@ import sys
 from Configuration import Configuration
 from MySQLUtils import MySQLUtils
 import xml.etree.ElementTree as ET
-import psycopg2 as pg
-import psycopg2.extras
+#import psycopg2 as pg
+#import psycopg2.extras
 
 
 class VOMS:
@@ -122,7 +122,7 @@ def read_uid(fname):
     fd = open(fname)
     usrs = {}
     for line in fd.readlines():
-        #try:
+        try:
             if not len(line[:-1]):
                 continue
             tmp = line[:-1].split("\t\t")
@@ -130,8 +130,8 @@ def read_uid(fname):
                 usrs[tmp[4].strip().lower()] = User(tmp[0].strip(), tmp[2].strip().lower().capitalize(),
                                                      tmp[3].strip().lower().capitalize(), tmp[4].strip().lower())
                 usrs[tmp[4].strip().lower()].add_group((tmp[1].strip().lower()))
-        #except:
-        #    print >> sys.stderr, "Failed ", line
+        except:
+            print >> sys.stderr, "Failed ", line
     return usrs
 
 
@@ -214,15 +214,19 @@ def populate_db(config, users, gids, vomss, gums, roles):
     fd.flush()
 
     experiment_counter = 0
+
     for vos in vomss:
         for vname, vo in vos.items():
             experiment_counter += 1
             fd.write("insert into collaboration_unit (unitid,experiment_name,voms_url,alternative_name,last_updated) values (%d,\'%s\',"
                      "\'%s\',\'\',NOW());\n" % (experiment_counter,vname, vo.url))
             vo.set_id(experiment_counter)
+
             for uname, user in users.items():
+
                 #if uname!='kherner':
                 #    continue
+
                 if user.vo_membership.has_key((vname,vo.url)):
                     for umap in user.vo_membership[(vname, vo.url)]:
                         fqanid = 0
@@ -263,9 +267,6 @@ def read_services_users(fname, users):
                     if tmp[2] == "EXPIRED":
                         users[tmp[0]].set_status(0)
                 users[tmp[0]].set_expiration_date(tmp[2].strip())
-                if '.' in tmp[2].strip():
-                    print tmp
-                    print line
                 users[tmp[0]].is_k5login = True
         except:
             print >> sys.stderr, "csv Failed ", line
@@ -341,9 +342,11 @@ def assign_vos(config, vn, vurl, rls, usrs, gums_map):
 
         command = "select u.userid,d.subject_string,c.subject_string from certificate d, ca c, usr u where u.userid = "\
                   "d.usr_id and c.cid=d.ca_id and (c.subject_string not like \'%HSM%\' and c.subject_string not like " \
-                  "\'%Digi%\' and c.subject_string  not like \'%DOE%\') and u.dn like \'/DC=org/DC=cilogon/C=US/O=" \
-                  "Fermi National Accelerator Laboratory/OU=People/CN=%/CN=UID:"+user.uname+"\';"
+                  "\'%Digi%\' and c.subject_string  not like \'%DOE%\') and u.userid in (" \
+                  "select distinct  u.userid from usr u, certificate d where u.userid = d.usr_id and (u.dn like " \
+                  "\'%" + uname + "%\' or d.subject_string like \'%" + uname + "%\'));"
         members, return_code = MySQLUtils.RunQuery(command, connect_str, False)
+
         if return_code:
             print >> sys.stderr, "Failed to extract information from VOMS %s for user %s" % (vn, user.uname)
             continue
@@ -547,12 +550,12 @@ if __name__ == "__main__":
         vomss.append(vos)
         assign_vos(config.config, vn, url, roles, users, gums)
 
-    for uname, user in users.items():
-            if user.uname == "kherner":
-                print user.uname
-                for c in user.certs:
-                    print c.__dict__
-                for k,v in user.vo_membership.items():
-                    for l in v:
-                        print k, l.__dict__
+    #for uname, user in users.items():
+    #        if user.uname == "kherner":
+    #            print user.uname
+    #            for c in user.certs:
+    #                print c.__dict__
+    #            for k,v in user.vo_membership.items():
+    #                for l in v:
+    #                    print k, l.__dict__
     populate_db(config.config, users, gids, vomss, gums, roles)
