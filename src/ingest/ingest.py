@@ -6,8 +6,8 @@ import sys
 from Configuration import Configuration
 from MySQLUtils import MySQLUtils
 import xml.etree.ElementTree as ET
-#import psycopg2 as pg
-#import psycopg2.extras
+import psycopg2 as pg
+import psycopg2.extras
 
 
 class VOMS:
@@ -166,6 +166,11 @@ def populate_db(config, users, gids, vomss, gums, roles):
     mysql_client_cfg = MySQLUtils.createClientConfig("main_db", config)
     connect_str = MySQLUtils.getDbConnection("main_db", mysql_client_cfg, config)
     fd = open("ferry.sql", "w")
+    fd.write("drop database ferry;\n")
+    fd.write("create database ferry;\n")
+    for line in open("../../db/dumps/ferry-schema.sql"):
+        fd.write(line)
+    fd.flush()
     command = ""
     for user in users.values():
         #if user.uname!='kherner':
@@ -209,7 +214,8 @@ def populate_db(config, users, gids, vomss, gums, roles):
             un = "\'%s\'" % (gmap.uname)
         else:
             un='NULL'
-        fd.write("insert into experiment_fqan (fqanid,fqan,mapped_user,mapped_group) values(%d,\'%s/Role=%s\',%s,\'%s\');\n" % (fqan_counter,gmap.group,gmap.role,un,gname))
+        fd.write("insert into grid_fqan (fqanid,fqan,mapped_user,mapped_group) values(%d,\'%s/Role=%s\',%s,\'%s\');\n" %
+                 (fqan_counter,gmap.group,gmap.role,un,gname))
         gmap.set_id(fqan_counter)
     fd.flush()
 
@@ -218,7 +224,8 @@ def populate_db(config, users, gids, vomss, gums, roles):
     for vos in vomss:
         for vname, vo in vos.items():
             experiment_counter += 1
-            fd.write("insert into collaboration_unit (unitid,experiment_name,voms_url,alternative_name,last_updated) values (%d,\'%s\',"
+            fd.write("insert into collaboration_unit (unitid,unit_name,voms_url,alternative_name,last_updated) values ("
+                     "%d,\'%s\',"
                      "\'%s\',\'\',NOW());\n" % (experiment_counter,vname, vo.url))
             vo.set_id(experiment_counter)
 
@@ -485,7 +492,7 @@ def read_vulcan_user_group(config, users):
     config = config.config._sections["vulcan"]
     conn_string = "host='%s' dbname='%s' user='%s' password='%s'" % \
                   (config["hostname"], config["database"], config["username"], config["password"])
-
+    print conn_string
     conn = pg.connect(conn_string)
     cursor = conn.cursor(cursor_factory=pg.extras.DictCursor)
 
