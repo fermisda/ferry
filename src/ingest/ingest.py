@@ -8,6 +8,7 @@ from MySQLUtils import MySQLUtils
 import xml.etree.ElementTree as ET
 import psycopg2 as pg
 import psycopg2.extras
+import fetchcas as ca
 
 
 class VOMS:
@@ -166,9 +167,14 @@ def populate_db(config, users, gids, vomss, gums, roles):
     mysql_client_cfg = MySQLUtils.createClientConfig("main_db", config)
     connect_str = MySQLUtils.getDbConnection("main_db", mysql_client_cfg, config)
     fd = open("ferry.sql", "w")
-    fd.write("drop database ferry;\n")
-    fd.write("create database ferry;\n")
-    for line in open("../../db/dumps/ferry-schema.sql"):
+    fd.write("\connect ferry_test\n")
+    fd.write("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'ferry';\n")
+    fd.write("DROP DATABASE ferry;\n")
+    fd.write("CREATE DATABASE ferry OWNER ferry;\n")
+    fd.write("\connect ferry\n")
+    fd.write("GRANT ALL ON SCHEMA public TO ferry;\n")
+    fd.write("GRANT ALL ON SCHEMA public TO public;\n")
+    for line in open(config._sections["main_db"]["schemadump"]):
         fd.write(line)
     fd.flush()
     command = ""
@@ -248,8 +254,8 @@ def populate_db(config, users, gids, vomss, gums, roles):
                     for certs in user.certs:
                         if certs.vomsid == (vname, vo.url):
                             for k in range (0,len(certs.subjects)):
-                                fd.write("insert into user_certificate values (%d,\'%s\',\'%s\', NOW(),%d);\n"
-                                     % (int(user.uid), certs.subjects[k], certs.issuers[k], experiment_counter))
+                                fd.write("insert into user_certificate values (%d,\'%s\',%d,\'%s\',NOW());\n"
+                                     % (int(user.uid), certs.subjects[k], experiment_counter, certs.issuers[k]))
 
                     fd.flush()
     for uname, user in users.items():
@@ -516,6 +522,7 @@ def read_vulcan_user_group(config, users):
     for row in rows:
         if row["auth_string"] in users:
             users[row["auth_string"]].add_group('5063', False)
+            users[row["auth_string"]].add_to_vo('cms', 'https://voms2.cern.ch:8443/voms/cms')
 
     # fetch group leadership from vulcan
     cursor.execute("select l.*, a.auth_string from leader_group_t1 as l left join auth_tokens_t1 as a on l.userid = a.userid where a.auth_method = 'UNIX'")
@@ -525,6 +532,39 @@ def read_vulcan_user_group(config, users):
         if row["auth_string"] in users:
             if str(row["groupid"]) in (item[0] for item in users[row["auth_string"]].gids):
                 users[row["auth_string"]].add_group(row["groupid"], True)
+
+def read_vulcan_certificates(config, users, vomss):
+    cfg = config.config._sections["vulcan"]
+    conn_string = "host='%s' dbname='%s' user='%s' password='%s'" % \
+                  (cfg["hostname"], cfg["database"], cfg["username"], cfg["password"])
+    print conn_string
+    conn = pg.connect(conn_string)
+    cursor = conn.cursor(cursor_factory=pg.extras.DictCursor)
+
+    url = cfg["cmsurl"]
+    vo = cfg["cmsvo"]
+
+    CADir = config.config._sections["CAs"]["cadir"]
+    CAs = ca.fetchCAs(CADir)
+
+    # add cms voms information
+    vomss.append({'cms': VOMS(url, vo, vo)})
+
+    # fetch certificates from vulcan
+    cursor.execute("select u.auth_string as uname, c.* from auth_tokens_t1 as c left join auth_tokens_t1 as u on c.userid = u.userid \
+                    where c.auth_method = 'X509' and u.auth_method = 'UNIX' \
+                    and c.auth_string not like '%DC=doegrids%' \
+                    and c.auth_string not like '%DC=fnal%' \
+                    and c.auth_string not like '%DC=DigiCert%' \
+                    and c.auth_string not like '%O=BEGRID%' \
+                    and c.auth_string not like '%O=UNIANDES%'")
+    rows = cursor.fetchall()
+
+    for row in rows:
+        if row["uname"] in users:
+            CA = ca.matchCA(CAs, row["auth_string"])
+            if CA:
+                users[row["uname"]].add_certs(row["auth_string"], CA["subjectdn"], vo, url)
 
 
 if __name__ == "__main__":
@@ -550,6 +590,8 @@ if __name__ == "__main__":
     vomss = [] # list of VOs from VOMS instances
     roles = []
     gums = read_gums_config(config) # List of GUMS group mapping
+    # read Vulcan X509 certificates and voms and add this information to proper containers
+    read_vulcan_certificates(config, users, vomss)
     for vn in voms_list:
         url = config.config.get("voms_db_%s" % (vn,), "url")
         # reads vo related information from VOMS

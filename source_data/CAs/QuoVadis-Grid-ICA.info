@@ -1,0 +1,14 @@
+#
+# @(#)$Id: e72045ce.info,v 1.9 2015/06/18 09:44:55 pmacvsdg Exp $
+#   
+alias = QuoVadis-Grid-ICA
+requires = QuoVadis-Root-CA1
+obsoletes = SWITCH-QuoVadis-Grid-ICA
+ca_url = http://trust.quovadisglobal.com/pem/qvgridg1.crt
+crl_url = http://crl.quovadisglobal.com/qvgridg1.crl
+email = compliance@quovadisglobal.com
+status = accredited:classic
+url = https://www.quovadisglobal.bm/
+version = 1.85
+sha1fp.0 = 39:4B:FA:49:40:63:A5:D0:88:4C:67:8F:FC:AB:38:2F:7C:47:64:DA
+subjectdn = "/C=BM/O=QuoVadis Limited/OU=Issuing Certification Authority/CN=QuoVadis Grid ICA"
