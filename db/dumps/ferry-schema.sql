@@ -42,28 +42,6 @@ SET default_tablespace = '';
 SET default_with_oids = false;
 
 --
--- Name: batch_priority; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
---
-
-CREATE TABLE batch_priority (
-    groupid bigint NOT NULL,
-    unitid bigint NOT NULL,
-    priority bigint NOT NULL,
-    last_updated date DEFAULT ('now'::text)::date NOT NULL,
-    compid bigint NOT NULL
-);
-
-
-ALTER TABLE public.batch_priority OWNER TO ferry;
-
---
--- Name: TABLE batch_priority; Type: COMMENT; Schema: public; Owner: ferry
---
-
-COMMENT ON TABLE batch_priority IS 'table describes condor quota and priority per user';
-
-
---
 -- Name: collaboration_unit; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
 --
 
@@ -130,11 +108,27 @@ CREATE TABLE compute_access (
 ALTER TABLE public.compute_access OWNER TO ferry;
 
 --
+-- Name: compute_batch; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
+--
+
+CREATE TABLE compute_batch (
+    compid bigint DEFAULT (0)::bigint NOT NULL,
+    groupid bigint NOT NULL,
+    name character varying(300) NOT NULL,
+    value bigint,
+    type character varying(255),
+    last_updated date DEFAULT ('now'::text)::date
+);
+
+
+ALTER TABLE public.compute_batch OWNER TO ferry;
+
+--
 -- Name: compute_resource; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
 --
 
 CREATE TABLE compute_resource (
-    id bigint NOT NULL,
+    compid bigint NOT NULL,
     name character varying(100),
     default_shell character varying(100),
     comp_type character varying(100),
@@ -145,22 +139,6 @@ CREATE TABLE compute_resource (
 
 
 ALTER TABLE public.compute_resource OWNER TO ferry;
-
---
--- Name: condor_quota; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
---
-
-CREATE TABLE condor_quota (
-    id bigint NOT NULL,
-    groupid bigint NOT NULL,
-    quota character varying(255),
-    last_updated date DEFAULT ('now'::text)::date,
-    compid bigint DEFAULT (0)::bigint NOT NULL,
-    name character varying(300) NOT NULL
-);
-
-
-ALTER TABLE public.condor_quota OWNER TO ferry;
 
 --
 -- Name: grid_fqan; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
@@ -276,15 +254,15 @@ COMMENT ON COLUMN groups.group_name IS 'unix group name';
 --
 
 CREATE TABLE storage_quota (
-    groupid bigint NOT NULL,
+    groupid bigint,
     path text NOT NULL,
     last_updated date DEFAULT ('now'::text)::date NOT NULL,
     shell character varying(255),
     value text NOT NULL,
     unit character varying(100) NOT NULL,
     valid_until date,
-    id bigint NOT NULL,
-    storageid bigint,
+    quotaid bigint NOT NULL,
+    storageid bigint NOT NULL,
     uid bigint
 );
 
@@ -303,7 +281,7 @@ COMMENT ON TABLE storage_quota IS 'table store quota per user in various storage
 --
 
 CREATE TABLE storage_resource (
-    id bigint NOT NULL,
+    storageid bigint NOT NULL,
     name character varying(100) NOT NULL,
     storage_type character varying(255) NOT NULL,
     default_path character varying(255),
@@ -411,14 +389,6 @@ ALTER TABLE ONLY grid_fqan ALTER COLUMN fqanid SET DEFAULT nextval('experiment_r
 
 
 --
--- Name: idx_22236_primary; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
---
-
-ALTER TABLE ONLY condor_quota
-    ADD CONSTRAINT idx_22236_primary PRIMARY KEY (id);
-
-
---
 -- Name: idx_22242_primary; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
 --
 
@@ -455,7 +425,7 @@ ALTER TABLE ONLY compute_access
 --
 
 ALTER TABLE ONLY storage_resource
-    ADD CONSTRAINT idx_22265_primary PRIMARY KEY (id);
+    ADD CONSTRAINT idx_22265_primary PRIMARY KEY (storageid);
 
 
 --
@@ -463,7 +433,7 @@ ALTER TABLE ONLY storage_resource
 --
 
 ALTER TABLE ONLY storage_quota
-    ADD CONSTRAINT idx_22271_primary PRIMARY KEY (id);
+    ADD CONSTRAINT idx_22271_primary PRIMARY KEY (quotaid);
 
 
 --
@@ -515,11 +485,19 @@ ALTER TABLE ONLY users
 
 
 --
+-- Name: pk_compute_batch; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
+--
+
+ALTER TABLE ONLY compute_batch
+    ADD CONSTRAINT pk_compute_batch PRIMARY KEY (compid, groupid, name);
+
+
+--
 -- Name: pk_compute_resource; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
 --
 
 ALTER TABLE ONLY compute_resource
-    ADD CONSTRAINT pk_compute_resource PRIMARY KEY (id);
+    ADD CONSTRAINT pk_compute_resource PRIMARY KEY (compid);
 
 
 --
@@ -539,38 +517,17 @@ ALTER TABLE ONLY user_affiliation
 
 
 --
--- Name: idx_22233_idx_batch_user_quota_0; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
---
-
-CREATE INDEX idx_22233_idx_batch_user_quota_0 ON batch_priority USING btree (unitid);
-
-
---
--- Name: idx_22233_idx_batch_user_quota_1; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
---
-
-CREATE INDEX idx_22233_idx_batch_user_quota_1 ON batch_priority USING btree (compid);
-
-
---
--- Name: idx_22233_idx_priority_factor; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
---
-
-CREATE INDEX idx_22233_idx_priority_factor ON batch_priority USING btree (groupid);
-
-
---
 -- Name: idx_22236_idx_compute_resource_0; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
-CREATE INDEX idx_22236_idx_compute_resource_0 ON condor_quota USING btree (groupid);
+CREATE INDEX idx_22236_idx_compute_resource_0 ON compute_batch USING btree (groupid);
 
 
 --
 -- Name: idx_22236_idx_compute_resource_1; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
-CREATE INDEX idx_22236_idx_compute_resource_1 ON condor_quota USING btree (compid);
+CREATE INDEX idx_22236_idx_compute_resource_1 ON compute_batch USING btree (compid);
 
 
 --
@@ -710,8 +667,8 @@ CREATE INDEX idx_storage_quota ON storage_quota USING btree (uid);
 -- Name: fk_compute_resource_compute_resource; Type: FK CONSTRAINT; Schema: public; Owner: ferry
 --
 
-ALTER TABLE ONLY condor_quota
-    ADD CONSTRAINT fk_compute_resource_compute_resource FOREIGN KEY (compid) REFERENCES compute_resource(id);
+ALTER TABLE ONLY compute_batch
+    ADD CONSTRAINT fk_compute_resource_compute_resource FOREIGN KEY (compid) REFERENCES compute_resource(compid);
 
 
 --
@@ -726,7 +683,7 @@ ALTER TABLE ONLY compute_resource
 -- Name: fk_compute_resource_groups; Type: FK CONSTRAINT; Schema: public; Owner: ferry
 --
 
-ALTER TABLE ONLY condor_quota
+ALTER TABLE ONLY compute_batch
     ADD CONSTRAINT fk_compute_resource_groups FOREIGN KEY (groupid) REFERENCES groups(groupid);
 
 
@@ -791,7 +748,7 @@ ALTER TABLE ONLY grid_access
 --
 
 ALTER TABLE ONLY compute_access
-    ADD CONSTRAINT fk_interactive_access_compute_resource FOREIGN KEY (compid) REFERENCES compute_resource(id);
+    ADD CONSTRAINT fk_interactive_access_compute_resource FOREIGN KEY (compid) REFERENCES compute_resource(compid);
 
 
 --
@@ -811,30 +768,6 @@ ALTER TABLE ONLY compute_access
 
 
 --
--- Name: fk_priority_factor_comp_resources; Type: FK CONSTRAINT; Schema: public; Owner: ferry
---
-
-ALTER TABLE ONLY batch_priority
-    ADD CONSTRAINT fk_priority_factor_comp_resources FOREIGN KEY (compid) REFERENCES compute_resource(id);
-
-
---
--- Name: fk_priority_factor_experiments; Type: FK CONSTRAINT; Schema: public; Owner: ferry
---
-
-ALTER TABLE ONLY batch_priority
-    ADD CONSTRAINT fk_priority_factor_experiments FOREIGN KEY (unitid) REFERENCES collaboration_unit(unitid);
-
-
---
--- Name: fk_priority_factor_groups; Type: FK CONSTRAINT; Schema: public; Owner: ferry
---
-
-ALTER TABLE ONLY batch_priority
-    ADD CONSTRAINT fk_priority_factor_groups FOREIGN KEY (groupid) REFERENCES groups(groupid);
-
-
---
 -- Name: fk_storage_quota_groups; Type: FK CONSTRAINT; Schema: public; Owner: ferry
 --
 
@@ -847,7 +780,7 @@ ALTER TABLE ONLY storage_quota
 --
 
 ALTER TABLE ONLY storage_quota
-    ADD CONSTRAINT fk_storage_quota_resources FOREIGN KEY (storageid) REFERENCES storage_resource(id);
+    ADD CONSTRAINT fk_storage_quota_resources FOREIGN KEY (storageid) REFERENCES storage_resource(storageid);
 
 
 --
