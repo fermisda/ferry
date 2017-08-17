@@ -20,6 +20,8 @@ def fetchCAs(CADir):
     for path in pathList:
         f = open(path)
         fileName = path.split("/")[-1].split(".")[0]
+        if 'policy-igtf' in fileName:
+            continue
         CAs[fileName] = {}
         for line in f.readlines():
             if not line.startswith("#"):
