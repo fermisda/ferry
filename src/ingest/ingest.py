@@ -5,121 +5,23 @@
 import sys
 from Configuration import Configuration
 from MySQLUtils import MySQLUtils
+from User import User, Certificate, ComputeAccess
+from Resource import CollaborationUnit, VOMS, VOUserGroup, ComputeResource
 import xml.etree.ElementTree as ET
 import psycopg2 as pg
 import psycopg2.extras
 import fetchcas as ca
 
 
-class VOMS:
-    """
-    VOMS presents information about VOMS instance groups and roles
-    voname is a name of VOMS
-    experiment could be either a VO name or subgroup as in case of fermilab VO
-    It is planning to address any generic case it just deal with what we have now
-    """
-    def __init__(self, vurl, vo_name, experiment):
-        self.name = experiment
-        self.url = vurl
-        if experiment != vo_name:
-            self.url = "%s/%s" % (url, experiment)
-        self.gid = 0
-        self.roles = []
-        self.expid = 0
-
-    def add_unix_gid(self, gid):
-        self.gid = gid
-
-    def add_roles(self, rnames):
-        self.roles = rnames
-
-    def set_id(self, index):
-        self.expid = index
-
-class VOUserGroup:
-    """
-    GUMS mapping from configuration file
-    """
-
-    def __init__(self, voms_user_group, voms_server, vo_group, role):
-        self.user_group = voms_user_group
-        self.server = voms_server
-        self.group = vo_group
-        self.role = role
-        self.uname = None
-        self.account_mappers = None
-        self.gid = None
-        self.fqanid = 0
-
-    def set_id(self, index):
-        self.fqanid = index
-
-
-class Certificates:
-    """
-    Certificate class stores cert issuer, subject and experiment (name and url)
-    """
-    def __init__(self, subject, issuer, vomsname, vurl):
-        self.vomsid = (vomsname, vurl)
-        self.subjects = [subject,]
-        self.issuers = [issuer,]
-
-    def add_cert(self,subject, issuer):
-        if subject not in self.subjects:
-            self.subjects.append(subject)
-            self.issuers.append(issuer)
-
-
-class User:
-    """
-    User class represents all information about user gathered from various sources
-    """
-
-    def __init__(self, uid, last_name, first_name, uname):
-        self.uid = uid
-        if last_name.find("'") > 0:
-            tmp = last_name.split("'")
-            last_name = "%s'%s" % (tmp[0], tmp[1].capitalize())
-        self.last_name = last_name.replace("'", "''")
-        self.first_name = first_name.replace("'", "''")
-        self.uname = uname
-        self.gids = []
-        self.expiration_date = None
-        self.certs = []
-        self.status = True
-        self.vo_membership = {}
-        self.is_k5login = False
-
-    def add_to_vo(self, vname, vurl):
-        if not self.vo_membership.has_key((vname, vurl)):
-            self.vo_membership[(vname, vurl)] = []
-
-    def add_to_vo_role(self, vname, vurl, gums_mapping):
-        self.vo_membership[(vname, vurl)].append(gums_mapping)
-
-    def add_group(self, gid, leader = False):
-        if (str(gid), leader) not in self.gids:
-            self.gids.append((str(gid), leader))
-        if (str(gid), not leader) in self.gids:
-            self.gids.remove((str(gid), not leader))
-
-    def set_expiration_date(self, dt):
-        self.expiration_date = dt
-
-    def set_status(self, status):
-        self.status = status
-
-    def add_certs(self, subject, issuer, vname, vurl):
-        subject = subject.replace("'", "''")
-        for c in self.certs:
-            if c.vomsid == (vname, vurl):
-                c.add_cert(subject, issuer)
-                return
-        cert = Certificates(subject, issuer, vname, vurl)
-        self.certs.append(cert)
-
-
 def read_uid(fname):
+    """
+    Reads data from uid.lis file obtained from userdb
+    Args:
+        fname: file name
+
+    Returns: {uname:User,}
+
+    """
     fd = open(fname)
     usrs = {}
     for line in fd.readlines():
@@ -135,8 +37,15 @@ def read_uid(fname):
             print >> sys.stderr, "Failed ", line
     return usrs
 
-
 def read_gid(fname):
+    """
+    Reads data from gid.lis file obtained from userdb
+    Args:
+        fname: file name
+
+    Returns: {gname:gid,}
+
+    """
     fd = open(fname)
     groupids = {}
     for line in fd.readlines():
@@ -147,128 +56,19 @@ def read_gid(fname):
             groupids[tmp[1].strip().lower()] = tmp[0].strip()
 
         except:
-            print >> sys.stderr, " group Failed ", line
+            print >> sys.stderr, "Faoiled reading group.lis (%s) file. Failed: " % (fname, line)
     return groupids
 
 
-def populate_db(config, users, gids, vomss, gums, roles):
+def read_services_users(fname, users):
     """
-    create mysql dump for ferry database
+    Reads data for service_user.csv with k5login info
     Args:
-        config:
-        users:
-        gids:
-        vomss:
-        roles:
-
+        fname: file name
+        users: {uname:User,}
     Returns:
 
     """
-    mysql_client_cfg = MySQLUtils.createClientConfig("main_db", config)
-    connect_str = MySQLUtils.getDbConnection("main_db", mysql_client_cfg, config)
-    fd = open("ferry.sql", "w")
-    fd.write("\connect ferry_test\n")
-    fd.write("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'ferry';\n")
-    fd.write("DROP DATABASE ferry;\n")
-    fd.write("CREATE DATABASE ferry OWNER ferry;\n")
-    fd.write("\connect ferry\n")
-    fd.write("GRANT ALL ON SCHEMA public TO ferry;\n")
-    fd.write("GRANT ALL ON SCHEMA public TO public;\n")
-    for line in open(config._sections["main_db"]["schemadump"]):
-        fd.write(line)
-    fd.flush()
-    command = ""
-    for user in users.values():
-        #if user.uname!='kherner':
-        #    continue
-        if not user.expiration_date:
-            user.expiration_date = "NULL"
-        elif user.expiration_date == "EXPIRED":
-            user.expiration_date = "NULL"
-        elif user.expiration_date == "No Expiration date":
-            user.expiration_date = "\'2038-01-01\'"
-        else:
-            user.expiration_date = "\'%s\'" % user.expiration_date
-        fd.write("insert into users values (%d,\'%s\',\'%s\',\'%s\',\'%s\',%s,%s, NOW());\n"
-                 % (int(user.uid), user.uname, user.first_name, "", user.last_name, user.status,
-                    user.expiration_date))
-        # for now will just create ferry.sql file
-        # results,return_code=MySQLUtils.RunQuery(command,connect_str)
-        # if return_code!=0:
-        #    print >> sys.stderr,'Error ', command
-
-    group_counter = 1
-    gid_map = {}
-    for gname, index in gids.items():
-        fd.write("insert into groups (gid,group_name,group_type,groupid) values (%d,\'%s\','UnixGroup',%d);\n" % (int(
-            index), gname,group_counter))
-        gid_map[index] = group_counter
-        group_counter += 1
-        # results,return_code=MySQLUtils.RunQuery(command,connect_str)
-        # if return_code!=0:
-        #    print >> sys.stderr,'Error ', command
-    fd.flush()
-    # populating experiment_fqan table
-    # GUMS darksidepro {'group': '/fermilab/darkside', 'server': 'fermilab', 'uname': 'darksidepro', 'gid': '9985', 'role': 'Production', 'user_group': 'darksidepro', 'account_mappers': 'darksidepro'}
-    # experiment_fqan(fqanid, fqan, mapped_user,mapped_group);
-    fqan_counter = 0
-    for key, gmap in gums.items():
-        fqan_counter += 1
-        gname = gids.keys()[gids.values().index(gmap.gid)]
-        un=gmap.uname
-        if gmap.uname:
-            un = "\'%s\'" % (gmap.uname)
-        else:
-            un='NULL'
-        fd.write("insert into grid_fqan (fqanid,fqan,mapped_user,mapped_group) values(%d,\'%s/Role=%s\',%s,\'%s\');\n" %
-                 (fqan_counter,gmap.group,gmap.role,un,gname))
-        gmap.set_id(fqan_counter)
-    fd.flush()
-
-    experiment_counter = 0
-
-    for vos in vomss:
-        for vname, vo in vos.items():
-            experiment_counter += 1
-            fd.write("insert into collaboration_unit (unitid,unit_name,voms_url,alternative_name,last_updated) values ("
-                     "%d,\'%s\',"
-                     "\'%s\',\'\',NOW());\n" % (experiment_counter,vname, vo.url))
-            vo.set_id(experiment_counter)
-
-            for uname, user in users.items():
-
-                #if uname!='kherner':
-                #    continue
-
-                if user.vo_membership.has_key((vname,vo.url)):
-                    for umap in user.vo_membership[(vname, vo.url)]:
-                        fqanid = 0
-                        for gmap in gums.values():
-
-                            if  umap.group == gmap.group and umap.role == gmap.role:
-                                fqanid = gmap.fqanid
-                                break
-                        fd.write("insert into grid_access values  (%d,%d,%d,False,False,NOW());\n" % \
-                                 (int(user.uid),experiment_counter, fqanid, ))
-
-                    for certs in user.certs:
-                        if certs.vomsid == (vname, vo.url):
-                            for k in range (0,len(certs.subjects)):
-                                fd.write("insert into user_certificate values (%d,\'%s\',%d,\'%s\',NOW());\n"
-                                     % (int(user.uid), certs.subjects[k], experiment_counter, certs.issuers[k]))
-
-                    fd.flush()
-    for uname, user in users.items():
-        #if uname!='kherner':
-        #    continue
-        for gid, is_primary in user.gids:
-            groupid = gid_map[gid]
-            fd.write("insert into user_group values (%d,%d,%s);\n" % (int(user.uid), groupid, is_primary))
-    fd.flush()
-    fd.close()
-
-
-def read_services_users(fname, users):
     fd = open(fname)
     for line in fd.readlines():
         if line.startswith("#"):
@@ -295,7 +95,7 @@ def get_vos(config, vn, vurl, gids):
         vurl:
         gids:
 
-    Returns:
+    Returns: {voname:VOMS,}
 
     """
     mysql_client_cfg = MySQLUtils.createClientConfig("voms_db_%s" % (vn,), config)
@@ -319,13 +119,13 @@ def get_vos(config, vn, vurl, gids):
             if not volist.has_key(name):
                 volist[name] = VOMS(vurl, vn, name)
             if gids.has_key(name):
-                volist[name].add_unix_gid(gids[name])
+                volist[name].add_voms_unix_group(name,gids[name])
         except:
             print >> sys.stderr, "group is not defined ", name
     return volist
 
 
-def assign_vos(config, vn, vurl, rls, usrs, gums_map):
+def assign_vos(config, vn, vurl, rls, usrs, gums_map, collaborations):
     """
     From VOMS database tries to get information about each user, certificate and group and role affiliation
     Args:
@@ -357,7 +157,7 @@ def assign_vos(config, vn, vurl, rls, usrs, gums_map):
                   "d.usr_id and c.cid=d.ca_id and (c.subject_string not like \'%HSM%\' and c.subject_string not like " \
                   "\'%Digi%\' and c.subject_string  not like \'%DOE%\') and u.userid in (" \
                   "select distinct  u.userid from usr u, certificate d where u.userid = d.usr_id and (u.dn like " \
-                  "\'%" + uname + "%\' or d.subject_string like \'%" + uname + "%\'));"
+                  "\'%UID:" + uname + "\' or d.subject_string like \'%UID:" + uname + "\'));"
         members, return_code = MySQLUtils.RunQuery(command, connect_str, False)
 
         if return_code:
@@ -387,7 +187,7 @@ def assign_vos(config, vn, vurl, rls, usrs, gums_map):
             # gets all roles
             command = "select g.dn,r.role from m m, roles r, groups  g where  r.rid=m.rid and g.gid=m.gid and " \
                       "m.userid =" + mid +" and r.role!=\'VO-Admin\';"
-            group_role, return_code = MySQLUtils.RunQuery(command, connect_str)
+            group_role, return_code = MySQLUtils.RunQuery(command, connect_str,False)
             if return_code:
                 print >> sys.stderr, "Failed to extract information from VOMS %s g and g tables for user %s" % (vn,
                                                                                                           user.uname)
@@ -409,17 +209,19 @@ def assign_vos(config, vn, vurl, rls, usrs, gums_map):
                     if member[0] == mid:
                         subject = member[1].strip()
                         issuer = member[2].strip()
-                        user.add_certs(subject, issuer, group, url)
+                        for cu in collaborations:
+                            if cu.name == group or cu.alt_name == group:
+                                index = collaborations.index(cu) +1
+                                user.add_cert(Certificate(index,subject, issuer))
+
                 if len(tmp) > 1:
                     role = tmp[1].strip()
                 else:
                     role = None
-                # print "%s /%s %s %s" % (user.uname, subgroup, role, url)
+
                 for key, umap in gums_map.items():
-                    # if "/%s" % (subgroup,) == umap.group:
-                    #    print "gums_dict", umap.__dict__
+
                     if "/%s" % (subgroup,) == umap.group and role == umap.role:
-                        # print "found ",umap.group, umap.role
                         if not umap.uname:
                             account_name = user.uname
                         else:
@@ -439,7 +241,7 @@ def assign_vos(config, vn, vurl, rls, usrs, gums_map):
                     rls.append(role)
 
 
-def read_gums_config(config):
+def read_gums_config(config, usrs, grps):
     """
 
     Args:
@@ -489,16 +291,33 @@ def read_gums_config(config):
                 for element in child.getchildren():
                     if element.attrib.get('name') == gmap.account_mappers:
                         #print "found accountMappers", gmap.account_mappers,element.attrib.get('groupName')
-                        gmap.gid = element.attrib.get('groupName')
-                        gmap.uname = element.attrib.get('accountName')
+                        gid = element.attrib.get('groupName')
+                        if gid not in grps.values():
+                            print >> sys.stderr, "Group gid %s for %s id not in gid.lis" % (gid,key)
+                        else:
+                            gmap.gid = gid
+                        uname = element.attrib.get('accountName')
+
+                        if uname and uname not in users.keys():
+                            print >> sys.stderr, "User uname %s for %s id not in uid.lis" % (uname,key)
+                        else:
+                            gmap.uname = uname
                         break
     return gums_mapping
 
 def read_vulcan_user_group(config, users):
+    """
+    Reads Vulcan user related info from Vulcan db
+    Args:
+        config:
+        users:
+
+    Returns:
+
+    """
     config = config.config._sections["vulcan"]
     conn_string = "host='%s' dbname='%s' user='%s' password='%s'" % \
                   (config["hostname"], config["database"], config["username"], config["password"])
-    print conn_string
     conn = pg.connect(conn_string)
     cursor = conn.cursor(cursor_factory=pg.extras.DictCursor)
 
@@ -524,6 +343,7 @@ def read_vulcan_user_group(config, users):
             users[row["auth_string"]].add_group('5063', False)
             users[row["auth_string"]].add_to_vo('cms', 'https://voms2.cern.ch:8443/voms/cms')
 
+
     # fetch group leadership from vulcan
     cursor.execute("select l.*, a.auth_string from leader_group_t1 as l left join auth_tokens_t1 as a on l.userid = a.userid where a.auth_method = 'UNIX'")
     rows = cursor.fetchall()
@@ -531,13 +351,25 @@ def read_vulcan_user_group(config, users):
     for row in rows:
         if row["auth_string"] in users:
             if str(row["groupid"]) in (item[0] for item in users[row["auth_string"]].gids):
-                users[row["auth_string"]].add_group(row["groupid"], True)
+                users[row["auth_string"]].set_leader(row["groupid"])
+                #users[row["auth_string"]].add_group(row["groupid"], True)
+    return validGroups
 
 def read_vulcan_certificates(config, users, vomss):
+    """
+    Reads Vulcan cerificate related info from Vulcan db
+
+    Args:
+        config:
+        users:
+        vomss:
+
+    Returns:
+
+    """
     cfg = config.config._sections["vulcan"]
     conn_string = "host='%s' dbname='%s' user='%s' password='%s'" % \
                   (cfg["hostname"], cfg["database"], cfg["username"], cfg["password"])
-    print conn_string
     conn = pg.connect(conn_string)
     cursor = conn.cursor(cursor_factory=pg.extras.DictCursor)
 
@@ -566,6 +398,363 @@ def read_vulcan_certificates(config, users, vomss):
             if CA:
                 users[row["uname"]].add_certs(row["auth_string"], CA["subjectdn"], vo, url)
 
+def build_collaborations(vomss, nis, groups):
+    """
+    Build collaboration unit
+    Args:
+        vomss:
+        nis:
+        groups:
+
+    Returns:
+
+    """
+    collaborations = []
+    # There are VOs that are collaboration units that have NIS domain
+    # Let's find them
+    for vos in vomss:
+        for vo in vos.values():
+            # We should ignore VO (des, dune) that are subgroups in fermilab VOMS
+            #  they don't have NIS domain
+            #  We also should ignore top level fermilab vo - it doesn't have NIS domain
+
+            if (vo.name in ["des","dune"] and vo.url.find("fermilab") >= 0) or vo.name == "fermilab":
+                collaborations.append(vo)
+                vo.set_id(len(collaborations))
+                # now we need to figure out the group for this collaborative unit
+                # and hope that the name is the gname
+                if vo.name in groups.keys():
+                    collaborations[-1].groups = {vo.name:groups[vo.name]}
+                continue
+            found = False
+            for domain,nis in nis_structure.items():
+                if domain == vo.name or nis.alternative_name == vo.name:
+                    # build a collaboration unit from all the VO
+                    if nis.alternative_name:
+                        vo.set_alt_name(domain)
+                    collaborations.append(vo)
+                    vo.set_id(len(collaborations))
+                    collaborations[-1].groups = nis.groups
+                    found = True
+                    break
+            if not found:
+                collaborations.append(vo)
+                vo.set_id(len(collaborations))
+                if vo.name in groups.keys():
+                    collaborations[-1].groups = {vo.name:groups[vo.name]}
+
+    # we need to include in collaborations all NIS domains that don't have a corresponding VO
+    for domain,nis in nis_structure.items():
+        found = False
+        for cu in collaborations:
+            if cu.name == "fermilab":
+                continue
+            if domain == cu.name or domain == cu.alt_name:
+                found = True
+                break
+        if not found:
+            print >> sys.stderr,"NIS domain doesn't exist for %s" % (vo.name)
+            c = CollaborationUnit(domain)
+            c.groups = nis.groups
+            collaborations.append(c)
+            c.set_id(len(collaborations))
+
+    return collaborations
+
+def read_nis(dir_path, exclude_list, altnames, users, groups, cms_groups):
+    """
+    Read NIS domain and build passwd and group
+    Args:
+        dir_path:
+        exclude_list:
+        altnames:
+        users:
+        groups:
+        cms_groups:
+
+    Returns:
+
+    """
+    import os
+    import ast
+
+    nis = {}
+    alt_names = ast.literal_eval(altnames)
+
+    for dir in os.listdir(dir_path):
+        if dir in exclude_list:
+            # print >> sys.stderr, "Skipping %s" % (dir,)
+            continue
+        nis[dir] = ComputeResource( dir, dir)
+
+        # dcarber:KERBEROS:52790:9467:Daniel Carber: / nashome / d / dcarber: / bin / bash
+        lines = open("%s/%s/passwd" % (dir_path,dir)).readlines()
+        for l  in lines:
+            if l.startswith("#") or not len(l.strip()):
+                continue
+
+            tmp = l[:-1].split(":")
+            uname = tmp[0]
+            uid = tmp[2]
+            gid = tmp[3]
+            home_dir = tmp[5]
+            shell = tmp[6]
+            if uname not in users.keys():
+                print >> sys.stderr, "Domain: %s User %s in not in userdb!" % (dir,uname,)
+                continue
+            if uid != users[uname].uid:
+                for u in users.values():
+                    if u.uid == uid:
+                        print >> sys.stderr, "Domain: %s user %s, %s has different uid (%s) in userdb! This userdb " \
+                                             "uid (%s) is mapped to %s." % (dir, uname,uid, users[uname].uid, uid, u.uname)
+                        print >> sys.stderr, "Assume that uid is correct, using %s" % (users[uname].uid,)
+
+            if gid not in groups.values():
+                print >> sys.stderr, "Domain: %s group %s doesn\'t exist in userdb!" % (dir,gid,)
+                continue
+            users[uname].compute_access[dir] = ComputeAccess(dir, gid, home_dir, shell)
+            nis[dir].users[uname] = users[uname]
+            nis[dir].primary_gid.append(gid)
+            nis[dir].groups[groups.keys()[groups.values().index(gid)]] = gid
+
+            if dir in alt_names.keys():
+                nis[dir].alternative_name = alt_names[dir]
+        # numix:x:9276:zwaska,tjyang,tianxc,
+        lines = open("%s/%s/group" % (dir_path,dir)).readlines()
+        for l  in lines:
+            if l.startswith("#") or not len(l.strip()) :
+                    continue
+            tmp = l[:-1].split(":")
+            gname = tmp[0]
+            gid = tmp[2]
+            if len(tmp) < 4 or len(tmp[3].strip()) == 0:
+                continue
+
+            user_list = tmp[3].split(",")
+            if gid not in groups.values():
+                print >> sys.stderr, "Domain: %s group %s from group filedoesn\'t exist  in userdb!" % (dir,gid,)
+                continue
+            if gname not in groups.keys():
+                print >> sys.stderr, "Domain: %s group name %s, %s from group file doesn\'t exist  in userdb!" % \
+                                     (dir,gname,gid)
+                continue
+            if gid != groups[gname]:
+                print >> sys.stderr, "Domain: %s group %s from group file %s have different gid in userdb!" % \
+                                     (dir,gname,gid,groups[gname])
+                continue
+            for uname in user_list:
+                if uname not in users.keys():
+                    print >> sys.stderr, "Domain: %s User %s in group file in not in userdb!" % (dir,uname,)
+                    continue
+                if dir in users[uname].compute_access:
+                    users[uname].compute_access[dir].add_secondary_group(gid)
+                    nis[dir].groups[gname]=gid
+                else:
+                    print >> sys.stderr, "Domain: %s User %s in group file but not in passwd!" % (dir,uname,)
+
+
+
+    # add cms structure, this should modified not to have anything harcoded!!!!!
+    dir = "cms"
+    nis[dir] = ComputeResource( dir, dir,"Interactive","/uscms/home","/bin/tcsh")
+    for gid in cms_groups:
+        if gid not in groups.values():
+            print >> sys.stderr, "Domain: %s group %s doesn\'t exist in userdb!" % (dir,gid,)
+            continue
+        gn = groups.keys()[groups.values().index(gid)]
+        nis[dir].groups[gn]=gid
+    gid = groups['us_cms']
+
+    for uname, user in users.items():
+        home = "/uscms/home/%s" % (uname)
+        for tup in user.gids:
+            if tup[0] != "5063":  # us_cms
+                continue
+            user.compute_access["cms"] = ComputeAccess("cms", gid, home, "/bin/tcsh" )
+            nis[dir].users[uname] = user
+            break
+    nis[dir].primary_gid.append(groups['us_cms'])
+    return nis
+
+def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis):
+    """
+    create mysql dump for ferry database
+    Args:
+        config:
+        users:
+        gids:
+        vomss:
+        roles:
+
+    Returns:
+
+    """
+    mysql_client_cfg = MySQLUtils.createClientConfig("main_db", config)
+    connect_str = MySQLUtils.getDbConnection("main_db", mysql_client_cfg, config)
+
+    # rebuild database and schema
+    fd = open("ferry.sql", "w")
+    fd.write("\connect ferry_test\n")
+    fd.write("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'ferry';\n")
+    fd.write("DROP DATABASE ferry;\n")
+    fd.write("CREATE DATABASE ferry OWNER ferry;\n")
+    fd.write("\connect ferry\n")
+    fd.write("GRANT ALL ON SCHEMA public TO ferry;\n")
+    fd.write("GRANT ALL ON SCHEMA public TO public;\n")
+    for line in open(config._sections["main_db"]["schemadump"]):
+        fd.write(line)
+    fd.flush()
+
+    # populate users table
+    command = ""
+    for user in users.values():
+        #if user.uname!='kherner':
+        #    continue
+        if not user.expiration_date:
+            user.expiration_date = "NULL"
+        elif user.expiration_date == "EXPIRED":
+            user.expiration_date = "NULL"
+        elif user.expiration_date == "No Expiration date":
+            user.expiration_date = "\'2038-01-01\'"
+        else:
+            user.expiration_date = "\'%s\'" % user.expiration_date
+        status = "False"
+        if user.status:
+            status = "True"
+        fd.write("insert into users values (%d,\'%s\',\'%s\',\'%s\',\'%s\',%s,%s, NOW());\n"
+                 % (int(user.uid), user.uname, user.first_name, "", user.last_name, status,
+                    user.expiration_date))
+        # for now will just create ferry.sql file
+        # results,return_code=MySQLUtils.RunQuery(command,connect_str)
+        # if return_code!=0:
+        #    print >> sys.stderr,'Error ', command
+
+    # populate groups table with unix group
+
+    group_counter = 1
+    gid_map = {}
+    for gname, index in gids.items():
+        fd.write("insert into groups (gid,group_name,group_type,groupid) values (%d,\'%s\','UnixGroup',%d);\n" % (int(
+            index), gname,group_counter))
+        gid_map[index] = group_counter
+        group_counter += 1
+        # results,return_code=MySQLUtils.RunQuery(command,connect_str)
+        # if return_code!=0:
+        #    print >> sys.stderr,'Error ', command
+    fd.flush()
+
+    # populate collaborative_unit
+    for cu in collaborations:
+        if isinstance(cu,VOMS):
+            link = "\'%s\'" % (cu.url)
+        else:
+            link = "NULL"
+        if cu.alt_name:
+            alt_name = "\'%s\'" % (cu.alt_name)
+        else:
+            alt_name = "NULL"
+        fd.write("insert into collaboration_unit (unit_name, voms_url, alternative_name, last_updated) " +\
+            "values (\'%s\',%s,%s,NOW());\n" % (cu.name, link,alt_name))
+        # populate collaboration unit groups
+
+        for gid in cu.groups.values():
+            index = gid_map[gid]
+            is_primary = 0
+            if cu.name in nis.keys():
+                if index in nis[cu.name].primary_gid:
+                    is_primary = 1
+            else:
+                    is_primary = 1
+            fd.write("insert into collaboration_unit_group values(%d,%d,%s,NOW());\n" % (cu.unitid,index,is_primary))
+    fd.flush()
+
+    #populate compute_resource
+    nis_counter = 0
+    for cu in collaborations:
+        if cu.name in nis.keys():
+            nis_info = nis[cu.name]
+        elif cu.alt_name in  nis.keys():
+            nis_info = nis[cu.alt_name]
+        else:
+            print >> sys.stderr, "Neither %s not %s found in NIS" % (cu.name,cu.alt_name)
+            continue
+        nis_counter += 1
+        fd.write("insert into compute_resource (compid,name, default_shell,default_home_dir,comp_type, unitid,last_updated)" +\
+                 " values (\'%s\',\'%s\',\'%s\',\'%s\',\'%s\',%s,NOW());\n" % (nis_counter, nis_info.cresource,
+                                                                         nis_info.cshell,nis_info.chome,nis_info.ctype,cu.unitid))
+
+        for uname, user in nis_info.users.items():
+            comp = user.compute_access[nis_info.cresource]
+            groupid = gid_map[comp.gid]
+            fd.write("insert into compute_access (compid, uid, groupid,shell,home_dir,last_updated)" + \
+                     " values (%s,%s,%s,\'%s\',\'%s\', NOW());\n" % (nis_counter,user.uid,groupid,comp.shell,comp.home_dir))
+    fd.flush()
+    # populate collaboration unit groups
+
+    for gid in cu.groups.values():
+        index = gid_map[gid]
+        is_primary = 0
+        if cu.name in nis.keys():
+            if index in nis[cu.name].primary_gid:
+                is_primary = 1
+        else:
+                is_primary = 0
+        fd.write("insert into collaboration_unit_group values(%d,%d,%s,NOW());\n" % (cu.unitid,index,is_primary))
+        fd.flush()
+
+
+    # populating experiment_fqan table
+    # GUMS darksidepro {'group': '/fermilab/darkside', 'server': 'fermilab', 'uname': 'darksidepro', 'gid': '9985', 'role': 'Production', 'user_group': 'darksidepro', 'account_mappers': 'darksidepro'}
+    # experiment_fqan(fqanid, fqan, mapped_user,mapped_group);
+    fqan_counter = 0
+    for key, gmap in gums.items():
+        fqan_counter += 1
+        gname = gids.keys()[gids.values().index(gmap.gid)]
+        #and gmap.uname in users.keys()
+        if gmap.uname:
+            un = "\'%s\'" % (gmap.uname)
+        else:
+            un='NULL'
+
+        fd.write("insert into grid_fqan (fqan,mapped_user,mapped_group) values(\'%s/Role=%s\',%s,\'%s\');\n" % (gmap.group,gmap.role,un,gname))
+        gmap.set_id(fqan_counter)
+    fd.flush()
+
+    experiment_counter =0
+    for cu in collaborations:
+        experiment_counter += 1
+        if not isinstance(cu,VOMS):
+            continue
+
+        for uname, user in users.items():
+            #if uname!='kherner':
+            #    continue
+            if user.vo_membership.has_key((cu.name,cu.url)):
+                for umap in user.vo_membership[(cu.name, cu.url)]:
+                    fqanid = 0
+                    for gmap in gums.values():
+                        if  umap.group == gmap.group and umap.role == gmap.role:
+                            fqanid = gmap.fqanid
+                            break
+                    fd.write("insert into grid_access values  (%d,%d,%d,False,False,NOW());\n" % \
+                             (int(user.uid),cu.unitid, fqanid ))
+
+                if cu.unitid not in user.certificates.keys():
+                    continue
+                for certs in user.certificates[cu.unitid]:
+                       fd.write("insert into user_certificate (uid,dn,issuer_ca,unitid,last_update) values (%d,\'%s\',"
+                                "\'%s\',%d,NOW());\n" % (int(user.uid), certs.dn,certs.ca,experiment_counter))
+
+                fd.flush()
+    for uname, user in users.items():
+        #if uname!='kherner':
+        #    continue
+        for gid, is_primary in user.gids:
+            groupid = gid_map[gid]
+            fd.write("insert into user_group values (%d,%d,%s);\n" % (int(user.uid), groupid, is_primary))
+    fd.flush()
+    fd.close()
+
 
 if __name__ == "__main__":
     import os
@@ -581,7 +770,12 @@ if __name__ == "__main__":
     read_services_users(config.config.get("user_db", "services_user_file"), users)
 
     # read Vulcan group memberships and add this information to users containers
-    read_vulcan_user_group(config, users)
+    cms_groups=read_vulcan_user_group(config, users)
+
+    # read NIS information
+    nis_structure = read_nis(config.config.get("nis", "dir_path"),config.config.get("nis", "exclude_domain"),
+                                 config.config.get("nis", "name_mapping"),users, gids,cms_groups)
+
 
     # process voms information; list of VOMS instances should be in configuration file
     voms_instances = config.config.get("voms_instances", "list")
@@ -589,22 +783,56 @@ if __name__ == "__main__":
     voms_list.sort()
     vomss = [] # list of VOs from VOMS instances
     roles = []
-    gums = read_gums_config(config) # List of GUMS group mapping
+    gums = read_gums_config(config, users, gids) # List of GUMS group mapping
+
     # read Vulcan X509 certificates and voms and add this information to proper containers
     read_vulcan_certificates(config, users, vomss)
+
+    # need to assign incremental ids to all the entities
+    # groupid  - use gids index
+    # unitid - collaboration unit
+    # computeid - compute cluster id
+    # fqanid -
+
+
+
     for vn in voms_list:
         url = config.config.get("voms_db_%s" % (vn,), "url")
         # reads vo related information from VOMS
         vos = get_vos(config.config, vn, url, gids)
         vomss.append(vos)
-        assign_vos(config.config, vn, url, roles, users, gums)
+
+    # define collaboration unit
+    # in case where there are fermilab subgroup and a separate VO (des, dune) the nis_structure will be set for a
+    # separate vo
+
+    collaborations = build_collaborations(vomss, nis_structure, gids)
+
+    # add VOMS info for collaboration_unit if relevant
+    for vos in vomss:
+        for vo in vos.values():
+            found = False
+            for cu in collaborations:
+                if cu.name == vo.name or cu.alt_name == vo.name:
+                    found = True
+                    break
+            if not found:
+                print >> sys.stderr,"NIS domain doesn't exist for %s" % (vo.name)
+                collaborations.append(vo)
+                vo.set_id(len(collaborations))
+
+
+    for vn in voms_list:
+        url = config.config.get("voms_db_%s" % (vn,), "url")
+        assign_vos(config.config, vn, url, roles, users, gums, collaborations)
 
     #for uname, user in users.items():
-    #        if user.uname == "kherner":
+    #        if user.uname == "wicz":
     #            print user.uname
-    #            for c in user.certs:
-    #                print c.__dict__
+    #            for id, certs in user.certificates.items():
+    #                for c in certs:
+    #                    print id, collaborations[id-1].name,c.dn,c.ca
     #            for k,v in user.vo_membership.items():
     #                for l in v:
     #                    print k, l.__dict__
-    populate_db(config.config, users, gids, vomss, gums, roles)
+    populate_db(config.config, users, gids, vomss, gums, roles,collaborations, nis_structure )
