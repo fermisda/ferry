@@ -1,0 +1,8 @@
+ifmon:x:9102:
+nova:x:9553:rklokov,gjmelin,justinh,prabhjot,zjel182,timm,yangs9,yatesla,ecatanom,marek,mgheith,asousa,merritth,nst,red,ash,marshak,talaga,klwood,chrisk,jsingh24,goodenou,tdolph,dbsmith,billl,petti,pavan219,mchau,lyon,kuldeepm,rameika,oksuzian,ifmon,novadq
+nusoft:x:10044:nusoft
+gpcf:x:10000:
+numix:x:9276:zwaska,tjyang,tianxc,asousa,rschroet,wingmc,msanchez,radovic,plunk,zarko,paolone,jkn,gmills,mercurio,rmehdi,ksmcf,alberto,kuldeepm,lang,kordosky,hylen,annah1,rhatcher,dharris,mgoodman,corwin,cvson,vipin,aurisano,omanghel,laliaga,pa,ifmon
+sdss:x:5444:ifmon
+scdms:x:5442:ifmon
+novadq:x:8976:

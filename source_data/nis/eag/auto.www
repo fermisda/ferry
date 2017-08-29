@@ -1,0 +1,1 @@
+www1	-rw,grpid,noac,hard,intr,quota,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768	sdsswww1.fnal.gov:/export/data/www/

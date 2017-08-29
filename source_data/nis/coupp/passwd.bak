@@ -1,0 +1,91 @@
+pcooper:x:2906:9645::/nashome/p/pcooper:/bin/bash
+jurgen:x:2696:9645::/nashome/j/jurgen:/bin/bash
+sonnensn:x:11429:9645::/nashome/s/sonnensn:/bin/bash
+sbrice:x:9430:9645::/nashome/s/sbrice:/bin/bash
+coupp:x:3237:9645:COUPP Group Account:/coupp/data/home/coupp:/bin/bash
+coupppro:x:48270:9645:COUPPPRO Group Account:/coupp/data/home/coupppro:/bin/bash
+cdahl:KERBEROS:9793:9645:Carl Dahl:/nashome/c/cdahl:/bin/bash
+neilson:KERBEROS:46360:9645:Russell Neilson:/nashome/n/neilson:/bin/bash
+ckrauss:KERBEROS:47493:9645:Carsten Krauss:/nashome/c/ckrauss:/bin/bash
+itlawson:KERBEROS:47515:9645:Ian Lawson:/nashome/i/itlawson:/bin/bash
+whl5:KERBEROS:45108:9645:Walter Lippincott:/nashome/w/whl5:/bin/bash
+mjn693:KERBEROS:48138:9645:Miaotianzi Jin:/nashome/m/mjn693:/bin/bash
+dbaxter9:KERBEROS:48123:9645:Daniel Baxter:/nashome/d/dbaxter9:/bin/bash
+wichoski:KERBEROS:47533:9645:Ubi Wichoski:/nashome/w/wichoski:/bin/bash
+orin:KERBEROS:13517:9645:Orin Harris:/nashome/o/orin:/bin/bash
+ericvj:KERBEROS:45702:9645:Eric Vazquez Jauregui:/nashome/e/ericvj:/bin/bash
+ramberg:KERBEROS:2377:9645:Erik Ramberg:/nashome/r/ramberg:/bin/bash
+dbox:KERBEROS:8531:9645:Dennis Box:/nashome/d/dbox:/bin/bash
+levine:KERBEROS:6362:9645:Ilan Levine:/nashome/l/levine:/bin/bash
+ebehnke:KERBEROS:46923:9645:Edward Behnke:/nashome/e/ebehnke:/bin/bash
+camole:KERBEROS:47502:9645:Chanpreet Amole:/nashome/c/camole:/bin/bash
+jzhang:KERBEROS:43759:9645:Jianjie Zhang:/nashome/j/jzhang:/bin/bash
+bshah:KERBEROS:48383:9645:Bhairvi Shah:/nashome/b/bshah:/bin/bash
+ggiroux:KERBEROS:48597:9645:Guillaume Giroux:/nashome/g/ggiroux:/bin/bash
+cjackson:KERBEROS:48598:9645:Christopher Jackson:/nashome/c/cjackson:/bin/bash
+broemmel:KERBEROS:2169:9645:Daniel Broemmelsiek:/nashome/b/broemmel:/bin/bash
+paja:KERBEROS:48606:9645:Pavel Soukup:/nashome/p/paja:/bin/bash
+robert:KERBEROS:48607:9645:Robert Filgas:/nashome/r/robert:/bin/bash
+ruslan:KERBEROS:48605:9645:Ruslan Podviyanuk:/nashome/r/ruslan:/bin/bash
+susnata:KERBEROS:48609:9645:Susnata Seth:/nashome/s/susnata:/bin/bash
+caria90:KERBEROS:48608:9645:Giacomo Caria:/nashome/c/caria90:/bin/bash
+jeter:KERBEROS:14036:9645:Jeter Hall:/nashome/j/jeter:/bin/bash
+fabrice1:KERBEROS:48612:9645:Fabrice Debris:/nashome/f/fabrice1:/bin/bash
+mlaurin:KERBEROS:48633:9645:Mathieu Laurin:/nashome/m/mlaurin:/bin/bash
+mfines:KERBEROS:48630:9645:Mirjam Fines-Neuschild:/nashome/m/mfines:/bin/bash
+kos:KERBEROS:16788:9645:Marek Kos:/nashome/k/kos:/bin/bash
+laplante:KERBEROS:48731:9645:Caroline Laplante:/nashome/l/laplante:/bin/bash
+arthur:KERBEROS:48729:9645:Arthur Plante:/nashome/a/arthur:/bin/bash
+shepelak:KERBEROS:2189:9645:Karen Shepelak:/nashome/s/shepelak:/bin/bash
+matthieu:KERBEROS:48284:9645:Matthieu Lafreniere:/nashome/m/matthieu:/bin/bash
+childh:KERBEROS:48613:9645:Hillary Child:/nashome/c/childh:/bin/bash
+fbfree:KERBEROS:45015:9645:Alan Robinson:/nashome/f/fbfree:/bin/bash
+pitam:KERBEROS:47677:9645:Pitam Mitra:/nashome/p/pitam:/bin/bash
+sdaley:KERBEROS:49067:9645:Stephaney Daley:/nashome/s/sdaley:/bin/bash
+zhangc93:KERBEROS:49070:9645:Charles Zhang:/nashome/z/zhangc93:/bin/bash
+jwells:KERBEROS:48187:9645:Jonathan Wells:/nashome/j/jwells:/bin/bash
+eemann56:KERBEROS:48179:9645:Emily Mann:/nashome/e/eemann56:/bin/bash
+heborsod:KERBEROS:49080:9645:Haley Borsodi:/nashome/h/heborsod:/bin/bash
+jacques9:KERBEROS:49087:9645:Jacques Thibault:/nashome/j/jacques9:/bin/bash
+kr0ut:KERBEROS:49299:9645:Kevin Krout:/nashome/k/kr0ut:/bin/bash
+eugene43:KERBEROS:49334:9645:Eugene Wu:/nashome/e/eugene43:/bin/bash
+mardid:KERBEROS:46259:9645:Miguel Ardid:/nashome/m/mardid:/bin/bash
+gerard1:KERBEROS:47331:9645:Gerard Bernabeu Altayo:/nashome/g/gerard1:/bin/bash
+njp:KERBEROS:49007:9645:Nicholas Peregonow:/nashome/n/njp:/bin/bash
+esimm:KERBEROS:43512:9645:Edward Simmonds:/nashome/e/esimm:/bin/bash
+fgirard:KERBEROS:49630:9645:Frederic Girard:/nashome/f/fgirard:/bin/bash
+aleblanc:KERBEROS:49631:9645:Alexandre Le Blanc:/nashome/a/aleblanc:/bin/bash
+cbonnaud:KERBEROS:45340:9645:Christophe Bonnaud:/nashome/c/cbonnaud:/bin/bash
+fallows:KERBEROS:43496:9645:Scott Fallows:/nashome/f/fallows:/bin/bash
+omalenfa:KERBEROS:49975:9645:Olivier Malenfant-Thuot:/nashome/o/omalenfa:/bin/bash
+aleclair:KERBEROS:49982:9645:Alex Leclair:/nashome/a/aleclair:/bin/bash
+mike:KERBEROS:5467:9645:Michael Crisler:/nashome/m/mike:/bin/bash
+kherner:KERBEROS:11469:9645:Kenneth Herner:/nashome/k/kherner:/bin/bash
+mpoinsin:KERBEROS:49997:9645:Martin Poinsinet De Sivry:/nashome/m/mpoinsin:/bin/bash
+akamaha:KERBEROS:50220:9645:Alvine Kamaha:/nashome/a/akamaha:/bin/bash
+kretzke:KERBEROS:50216:9645:Kevin Retzke:/nashome/k/kretzke:/bin/bash
+pcampion:KERBEROS:50247:9645:Peter Campion:/nashome/p/pcampion:/bin/bash
+vprice:KERBEROS:50289:9645:Virginia Price:/nashome/v/vprice:/bin/bash
+hyassin:KERBEROS:50417:9645:Houssam Yassin:/nashome/h/hyassin:/bin/bash
+nbuzinsk:KERBEROS:50419:9645:Nicholas Buzinsky:/nashome/n/nbuzinsk:/bin/bash
+aroeder:KERBEROS:50451:9645:Aaron Roeder:/nashome/a/aroeder:/bin/bash
+agaspert:KERBEROS:50714:9645:Andrea Gaspert:/nashome/a/agaspert:/bin/bash
+mreid:KERBEROS:50779:9645:Michael Reid:/nashome/m/mreid:/bin/bash
+aambler:KERBEROS:50550:9645:Alessandro Ambler:/nashome/a/aambler:/bin/bash
+vcushman:KERBEROS:50967:9645:Victor Cushman:/nashome/v/vcushman:/bin/bash
+dtemples:KERBEROS:51355:9645:Dylan Temples:/nashome/d/dtemples:/bin/bash
+gcao:KERBEROS:51762:9645:Gevy Cao:/nashome/g/gcao:/bin/bash
+gcrowder:KERBEROS:51757:9645:Gavin Crowder:/nashome/g/gcrowder:/bin/bash
+boyd:KERBEROS:4395:9645:Joseph Boyd:/nashome/b/boyd:/bin/bash
+kreymer:KERBEROS:1060:9645:Arthur Kreymer:/nashome/k/kreymer:/bin/bash
+ftardif:KERBEROS:51409:9645:Frederic Tardif:/nashome/f/ftardif:/bin/bash
+wakulicz:KERBEROS:52034:9645:Jennifer Wakulicz:/nashome/w/wakulicz:/bin/bash
+kirby:KERBEROS:8957:9645:Michael Kirby:/nashome/k/kirby:/bin/bash
+aortega:KERBEROS:52072:9645:Aaron Ortega:/nashome/a/aortega:/bin/bash
+glara:KERBEROS:52069:9645:Jose Guillermo Lara Delgado:/nashome/g/glara:/bin/bash
+sbhat:KERBEROS:10610:9645:Shreyas Bhat:/nashome/s/sbhat:/bin/bash
+tcwiok:KERBEROS:52147:9645:Trent Cwiok:/nashome/t/tcwiok:/bin/bash
+usman:KERBEROS:52340:9645:Usman Chowdhury:/nashome/u/usman:/bin/bash
+cchen:KERBEROS:50861:9645:Chiung-Wei Chen:/nashome/c/cchen:/bin/bash
+bressler:KERBEROS:49137:9645:Matthew Bressler:/nashome/b/bressler:/bin/bash
+thillier:KERBEROS:52477:9645:Tristan Hillier:/nashome/t/thillier:/bin/bash

@@ -1,0 +1,1 @@
+dp0	-rw,vers=3,noac,hard,intr,quota,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768	filesrv-app:/eag/usrdevel/dp0

@@ -1,0 +1,7 @@
+/das		auto.das
+/data		auto.data
+/fnal		auto.fnal
+/home		auto.home
+/sdss		auto.sdss
+/usrdevel	auto.usrdevel
+/cvmfs /etc/auto.cvmfs

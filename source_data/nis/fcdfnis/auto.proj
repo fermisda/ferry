@@ -1,0 +1,44 @@
+#101.look	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/101.look
+# Removed per Stephan's request. M. Schmitz 1-26-12
+#102.calib	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/102.calib
+# Removed per Stephan's request.  E. Burns   11/29/2011
+#103.dqm		-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/103.dqm
+104.wh_plug	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/104.wh_plug
+105.mtop_had	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/105.mtop_had
+106.susy_snutau	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/106.susy_snutau
+# Removed per Stephan's request.  E. Burns   11/29/2011
+#107.wh_www	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/107.wh_www
+# Removed per Stephan's request.  E. Burns   11/29/2011
+#108.h_ww	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/108.h_ww
+109.ntuple	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/109.ntuple
+110.w_bjet	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/110.w_bjet
+111.svt		-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/111.svt
+112.b_to_dk	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/112.b_to_dk
+113.w_prime	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/113.w_prime
+114.b_jpsix	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/114.b_jpsix
+115.top_had	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/115.top_had
+#116.diphotonx	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/116.diphotonx
+117.top_zc	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/117.top_zc
+# Removed per Stephan's request.  E. Burns   2/25/2011
+#118.svx_dmode	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/118.svx_dmode
+#119.svx_align	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/119.svx_align
+120.sam_log	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/120.sam_log
+121.top_skim	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/121.top_skim
+122.dstar_dedx	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/122.dstar_dedx
+123.wz_lnubb	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/123.wz_lnubb
+#124.multi_mu	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/124.multi_mu
+# Removed per Stephan's request. M.Schmitz 1/26/12
+125.caf_log	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/125.caf_log
+126.code_tar	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/126.code_tar
+127.prod_log	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/127.prod_log
+128.monte_carlo	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/128.monte_carlo
+129.lep_htau   	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/129.lep_htau
+130.jetmass   	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/130.jetmass
+131.validation  -rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/131.validation
+132.dbmon_log   -rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/132.dbmon_log
+201.bottom	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/201.bottom
+202.ewk		-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/202.ewk
+#301.exotic	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/301.exotic
+#302.higgs	-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/302.higgs
+401.top		-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/401.top
+402.qcd		-rw,intr,hard,async,tcp,wsize=32768,rsize=32768,nfsvers=3 cdf-nas-0.fnal.gov:/402.qcd

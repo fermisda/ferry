@@ -1,0 +1,338 @@
+ziemer:KERBEROS:13283:9555:Benjamin Ziemer:/nashome/z/ziemer:/bin/bash
+jwolcott:KERBEROS:12818:9555:Jeremy Wolcott:/nashome/j/jwolcott:/bin/bash
+butkevic:KERBEROS:42977:9555:Anatoli Butkevich:/nashome/b/butkevic:/bin/bash
+walding:KERBEROS:3481:9555:Allison Lawrence-Harris:/nashome/w/walding:/bin/bash
+cpratt:KERBEROS:44989:9555:Christopher Pratt:/nashome/c/cpratt:/bin/bash
+ifmon:KERBEROS:45438:9102:IF monitoring:/nusoft/app/home/ifmon:/bin/bash
+westy3k:KERBEROS:44947:9555:Alex Westerberg:/nashome/w/westy3k:/bin/bash
+lyzhu:KERBEROS:43144:9555:Lingyan Zhu:/nashome/l/lyzhu:/bin/bash
+avva:KERBEROS:8087:9555:Sergey_Avvakumov:/nashome/a/avva:/bin/bash
+mctizzz:KERBEROS:45723:9555:Michael Testa:/nashome/m/mctizzz:/bin/bash
+idanko:KERBEROS:42869:9555:Istvan Danko:/nashome/i/idanko:/bin/bash
+mjerkins:KERBEROS:45213:9555:Melissa Jerkins:/nashome/m/mjerkins:/bin/bash
+spentz:KERBEROS:1563:9555:Panagiotis Spentzouris:/nashome/s/spentz:/bin/bash
+minervadat:KERBEROS:44239:9555:Lee Lueking:/minerva/app/home/minervadat:/bin/bash
+minervasam:KERBEROS:47683:9555:Minerva Sam:/minerva/app/home/minervasam:/bin/bash
+cperez:KERBEROS:43159:9555:Carlos Perez Lara:/nashome/c/cperez:/bin/bash
+sam:x:7816:9555:SAM:/home/sam:/bin/bash
+gzg:KERBEROS:42998:9555:Glexec50:/nashome/g/gzg:/bin/bash
+wenting:KERBEROS:45670:9555:Wenting Tan:/nashome/w/wenting:/bin/bash
+tbonline:x:44659:9555:System Administrators:/minerva/app/home/tbonline:/bin/bash
+ajs180:KERBEROS:45785:9555:Andrew Seel:/nashome/a/ajs180:/bin/bash
+woody:KERBEROS:43881:9555:Nate Woodward:/nashome/w/woody:/bin/bash
+hans2877:KERBEROS:44772:9555:James Hanson:/nashome/h/hans2877:/bin/bash
+tagg:KERBEROS:9941:9555:Nathaniel_Tagg:/nashome/t/tagg:/bin/bash
+rhatcher:KERBEROS:5922:9555:Beams - Bp347:/nashome/r/rhatcher:/bin/bash
+mollyjc:KERBEROS:45917:9555:Molly Clairemont:/nashome/m/mollyjc:/bin/bash
+csimon:KERBEROS:13284:9555:Clifford Simon:/nashome/c/csimon:/bin/bash
+perdue:KERBEROS:9861:9555:Gabriel_Perdue:/nashome/p/perdue:/bin/bash
+mengel:KERBEROS:1733:9555:Cms Projects:/nashome/m/mengel:/bin/bash
+stevens4:KERBEROS:44102:9555:Robert Stevens:/nashome/s/stevens4:/bin/bash
+ljf26:KERBEROS:43690:9555:Laura Fields:/nashome/l/ljf26:/bin/bash
+rude:KERBEROS:42500:9555:Cody Rude:/nashome/r/rude:/bin/bash
+rennie:KERBEROS:42702:9555:Rennie Scott:/nashome/r/rennie:/bin/bash
+cpatrick:KERBEROS:45321:9555:Cheryl Patrick:/nashome/c/cpatrick:/bin/bash
+urish:KERBEROS:2645:9555:John Urish:/nashome/u/urish:/bin/bash
+kordosky:KERBEROS:3873:9555:Michael_Kordosky:/nashome/k/kordosky:/bin/bash
+dilyanam:KERBEROS:44858:9555:Dilyana Mihaylova:/nashome/d/dilyanam:/bin/bash
+renlu23:KERBEROS:45749:9555:Lu Ren:/nashome/r/renlu23:/bin/bash
+mislivec:KERBEROS:12828:9555:Aaron Mislivec:/nashome/m/mislivec:/bin/bash
+zisvan:KERBEROS:43231:9555:Zeynep Isvan:/nashome/z/zisvan:/bin/bash
+hray:KERBEROS:4837:9555:Heather Ray:/nashome/h/hray:/bin/bash
+jyuko:KERBEROS:11781:9555:Jasmine Ratchford:/nashome/j/jyuko:/bin/bash
+zurrutia:KERBEROS:4916:9555:Zaida_Urrutia:/nashome/z/zurrutia:/bin/bash
+fmoscato:KERBEROS:42403:9555:Federica Moscato:/nashome/f/fmoscato:/bin/bash
+agago:KERBEROS:3204:9555:Alberto Gago:/nashome/a/agago:/bin/bash
+malanari:KERBEROS:44308:9555:Mark Lanari:/nashome/m/malanari:/bin/bash
+wmusial:KERBEROS:43740:9555:Musial Wojciech:/nashome/w/wmusial:/bin/bash
+minervacal:KERBEROS:44417:9555:MINERVACAL:/minerva/app/home/minervacal:/bin/bash
+napora:KERBEROS:4932:9555:Robert Napora:/nashome/n/napora:/bin/bash
+lueking:KERBEROS:1434:9555:Lee Lueking:/nashome/l/lueking:/bin/bash
+dbox:KERBEROS:8531:9555:Dennis Box:/nashome/d/dbox:/bin/bash
+chrisg:KERBEROS:43072:9555:Christos Gatis:/nashome/c/chrisg:/bin/bash
+dalefox1:KERBEROS:44855:9555:Dale Fox:/nashome/d/dalefox1:/bin/bash
+steevven:KERBEROS:45623:9555:Steven Keys:/nashome/s/steevven:/bin/bash
+esnider:KERBEROS:1571:9555:Erica Snider:/nashome/e/esnider:/bin/bash
+minervapro:KERBEROS:43567:9555:Steven Timm:/minerva/app/home/minervapro:/bin/bash
+pahlka:KERBEROS:42821:9555:Raymond Pahlka:/nashome/p/pahlka:/bin/bash
+dzhang:KERBEROS:44288:9555:Dun Zhang:/nashome/d/dzhang:/bin/bash
+lpatrick:KERBEROS:43328:9555:Lee Patrick:/nashome/l/lpatrick:/bin/bash
+javier:KERBEROS:5142:9555:Glexec142:/nashome/j/javier:/bin/bash
+robertk:KERBEROS:12303:9555:Robert Bradford:/nashome/r/robertk:/bin/bash
+jddevan:KERBEROS:44009:9555:Joshua Devan:/nashome/j/jddevan:/bin/bash
+noemi:KERBEROS:44462:9555:Noemi Ochoa Gamboa:/nashome/n/noemi:/bin/bash
+mnrva:KERBEROS:45636:9555:Minerva Group Account:/minerva/app/home/mnrva:/bin/bash
+laliaga:KERBEROS:3213:9555:CDF - CDFele:/nashome/l/laliaga:/bin/bash
+jpvel150:KERBEROS:44856:9555:Juan Pablo Velasquez Ormaeche:/nashome/j/jpvel150:/bin/bash
+mnvnumi:KERBEROS:45138:9555:MNVNUMI:/minerva/app/home/mnvnumi:/bin/bash
+higuera:KERBEROS:43463:9555:Aaron Higuera Pichardo:/nashome/h/higuera:/bin/bash
+jk323209:KERBEROS:45901:9555:Joshua Kaisen:/nashome/j/jk323209:/bin/bash
+grange:KERBEROS:43140:9555:Joe Grange:/nashome/g/grange:/bin/bash
+stelios:KERBEROS:13337:9555:Stylianos Angelidakis:/nashome/s/stelios:/bin/bash
+oliver:KERBEROS:8099:9555:William_Oliver:/nashome/o/oliver:/bin/bash
+dcasper:KERBEROS:11706:9555:David Casper:/nashome/d/dcasper:/bin/bash
+hchung:KERBEROS:44787:9555:Harry Chung:/nashome/h/hchung:/bin/bash
+mmaluff:KERBEROS:45127:9555:Mauricio Maluff Masi:/nashome/m/mmaluff:/bin/bash
+naples:KERBEROS:1838:9555:Cms Projects:/nashome/n/naples:/bin/bash
+bcoopers:KERBEROS:46167:9555:Brian Coopersmith:/nashome/b/bcoopers:/bin/bash
+lwielg01:KERBEROS:43982:9555:Lauren Wielgus:/nashome/l/lwielg01:/bin/bash
+jkn:KERBEROS:6462:9555:Jeffrey Nelson:/nashome/j/jkn:/bin/bash
+gfactory:x:43680:9555:GlideIn Factory:/home/gfactory:/bin/bash
+cmorgoth:KERBEROS:44789:9555:Christian Pena:/nashome/c/cmorgoth:/bin/bash
+twytock:KERBEROS:43624:9555:Thomas Wytock:/nashome/t/twytock:/bin/bash
+brooksw:KERBEROS:44785:9555:William Brooks:/nashome/b/brooksw:/bin/bash
+mazeta:KERBEROS:45253:9555:Maria Zarazua:/nashome/m/mazeta:/bin/bash
+felix:KERBEROS:8392:9555:Julian_Felix-Valdez:/nashome/f/felix:/bin/bash
+arturo:KERBEROS:43129:9555:Guillermo Fiorentini:/nashome/a/arturo:/bin/bash
+prof:KERBEROS:3603:9555:Richard Gray:/nashome/p/prof:/bin/bash
+gfrontend:x:43598:9555:GlideIn Front-End:/home/gfrontend:/bin/bash
+tzanakos:KERBEROS:7083:9555:George Tzanakos:/nashome/t/tzanakos:/bin/bash
+mnjiang:KERBEROS:45700:9555:Michael Jiang:/nashome/m/mnjiang:/bin/bash
+mcgo0109:KERBEROS:13172:9555:Aaron Mcgowan:/nashome/m/mcgo0109:/bin/bash
+edniner:KERBEROS:44934:9555:Evan Niner:/nashome/e/edniner:/bin/bash
+morfin:KERBEROS:7644:9555:Jorge_Morfin:/nashome/m/morfin:/bin/bash
+dharris:KERBEROS:2603:9555:Deborah Harris:/nashome/d/dharris:/bin/bash
+rntilden:KERBEROS:10632:9555:Robert Tilden:/nashome/r/rntilden:/bin/bash
+mnvonline:KERBEROS:44471:9555:MNVONLINE:/minerva/app/home/mnvonline:/bin/bash
+stefansk:KERBEROS:6842:9555:Raymond Stefanski:/nashome/s/stefansk:/bin/bash
+ltrung:KERBEROS:44698:9555:Trung Le:/nashome/l/ltrung:/bin/bash
+dytman:KERBEROS:13348:9555:Steven Dytman:/nashome/d/dytman:/bin/bash
+cag51:KERBEROS:43958:9555:Christopher George:/nashome/c/cag51:/bin/bash
+schellma:KERBEROS:1327:9555:Heidi Schellman:/nashome/s/schellma:/bin/bash
+paolone:KERBEROS:1494:9555:Vittorio Paolone:/nashome/p/paolone:/bin/bash
+minervaraw:KERBEROS:44439:9555:Lee Lueking:/minerva/app/home/minervaraw:/bin/bash
+jhobbs:KERBEROS:13519:9555:Jennifer Heller:/nashome/j/jhobbs:/bin/bash
+ettab:KERBEROS:1963:1507:Etta Burns:/nashome/e/ettab:/bin/bash
+vk:KERBEROS:42530:9555:Vasiliy Kuznetsov:/nashome/v/vk:/bin/bash
+tilden:KERBEROS:10631:9555:Robert Tilden:/nashome/t/tilden:/bin/bash
+giuliano:KERBEROS:44819:9555:Giuliano Maggi:/nashome/g/giuliano:/bin/bash
+garren:KERBEROS:1147:9555:Lynn Garren:/nashome/g/garren:/bin/bash
+minerva:KERBEROS:3343:9555:Peter Cooper:/minerva/app/home/minerva:/bin/bash
+tice:KERBEROS:43877:9555:Brian Tice:/nashome/t/tice:/bin/bash
+bwalker:KERBEROS:43907:9555:Brandon Walker:/nashome/b/bwalker:/bin/bash
+vtakhist:KERBEROS:43351:9555:Volodymyr Takhistov:/nashome/v/vtakhist:/bin/bash
+alania:KERBEROS:44436:9555:Marcos Alania Vicente:/nashome/a/alania:/bin/bash
+jpalomin:KERBEROS:11772:9555:Jose Palomino Gallo:/nashome/j/jpalomin:/bin/bash
+vittone:KERBEROS:1591:9555:Cms Projects:/nashome/v/vittone:/bin/bash
+dave_b:KERBEROS:2261:9555:David Boehnlein:/nashome/d/dave_b:/bin/bash
+nowak:KERBEROS:6150:9555:E904 (P904,Mice,Mucool):/nashome/n/nowak:/bin/bash
+damartin:KERBEROS:43914:9555:David Martinez:/nashome/d/damartin:/bin/bash
+jwpark:KERBEROS:6510:9555:Jaewon Park:/nashome/j/jwpark:/bin/bash
+esimm:KERBEROS:43512:9555::/nashome/e/esimm:/bin/bash
+peterman:KERBEROS:43995:9555:Alison Peterman:/nashome/p/peterman:/bin/bash
+cesark26:KERBEROS:46202:9555:Cesar Sotelo Chico:/nashome/c/cesark26:/bin/bash
+jcravens:KERBEROS:43513:9555:John Cravens:/nashome/j/jcravens:/bin/bash
+poage09:KERBEROS:43374:9555:Jonathon Poage:/nashome/p/poage09:/bin/bash
+rgran:KERBEROS:13377:9555:Richard Gran:/nashome/r/rgran:/bin/bash
+kenai:KERBEROS:16794:9555:Kenyi Hurtado Anampa:/nashome/k/kenai:/bin/bash
+kafka:KERBEROS:6851:9555:Tomas Kafka:/nashome/k/kafka:/bin/bash
+sboyd:KERBEROS:11114:9555:Steven Boyd:/nashome/s/sboyd:/bin/bash
+joelam:KERBEROS:16789:9555:Joel Mousseau:/nashome/j/joelam:/bin/bash
+jrf39:KERBEROS:44256:9555:Jeffrey Fein:/nashome/j/jrf39:/bin/bash
+nusoft:KERBEROS:45318:10044::/nusoft/app/home/nusoft:/bin/bash
+mclark:KERBEROS:45715:9555:Mary Clark:/nashome/m/mclark:/bin/bash
+twalton:KERBEROS:43472:9555:Tammy Walton:/nashome/t/twalton:/bin/bash
+minervaana:KERBEROS:44415:9555::/minerva/app/home/minervaana:/bin/bash
+dschmitz:KERBEROS:10475:9555:David Schmitz:/nashome/d/dschmitz:/bin/bash
+ksmcf:KERBEROS:5039:9555:Kevin_Mcfarland:/nashome/k/ksmcf:/bin/bash
+buchholz:KERBEROS:2009:9555:David Buchholz:/nashome/b/buchholz:/bin/bash
+chvojka:KERBEROS:10500:9555:Jesse Chvojka:/nashome/c/chvojka:/bin/bash
+yumiceva:KERBEROS:12026:9555:Francisco Yumiceva:/nashome/y/yumiceva:/bin/bash
+jet:KERBEROS:11251:9555:Joulien Tatar:/nashome/j/jet:/bin/bash
+loiacono:KERBEROS:3261:9555:CDF - Products Archive Sets:/nashome/l/loiacono:/bin/bash
+cesarc:KERBEROS:13277:9555:Cesar Castromonte:/nashome/c/cesarc:/bin/bash
+usarica:KERBEROS:46029:9555:Ulascan Sarica:/nashome/u/usarica:/bin/bash
+timm:KERBEROS:2904:9555:Steven Timm:/nashome/t/timm:/bin/bash
+bjlawson:KERBEROS:44862:9555:Benjamin Lawson:/nashome/b/bjlawson:/bin/bash
+adolfoch:KERBEROS:13951:9555:Adolfo Chamorro Gomez:/nashome/a/adolfoch:/bin/bash
+kemei:KERBEROS:43917:9555:Moureen Kemei:/nashome/k/kemei:/bin/bash
+nkaplis:KERBEROS:13212:9555:Nikolaos Kaplis:/nashome/n/nkaplis:/bin/bash
+heato029:KERBEROS:43361:9555:Jordan Heaton:/nashome/h/heato029:/bin/bash
+evalen:KERBEROS:45241:9555:Edgar Valencia:/nashome/e/evalen:/bin/bash
+hgallag:KERBEROS:6855:9555:Cms Projects:/nashome/h/hgallag:/bin/bash
+oaltinok:KERBEROS:46131:9555:Ozgur Altinok:/nashome/o/oaltinok:/bin/bash
+jcastor:KERBEROS:16790:9555:Jorge Castorena:/nashome/j/jcastor:/bin/bash
+eschulte:KERBEROS:1010:9555:Elaine Schulte:/nashome/e/eschulte:/bin/bash
+illingwo:KERBEROS:6233:9555:Cms Projects:/nashome/i/illingwo:/bin/bash
+kreymer:KERBEROS:1060:9555:Art Kreymer:/nashome/k/kreymer:/bin/bash
+jason:KERBEROS:9729:9555:Jason Harrington:/nashome/j/jason:/bin/bash
+mcj:KERBEROS:45918:9555:Matthew Jamieson:/nashome/m/mcj:/bin/bash
+emaher:KERBEROS:3857:9555:Emily_Maher:/nashome/e/emaher:/bin/bash
+meve:KERBEROS:44827:9555:David Eve:/nashome/m/meve:/bin/bash
+beringed:KERBEROS:43205:9555:Douglas Beringer:/nashome/b/beringed:/bin/bash
+josta:KERBEROS:60184:9555:Jyotsna Osta:/nashome/j/josta:/bin/bash
+ransome:KERBEROS:11590:9555:Ronald Ransome:/nashome/r/ransome:/bin/bash
+marshalc:KERBEROS:43963:9555:Christopher Marshall:/nashome/m/marshalc:/bin/bash
+panos:KERBEROS:10378:9555:Panagiotis Stamoulis:/nashome/p/panos:/bin/bash
+eberly:KERBEROS:42453:9555:Brandon Eberly:/nashome/e/eberly:/bin/bash
+osmanov:KERBEROS:42981:9555:Bari Osmanov:/nashome/o/osmanov:/bin/bash
+ddonelan:KERBEROS:43919:9555:Darsa Donelan:/nashome/d/ddonelan:/bin/bash
+hbudd:KERBEROS:6036:9555:Howard Budd:/nashome/h/hbudd:/bin/bash
+votava:KERBEROS:1103:9555:Margaret Votava:/nashome/v/votava:/bin/bash
+gonzalo:KERBEROS:46373:9555:Gonzalo Diaz Bautista:/nashome/g/gonzalo:/bin/bash
+grid:KERBEROS:4287:9555:GRID_USER:/home/grid:/bin/bash
+condor:KERBEROS:4716:3302:Condor User:/var/lib/condor:/sbin/nologin
+mmr:KERBEROS:46553:9555:Matthew Rosenberg:/nashome/m/mmr:/bin/bash
+nataliae:KERBEROS:46640:9555:Natalia Encina:/nashome/n/nataliae:/bin/bash
+ebombalg:KERBEROS:46657:9555:Esteban Bombal:/nashome/e/ebombalg:/bin/bash
+norrick:KERBEROS:45656:9555:Anne Norrick:/nashome/n/norrick:/bin/bash
+dattam:KERBEROS:13279:9555:Mousumi Datta:/nashome/d/dattam:/bin/bash
+mwang:KERBEROS:6553:9555:Michael H L Wang:/nashome/m/mwang:/bin/bash
+markg12:KERBEROS:46754:9555:Mark Gragston:/nashome/m/markg12:/bin/bash
+kamalone:KERBEROS:46720:9555:Kelly Malone:/nashome/k/kamalone:/bin/bash
+mlstorms:KERBEROS:46731:9555:Michelle Storms:/nashome/m/mlstorms:/bin/bash
+skeane:KERBEROS:46839:9555:Shane Keane:/nashome/s/skeane:/bin/bash
+boyd:KERBEROS:4395:9555:Joseph Boyd:/nashome/b/boyd:/bin/bash
+lauren:KERBEROS:46751:9555:Lauren Gilbert:/nashome/l/lauren:/bin/bash
+rodriges:KERBEROS:14177:9555:Philip Rodrigues:/nashome/r/rodriges:/bin/bash
+korzenev:KERBEROS:47148:9555:Alexander Korzenev:/nashome/k/korzenev:/bin/bash
+bravar:KERBEROS:47152:9555:Alessandro Bravar:/nashome/b/bravar:/bin/bash
+minervasoft:KERBEROS:47181:9555:Joe Minervasoft:/grid/fermiapp/minerva/minervasoft:/bin/bash
+laza:KERBEROS:47220:9555:Laza Rakotondravohitra:/nashome/l/laza:/bin/bash
+wospakrk:KERBEROS:47269:9555:Marianette Wospakrik:/nashome/w/wospakrk:/bin/bash
+baweaver:KERBEROS:47153:9555:Bryan Weaver:/nashome/b/baweaver:/bin/bash
+mcgivern:KERBEROS:42472:9555:Carrie Mcgivern:/nashome/m/mcgivern:/bin/bash
+lmk3087:KERBEROS:47243:9555:Luke Krauth:/nashome/l/lmk3087:/bin/bash
+diesburg:KERBEROS:1224:9555:Michael Diesburg:/nashome/d/diesburg:/bin/bash
+anorman:KERBEROS:11537:9555:Andrew Norman:/nashome/a/anorman:/bin/bash
+lyon:KERBEROS:5049:9555:Adam Lyon:/nashome/l/lyon:/bin/bash
+cmartin:KERBEROS:47416:9555:Carlos Martin-Mari:/nashome/c/cmartin:/bin/bash
+mmac42:KERBEROS:47463:9555:Matthew Mcintyre:/nashome/m/mmac42:/bin/bash
+wfbergan:KERBEROS:47674:9555:William Bergan:/nashome/w/wfbergan:/bin/bash
+kriesten:KERBEROS:47597:9555:Brandon Kriesten:/nashome/k/kriesten:/bin/bash
+mbarrios:KERBEROS:47784:9555:Maria Barrios:/nashome/m/mbarrios:/bin/bash
+kevbauer:KERBEROS:47789:9555:Kevin Thomas:/nashome/k/kevbauer:/bin/bash
+jam3:KERBEROS:47591:9555:Jonathan Miller:/nashome/j/jam3:/bin/bash
+maj0bur0:KERBEROS:47806:9555:Maria Jose Bustamante Rosell:/nashome/m/maj0bur0:/bin/bash
+lackey32:KERBEROS:46785:9555:Teresa Lackey:/nashome/l/lackey32:/bin/bash
+finer:KERBEROS:47825:9555:Robert Fine:/nashome/f/finer:/bin/bash
+ge1asoy:KERBEROS:47695:9555:Robert Sims:/nashome/g/ge1asoy:/bin/bash
+savage:KERBEROS:7180:9555:David Savage:/nashome/s/savage:/bin/bash
+bmesserl:KERBEROS:47718:9555:Benjamin Messerly:/nashome/b/bmesserl:/bin/bash
+cmkara93:KERBEROS:47955:9555:Cora Karamitsos:/nashome/c/cmkara93:/bin/bash
+mtader:KERBEROS:47926:9555:Mariel Tader:/nashome/m/mtader:/bin/bash
+ksilver2:KERBEROS:47793:9555:Kevin Silverstein:/nashome/k/ksilver2:/bin/bash
+mrah02:KERBEROS:47980:9555:Rahman Mahbubur:/nashome/m/mrah02:/bin/bash
+badgett:KERBEROS:7260:9555:William Badgett:/nashome/b/badgett:/bin/bash
+betan009:KERBEROS:43725:9555:Minerba Betancourt:/nashome/b/betan009:/bin/bash
+howard:KERBEROS:47950:9555:Bruce Howard:/nashome/h/howard:/bin/bash
+swhite:KERBEROS:1627:9555:Stephen White:/nashome/s/swhite:/bin/bash
+s054920:KERBEROS:48048:9555:Jack Havey:/nashome/s/s054920:/bin/bash
+thiago:KERBEROS:48124:9555:Thiago Muhlbeier:/nashome/t/thiago:/bin/bash
+cabe78:KERBEROS:44700:9555:Roberto Diaz Cuesta:/nashome/c/cabe78:/bin/bash
+victorcv:KERBEROS:48208:9555:Victor Castillo-Vallejo:/nashome/v/victorcv:/bin/bash
+dwd:KERBEROS:3382:9555:David Dykstra:/nashome/d/dwd:/bin/bash
+parag:KERBEROS:11017:9555:Parag Mhashilkar:/nashome/p/parag:/bin/bash
+reynier:KERBEROS:47964:9555:Reynier Cruz Torres:/nashome/r/reynier:/bin/bash
+neha:KERBEROS:60158:9555:Neha Sharma:/nashome/n/neha:/bin/bash
+joe6174:KERBEROS:48380:9555:Joseph Sullivan:/nashome/j/joe6174:/bin/bash
+ajc7282:KERBEROS:48389:9555:Andrew Carley:/nashome/a/ajc7282:/bin/bash
+sether:KERBEROS:5472:5023:Seth Graham:/nashome/s/sether:/bin/bash
+wenzel:KERBEROS:1915:9555:Hans-Joachim Wenzel:/nashome/w/wenzel:/bin/bash
+shepelak:KERBEROS:2189:9555:Karen Shepelak:/nashome/s/shepelak:/bin/bash
+drut1186:KERBEROS:48745:9555:Daniel Ruterbories:/nashome/d/drut1186:/bin/bash
+yordan:KERBEROS:48804:9555:Yordan Karadzhov:/nashome/y/yordan:/bin/bash
+kleykamp:KERBEROS:48757:9555:Jeffrey Kleykamp:/nashome/k/kleykamp:/bin/bash
+carneir0:KERBEROS:48868:9555:Mateus Carneiro Da Silva:/nashome/c/carneir0:/bin/bash
+mateusc:KERBEROS:48886:9555:Mateus Carneiro Da Silva:/nashome/m/mateusc:/bin/bash
+aghosh12:KERBEROS:48890:9555:Anushree Ghosh:/nashome/a/aghosh12:/bin/bash
+jcurtis:KERBEROS:48925:9555:Jonathan Curtis:/nashome/j/jcurtis:/bin/bash
+kciampa0:KERBEROS:48966:9555:Kate Ciampa:/nashome/k/kciampa0:/bin/bash
+agomez:KERBEROS:49001:9555:Alicia Gomez:/nashome/a/agomez:/bin/bash
+torretta:KERBEROS:1313:9555:Donatella Torretta:/nashome/t/torretta:/bin/bash
+goran:KERBEROS:49034:9555:Tomasz Golan:/nashome/g/goran:/bin/bash
+abercell:KERBEROS:45882:9555:Aaron Bercellie:/nashome/a/abercell:/bin/bash
+abehr95:KERBEROS:49085:9555:Alli Behr:/nashome/a/abehr95:/bin/bash
+ermilten:KERBEROS:49128:9555:Ethan Miltenberger:/nashome/e/ermilten:/bin/bash
+madams:KERBEROS:49162:9555:Marissa Adams:/nashome/m/madams:/bin/bash
+rgalindo:KERBEROS:49243:9555:Roger Galindo Orjuela:/nashome/r/rgalindo:/bin/bash
+kherner:KERBEROS:11469:9555:Kenneth Herner:/nashome/k/kherner:/bin/bash
+bellanto:KERBEROS:6200:9555:Leo Bellantoni:/nashome/b/bellanto:/bin/bash
+akg09g:KERBEROS:46659:9555:Alicia Gomez:/nashome/a/akg09g:/bin/bash
+lebrun:KERBEROS:1063:9555:Paul Lebrun:/nashome/l/lebrun:/bin/bash
+hyepesra:KERBEROS:49426:9555:Harold Yepes-Ramirez:/nashome/h/hyepesra:/bin/bash
+jdemgen:KERBEROS:49467:9555:John Demgen:/nashome/j/jdemgen:/bin/bash
+drimal:KERBEROS:49480:9555:Dipak Rimal:/nashome/d/drimal:/bin/bash
+jteheran:KERBEROS:49401:9555:Jeny Teheran:/nashome/j/jteheran:/bin/bash
+pbuitrag:KERBEROS:49406:9555:Paola Buitrago:/nashome/p/pbuitrag:/bin/bash
+jsobczyk:KERBEROS:46272:9555:Jan Sobczyk:/nashome/j/jsobczyk:/bin/bash
+maramire:KERBEROS:49523:9555:Manuel Ramirez Delgado:/nashome/m/maramire:/bin/bash
+aren:KERBEROS:49554:9555:Alan Ren:/nashome/a/aren:/bin/bash
+viyer:KERBEROS:49555:9555:Varun Iyer:/nashome/v/viyer:/bin/bash
+eendress:KERBEROS:49583:9555:Eric Endress:/nashome/e/eendress:/bin/bash
+rmasti:KERBEROS:49588:9555:Robert Masti:/nashome/r/rmasti:/bin/bash
+nsteinbe:KERBEROS:49659:9555:Noah Steinberg:/nashome/n/nsteinbe:/bin/bash
+tejinc:KERBEROS:44783:9555:Tejin Cai:/nashome/t/tejinc:/bin/bash
+jtheurer:KERBEROS:49743:9555:John Theurer:/nashome/j/jtheurer:/bin/bash
+mkiveni:KERBEROS:43139:9555:Manungu Kiveni:/nashome/m/mkiveni:/bin/bash
+sfsanche:KERBEROS:49906:9555:Sebastian Sanchez:/nashome/s/sfsanche:/bin/bash
+gsalazar:KERBEROS:49929:9555:Gerald Salazar Quiroz:/nashome/g/gsalazar:/bin/bash
+mazzacan:KERBEROS:14185:9555:Anna Mazzacane:/nashome/m/mazzacan:/bin/bash
+azegarra:KERBEROS:50049:9555:Antonio Zegarra Borrero:/nashome/a/azegarra:/bin/bash
+nuruzzam:KERBEROS:50222:9555:Fnu Nuruzzaman:/nashome/n/nuruzzam:/bin/bash
+kwiley:KERBEROS:50234:9555:Keith Wiley:/nashome/k/kwiley:/bin/bash
+afilkins:KERBEROS:50235:9555:Amy Filkins:/nashome/a/afilkins:/bin/bash
+griswold:KERBEROS:50240:9555:Spencer Griswold:/nashome/g/griswold:/bin/bash
+kretzke:KERBEROS:50216:9555:Kevin Retzke:/nashome/k/kretzke:/bin/bash
+nur:KERBEROS:50250:9555:Fnu Nuruzzaman:/nashome/n/nur:/bin/bash
+qhuang:KERBEROS:50038:9555:Qiulan Huang:/nashome/q/qhuang:/bin/bash
+vito:KERBEROS:14191:9555:Vito Di Benedetto:/nashome/v/vito:/bin/bash
+whitehd:KERBEROS:15873:9555:Lisa Whitehead:/nashome/w/whitehd:/bin/bash
+gnowak:KERBEROS:50403:9555:Gabriel Nowak:/nashome/g/gnowak:/bin/bash
+epeters:KERBEROS:50404:9555:Evan Peters:/nashome/e/epeters:/bin/bash
+zwang3:KERBEROS:50534:9555:Ziyue Wang:/nashome/z/zwang3:/bin/bash
+lshadler:KERBEROS:50537:9555:Lucas Shadler:/nashome/l/lshadler:/bin/bash
+ekshockl:KERBEROS:50565:9555:Emma Shockley:/nashome/e/ekshockl:/bin/bash
+byaeggy:KERBEROS:50576:9555:Barbara Yaeggy:/nashome/b/byaeggy:/bin/bash
+kbachins:KERBEROS:50734:9555:Kyle Bachinski:/nashome/k/kbachins:/bin/bash
+ahandres:KERBEROS:50765:9555:Andres Alba Hernandez:/nashome/a/ahandres:/bin/bash
+gianfred:KERBEROS:50976:9555:Gian Fredy Ricardo Caceres Vera:/nashome/g/gianfred:/bin/bash
+melkins:KERBEROS:50992:9555:Miranda Elkins:/nashome/m/melkins:/bin/bash
+alovlein:KERBEROS:50993:9555:Alexander Lovlein:/nashome/a/alovlein:/bin/bash
+leistico:KERBEROS:50999:9555:Jacob Leistico:/nashome/l/leistico:/bin/bash
+bashyal8:KERBEROS:47828:9555:Amit Bashyal:/nashome/b/bashyal8:/bin/bash
+xlu:KERBEROS:51064:9555:Xianguo Lu:/nashome/x/xlu:/bin/bash
+sbest:KERBEROS:51110:9555:Sergio Best:/nashome/s/sbest:/bin/bash
+dcoplowe:KERBEROS:51273:9555:David Coplowe:/nashome/d/dcoplowe:/bin/bash
+rabindra:KERBEROS:51277:9555:Rabindra Bhattarai:/nashome/r/rabindra:/bin/bash
+tpropp:KERBEROS:50554:9555:Tyler Propp:/nashome/t/tpropp:/bin/bash
+rfonti:KERBEROS:51448:9555:Robert Fonti:/nashome/r/rfonti:/bin/bash
+sultana:KERBEROS:49107:9555:Mehreen Sultana:/nashome/s/sultana:/bin/bash
+rosastf:KERBEROS:51582:9555:Francisco Rosas Torres:/nashome/r/rosastf:/bin/bash
+grodrigu:KERBEROS:51588:9555:Gerardo Rodriguez-Becerra:/nashome/g/grodrigu:/bin/bash
+kherrera:KERBEROS:51590:9555:Karla Herrera-Guzman:/nashome/k/kherrera:/bin/bash
+sanchezj:KERBEROS:51591:9555:Jazmin Sanchez:/nashome/s/sanchezj:/bin/bash
+mhernan:KERBEROS:51589:9555:Miguel Hernandez-Morquecho:/nashome/m/mhernan:/bin/bash
+rgutierr:KERBEROS:51584:9555:Raul Gutierrez:/nashome/r/rgutierr:/bin/bash
+granados:KERBEROS:51596:9555:Everardo Granados:/nashome/g/granados:/bin/bash
+dandrade:KERBEROS:51601:9555:Diego Andrade:/nashome/d/dandrade:/bin/bash
+omorenop:KERBEROS:51599:9555:Oscar Moreno-Palacios:/nashome/o/omorenop:/bin/bash
+ortizvj:KERBEROS:51600:9555:Jordan Ortiz:/nashome/o/ortizvj:/bin/bash
+araujoma:KERBEROS:51606:9555:Aurora Araujo-Martinez:/nashome/a/araujoma:/bin/bash
+cvera:KERBEROS:51607:9555:Carlos Vera:/nashome/c/cvera:/bin/bash
+almveg:KERBEROS:51604:9555:Alfredo Martinez-Vega:/nashome/a/almveg:/bin/bash
+larceo:KERBEROS:51605:9555:Luis Arceo:/nashome/l/larceo:/bin/bash
+cnguyen:KERBEROS:51628:9555:Christian Nguyen:/nashome/c/cnguyen:/bin/bash
+mfattoru:KERBEROS:51508:9555:Michele Fattoruso:/nashome/m/mfattoru:/bin/bash
+mascenci:KERBEROS:51774:9555:Marvin Ascencio Sosa:/nashome/m/mascenci:/bin/bash
+sohini:KERBEROS:51780:9555:Sohini Upadhyay:/nashome/s/sohini:/bin/bash
+cfrey:KERBEROS:51839:9555:Christian Frey:/nashome/c/cfrey:/bin/bash
+jbecerra:KERBEROS:51444:9555:Jose Becerra:/nashome/j/jbecerra:/bin/bash
+dkodroff:KERBEROS:51898:9555:Daniel Kodroff:/nashome/d/dkodroff:/bin/bash
+jsydnor:KERBEROS:51902:9555:Jessica Sydnor:/nashome/j/jsydnor:/bin/bash
+tbaker:KERBEROS:50749:9555:Timothy Baker:/nashome/t/tbaker:/bin/bash
+agao:KERBEROS:50456:9555:Amanda Gao:/nashome/a/agao:/bin/bash
+cpegerer:KERBEROS:51965:9555:Colin Egerer:/nashome/c/cpegerer:/bin/bash
+spvidal:KERBEROS:51983:9555:Sonya Vidal:/nashome/s/spvidal:/bin/bash
+sbhat:KERBEROS:10610:9555:Shreyas Bhat:/nashome/s/sbhat:/bin/bash
+azeitlin:KERBEROS:52135:9555:Adam Zeitlin:/nashome/a/azeitlin:/bin/bash
+athorn:KERBEROS:52188:9555:Aidan Thorn:/nashome/a/athorn:/bin/bash
+jyhan:KERBEROS:11339:9555:Jiyeon Han:/nashome/j/jyhan:/bin/bash
+edgarch:KERBEROS:52508:9555:Alberto Chavarria Rodriguez:/nashome/e/edgarch:/bin/bash
+kiwamot2:KERBEROS:47719:9555:Konosuke Iwamoto:/nashome/k/kiwamot2:/bin/bash
+russo:KERBEROS:1846:9555:Paul Russo:/nashome/r/russo:/bin/bash
+letrog:KERBEROS:52755:9555:Maria Rodriguez-Gomez:/nashome/l/letrog:/bin/bash
+hhaider:KERBEROS:52786:9555:Huma Haider:/nashome/h/hhaider:/bin/bash
+ateklu:KERBEROS:52792:9555:Abraham Teklu:/nashome/a/ateklu:/bin/bash
+lisa:KERBEROS:1291:9555:Lisa Giacchetti:/nashome/l/lisa:/bin/bash
+shenry:KERBEROS:52806:9555:Sarah Henry:/nashome/s/shenry:/bin/bash

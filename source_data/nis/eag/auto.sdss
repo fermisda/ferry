@@ -1,0 +1,3 @@
+ups	-rw,vers=3,noac,hard,intr,nodev,timeo=10,retrans=3,rsize=32768,wsize=32768	filesrv-app:/eag/dp0.a/data/products/ups
+#ups	-rw,grpid,noac,hard,intr,nodev,timeo=10,retrans=3,rsize=32768,wsize=32768	sdssprd.fnal.gov:/export/sdss/ups
+#data	-rw,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768	sdssdp30.fnal.gov:/export/data/dp30.a/data

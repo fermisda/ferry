@@ -1,0 +1,11 @@
+lbnemars:x:9108:rakhno,mkarpov,einstein,strigano,reitzner,lundberg,mokhov,dbox,lueking
+lbne:x:9960:dune,duneana,dunecal,dunepro
+nusoft:x:10044:
+mars:x:9100:ifmon,dbox,mokhov,reitzner
+marslbne:x:9111:qzli,kriss,trj,glass,rakhno,mkarpov,velev,ifmon,lundberg,dbox,mokhov,lueking,tropin,reitzner,marslbneana,strigano
+gpcf:x:10000:
+larsoft:x:9280:larsoft,esnider,garren
+lbnesk:x:9105:
+na61:x:9149:laliagasoplin,nusoft,lueking,dschmitz,ayarritu,gmills,guardi,gzeller,trj
+numix:x:9276:zwaska,tjyang,tianxc,asousa,rschroet,wingmc,msanchez,radovic,plunk,zarko,paolone,jkn,gmills,mercurio,rmehdi,ksmcf,alberto,kuldeepm,lang,kordosky,hylen,annah1,rhatcher,dharris,mgoodman,corwin,cvson,vipin,aurisano,omanghel,laliaga,pa
+dune:x:9010:dune,duneana,dunecal,dunepro,ifmon
