@@ -29,12 +29,12 @@ def read_uid(fname):
             if not len(line[:-1]):
                 continue
             tmp = line[:-1].split("\t\t")
-            if not usrs.has_key(tmp[4].strip().lower()):
+            if not usrs.__contains__(tmp[4].strip().lower()):
                 usrs[tmp[4].strip().lower()] = User(tmp[0].strip(), tmp[2].strip().lower().capitalize(),
                                                      tmp[3].strip().lower().capitalize(), tmp[4].strip().lower())
                 usrs[tmp[4].strip().lower()].add_group((tmp[1].strip().lower()))
         except:
-            print >> sys.stderr, "Failed ", line
+            print("Failed ", line, file=sys.stderr)
     return usrs
 
 def read_gid(fname):
@@ -56,7 +56,7 @@ def read_gid(fname):
             groupids[tmp[1].strip().lower()] = tmp[0].strip()
 
         except:
-            print >> sys.stderr, "Faoiled reading group.lis (%s) file. Failed: " % (fname, line)
+            print("Faoiled reading group.lis (%s) file. Failed: " % (fname, line), file=sys.stderr)
     return groupids
 
 
@@ -75,14 +75,14 @@ def read_services_users(fname, users):
             continue
         try:
             tmp = line[:-1].split(",")
-            if users.has_key(tmp[0]):
+            if users.__contains__(tmp[0]):
                 if tmp[2] != "No Expiration date":
                     if tmp[2] == "EXPIRED":
                         users[tmp[0]].set_status(0)
                 users[tmp[0]].set_expiration_date(tmp[2].strip())
                 users[tmp[0]].is_k5login = True
         except:
-            print >> sys.stderr, "csv Failed ", line
+            print("csv Failed ", line, file=sys.stderr)
 
 
 def get_vos(config, vn, vurl, gids):
@@ -101,10 +101,10 @@ def get_vos(config, vn, vurl, gids):
     mysql_client_cfg = MySQLUtils.createClientConfig("voms_db_%s" % (vn,), config)
     connect_str = MySQLUtils.getDbConnection("voms_db_%s" % (vn,), mysql_client_cfg, config)
     command = "select dn from groups"
-    groups, return_code = MySQLUtils.RunQuery(command, connect_str,False)
+    groups, return_code = MySQLUtils.RunQuery(command, connect_str, False)
     volist = {}
     if return_code:
-        print >> sys.stderr, "Failed to select dn from table group from voms_db_%s %s" % (vn, groups)
+        print("Failed to select dn from table group from voms_db_%s %s" % (vn, groups), file=sys.stderr)
         return volist
     for g in groups:
         exp = g[1:].strip().split('/')
@@ -116,12 +116,12 @@ def get_vos(config, vn, vurl, gids):
         else:
             name = exp[0]
         try:
-            if not volist.has_key(name):
+            if not volist.__contains__(name):
                 volist[name] = VOMS(vurl, vn, name)
-            if gids.has_key(name):
+            if gids.__contains__(name):
                 volist[name].add_voms_unix_group(name,gids[name])
         except:
-            print >> sys.stderr, "group is not defined ", name
+            print("group is not defined ", name, file=sys.stderr)
     return volist
 
 
@@ -161,7 +161,7 @@ def assign_vos(config, vn, vurl, rls, usrs, gums_map, collaborations):
         members, return_code = MySQLUtils.RunQuery(command, connect_str, False)
 
         if return_code:
-            print >> sys.stderr, "Failed to extract information from VOMS %s for user %s" % (vn, user.uname)
+            print("Failed to extract information from VOMS %s for user %s" % (vn, user.uname), file=sys.stderr)
             continue
         # user is not a member of VO
         if len(members[0].strip()) == 0:
@@ -181,16 +181,14 @@ def assign_vos(config, vn, vurl, rls, usrs, gums_map, collaborations):
                       "m.userid =" + mid+";"
             affiliation, return_code = MySQLUtils.RunQuery(command, connect_str)
             if return_code:
-                print >> sys.stderr, "Failed to extract information from VOMS %s m and g tables for user %s" % (vn,
-                                                                                                          user.uname)
+                print("Failed to extract information from VOMS %s m and g tables for user %s" % (vn, user.uname), file=sys.stderr)
                 continue
             # gets all roles
             command = "select g.dn,r.role from m m, roles r, groups  g where  r.rid=m.rid and g.gid=m.gid and " \
                       "m.userid =" + mid +" and r.role!=\'VO-Admin\';"
             group_role, return_code = MySQLUtils.RunQuery(command, connect_str,False)
             if return_code:
-                print >> sys.stderr, "Failed to extract information from VOMS %s g and g tables for user %s" % (vn,
-                                                                                                          user.uname)
+                print("Failed to extract information from VOMS %s g and g tables for user %s" % (vn, user.uname), file=sys.stderr)
             affiliation = affiliation+group_role
 
             for aff in affiliation:
@@ -230,7 +228,7 @@ def assign_vos(config, vn, vurl, rls, usrs, gums_map, collaborations):
                         new_umap.uname = account_name
                         new_umap.gid = umap.gid
                         if not umap.gid:
-                            print "disaster", new_umap.__dict__
+                            print("disaster", new_umap.__dict__)
                             sys.exit(1)
                         if umap.gid not in user.gids:
                             user.add_group(umap.gid)
@@ -267,7 +265,7 @@ def read_gums_config(config, usrs, grps):
                     continue
                 role = element.attrib.get('role')
                 # print voms_user_group,vo_group, role
-                if not vo_groups.has_key(vo_group):
+                if not vo_groups.__contains__(vo_group):
                     vo_groups[vo_group] = []
                 vo_groups[vo_group].append(role)
                 gums_mapping[voms_user_group] = VOUserGroup(voms_user_group, voms_server, vo_group, role)
@@ -293,13 +291,13 @@ def read_gums_config(config, usrs, grps):
                         #print "found accountMappers", gmap.account_mappers,element.attrib.get('groupName')
                         gid = element.attrib.get('groupName')
                         if gid not in grps.values():
-                            print >> sys.stderr, "Group gid %s for %s id not in gid.lis" % (gid,key)
+                            print("Group gid %s for %s id not in gid.lis" % (gid,key), file=sys.stderr)
                         else:
                             gmap.gid = gid
                         uname = element.attrib.get('accountName')
 
                         if uname and uname not in users.keys():
-                            print >> sys.stderr, "User uname %s for %s id not in uid.lis" % (uname,key)
+                            print("User uname %s for %s id not in uid.lis" % (uname,key), file=sys.stderr)
                         else:
                             gmap.uname = uname
                         break
@@ -453,7 +451,7 @@ def build_collaborations(vomss, nis, groups):
                 found = True
                 break
         if not found:
-            print >> sys.stderr,"NIS domain doesn't exist for %s" % (vo.name)
+            print("NIS domain doesn't exist for %s" % (vo.name), file=sys.stderr)
             c = CollaborationUnit(domain)
             c.groups = nis.groups
             collaborations.append(c)
@@ -483,7 +481,7 @@ def read_nis(dir_path, exclude_list, altnames, users, groups, cms_groups):
 
     for dir in os.listdir(dir_path):
         if dir in exclude_list:
-            # print >> sys.stderr, "Skipping %s" % (dir,)
+            # print("Skipping %s" % (dir,), file=sys.stderr)
             continue
         nis[dir] = ComputeResource( dir, dir)
 
@@ -500,22 +498,22 @@ def read_nis(dir_path, exclude_list, altnames, users, groups, cms_groups):
             home_dir = tmp[5]
             shell = tmp[6]
             if uname not in users.keys():
-                print >> sys.stderr, "Domain: %s User %s in not in userdb!" % (dir,uname,)
+                print("Domain: %s User %s in not in userdb!" % (dir,uname,), file=sys.stderr)
                 continue
             if uid != users[uname].uid:
                 for u in users.values():
                     if u.uid == uid:
-                        print >> sys.stderr, "Domain: %s user %s, %s has different uid (%s) in userdb! This userdb " \
-                                             "uid (%s) is mapped to %s." % (dir, uname,uid, users[uname].uid, uid, u.uname)
-                        print >> sys.stderr, "Assume that uid is correct, using %s" % (users[uname].uid,)
+                        print("Domain: %s user %s, %s has different uid (%s) in userdb! This userdb " \
+                                             "uid (%s) is mapped to %s." % (dir, uname,uid, users[uname].uid, uid, u.uname), file=sys.stderr)
+                        print("Assume that uid is correct, using %s" % (users[uname].uid,), file=sys.stderr)
 
             if gid not in groups.values():
-                print >> sys.stderr, "Domain: %s group %s doesn\'t exist in userdb!" % (dir,gid,)
+                print("Domain: %s group %s doesn\'t exist in userdb!" % (dir,gid,), file=sys.stderr)
                 continue
             users[uname].compute_access[dir] = ComputeAccess(dir, gid, home_dir, shell)
             nis[dir].users[uname] = users[uname]
             nis[dir].primary_gid.append(gid)
-            nis[dir].groups[groups.keys()[groups.values().index(gid)]] = gid
+            nis[dir].groups[list(groups.keys())[list(groups.values()).index(gid)]] = gid
 
             if dir in alt_names.keys():
                 nis[dir].alternative_name = alt_names[dir]
@@ -532,25 +530,26 @@ def read_nis(dir_path, exclude_list, altnames, users, groups, cms_groups):
 
             user_list = tmp[3].split(",")
             if gid not in groups.values():
-                print >> sys.stderr, "Domain: %s group %s from group filedoesn\'t exist  in userdb!" % (dir,gid,)
+                print("Domain: %s group %s from group filedoesn\'t exist  in userdb!" % \
+                                     (dir,gid,), file=sys.stderr)
                 continue
             if gname not in groups.keys():
-                print >> sys.stderr, "Domain: %s group name %s, %s from group file doesn\'t exist  in userdb!" % \
-                                     (dir,gname,gid)
+                print("Domain: %s group name %s, %s from group file doesn\'t exist  in userdb!" % \
+                                     (dir,gname,gid), file=sys.stderr)
                 continue
             if gid != groups[gname]:
-                print >> sys.stderr, "Domain: %s group %s from group file %s have different gid in userdb!" % \
-                                     (dir,gname,gid,groups[gname])
+                print("Domain: %s group %s from group file %s have different gid in userdb!" % \
+                                     (dir,gname,gid,groups[gname]), file=sys.stderr)
                 continue
             for uname in user_list:
                 if uname not in users.keys():
-                    print >> sys.stderr, "Domain: %s User %s in group file in not in userdb!" % (dir,uname,)
+                    print("Domain: %s User %s in group file in not in userdb!" % (dir,uname,), file=sys.stderr)
                     continue
                 if dir in users[uname].compute_access:
                     users[uname].compute_access[dir].add_secondary_group(gid)
                     nis[dir].groups[gname]=gid
                 else:
-                    print >> sys.stderr, "Domain: %s User %s in group file but not in passwd!" % (dir,uname,)
+                    print("Domain: %s User %s in group file but not in passwd!" % (dir,uname,), file=sys.stderr)
 
 
 
@@ -559,9 +558,9 @@ def read_nis(dir_path, exclude_list, altnames, users, groups, cms_groups):
     nis[dir] = ComputeResource( dir, dir,"Interactive","/uscms/home","/bin/tcsh")
     for gid in cms_groups:
         if gid not in groups.values():
-            print >> sys.stderr, "Domain: %s group %s doesn\'t exist in userdb!" % (dir,gid,)
+            print("Domain: %s group %s doesn\'t exist in userdb!" % (dir,gid,), file=sys.stderr)
             continue
-        gn = groups.keys()[groups.values().index(gid)]
+        gn = list(groups.keys())[list(groups.values()).index(gid)]
         nis[dir].groups[gn]=gid
     gid = groups['us_cms']
 
@@ -627,7 +626,7 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis):
         # for now will just create ferry.sql file
         # results,return_code=MySQLUtils.RunQuery(command,connect_str)
         # if return_code!=0:
-        #    print >> sys.stderr,'Error ', command
+        #    print('Error ', command, file=sys.stderr)
 
     # populate groups table with unix group
 
@@ -640,7 +639,7 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis):
         group_counter += 1
         # results,return_code=MySQLUtils.RunQuery(command,connect_str)
         # if return_code!=0:
-        #    print >> sys.stderr,'Error ', command
+        #    print('Error ', command, file=sys.stderr)
     fd.flush()
 
     # populate collaborative_unit
@@ -676,7 +675,7 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis):
         elif cu.alt_name in  nis.keys():
             nis_info = nis[cu.alt_name]
         else:
-            print >> sys.stderr, "Neither %s not %s found in NIS" % (cu.name,cu.alt_name)
+            print("Neither %s not %s found in NIS" % (cu.name,cu.alt_name), file=sys.stderr)
             continue
         nis_counter += 1
         fd.write("insert into compute_resource (compid,name, default_shell,default_home_dir,comp_type, unitid,last_updated)" +\
@@ -729,7 +728,7 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis):
         for uname, user in users.items():
             #if uname!='kherner':
             #    continue
-            if user.vo_membership.has_key((cu.name,cu.url)):
+            if user.vo_membership.__contains__((cu.name,cu.url)):
                 for umap in user.vo_membership[(cu.name, cu.url)]:
                     fqanid = 0
                     for gmap in gums.values():
@@ -759,7 +758,10 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis):
 if __name__ == "__main__":
     import os
     config = Configuration()
-    config.configure(sys.argv[1])
+    if len(sys.argv) > 1:
+        config.configure(sys.argv[1])
+    else:
+        config.configure(os.path.dirname(os.path.realpath(__file__)) + "/dev.config")
     # read all information about users from uid.lis file
     users = read_uid(config.config.get("user_db", "uid_file"))
 
@@ -817,7 +819,7 @@ if __name__ == "__main__":
                     found = True
                     break
             if not found:
-                print >> sys.stderr,"NIS domain doesn't exist for %s" % (vo.name)
+                print("NIS domain doesn't exist for %s" % (vo.name), file=sys.stderr)
                 collaborations.append(vo)
                 vo.set_id(len(collaborations))
 

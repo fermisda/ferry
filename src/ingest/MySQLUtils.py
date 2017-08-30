@@ -28,7 +28,7 @@ class MySQLUtils:
             os.write(fd,'password="%s"\n' % (dbPasswd,))
             os.close(fd)
         except:
-            print >> sys.stderr,"Didn't create client configuration file", sys.exc_info()[0]
+            print("Didn't create client configuration file", sys.exc_info()[0], file=sys.stderr)
         return name
 
     @staticmethod
@@ -50,7 +50,7 @@ class MySQLUtils:
             dbPort = config.get(dbn, "port")
             dbName = config.get(dbn, "schema")
         except:
-            print >> sys.stderr, "ERROR!!! The " + dbn + " section either does not exist or does not contain all the needed information or has an error in it."
+            print("ERROR!!! The " + dbn + " section either does not exist or does not contain all the needed information or has an error in it.", file=sys.stderr)
             MySQLUtils.removeClientConfig(tmpPwdFile)
             sys.exit(1)
         if tmpPwdFile!=None:
@@ -87,15 +87,15 @@ class MySQLUtils:
         """
         if verbose:
             print >> sys.stdout, cmd
-        proc = subprocess.Popen(cmd,shell=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+        proc = subprocess.Popen(cmd,shell=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE, universal_newlines=True)
         # Reads from pipes, avoides blocking
         result,error=proc.communicate()
         return_code = proc.wait()
         if verbose:
-            print >> sys.stdout, result
-            print >>sys.stderr,error
+            print(result, file=sys.stderr)
+            print(error, file=sys.stderr)
         if verbose:
-            print >>sys.stdout,"command return code is %s" % (return_code,)
+            print("command return code is %s" % (return_code,), file=sys.stderr)
         return result.strip().split("\n"),return_code
  
     @staticmethod

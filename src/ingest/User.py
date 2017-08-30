@@ -59,7 +59,7 @@ class User:
         self.certificates = {}
 
     def add_to_vo(self, vname, vurl):
-        if not self.vo_membership.has_key((vname, vurl)):
+        if not self.vo_membership.__contains__((vname, vurl)):
              self.vo_membership[(vname, vurl)] = []
 
     def add_to_vo_role(self, vname, vurl, gums_mapping):
@@ -130,7 +130,7 @@ class User:
         if groupid in self.groups:
             self.groups[groupid].is_leader = True
         else:
-            print >> sys.stderr, "User %s is not a member of group with id %d" % (self.uname,groupid)
+            print("User %s is not a member of group with id %d" % (self.uname,groupid), file=sys.stderr)
 
     def get_experiment(self):
         enames = []

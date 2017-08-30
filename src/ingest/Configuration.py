@@ -1,10 +1,10 @@
 import sys
 import re
-import ConfigParser
+import configparser
 class Configuration:
     """Provides access to configuration"""
     def __init__(self):
-        self.config=ConfigParser.ConfigParser()
+        self.config=configparser.ConfigParser()
     def configure(self,fn):
         self.config.read([fn,])
 
@@ -24,8 +24,8 @@ def checkRequiredArguments(opts, parser):
 if __name__=="__main__":
     config=Configuration()
     config.configure(sys.argv[1])
-    print config.config.sections()
-    print config.config.get("project_name", "csv")
-    print config.config.get("main_db", "hostname")
-    print config.config.get("query", "OSG_flocking_probe_list")
-    print config.config.get("query", "OSG_flocking_probe_list")
+    print(config.config.sections())
+    print(config.config.get("project_name", "csv"))
+    print(config.config.get("main_db", "hostname"))
+    print(config.config.get("query", "OSG_flocking_probe_list"))
+    print(config.config.get("query", "OSG_flocking_probe_list"))
