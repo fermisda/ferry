@@ -24,8 +24,8 @@ class MySQLUtils:
         try:
             dbPasswd=config.get(dbn,"password")
             fd,name=tempfile.mkstemp(prefix='.mysql')
-            os.write(fd,"[client]\n")
-            os.write(fd,'password="%s"\n' % (dbPasswd,))
+            os.write(fd, str.encode("[client]\n"))
+            os.write(fd,str.encode('password="%s"\n' % (dbPasswd,)))
             os.close(fd)
         except:
             print("Didn't create client configuration file", sys.exc_info()[0], file=sys.stderr)
@@ -45,6 +45,7 @@ class MySQLUtils:
         """
         options=""
         try:
+            mysql  = config.get("path", "mysql")
             dbHost = config.get(dbn, "hostname")
             dbUser = config.get(dbn, "username")
             dbPort = config.get(dbn, "port")
@@ -54,8 +55,8 @@ class MySQLUtils:
             MySQLUtils.removeClientConfig(tmpPwdFile)
             sys.exit(1)
         if tmpPwdFile!=None:
-            options=" --defaults-extra-file=" + tmpPwdFile
-        return options+" -h " + dbHost + " -u " + dbUser + " --port=" + dbPort + " -N " +  dbName
+            options="--defaults-extra-file=" + tmpPwdFile
+        return mysql + " " + options + " -h " + dbHost + " -u " + dbUser + " --port=" + dbPort + " -N " +  dbName
 
     @staticmethod
     def RunQuery(select,connectString,verbose=False):
@@ -69,9 +70,8 @@ class MySQLUtils:
         Returns:
 
         """
-        mysql="/usr/bin/mysql"
-        #mysql = "/usr/local/mysql/bin/mysql"
-        command_line="echo \"%s\" | %s %s" % (select,mysql,connectString)
+
+        command_line="%s -e \"%s\"" % (connectString,select)
         return MySQLUtils.executeCmd(command_line,verbose)
 
     @staticmethod
