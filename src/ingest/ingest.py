@@ -11,6 +11,7 @@ import xml.etree.ElementTree as ET
 import psycopg2 as pg
 import psycopg2.extras
 import fetchcas as ca
+import re
 
 
 def read_uid(fname):
@@ -32,7 +33,8 @@ def read_uid(fname):
             if not usrs.__contains__(tmp[4].strip().lower()):
                 usrs[tmp[4].strip().lower()] = User(tmp[0].strip(), tmp[2].strip().lower().capitalize(),
                                                      tmp[3].strip().lower().capitalize(), tmp[4].strip().lower())
-                usrs[tmp[4].strip().lower()].add_group((tmp[1].strip().lower()))
+                gname = list(gids.keys())[list(gids.values()).index(tmp[1].strip().lower())]
+                usrs[tmp[4].strip().lower()].add_group(gname, (tmp[1].strip().lower()))
         except:
             print("Failed ", line, file=sys.stderr)
     return usrs
@@ -139,12 +141,61 @@ def assign_vos(config, vn, vurl, rls, usrs, gums_map, collaborations):
     Returns:
 
     """
+    CADir = config._sections["path"]["cadir"]
+    CAs = ca.fetchCAs(CADir)
+
     mysql_client_cfg = MySQLUtils.createClientConfig("voms_db_%s" % (vn,), config)
     connect_str = MySQLUtils.getDbConnection("voms_db_%s" % (vn,), mysql_client_cfg, config)
-    # for all users in user-services.csv
+
+    # map all vo members
+    members_list = {}
+    command = "select u.dn,u.userid,d.subject_string,c.subject_string from certificate d, ca c, usr u where u.userid = "\
+              "d.usr_id and c.cid=d.ca_id and (c.subject_string not like \'%HSM%\' and c.subject_string not like " \
+              "\'%Digi%\' and c.subject_string  not like \'%DOE%\') and u.userid in (" \
+              "select distinct  u.userid from usr u, certificate d where u.userid = d.usr_id);"
+    table, return_code = MySQLUtils.RunQuery(command, connect_str)
+    if return_code:
+        print("Failed to extract information from VOMS %s" % (vn), file=sys.stderr)
+        return
+    else:
+        for line in table:
+            uname = re.findall("UID:([A-z]*)", line)
+            if len(uname) > 0:
+                if uname[0] not in members_list:
+                    members_list[uname[0]] = []
+                members_list[uname[0]].append(line.split("\t", 1)[1])
+
+    # generates a map user: affiliations
+    affiliation_list = {}
+    command = "select distinct m.userid,g.dn from m m, groups  g where g.gid=m.gid;"
+    table, return_code = MySQLUtils.RunQuery(command, connect_str)
+    if return_code:
+        print("Failed to extract information from VOMS %s m and g tables" % (vn), file=sys.stderr)
+        return
+    else:
+        for line in table:
+            userid, group = line.split("\t", 1)
+            if userid not in affiliation_list:
+                affiliation_list[userid] = []
+            affiliation_list[userid].append(group)
+
+    # generates a map user: roles
+    group_role_list = {}
+    command = "select m.userid,g.dn,r.role from m m, roles r, groups  g where  r.rid=m.rid and g.gid=m.gid and r.role!=\'VO-Admin\';"
+    table, return_code = MySQLUtils.RunQuery(command, connect_str)
+    if return_code:
+        print("Failed to extract information from VOMS %s g and g tables" % (vn), file=sys.stderr)
+        return
+    else:
+        for line in table:
+            userid, role = line.split("\t", 1)
+            if userid not in group_role_list:
+                group_role_list[userid] = []
+            group_role_list[userid].append(role)
 
     total = 0
 
+    # for all users in user-services.csv
     for uname, user in usrs.items():
         #if uname!='kherner':
         #    continue
@@ -153,19 +204,11 @@ def assign_vos(config, vn, vurl, rls, usrs, gums_map, collaborations):
         if not user.is_k5login:
             continue
 
-        command = "select u.userid,d.subject_string,c.subject_string from certificate d, ca c, usr u where u.userid = "\
-                  "d.usr_id and c.cid=d.ca_id and (c.subject_string not like \'%HSM%\' and c.subject_string not like " \
-                  "\'%Digi%\' and c.subject_string  not like \'%DOE%\') and u.userid in (" \
-                  "select distinct  u.userid from usr u, certificate d where u.userid = d.usr_id and (u.dn like " \
-                  "\'%UID:" + uname + "\' or d.subject_string like \'%UID:" + uname + "\'));"
-        members, return_code = MySQLUtils.RunQuery(command, connect_str, False)
-
-        if return_code:
-            print("Failed to extract information from VOMS %s for user %s" % (vn, user.uname), file=sys.stderr)
-            continue
         # user is not a member of VO
-        if len(members[0].strip()) == 0:
+        if uname not in members_list:
             continue
+        else:
+            members = members_list[uname]
 
         mids = []
 
@@ -176,20 +219,10 @@ def assign_vos(config, vn, vurl, rls, usrs, gums_map, collaborations):
                 mids.append(member[0].strip())
 
         for mid in mids:
-            # gets all the groups that this user is a member
-            command = "select distinct g.dn from m m, groups  g where g.gid=m.gid and " \
-                      "m.userid =" + mid+";"
-            affiliation, return_code = MySQLUtils.RunQuery(command, connect_str)
-            if return_code:
-                print("Failed to extract information from VOMS %s m and g tables for user %s" % (vn, user.uname), file=sys.stderr)
-                continue
-            # gets all roles
-            command = "select g.dn,r.role from m m, roles r, groups  g where  r.rid=m.rid and g.gid=m.gid and " \
-                      "m.userid =" + mid +" and r.role!=\'VO-Admin\';"
-            group_role, return_code = MySQLUtils.RunQuery(command, connect_str,False)
-            if return_code:
-                print("Failed to extract information from VOMS %s g and g tables for user %s" % (vn, user.uname), file=sys.stderr)
-            affiliation = affiliation+group_role
+            # gets all groups and roles that this user is a member
+            affiliation = affiliation_list[mid]
+            if mid in group_role_list:
+                affiliation += group_role_list[mid]
 
             for aff in affiliation:
                 tmp = aff.split("\t")
@@ -209,8 +242,12 @@ def assign_vos(config, vn, vurl, rls, usrs, gums_map, collaborations):
                         issuer = member[2].strip()
                         for cu in collaborations:
                             if cu.name == group or cu.alt_name == group:
-                                index = collaborations.index(cu) +1
-                                user.add_cert(Certificate(index,subject, issuer))
+                                CA = ca.matchCA(CAs, subject)
+                                if CA:
+                                    index = collaborations.index(cu) +1
+                                    user.add_cert(Certificate(index,subject, issuer))
+                                else:
+                                    print("Certificate %s is not issued by a valid CA" % subject)
 
                 if len(tmp) > 1:
                     role = tmp[1].strip()
@@ -230,8 +267,9 @@ def assign_vos(config, vn, vurl, rls, usrs, gums_map, collaborations):
                         if not umap.gid:
                             print("disaster", new_umap.__dict__)
                             sys.exit(1)
-                        if umap.gid not in user.gids:
-                            user.add_group(umap.gid)
+                        if umap.gid not in user.groups:
+                            gname = list(gids.keys())[list(gids.values()).index(umap.gid)]
+                            user.add_group(gname, umap.gid)
                         user.add_to_vo_role(group, url, new_umap)
 
                         break
@@ -323,14 +361,14 @@ def read_vulcan_user_group(config, users):
     cursor.execute("select u.*, a.auth_string from user_group_t1 as u left join auth_tokens_t1 as a on u.userid = a.userid where a.auth_method = 'UNIX'")
     rows = cursor.fetchall()
 
-    validGroups = []
+    validGroups = {}
     for line in open(config["validgroups"], "r").readlines():
-        validGroups.append(line.split()[0])
+        validGroups[line.split()[0]] = line.split()[1]
 
     for row in rows:
         if row["auth_string"] in users:
             if str(row["groupid"]) in validGroups:
-                users[row["auth_string"]].add_group(row["groupid"], False)
+                users[row["auth_string"]].add_group(validGroups[str(row["groupid"])], row["groupid"])
 
     # ensure all Vulcan users are in us_cms (5063) group in Ferry
     cursor.execute("select u.userid, a.auth_string from users_t1 as u left join auth_tokens_t1 as a on u.userid = a.userid where a.auth_method = 'UNIX'")
@@ -338,7 +376,7 @@ def read_vulcan_user_group(config, users):
 
     for row in rows:
         if row["auth_string"] in users:
-            users[row["auth_string"]].add_group('5063', False)
+            users[row["auth_string"]].add_group('us_cms','5063')
             users[row["auth_string"]].add_to_vo('cms', 'https://voms2.cern.ch:8443/voms/cms')
 
 
@@ -348,9 +386,8 @@ def read_vulcan_user_group(config, users):
 
     for row in rows:
         if row["auth_string"] in users:
-            if str(row["groupid"]) in (item[0] for item in users[row["auth_string"]].gids):
-                users[row["auth_string"]].set_leader(row["groupid"])
-                #users[row["auth_string"]].add_group(row["groupid"], True)
+            if str(row["groupid"]) in users[row["auth_string"]].groups:
+                users[row["auth_string"]].set_leader(str(row["groupid"]))
     return validGroups
 
 def read_vulcan_certificates(config, users, vomss):
@@ -374,7 +411,7 @@ def read_vulcan_certificates(config, users, vomss):
     url = cfg["cmsurl"]
     vo = cfg["cmsvo"]
 
-    CADir = config.config._sections["CAs"]["cadir"]
+    CADir = config.config._sections["path"]["cadir"]
     CAs = ca.fetchCAs(CADir)
 
     # add cms voms information
@@ -394,7 +431,7 @@ def read_vulcan_certificates(config, users, vomss):
         if row["uname"] in users:
             CA = ca.matchCA(CAs, row["auth_string"])
             if CA:
-                users[row["uname"]].add_certs(row["auth_string"], CA["subjectdn"], vo, url)
+                users[row["uname"]].add_cert(Certificate(len(vomss), row["auth_string"], CA["subjectdn"]))
 
 def build_collaborations(vomss, nis, groups):
     """
@@ -566,8 +603,8 @@ def read_nis(dir_path, exclude_list, altnames, users, groups, cms_groups):
 
     for uname, user in users.items():
         home = "/uscms/home/%s" % (uname)
-        for tup in user.gids:
-            if tup[0] != "5063":  # us_cms
+        for group in user.groups:
+            if group != "5063":  # us_cms
                 continue
             user.compute_access["cms"] = ComputeAccess("cms", gid, home, "/bin/tcsh" )
             nis[dir].users[uname] = user
@@ -592,7 +629,7 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis):
     connect_str = MySQLUtils.getDbConnection("main_db", mysql_client_cfg, config)
 
     # rebuild database and schema
-    fd = open("ferry.sql", "w")
+    fd = open(config._sections["path"]["output"], "w")
     fd.write("\connect ferry_test\n")
     fd.write("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'ferry';\n")
     fd.write("DROP DATABASE ferry;\n")
@@ -708,7 +745,7 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis):
     fqan_counter = 0
     for key, gmap in gums.items():
         fqan_counter += 1
-        gname = gids.keys()[gids.values().index(gmap.gid)]
+        gname = list(gids.keys())[list(gids.values()).index(gmap.gid)]
         #and gmap.uname in users.keys()
         if gmap.uname:
             un = "\'%s\'" % (gmap.uname)
@@ -748,9 +785,9 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis):
     for uname, user in users.items():
         #if uname!='kherner':
         #    continue
-        for gid, is_primary in user.gids:
+        for gid in user.groups:
             groupid = gid_map[gid]
-            fd.write("insert into user_group values (%d,%d,%s);\n" % (int(user.uid), groupid, is_primary))
+            fd.write("insert into user_group values (%d,%d,%s);\n" % (int(user.uid), groupid, user.groups[gid].is_leader))
     fd.flush()
     fd.close()
 
@@ -762,11 +799,11 @@ if __name__ == "__main__":
         config.configure(sys.argv[1])
     else:
         config.configure(os.path.dirname(os.path.realpath(__file__)) + "/dev.config")
-    # read all information about users from uid.lis file
-    users = read_uid(config.config.get("user_db", "uid_file"))
-
     # read all information about groups from gid.lis
     gids = read_gid(config.config.get("user_db", "gid_file"))
+
+    # read all information about users from uid.lis file
+    users = read_uid(config.config.get("user_db", "uid_file"))
 
     # read services_user_files.csv and add this information to users containers
     read_services_users(config.config.get("user_db", "services_user_file"), users)
@@ -838,3 +875,4 @@ if __name__ == "__main__":
     #                for l in v:
     #                    print k, l.__dict__
     populate_db(config.config, users, gids, vomss, gums, roles,collaborations, nis_structure )
+    print("Done!")

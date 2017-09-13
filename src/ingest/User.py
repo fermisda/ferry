@@ -13,11 +13,11 @@ class ComputeAccess:
 
 
 class UserGroup:
-    def __init__(self,name):
+    def __init__(self, name, gid=0, leader=False):
         self.gname = name
         self.group_id = 0
-        self.gid = 0
-        self.is_leader = False
+        self.gid = gid
+        self.is_leader = leader
         self.group_type = None
 
 
@@ -51,7 +51,6 @@ class User:
         self.expiration_date = None
         self.is_k5login = False
         self.user_affiliation_attributes = {}
-        self.gids = []
         self.groups = {}
         self.grid_access= {}
         self.compute_access = {}
@@ -108,11 +107,11 @@ class User:
             self.certificates[gr.group_id] = gr
         return
 
-    def add_group(self, gid, leader=False):
-        for g in self.gids:
-            if gid == g[0]:
+    def add_group(self, name, gid, leader=False):
+        for g in self.groups:
+            if str(gid) == str(g):
                 return
-        self.gids.append((str(gid), leader))
+        self.groups[str(gid)] = UserGroup(name, str(gid), leader)
 
     def get_groups(self):
         gnames = []
