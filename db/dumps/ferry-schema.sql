@@ -257,13 +257,13 @@ CREATE TABLE storage_quota (
     groupid bigint,
     path text NOT NULL,
     last_updated date DEFAULT ('now'::text)::date NOT NULL,
-    shell character varying(255),
     value text NOT NULL,
     unit character varying(100) NOT NULL,
     valid_until date,
     quotaid bigint NOT NULL,
     storageid bigint NOT NULL,
-    uid bigint
+    uid bigint,
+    unitid bigint
 );
 
 
@@ -664,6 +664,13 @@ CREATE INDEX idx_storage_quota ON storage_quota USING btree (uid);
 
 
 --
+-- Name: idx_storage_quota_0; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
+--
+
+CREATE INDEX idx_storage_quota_0 ON storage_quota USING btree (unitid);
+
+
+--
 -- Name: fk_compute_resource_compute_resource; Type: FK CONSTRAINT; Schema: public; Owner: ferry
 --
 
@@ -765,6 +772,14 @@ ALTER TABLE ONLY compute_access
 
 ALTER TABLE ONLY compute_access
     ADD CONSTRAINT fk_interactive_access_users FOREIGN KEY (uid) REFERENCES users(uid);
+
+
+--
+-- Name: fk_storage_quota_collaboration_unit; Type: FK CONSTRAINT; Schema: public; Owner: ferry
+--
+
+ALTER TABLE ONLY storage_quota
+    ADD CONSTRAINT fk_storage_quota_collaboration_unit FOREIGN KEY (unitid) REFERENCES collaboration_unit(unitid);
 
 
 --
