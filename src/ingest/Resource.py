@@ -70,5 +70,24 @@ class ComputeResource:
         self.primary_gid = []
         self.alternative_name = None
 
+class StorageResource:
+    def __init__(self, name, storage_type, default_path, default_quota, unit):
+        self.sresource = name
+        self.stype = storage_type
+        self.spath = default_path
+        self.squota = default_quota
+        self.sunit = unit
+        self.quotas = []
+
+class StorageQuota:
+    def __init__(self, uid, gid, cunit, path, value, unit, valid_until):
+        self.quid = uid
+        self.qgid = gid
+        self.qcunit = cunit
+        self.qpath = path
+        self.qvalue = value
+        self.qunit = unit
+        self.quntil = valid_until
+
     def add_mapping(self,name, altname):
         self.alternative_name  = altname

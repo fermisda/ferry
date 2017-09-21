@@ -6,7 +6,7 @@ import sys
 from Configuration import Configuration
 from MySQLUtils import MySQLUtils
 from User import User, Certificate, ComputeAccess
-from Resource import CollaborationUnit, VOMS, VOUserGroup, ComputeResource
+from Resource import *
 import xml.etree.ElementTree as ET
 import psycopg2 as pg
 import psycopg2.extras
@@ -496,7 +496,7 @@ def build_collaborations(vomss, nis, groups):
 
     return collaborations
 
-def read_nis(dir_path, exclude_list, altnames, users, groups, cms_groups):
+def read_nis(dir_path, exclude_list, altnames, users, groups):
     """
     Read NIS domain and build passwd and group
     Args:
@@ -588,31 +588,142 @@ def read_nis(dir_path, exclude_list, altnames, users, groups, cms_groups):
                 else:
                     print("Domain: %s User %s in group file but not in passwd!" % (dir,uname,), file=sys.stderr)
 
-
-
-    # add cms structure, this should modified not to have anything harcoded!!!!!
-    dir = "cms"
-    nis[dir] = ComputeResource( dir, dir,"Interactive","/uscms/home","/bin/tcsh")
-    for gid in cms_groups:
-        if gid not in groups.values():
-            print("Domain: %s group %s doesn\'t exist in userdb!" % (dir,gid,), file=sys.stderr)
-            continue
-        gn = list(groups.keys())[list(groups.values()).index(gid)]
-        nis[dir].groups[gn]=gid
-    gid = groups['us_cms']
-
-    for uname, user in users.items():
-        home = "/uscms/home/%s" % (uname)
-        for group in user.groups:
-            if group != "5063":  # us_cms
-                continue
-            user.compute_access["cms"] = ComputeAccess("cms", gid, home, "/bin/tcsh" )
-            nis[dir].users[uname] = user
-            break
-    nis[dir].primary_gid.append(groups['us_cms'])
     return nis
 
-def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis):
+def read_vulcan_compute_resources(cfg, nis, users, groups, cms_groups):
+    """
+    read vulcan compute resources from a list and add to nis list
+    Args:
+        cfg:
+        nis:
+        groups:
+        cms_groups:
+
+    Returns:
+
+    """
+    cfg = config.config._sections["vulcan"]
+    conn_string = "host='%s' dbname='%s' user='%s' password='%s'" % \
+                  (cfg["hostname"], cfg["database"], cfg["username"], cfg["password"])
+    conn = pg.connect(conn_string)
+    cursor = conn.cursor(cursor_factory=pg.extras.DictCursor)
+
+    # compute resources
+    compList = open(cfg["computeres"]).readlines()
+    for comp in compList:
+        comp = comp.strip().split(",")
+        dir = "cms"
+        if comp[0] != "0":
+            nis[dir] = ComputeResource(comp[1], dir, comp[2], comp[4], comp[3])
+            cursor.execute("select g.groupid, g.gpname from res_shares_t1 as s left join groups_t1 as g on s.groupid = g.groupid where s.resourceid = %s;" % comp[0])
+            resourceGroups = cursor.fetchall()
+            for group in resourceGroups:
+                if group["gpname"] not in groups:
+                    print("Domain: %s group %s doesn\'t exist in userdb!" % (dir,group["gpname"]), file=sys.stderr)
+                    continue
+                nis[dir].groups[group["gpname"]]=groups[group["gpname"]]
+
+            cursor.execute("select a.*, t.gpname from res_accts_t1 as a left join \
+                            (select s.shareid, s.resourceid, g.gpname from res_shares_t1 as s left join groups_t1 as g on s.groupid = g.groupid) \
+                            as t on a.shareid = t.shareid where t.resourceid = %s" % comp[0])
+            rows = cursor.fetchall()
+            for row in rows:
+                uname = row["home_dir"].rsplit("/", 1)[-1]
+                if row["gpname"] in cms_groups.values() and uname in users:
+                    gid = list(cms_groups.keys())[list(cms_groups.values()).index(row["gpname"])]
+                    users[uname].compute_access[comp[1]] = ComputeAccess(comp[1], gid, row["home_dir"], comp[3])
+                    nis[dir].users[uname] = users[uname]
+            nis[dir].primary_gid.append(groups[comp[5]]) ### CHECK IT! ###
+
+def read_vulcan_storage_resources(cfg, users, groups, cms_groups):
+    """
+    read vulcan storage resources from a list and return a storage_structure
+    Args:
+        cfg:
+        users:
+        groups:
+        cms_groups:
+
+    Returns:
+
+    """
+    cfg = config.config._sections["vulcan"]
+    conn_string = "host='%s' dbname='%s' user='%s' password='%s'" % \
+                  (cfg["hostname"], cfg["database"], cfg["username"], cfg["password"])
+    conn = pg.connect(conn_string)
+    cursor = conn.cursor(cursor_factory=pg.extras.DictCursor)
+
+    # storage resources
+    storageList = open(cfg["storageres"]).readlines()
+    storage_structure = {}
+    for storage in storageList:
+        storage = storage.strip().split(",")
+        if storage[0] != "0": # This resources are coming from an external file instead of Vulcan
+            storage_structure[storage[1]] = StorageResource(storage[1], storage[2], storage[3], storage[4], storage[5])
+            try:
+                # user quotas
+                cursor.execute("select a.* from res_accts_t1 as a left join res_shares_t1 as s on a.shareid = s.shareid where s.resourceid = %s" 
+                              % storage[0])
+                rows = cursor.fetchall()
+
+                for row in rows:
+                    uname = row["home_dir"].rsplit("/", 1)[-1]
+                    if uname in users:
+                        storage_structure[storage[1]].quotas.append(StorageQuota(row["userid"], "null", "cms", row["home_dir"], row["quota"], "B", "null"))
+                    else:
+                        print("User %s doesn't exist in userdb. Skipping quota it's quota in %s." % (uname, storage[1]))
+
+                # group quotas
+                cursor.execute("select s.*, g.gpname from res_shares_t1 as s \
+                                left join groups_t1 as g on s.groupid = g.groupid where s.resourceid = %s;" % storage[0])
+                rows = cursor.fetchall()
+
+                for row in rows:
+                    if row["gpname"] in groups:
+                        storage_structure[storage[1]].quotas.append(StorageQuota("null", groups[row["gpname"]], "cms", "null", row["quota"], "B", "null"))
+                    else:
+                        print("Group %s doesn't exist in userdb. Skipping quota it's quota in %s." % (row["gpname"], storage[1]))
+            except:
+                print("failed to fetch %s data from Vulcan" % storage[1], file=sys.stderr)
+        else:
+            storage_structure[storage[1]] = StorageResource(storage[1], storage[2], storage[3], storage[4], storage[5])
+            try:
+                rows = open(cfg[storage[1].lower()]).readlines()
+
+                uquota = True
+                for row in rows:
+                    # matches lines like: "user_or_group         0   100G   120G  00 [------]"
+                    if re.match("[a-z\d_]+(\s+(0|\d+(\.\d+)?[BKMGTE])){3}\s+\d{2}\s+(\[(-+|\d\sdays?|-none-)\]|\d{1,2}(:\d{1,2}){2})", row):
+                        row = row.split()
+                        quota = row[2][0:-1]
+                        if row[2][-1] in "KMGTE":
+                            unit = row[2][-1] + "B"
+                        else:
+                            unit = "B"
+
+                        if uquota: # user quotas
+                            if row[0] in users:
+                                storage_structure[storage[1]].quotas.append(
+                                        StorageQuota(users[row[0]].uid, "null", "cms", "%s/%s" % (storage_structure[storage[1]].spath, row[0]), quota, unit, "null")
+                                    )
+                            else:
+                                print("User %s doesn't exist in userdb. Skipping quota it's quota in %s." % (row[0], storage[0]))
+                        else: # group quotas
+                            if row[0] in cms_groups.values():
+                                storage_structure[storage[1]].quotas.append(
+                                        StorageQuota("null", groups[row[0]], "cms", "null", quota, unit, "null")
+                                    )
+                            else:
+                                print("Group %s is not a valid CMS group. Skipping quota it's quota in %s." % (row[0], storage[0]))
+                    else:
+                        if row.startswith("Group quota"):
+                            uquota = False
+            except:
+                print("failed to fetch %s data from %s" % (storage[0], cfg[storage[0].lower()]), file=sys.stderr)
+
+    return storage_structure
+
+def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, storages):
     """
     create mysql dump for ferry database
     Args:
@@ -725,8 +836,29 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis):
             fd.write("insert into compute_access (compid, uid, groupid,shell,home_dir,last_updated)" + \
                      " values (%s,%s,%s,\'%s\',\'%s\', NOW());\n" % (nis_counter,user.uid,groupid,comp.shell,comp.home_dir))
     fd.flush()
-    # populate collaboration unit groups
+    
+    #populate storage_resource
+    storage_counter = 0
+    for storage in storages.values():
+        storage_counter += 1
+        fd.write("insert into storage_resource (name, storage_type, default_path, default_quota, default_unit, last_updated)" + \
+                 " values (\'%s\', \'%s\', \'%s\', \'%s\', \'%s\', NOW());\n" % (storage.sresource, storage.stype, storage.spath, storage.squota, storage.sunit))
+        for quota in storage.quotas:
+            for cu in collaborations:
+                if cu.name != quota.qcunit:
+                    continue
+                if quota.qgid != 'null':
+                    groupid = gid_map[quota.qgid]
+                else:
+                    groupid = 'null'
+                query = "insert into storage_quota (storageid, uid, groupid, unitid, path, value, unit, valid_until, last_updated)" + \
+                        " values (%s, %s, %s, %s, \'%s\', %s, \'%s\', \'%s\', NOW());\n" % (storage_counter, quota.quid, groupid, cu.unitid, quota.qpath, 
+                                                                                             quota.qvalue, quota.qunit, quota.quntil)
+                fd.write(query.replace("'null'", "null"))
+                break
 
+    
+    # populate collaboration unit groups
     for gid in cu.groups.values():
         index = gid_map[gid]
         is_primary = 0
@@ -813,8 +945,11 @@ if __name__ == "__main__":
 
     # read NIS information
     nis_structure = read_nis(config.config.get("nis", "dir_path"),config.config.get("nis", "exclude_domain"),
-                                 config.config.get("nis", "name_mapping"),users, gids,cms_groups)
+                             config.config.get("nis", "name_mapping"),users, gids)
 
+    # read valid CMS resources from Vulcan
+    read_vulcan_compute_resources(config, nis_structure, users, gids, cms_groups)
+    storages = read_vulcan_storage_resources(config, users, gids, cms_groups)
 
     # process voms information; list of VOMS instances should be in configuration file
     voms_instances = config.config.get("voms_instances", "list")
@@ -874,5 +1009,5 @@ if __name__ == "__main__":
     #            for k,v in user.vo_membership.items():
     #                for l in v:
     #                    print k, l.__dict__
-    populate_db(config.config, users, gids, vomss, gums, roles,collaborations, nis_structure )
+    populate_db(config.config, users, gids, vomss, gums, roles,collaborations, nis_structure, storages)
     print("Done!")
