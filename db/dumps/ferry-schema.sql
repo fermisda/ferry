@@ -42,39 +42,40 @@ SET default_tablespace = '';
 SET default_with_oids = false;
 
 --
--- Name: collaboration_unit; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
+-- Name: affiliation_unit; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
 --
 
-CREATE TABLE collaboration_unit (
+CREATE TABLE affiliation_unit (
     unitid bigint NOT NULL,
     unit_name character varying(100) NOT NULL,
     voms_url character varying(200),
     alternative_name character varying(100),
-    last_updated date DEFAULT ('now'::text)::date
+    last_updated date DEFAULT ('now'::text)::date,
+    type character varying(100)
 );
 
 
-ALTER TABLE public.collaboration_unit OWNER TO ferry;
+ALTER TABLE public.affiliation_unit OWNER TO ferry;
 
 --
--- Name: TABLE collaboration_unit; Type: COMMENT; Schema: public; Owner: ferry
+-- Name: TABLE affiliation_unit; Type: COMMENT; Schema: public; Owner: ferry
 --
 
-COMMENT ON TABLE collaboration_unit IS 'experiments and projects';
-
-
---
--- Name: COLUMN collaboration_unit.unitid; Type: COMMENT; Schema: public; Owner: ferry
---
-
-COMMENT ON COLUMN collaboration_unit.unitid IS 'Fermilab collaboration unit id ';
+COMMENT ON TABLE affiliation_unit IS 'experiments and projects';
 
 
 --
--- Name: COLUMN collaboration_unit.voms_url; Type: COMMENT; Schema: public; Owner: ferry
+-- Name: COLUMN affiliation_unit.unitid; Type: COMMENT; Schema: public; Owner: ferry
 --
 
-COMMENT ON COLUMN collaboration_unit.voms_url IS 'url to relevant voms installation. could point to a subgroup within fermilab voms';
+COMMENT ON COLUMN affiliation_unit.unitid IS 'Fermilab collaboration unit id ';
+
+
+--
+-- Name: COLUMN affiliation_unit.voms_url; Type: COMMENT; Schema: public; Owner: ferry
+--
+
+COMMENT ON COLUMN affiliation_unit.voms_url IS 'url to relevant voms installation. could point to a subgroup within fermilab voms';
 
 
 --
@@ -194,7 +195,7 @@ ALTER TABLE public.experiments_expid_seq OWNER TO ferry;
 -- Name: experiments_expid_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: ferry
 --
 
-ALTER SEQUENCE experiments_expid_seq OWNED BY collaboration_unit.unitid;
+ALTER SEQUENCE experiments_expid_seq OWNED BY affiliation_unit.unitid;
 
 
 --
@@ -286,25 +287,12 @@ CREATE TABLE storage_resource (
     storage_type character varying(255) NOT NULL,
     default_path character varying(255),
     default_quota bigint,
-    last_updated date DEFAULT ('now'::text)::date
+    last_updated date DEFAULT ('now'::text)::date,
+    default_unit character varying(100)
 );
 
 
 ALTER TABLE public.storage_resource OWNER TO ferry;
-
---
--- Name: user_affiliation; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
---
-
-CREATE TABLE user_affiliation (
-    uid bigint NOT NULL,
-    affiliation_value character varying(100),
-    last_updated date DEFAULT ('now'::text)::date,
-    affiliation_attribute character varying(100) NOT NULL
-);
-
-
-ALTER TABLE public.user_affiliation OWNER TO ferry;
 
 --
 -- Name: user_certificate; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
@@ -320,6 +308,20 @@ CREATE TABLE user_certificate (
 
 
 ALTER TABLE public.user_certificate OWNER TO ferry;
+
+--
+-- Name: user_external_affiliation; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
+--
+
+CREATE TABLE user_external_affiliation (
+    uid bigint NOT NULL,
+    affiliation_value character varying(100),
+    last_updated date DEFAULT ('now'::text)::date,
+    affiliation_attribute character varying(100) NOT NULL
+);
+
+
+ALTER TABLE public.user_external_affiliation OWNER TO ferry;
 
 --
 -- Name: user_group; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
@@ -378,7 +380,7 @@ COMMENT ON COLUMN users.last_name IS 'user''s last name';
 -- Name: unitid; Type: DEFAULT; Schema: public; Owner: ferry
 --
 
-ALTER TABLE ONLY collaboration_unit ALTER COLUMN unitid SET DEFAULT nextval('experiments_expid_seq'::regclass);
+ALTER TABLE ONLY affiliation_unit ALTER COLUMN unitid SET DEFAULT nextval('experiments_expid_seq'::regclass);
 
 
 --
@@ -392,7 +394,7 @@ ALTER TABLE ONLY grid_fqan ALTER COLUMN fqanid SET DEFAULT nextval('experiment_r
 -- Name: idx_22242_primary; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
 --
 
-ALTER TABLE ONLY collaboration_unit
+ALTER TABLE ONLY affiliation_unit
     ADD CONSTRAINT idx_22242_primary PRIMARY KEY (unitid);
 
 
@@ -512,7 +514,7 @@ ALTER TABLE ONLY groups
 -- Name: pk_user_affiliation; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
 --
 
-ALTER TABLE ONLY user_affiliation
+ALTER TABLE ONLY user_external_affiliation
     ADD CONSTRAINT pk_user_affiliation PRIMARY KEY (uid);
 
 
@@ -683,7 +685,7 @@ ALTER TABLE ONLY compute_batch
 --
 
 ALTER TABLE ONLY compute_resource
-    ADD CONSTRAINT fk_compute_resource_experiments FOREIGN KEY (unitid) REFERENCES collaboration_unit(unitid);
+    ADD CONSTRAINT fk_compute_resource_experiments FOREIGN KEY (unitid) REFERENCES affiliation_unit(unitid);
 
 
 --
@@ -715,7 +717,7 @@ ALTER TABLE ONLY grid_fqan
 --
 
 ALTER TABLE ONLY collaboration_unit_group
-    ADD CONSTRAINT fk_experiment_group_experiments FOREIGN KEY (unitid) REFERENCES collaboration_unit(unitid);
+    ADD CONSTRAINT fk_experiment_group_experiments FOREIGN KEY (unitid) REFERENCES affiliation_unit(unitid);
 
 
 --
@@ -739,7 +741,7 @@ ALTER TABLE ONLY grid_access
 --
 
 ALTER TABLE ONLY grid_access
-    ADD CONSTRAINT fk_experiment_membership_experiments FOREIGN KEY (unitid) REFERENCES collaboration_unit(unitid);
+    ADD CONSTRAINT fk_experiment_membership_experiments FOREIGN KEY (unitid) REFERENCES affiliation_unit(unitid);
 
 
 --
@@ -779,7 +781,7 @@ ALTER TABLE ONLY compute_access
 --
 
 ALTER TABLE ONLY storage_quota
-    ADD CONSTRAINT fk_storage_quota_collaboration_unit FOREIGN KEY (unitid) REFERENCES collaboration_unit(unitid);
+    ADD CONSTRAINT fk_storage_quota_collaboration_unit FOREIGN KEY (unitid) REFERENCES affiliation_unit(unitid);
 
 
 --
@@ -810,7 +812,7 @@ ALTER TABLE ONLY storage_quota
 -- Name: fk_user_affiliation_users; Type: FK CONSTRAINT; Schema: public; Owner: ferry
 --
 
-ALTER TABLE ONLY user_affiliation
+ALTER TABLE ONLY user_external_affiliation
     ADD CONSTRAINT fk_user_affiliation_users FOREIGN KEY (uid) REFERENCES users(uid);
 
 
@@ -819,7 +821,7 @@ ALTER TABLE ONLY user_affiliation
 --
 
 ALTER TABLE ONLY user_certificate
-    ADD CONSTRAINT fk_user_certificate_experiments FOREIGN KEY (unitid) REFERENCES collaboration_unit(unitid);
+    ADD CONSTRAINT fk_user_certificate_experiments FOREIGN KEY (unitid) REFERENCES affiliation_unit(unitid);
 
 
 --
