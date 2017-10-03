@@ -609,10 +609,12 @@ def read_vulcan_compute_resources(cfg, nis, users, groups, cms_groups):
     cursor = conn.cursor(cursor_factory=pg.extras.DictCursor)
 
     # compute resources
-    compList = open(cfg["computeres"]).readlines()
-    for comp in compList:
+    # select a.userid, s.groupid, a.shell, a.home_dir from res_accts_t1 as a left join res_shares_t1 as s on a.shareid = s.shareid where resourceid = %s;
+    # select a.userid, t.gpname, a.shell, a.home_dir from res_accts_t1 as a left join (select s.*, g.gpname from res_shares_t1 as s left join groups_t1 as g on s.groupid = g.groupid) as t on a.shareid = t.shareid where resourceid = 4;
+    for comp in open(cfg["computeres"]).readlines():
         comp = comp.strip().split(",")
         dir = "cms"
+        
         if comp[0] != "0":
             nis[dir] = ComputeResource(comp[1], dir, comp[2], comp[4], comp[3])
             cursor.execute("select g.groupid, g.gpname from res_shares_t1 as s left join groups_t1 as g on s.groupid = g.groupid where s.resourceid = %s;" % comp[0])
@@ -623,15 +625,15 @@ def read_vulcan_compute_resources(cfg, nis, users, groups, cms_groups):
                     continue
                 nis[dir].groups[group["gpname"]]=groups[group["gpname"]]
 
-            cursor.execute("select a.*, t.gpname from res_accts_t1 as a left join \
-                            (select s.shareid, s.resourceid, g.gpname from res_shares_t1 as s left join groups_t1 as g on s.groupid = g.groupid) \
-                            as t on a.shareid = t.shareid where t.resourceid = %s" % comp[0])
+            cursor.execute("select a.userid, t.gpname, a.shell, a.home_dir from res_accts_t1 as a \
+                            left join (select s.*, g.gpname from res_shares_t1 as s left join groups_t1 as g on s.groupid = g.groupid) as t \
+                            on a.shareid = t.shareid where resourceid = %s;" % comp[0])
             rows = cursor.fetchall()
             for row in rows:
                 uname = row["home_dir"].rsplit("/", 1)[-1]
                 if row["gpname"] in cms_groups.values() and uname in users:
                     gid = list(cms_groups.keys())[list(cms_groups.values()).index(row["gpname"])]
-                    users[uname].compute_access[comp[1]] = ComputeAccess(comp[1], gid, row["home_dir"], comp[3])
+                    users[uname].compute_access[comp[1]] = ComputeAccess(comp[1], gid, row["home_dir"], row["shell"])
                     nis[dir].users[uname] = users[uname]
             nis[dir].primary_gid.append(groups[comp[5]]) ### CHECK IT! ###
 
@@ -800,7 +802,7 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
             alt_name = "\'%s\'" % (cu.alt_name)
         else:
             alt_name = "NULL"
-        fd.write("insert into collaboration_unit (unit_name, voms_url, alternative_name, last_updated) " +\
+        fd.write("insert into affiliation_unit (unit_name, voms_url, alternative_name, last_updated) " +\
             "values (\'%s\',%s,%s,NOW());\n" % (cu.name, link,alt_name))
         # populate collaboration unit groups
 
@@ -812,7 +814,7 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
                     is_primary = 1
             else:
                     is_primary = 1
-            fd.write("insert into collaboration_unit_group values(%d,%d,%s,NOW());\n" % (cu.unitid,index,is_primary))
+            fd.write("insert into affiliation_unit_group values(%d,%d,%s,NOW());\n" % (cu.unitid,index,is_primary))
     fd.flush()
 
     #populate compute_resource
@@ -867,7 +869,7 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
                 is_primary = 1
         else:
                 is_primary = 0
-        fd.write("insert into collaboration_unit_group values(%d,%d,%s,NOW());\n" % (cu.unitid,index,is_primary))
+        fd.write("insert into affiliation_unit_group values(%d,%d,%s,NOW());\n" % (cu.unitid,index,is_primary))
         fd.flush()
 
 
