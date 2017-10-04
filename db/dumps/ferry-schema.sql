@@ -42,43 +42,6 @@ SET default_tablespace = '';
 SET default_with_oids = false;
 
 --
--- Name: affiliation_unit; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
---
-
-CREATE TABLE affiliation_unit (
-    unitid bigint NOT NULL,
-    unit_name character varying(100) NOT NULL,
-    voms_url character varying(200),
-    alternative_name character varying(100),
-    last_updated date DEFAULT ('now'::text)::date,
-    type character varying(100)
-);
-
-
-ALTER TABLE public.affiliation_unit OWNER TO ferry;
-
---
--- Name: TABLE affiliation_unit; Type: COMMENT; Schema: public; Owner: ferry
---
-
-COMMENT ON TABLE affiliation_unit IS 'experiments and projects';
-
-
---
--- Name: COLUMN affiliation_unit.unitid; Type: COMMENT; Schema: public; Owner: ferry
---
-
-COMMENT ON COLUMN affiliation_unit.unitid IS 'Fermilab collaboration unit id ';
-
-
---
--- Name: COLUMN affiliation_unit.voms_url; Type: COMMENT; Schema: public; Owner: ferry
---
-
-COMMENT ON COLUMN affiliation_unit.voms_url IS 'url to relevant voms installation. could point to a subgroup within fermilab voms';
-
-
---
 -- Name: affiliation_unit_group; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
 --
 
@@ -91,6 +54,43 @@ CREATE TABLE affiliation_unit_group (
 
 
 ALTER TABLE public.affiliation_unit_group OWNER TO ferry;
+
+--
+-- Name: affiliation_units; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
+--
+
+CREATE TABLE affiliation_units (
+    unitid bigint NOT NULL,
+    voms_url character varying(200),
+    alternative_name character varying(100),
+    last_updated date DEFAULT ('now'::text)::date,
+    type character varying(100),
+    name character varying(100) NOT NULL
+);
+
+
+ALTER TABLE public.affiliation_units OWNER TO ferry;
+
+--
+-- Name: TABLE affiliation_units; Type: COMMENT; Schema: public; Owner: ferry
+--
+
+COMMENT ON TABLE affiliation_units IS 'experiments and projects';
+
+
+--
+-- Name: COLUMN affiliation_units.unitid; Type: COMMENT; Schema: public; Owner: ferry
+--
+
+COMMENT ON COLUMN affiliation_units.unitid IS 'Fermilab collaboration unit id ';
+
+
+--
+-- Name: COLUMN affiliation_units.voms_url; Type: COMMENT; Schema: public; Owner: ferry
+--
+
+COMMENT ON COLUMN affiliation_units.voms_url IS 'url to relevant voms installation. could point to a subgroup within fermilab voms';
+
 
 --
 -- Name: compute_access; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
@@ -125,21 +125,21 @@ CREATE TABLE compute_batch (
 ALTER TABLE public.compute_batch OWNER TO ferry;
 
 --
--- Name: compute_resource; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
+-- Name: compute_resources; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
 --
 
-CREATE TABLE compute_resource (
+CREATE TABLE compute_resources (
     compid bigint NOT NULL,
     name character varying(100),
     default_shell character varying(100),
-    comp_type character varying(100),
     unitid integer,
     last_updated date DEFAULT ('now'::text)::date,
-    default_home_dir character varying(100)
+    default_home_dir character varying(100),
+    type character varying(100)
 );
 
 
-ALTER TABLE public.compute_resource OWNER TO ferry;
+ALTER TABLE public.compute_resources OWNER TO ferry;
 
 --
 -- Name: grid_fqan; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
@@ -195,8 +195,22 @@ ALTER TABLE public.experiments_expid_seq OWNER TO ferry;
 -- Name: experiments_expid_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: ferry
 --
 
-ALTER SEQUENCE experiments_expid_seq OWNED BY affiliation_unit.unitid;
+ALTER SEQUENCE experiments_expid_seq OWNED BY affiliation_units.unitid;
 
+
+--
+-- Name: external_affiliation_attribute; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
+--
+
+CREATE TABLE external_affiliation_attribute (
+    uid bigint NOT NULL,
+    attribute character varying(100) NOT NULL,
+    value character varying(100),
+    last_updated date DEFAULT ('now'::text)::date
+);
+
+
+ALTER TABLE public.external_affiliation_attribute OWNER TO ferry;
 
 --
 -- Name: grid_access; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
@@ -219,10 +233,10 @@ ALTER TABLE public.grid_access OWNER TO ferry;
 --
 
 CREATE TABLE groups (
-    gid bigint,
-    group_name character varying(100) NOT NULL,
-    group_type groups_group_type NOT NULL,
     groupid bigint NOT NULL,
+    gid bigint,
+    name character varying(100) NOT NULL,
+    type groups_group_type NOT NULL,
     last_updated date DEFAULT ('now'::text)::date
 );
 
@@ -244,10 +258,10 @@ COMMENT ON COLUMN groups.gid IS 'group unix id';
 
 
 --
--- Name: COLUMN groups.group_name; Type: COMMENT; Schema: public; Owner: ferry
+-- Name: COLUMN groups.name; Type: COMMENT; Schema: public; Owner: ferry
 --
 
-COMMENT ON COLUMN groups.group_name IS 'unix group name';
+COMMENT ON COLUMN groups.name IS 'unix group name';
 
 
 --
@@ -299,21 +313,21 @@ ALTER SEQUENCE storage_quota_quotaid_seq OWNED BY storage_quota.quotaid;
 
 
 --
--- Name: storage_resource; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
+-- Name: storage_resources; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
 --
 
-CREATE TABLE storage_resource (
+CREATE TABLE storage_resources (
     storageid integer NOT NULL,
     name character varying(100) NOT NULL,
-    storage_type character varying(255) NOT NULL,
     default_path character varying(255),
     default_quota bigint,
     last_updated date DEFAULT ('now'::text)::date,
-    default_unit character varying(100)
+    default_unit character varying(100),
+    type character varying(255) NOT NULL
 );
 
 
-ALTER TABLE public.storage_resource OWNER TO ferry;
+ALTER TABLE public.storage_resources OWNER TO ferry;
 
 --
 -- Name: storage_resource_storageid_seq; Type: SEQUENCE; Schema: public; Owner: ferry
@@ -333,7 +347,7 @@ ALTER TABLE public.storage_resource_storageid_seq OWNER TO ferry;
 -- Name: storage_resource_storageid_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: ferry
 --
 
-ALTER SEQUENCE storage_resource_storageid_seq OWNED BY storage_resource.storageid;
+ALTER SEQUENCE storage_resource_storageid_seq OWNED BY storage_resources.storageid;
 
 
 --
@@ -350,20 +364,6 @@ CREATE TABLE user_certificate (
 
 
 ALTER TABLE public.user_certificate OWNER TO ferry;
-
---
--- Name: user_external_affiliation; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
---
-
-CREATE TABLE user_external_affiliation (
-    uid bigint NOT NULL,
-    affiliation_value character varying(100),
-    last_updated date DEFAULT ('now'::text)::date,
-    affiliation_attribute character varying(100) NOT NULL
-);
-
-
-ALTER TABLE public.user_external_affiliation OWNER TO ferry;
 
 --
 -- Name: user_group; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
@@ -422,7 +422,7 @@ COMMENT ON COLUMN users.last_name IS 'user''s last name';
 -- Name: unitid; Type: DEFAULT; Schema: public; Owner: ferry
 --
 
-ALTER TABLE ONLY affiliation_unit ALTER COLUMN unitid SET DEFAULT nextval('experiments_expid_seq'::regclass);
+ALTER TABLE ONLY affiliation_units ALTER COLUMN unitid SET DEFAULT nextval('experiments_expid_seq'::regclass);
 
 
 --
@@ -443,14 +443,14 @@ ALTER TABLE ONLY storage_quota ALTER COLUMN quotaid SET DEFAULT nextval('storage
 -- Name: storageid; Type: DEFAULT; Schema: public; Owner: ferry
 --
 
-ALTER TABLE ONLY storage_resource ALTER COLUMN storageid SET DEFAULT nextval('storage_resource_storageid_seq'::regclass);
+ALTER TABLE ONLY storage_resources ALTER COLUMN storageid SET DEFAULT nextval('storage_resource_storageid_seq'::regclass);
 
 
 --
 -- Name: idx_22242_primary; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
 --
 
-ALTER TABLE ONLY affiliation_unit
+ALTER TABLE ONLY affiliation_units
     ADD CONSTRAINT idx_22242_primary PRIMARY KEY (unitid);
 
 
@@ -482,7 +482,7 @@ ALTER TABLE ONLY compute_access
 -- Name: idx_22265_primary; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
 --
 
-ALTER TABLE ONLY storage_resource
+ALTER TABLE ONLY storage_resources
     ADD CONSTRAINT idx_22265_primary PRIMARY KEY (storageid);
 
 
@@ -535,6 +535,14 @@ ALTER TABLE ONLY groups
 
 
 --
+-- Name: idx_groups_group_name; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
+--
+
+ALTER TABLE ONLY groups
+    ADD CONSTRAINT idx_groups_group_name UNIQUE (name);
+
+
+--
 -- Name: idx_users_uname; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
 --
 
@@ -554,8 +562,16 @@ ALTER TABLE ONLY compute_batch
 -- Name: pk_compute_resource; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
 --
 
-ALTER TABLE ONLY compute_resource
+ALTER TABLE ONLY compute_resources
     ADD CONSTRAINT pk_compute_resource PRIMARY KEY (compid);
+
+
+--
+-- Name: pk_external_affiliation_attribute; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
+--
+
+ALTER TABLE ONLY external_affiliation_attribute
+    ADD CONSTRAINT pk_external_affiliation_attribute PRIMARY KEY (uid, attribute);
 
 
 --
@@ -564,14 +580,6 @@ ALTER TABLE ONLY compute_resource
 
 ALTER TABLE ONLY groups
     ADD CONSTRAINT pk_groups PRIMARY KEY (groupid);
-
-
---
--- Name: pk_user_external_affiliation; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
---
-
-ALTER TABLE ONLY user_external_affiliation
-    ADD CONSTRAINT pk_user_external_affiliation PRIMARY KEY (uid, affiliation_attribute);
 
 
 --
@@ -690,7 +698,7 @@ CREATE INDEX idx_22287_idx_user_group_0 ON user_group USING btree (groupid);
 -- Name: idx_compute_resource; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
-CREATE INDEX idx_compute_resource ON compute_resource USING btree (unitid);
+CREATE INDEX idx_compute_resource ON compute_resources USING btree (unitid);
 
 
 --
@@ -705,13 +713,6 @@ CREATE INDEX idx_experiment_fqan ON grid_fqan USING btree (mapped_group);
 --
 
 CREATE INDEX idx_experiment_roles ON grid_fqan USING btree (mapped_user);
-
-
---
--- Name: idx_groups_group_name; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
---
-
-CREATE UNIQUE INDEX idx_groups_group_name ON groups USING btree (group_name);
 
 
 --
@@ -733,15 +734,15 @@ CREATE INDEX idx_storage_quota_0 ON storage_quota USING btree (unitid);
 --
 
 ALTER TABLE ONLY compute_batch
-    ADD CONSTRAINT fk_compute_resource_compute_resource FOREIGN KEY (compid) REFERENCES compute_resource(compid);
+    ADD CONSTRAINT fk_compute_resource_compute_resource FOREIGN KEY (compid) REFERENCES compute_resources(compid);
 
 
 --
 -- Name: fk_compute_resource_experiments; Type: FK CONSTRAINT; Schema: public; Owner: ferry
 --
 
-ALTER TABLE ONLY compute_resource
-    ADD CONSTRAINT fk_compute_resource_experiments FOREIGN KEY (unitid) REFERENCES affiliation_unit(unitid);
+ALTER TABLE ONLY compute_resources
+    ADD CONSTRAINT fk_compute_resource_experiments FOREIGN KEY (unitid) REFERENCES affiliation_units(unitid);
 
 
 --
@@ -757,7 +758,7 @@ ALTER TABLE ONLY compute_batch
 --
 
 ALTER TABLE ONLY grid_fqan
-    ADD CONSTRAINT fk_experiment_fqan_groups FOREIGN KEY (mapped_group) REFERENCES groups(group_name);
+    ADD CONSTRAINT fk_experiment_fqan_groups FOREIGN KEY (mapped_group) REFERENCES groups(name);
 
 
 --
@@ -773,7 +774,7 @@ ALTER TABLE ONLY grid_fqan
 --
 
 ALTER TABLE ONLY affiliation_unit_group
-    ADD CONSTRAINT fk_experiment_group_experiments FOREIGN KEY (unitid) REFERENCES affiliation_unit(unitid);
+    ADD CONSTRAINT fk_experiment_group_experiments FOREIGN KEY (unitid) REFERENCES affiliation_units(unitid);
 
 
 --
@@ -797,7 +798,7 @@ ALTER TABLE ONLY grid_access
 --
 
 ALTER TABLE ONLY grid_access
-    ADD CONSTRAINT fk_experiment_membership_experiments FOREIGN KEY (unitid) REFERENCES affiliation_unit(unitid);
+    ADD CONSTRAINT fk_experiment_membership_experiments FOREIGN KEY (unitid) REFERENCES affiliation_units(unitid);
 
 
 --
@@ -813,7 +814,7 @@ ALTER TABLE ONLY grid_access
 --
 
 ALTER TABLE ONLY compute_access
-    ADD CONSTRAINT fk_interactive_access_compute_resource FOREIGN KEY (compid) REFERENCES compute_resource(compid);
+    ADD CONSTRAINT fk_interactive_access_compute_resource FOREIGN KEY (compid) REFERENCES compute_resources(compid);
 
 
 --
@@ -837,7 +838,7 @@ ALTER TABLE ONLY compute_access
 --
 
 ALTER TABLE ONLY storage_quota
-    ADD CONSTRAINT fk_storage_quota_collaboration_unit FOREIGN KEY (unitid) REFERENCES affiliation_unit(unitid);
+    ADD CONSTRAINT fk_storage_quota_collaboration_unit FOREIGN KEY (unitid) REFERENCES affiliation_units(unitid);
 
 
 --
@@ -853,7 +854,7 @@ ALTER TABLE ONLY storage_quota
 --
 
 ALTER TABLE ONLY storage_quota
-    ADD CONSTRAINT fk_storage_quota_resources FOREIGN KEY (storageid) REFERENCES storage_resource(storageid);
+    ADD CONSTRAINT fk_storage_quota_resources FOREIGN KEY (storageid) REFERENCES storage_resources(storageid);
 
 
 --
@@ -868,7 +869,7 @@ ALTER TABLE ONLY storage_quota
 -- Name: fk_user_affiliation_users; Type: FK CONSTRAINT; Schema: public; Owner: ferry
 --
 
-ALTER TABLE ONLY user_external_affiliation
+ALTER TABLE ONLY external_affiliation_attribute
     ADD CONSTRAINT fk_user_affiliation_users FOREIGN KEY (uid) REFERENCES users(uid);
 
 
@@ -877,7 +878,7 @@ ALTER TABLE ONLY user_external_affiliation
 --
 
 ALTER TABLE ONLY user_certificate
-    ADD CONSTRAINT fk_user_certificate_experiments FOREIGN KEY (unitid) REFERENCES affiliation_unit(unitid);
+    ADD CONSTRAINT fk_user_certificate_experiments FOREIGN KEY (unitid) REFERENCES affiliation_units(unitid);
 
 
 --

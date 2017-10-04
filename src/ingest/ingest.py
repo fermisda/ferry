@@ -787,8 +787,8 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
     group_counter = 1
     gid_map = {}
     for gname, index in gids.items():
-        fd.write("insert into groups (gid,group_name,group_type,groupid) values (%d,\'%s\','UnixGroup',%d);\n" % (int(
-            index), gname,group_counter))
+        fd.write("insert into groups (gid,name,type,groupid) values (%d,\'%s\','UnixGroup',%d);\n"
+                 % (int(index), gname,group_counter))
         gid_map[index] = group_counter
         group_counter += 1
         # results,return_code=MySQLUtils.RunQuery(command,connect_str)
@@ -806,7 +806,7 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
             alt_name = "\'%s\'" % (cu.alt_name)
         else:
             alt_name = "NULL"
-        fd.write("insert into affiliation_unit (unit_name, voms_url, alternative_name, last_updated) " +\
+        fd.write("insert into affiliation_units (name, voms_url, alternative_name, last_updated) " +\
             "values (\'%s\',%s,%s,NOW());\n" % (cu.name, link,alt_name))
         # populate collaboration unit groups
 
@@ -832,7 +832,7 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
             print("Neither %s not %s found in NIS" % (cu.name,cu.alt_name), file=sys.stderr)
             continue
         nis_counter += 1
-        fd.write("insert into compute_resource (compid,name, default_shell,default_home_dir,comp_type, unitid,last_updated)" +\
+        fd.write("insert into compute_resources (compid,name, default_shell,default_home_dir,type, unitid,last_updated)" +\
                  " values (\'%s\',\'%s\',\'%s\',\'%s\',\'%s\',%s,NOW());\n" % (nis_counter, nis_info.cresource,
                                                                          nis_info.cshell,nis_info.chome,nis_info.ctype,cu.unitid))
 
@@ -847,7 +847,7 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
     storage_counter = 0
     for storage in storages.values():
         storage_counter += 1
-        fd.write("insert into storage_resource (name, storage_type, default_path, default_quota, default_unit, last_updated)" + \
+        fd.write("insert into storage_resources (name, type, default_path, default_quota, default_unit, last_updated)" + \
                  " values (\'%s\', \'%s\', \'%s\', \'%s\', \'%s\', NOW());\n" % (storage.sresource, storage.stype, storage.spath, storage.squota, storage.sunit))
         for quota in storage.quotas:
             for cu in collaborations:
@@ -913,10 +913,10 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
             groupid = gid_map[gid]
             fd.write("insert into user_group values (%d,%d,%s);\n" % (int(user.uid), groupid, user.groups[gid].is_leader))
 
-    # populating user_external_affiliation
+    # populating external_affiliation_attribute
     for uname, user in users.items():
         for external_affiliation in user.external_affiliations:
-            fd.write("insert into user_external_affiliation (uid,affiliation_attribute,affiliation_value,last_updated) values (%d,\'%s\',"
+            fd.write("insert into external_affiliation_attribute (uid,attribute,value,last_updated) values (%d,\'%s\',"
                      "\'%s\',NOW());\n" % (int(user.uid), external_affiliation[0], external_affiliation[1]))
 
     fd.flush()
