@@ -56,12 +56,16 @@ class User:
         self.compute_access = {}
         self.vo_membership = {}
         self.certificates = {}
+        self.external_affiliations = []
 
     def add_to_vo(self, vname, vurl):
         if not self.vo_membership.__contains__((vname, vurl)):
              self.vo_membership[(vname, vurl)] = []
 
     def add_to_vo_role(self, vname, vurl, gums_mapping):
+        for gm in self.vo_membership[(vname, vurl)]:
+            if gm.group == gums_mapping.group and gums_mapping.role == gm.role:
+                return
         self.vo_membership[(vname, vurl)].append(gums_mapping)
 
     def set_expiration_date(self, dt):
@@ -80,6 +84,10 @@ class User:
                     return
             self.certificates[cert.experiment_id].append(cert)
         return
+
+    def add_external_affiliation(self, attribute, value):
+        if (attribute, value) not in self.external_affiliations:
+            self.external_affiliations.append((attribute, value))
 
     def get_certificate_for_experiments(self, eid):
         if eid in self.certificates:

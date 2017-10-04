@@ -432,6 +432,9 @@ def read_vulcan_certificates(config, users, vomss):
             CA = ca.matchCA(CAs, row["auth_string"])
             if CA:
                 users[row["uname"]].add_cert(Certificate(len(vomss), row["auth_string"], CA["subjectdn"]))
+                cernUser = re.findall("/DC=ch/DC=cern/OU=Organic Units/OU=Users/CN=(\w*)/CN=\d+/CN=[A-z\s]+", row["auth_string"])
+                if len(cernUser) > 0:
+                    users[row["uname"]].add_external_affiliation("cern", cernUser[0])
 
 def build_collaborations(vomss, nis, groups):
     """
@@ -697,7 +700,8 @@ def read_vulcan_storage_resources(cfg, users, groups, cms_groups):
                     # matches lines like: "user_or_group         0   100G   120G  00 [------]"
                     if re.match("[a-z\d_]+(\s+(0|\d+(\.\d+)?[BKMGTE])){3}\s+\d{2}\s+(\[(-+|\d\sdays?|-none-)\]|\d{1,2}(:\d{1,2}){2})", row):
                         row = row.split()
-                        quota = row[2][0:-1]
+                        if row[2] != '0':
+                            quota = row[2][0:-1]
                         if row[2][-1] in "KMGTE":
                             unit = row[2][-1] + "B"
                         else:
@@ -813,7 +817,7 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
                 if index in nis[cu.name].primary_gid:
                     is_primary = 1
             else:
-                    is_primary = 1
+                    is_primary = 0
             fd.write("insert into affiliation_unit_group values(%d,%d,%s,NOW());\n" % (cu.unitid,index,is_primary))
     fd.flush()
 
@@ -859,20 +863,6 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
                 fd.write(query.replace("'null'", "null"))
                 break
 
-    
-    # populate collaboration unit groups
-    for gid in cu.groups.values():
-        index = gid_map[gid]
-        is_primary = 0
-        if cu.name in nis.keys():
-            if index in nis[cu.name].primary_gid:
-                is_primary = 1
-        else:
-                is_primary = 0
-        fd.write("insert into affiliation_unit_group values(%d,%d,%s,NOW());\n" % (cu.unitid,index,is_primary))
-        fd.flush()
-
-
     # populating experiment_fqan table
     # GUMS darksidepro {'group': '/fermilab/darkside', 'server': 'fermilab', 'uname': 'darksidepro', 'gid': '9985', 'role': 'Production', 'user_group': 'darksidepro', 'account_mappers': 'darksidepro'}
     # experiment_fqan(fqanid, fqan, mapped_user,mapped_group);
@@ -890,7 +880,7 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
         gmap.set_id(fqan_counter)
     fd.flush()
 
-    experiment_counter =0
+    experiment_counter = 0
     for cu in collaborations:
         experiment_counter += 1
         if not isinstance(cu,VOMS):
@@ -899,7 +889,7 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
         for uname, user in users.items():
             #if uname!='kherner':
             #    continue
-            if user.vo_membership.__contains__((cu.name,cu.url)):
+            if user.vo_membership.__contains__((cu.name, cu.url)):
                 for umap in user.vo_membership[(cu.name, cu.url)]:
                     fqanid = 0
                     for gmap in gums.values():
@@ -912,8 +902,8 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
                 if cu.unitid not in user.certificates.keys():
                     continue
                 for certs in user.certificates[cu.unitid]:
-                       fd.write("insert into user_certificate (uid,dn,issuer_ca,unitid,last_update) values (%d,\'%s\',"
-                                "\'%s\',%d,NOW());\n" % (int(user.uid), certs.dn,certs.ca,experiment_counter))
+                    fd.write("insert into user_certificate (uid,dn,issuer_ca,unitid,last_updated) values (%d,\'%s\',"
+                            "\'%s\',%d,NOW());\n" % (int(user.uid), certs.dn,certs.ca,experiment_counter))
 
                 fd.flush()
     for uname, user in users.items():
@@ -922,6 +912,13 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
         for gid in user.groups:
             groupid = gid_map[gid]
             fd.write("insert into user_group values (%d,%d,%s);\n" % (int(user.uid), groupid, user.groups[gid].is_leader))
+
+    # populating user_external_affiliation
+    for uname, user in users.items():
+        for external_affiliation in user.external_affiliations:
+            fd.write("insert into user_external_affiliation (uid,affiliation_attribute,affiliation_value,last_updated) values (%d,\'%s\',"
+                     "\'%s\',NOW());\n" % (int(user.uid), external_affiliation[0], external_affiliation[1]))
+
     fd.flush()
     fd.close()
 
