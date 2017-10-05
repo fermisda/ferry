@@ -43,5 +43,3 @@ GROUP_QUOTA_group_seaquest = 350
 GROUP_QUOTA_group_theory = 0
 GROUP_QUOTA_group_uboone = 2000
 GROUP_QUOTA_group_uboone.prod = 1000
-
-GROUP_QUOTA_(DYNAMIC_)?group_([\w]+)(\.[\w]+)?\s=\s\d+(\.\d+)?

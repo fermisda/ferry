@@ -593,11 +593,34 @@ def read_nis(dir_path, exclude_list, altnames, users, groups):
 
     return nis
 
-def read_vulcan_compute_resources(cfg, nis, users, groups, cms_groups):
+def read_compute_batch(config):
+    """
+    read batch resources quotas and priorities
+    Args:
+        config:
+
+    Returns:
+
+    """
+
+    batch_structure = {}
+
+    # FermiGrid
+    batch_structure["fermigrid"] = ComputeResource("fermigrid", None, "Batch", None, None)
+    quotas = open(config.config._sections["fermigrid"]["quotas"]).readlines()
+
+    for quota in quotas:
+        name, value = quota.strip().split(" = ")
+        batch_structure["fermigrid"].batch.append(ComputeBatch(name, value, "quota"))
+
+    return batch_structure
+
+
+def read_vulcan_compute_resources(config, nis, users, groups, cms_groups):
     """
     read vulcan compute resources from a list and add to nis list
     Args:
-        cfg:
+        config:
         nis:
         groups:
         cms_groups:
@@ -640,11 +663,11 @@ def read_vulcan_compute_resources(cfg, nis, users, groups, cms_groups):
                     nis[dir].users[uname] = users[uname]
             nis[dir].primary_gid.append(groups[comp[5]]) ### CHECK IT! ###
 
-def read_vulcan_storage_resources(cfg, users, groups, cms_groups):
+def read_vulcan_storage_resources(config, users, groups, cms_groups):
     """
     read vulcan storage resources from a list and return a storage_structure
     Args:
-        cfg:
+        config:
         users:
         groups:
         cms_groups:
@@ -729,7 +752,7 @@ def read_vulcan_storage_resources(cfg, users, groups, cms_groups):
 
     return storage_structure
 
-def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, storages):
+def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, storages, batch_structure):
     """
     create mysql dump for ferry database
     Args:
@@ -919,6 +942,20 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
             fd.write("insert into external_affiliation_attribute (uid,attribute,value,last_updated) values (%d,\'%s\',"
                      "\'%s\',NOW());\n" % (int(user.uid), external_affiliation[0], external_affiliation[1]))
 
+    # populating compute_batch
+    cr_counter = nis_counter
+    for cr_name, cr_data in batch_structure.items():
+        cr_counter += 1
+        query = ("insert into compute_resources (compid, name, default_shell, default_home_dir, type, unitid, last_updated) " + 
+                 "values (\'%s\', \'%s\', \'%s\', \'%s\', \'%s\', %s, NOW());\n"
+              % (cr_counter, cr_name, cr_data.cshell, cr_data.chome, cr_data.ctype, cr_data.cunit))
+        fd.write(query.replace("'None'", "Null").replace("None", "Null"))
+        for batch in cr_data.batch:
+            query = ("insert into compute_batch (compid, name, value, type, groupid, last_updated) " +
+                     "values (%s, \'%s\', %s, \'%s\', %s, NOW());\n"
+                  % (cr_counter, batch.name, batch.value, batch.type, batch.groupid))
+            fd.write(query.replace("'None'", "Null").replace("None", "Null"))
+
     fd.flush()
     fd.close()
 
@@ -945,6 +982,9 @@ if __name__ == "__main__":
     # read NIS information
     nis_structure = read_nis(config.config.get("nis", "dir_path"),config.config.get("nis", "exclude_domain"),
                              config.config.get("nis", "name_mapping"),users, gids)
+
+    # read FermiGrid quotas
+    batch_structure = read_compute_batch(config)
 
     # read valid CMS resources from Vulcan
     read_vulcan_compute_resources(config, nis_structure, users, gids, cms_groups)
@@ -1008,5 +1048,5 @@ if __name__ == "__main__":
     #            for k,v in user.vo_membership.items():
     #                for l in v:
     #                    print k, l.__dict__
-    populate_db(config.config, users, gids, vomss, gums, roles,collaborations, nis_structure, storages)
+    populate_db(config.config, users, gids, vomss, gums, roles,collaborations, nis_structure, storages, batch_structure)
     print("Done!")

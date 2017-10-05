@@ -114,7 +114,7 @@ ALTER TABLE public.compute_access OWNER TO ferry;
 
 CREATE TABLE compute_batch (
     compid bigint DEFAULT (0)::bigint NOT NULL,
-    groupid bigint NOT NULL,
+    groupid bigint,
     name character varying(300) NOT NULL,
     value bigint,
     type character varying(255),
@@ -555,7 +555,7 @@ ALTER TABLE ONLY users
 --
 
 ALTER TABLE ONLY compute_batch
-    ADD CONSTRAINT pk_compute_batch PRIMARY KEY (compid, groupid, name);
+    ADD CONSTRAINT pk_compute_batch PRIMARY KEY (compid, name);
 
 
 --

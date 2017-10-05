@@ -69,6 +69,15 @@ class ComputeResource:
         self.groups = {}
         self.primary_gid = []
         self.alternative_name = None
+        self.batch = []
+
+class ComputeBatch:
+    def __init__(self, name, value = None, type = None, groupid = None):
+        self.name = name
+        self.value = value
+        self.type = type
+        self.groupid = groupid
+
 
 class StorageResource:
     def __init__(self, name, storage_type, default_path, default_quota, unit):
