@@ -31,8 +31,8 @@ def read_uid(fname):
                 continue
             tmp = line[:-1].split("\t\t")
             if not usrs.__contains__(tmp[4].strip().lower()):
-                usrs[tmp[4].strip().lower()] = User(tmp[0].strip(), tmp[2].strip().lower().capitalize(),
-                                                     tmp[3].strip().lower().capitalize(), tmp[4].strip().lower())
+                usrs[tmp[4].strip().lower()] = User(tmp[0].strip(), tmp[3].strip().lower().capitalize() + " " +
+                                                     tmp[2].strip().lower().capitalize(), tmp[4].strip().lower())
                 gname = list(gids.keys())[list(gids.values()).index(tmp[1].strip().lower())]
                 usrs[tmp[4].strip().lower()].add_group(gname, (tmp[1].strip().lower()))
         except:
@@ -797,8 +797,8 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
         status = "False"
         if user.status:
             status = "True"
-        fd.write("insert into users values (%d,\'%s\',\'%s\',\'%s\',\'%s\',%s,%s, NOW());\n"
-                 % (int(user.uid), user.uname, user.first_name, "", user.last_name, status,
+        fd.write("insert into users (uid, uname, full_name, status, expiration_date, last_updated) values (%d,\'%s\',\'%s\',%s,%s, NOW());\n"
+                 % (int(user.uid), user.uname, user.full_name.strip(), status,
                     user.expiration_date))
         # for now will just create ferry.sql file
         # results,return_code=MySQLUtils.RunQuery(command,connect_str)
@@ -810,8 +810,8 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
     group_counter = 1
     gid_map = {}
     for gname, index in gids.items():
-        fd.write("insert into groups (gid,name,type,groupid) values (%d,\'%s\','UnixGroup',%d);\n"
-                 % (int(index), gname,group_counter))
+        fd.write("insert into groups (gid,name,type,last_updated) values (%d,\'%s\','UnixGroup',NOW());\n"
+                 % (int(index), gname))
         gid_map[index] = group_counter
         group_counter += 1
         # results,return_code=MySQLUtils.RunQuery(command,connect_str)

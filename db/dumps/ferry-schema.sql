@@ -233,7 +233,7 @@ ALTER TABLE public.grid_access OWNER TO ferry;
 --
 
 CREATE TABLE groups (
-    groupid bigint NOT NULL,
+    groupid integer NOT NULL,
     gid bigint,
     name character varying(100) NOT NULL,
     type groups_group_type NOT NULL,
@@ -262,6 +262,27 @@ COMMENT ON COLUMN groups.gid IS 'group unix id';
 --
 
 COMMENT ON COLUMN groups.name IS 'unix group name';
+
+
+--
+-- Name: groups_groupid_seq; Type: SEQUENCE; Schema: public; Owner: ferry
+--
+
+CREATE SEQUENCE groups_groupid_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.groups_groupid_seq OWNER TO ferry;
+
+--
+-- Name: groups_groupid_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: ferry
+--
+
+ALTER SEQUENCE groups_groupid_seq OWNED BY groups.groupid;
 
 
 --
@@ -386,12 +407,10 @@ ALTER TABLE public.user_group OWNER TO ferry;
 CREATE TABLE users (
     uid bigint NOT NULL,
     uname character varying(100) NOT NULL,
-    first_name character varying(100),
-    middle_name character varying(100),
-    last_name character varying(100) NOT NULL,
     status boolean,
     expiration_date date,
-    last_updated date DEFAULT ('now'::text)::date NOT NULL
+    last_updated date DEFAULT ('now'::text)::date NOT NULL,
+    full_name character varying(255)
 );
 
 
@@ -412,13 +431,6 @@ COMMENT ON COLUMN users.uname IS 'user unix name';
 
 
 --
--- Name: COLUMN users.last_name; Type: COMMENT; Schema: public; Owner: ferry
---
-
-COMMENT ON COLUMN users.last_name IS 'user''s last name';
-
-
---
 -- Name: unitid; Type: DEFAULT; Schema: public; Owner: ferry
 --
 
@@ -430,6 +442,13 @@ ALTER TABLE ONLY affiliation_units ALTER COLUMN unitid SET DEFAULT nextval('expe
 --
 
 ALTER TABLE ONLY grid_fqan ALTER COLUMN fqanid SET DEFAULT nextval('experiment_roles_roleid_seq'::regclass);
+
+
+--
+-- Name: groupid; Type: DEFAULT; Schema: public; Owner: ferry
+--
+
+ALTER TABLE ONLY groups ALTER COLUMN groupid SET DEFAULT nextval('groups_groupid_seq'::regclass);
 
 
 --

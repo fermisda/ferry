@@ -37,16 +37,11 @@ class Certificate:
 
 
 class User:
-    def __init__(self, uid, last_name, first_name, name):
+    def __init__(self, uid, full_name, name):
 
-        self.uname = name;
-        if last_name.find("'") > 0:
-            tmp = last_name.split("'")
-            last_name = "%s'%s" % (tmp[0], tmp[1].capitalize())
-        self.last_name = last_name.replace("'", "''")
-        self.first_name = first_name.replace("'", "''")
+        self.uname = name
+        self.full_name = full_name.replace("'", "''")
         self.uid = uid
-        self.middle_name = ""
         self.status = True
         self.expiration_date = None
         self.is_k5login = False
