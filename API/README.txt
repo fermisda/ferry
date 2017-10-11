@@ -11,11 +11,13 @@ Installation
 
 4) mkdir bin
 
-5) go build -o bin/main src/main.go src/userAPI.go src/groupAPI.go src/miscAPI.go src/unitAPI.go
+5) export GOPATH=$PWD # important for building and picking up packages
+
+6) go build -o bin/main src/main.go src/userAPI.go src/groupAPI.go src/miscAPI.go src/unitAPI.go
 
 Deployment
 
-6) You have an executable called main in the bin directory. Go ahead and try it out. It contains its own server. Right now there's no authentication and it will probably be accessible only on the local host. 
+7) You have an executable called main in the bin directory. Go ahead and try it out. It contains its own server. Right now there's no authentication and it will probably be accessible only on the local host. 
 
 Example usage:  $ curl -i "http://localhost:8080/getgroups?uname=YOUR_USERNAME"
 
