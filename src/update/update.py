@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os
+import sys
 import configparser
 import urllib.request
 import re
@@ -9,10 +10,6 @@ import psycopg2
 import psycopg2.extras
 
 SOURCES = ['uid.lis', 'gid.lis', 'services-users.csv']
-CONGIGPATH = 'src/update/test.config'
-
-CONFIG = configparser.ConfigParser()
-CONFIG.read_file(open(CONGIGPATH))
 
 def update_users(cursor, uid_lis, services_users_csv):
     """
@@ -143,6 +140,13 @@ def update_user_group(cursor, uid_lis):
     return actions
 
 if __name__ == '__main__':
+    CONFIG = configparser.ConfigParser()
+    if len(sys.argv) > 1:
+        CONFIGPATH = sys.argv[1]
+    else:
+        CONFIGPATH = os.path.dirname(os.path.realpath(__file__)) + "/update.config"
+    CONFIG.read_file(open(CONFIGPATH))
+
     # Download source files
     for source in SOURCES:
         url = CONFIG.get('sources', source)
@@ -165,17 +169,17 @@ if __name__ == '__main__':
     # Apply changes to Ferry Database
     actions = update_users(CURSOR, CONFIG.get('path', 'source_dir') + SOURCES[0], CONFIG.get('path', 'source_dir') + SOURCES[2])
     if actions != '':
-        print(actions)
+        #print(actions)
         CURSOR.execute(actions)
     
     actions = update_groups(CURSOR, CONFIG.get('path', 'source_dir') + SOURCES[1])
     if actions != '':
-        print(actions)
+        #print(actions)
         CURSOR.execute(actions)
     
     actions = update_user_group(CURSOR, CONFIG.get('path', 'source_dir') + SOURCES[0])
     if actions != '':
-        print(actions)
+        #print(actions)
         CURSOR.execute(actions)
 
     CONN.commit()
