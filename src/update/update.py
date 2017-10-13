@@ -154,7 +154,7 @@ if __name__ == '__main__':
         CONFIGPATH = os.path.dirname(os.path.realpath(__file__)) + "/test.config"
     CONFIG.read_file(open(CONFIGPATH))
 
-    logging.basicConfig(filename=CONFIG.get('log', 'dir') + '\\' + datetime.datetime.now().strftime('ferry_update_%Y%m%d.log'),
+    logging.basicConfig(filename=CONFIG.get('log', 'dir') + '/' + datetime.datetime.now().strftime('ferry_update_%Y%m%d.log'),
                         level=getattr(logging, CONFIG.get('log', 'level')),
                         format='[%(asctime)s][%(levelname)s] %(message)s',
                         datefmt='%m/%d/%Y %H:%M:%S')
@@ -164,7 +164,7 @@ if __name__ == '__main__':
     # Download source files
     for source in SOURCES:
         url = CONFIG.get('sources', source)
-        filePath = CONFIG.get('general', 'source_dir') + source
+        filePath = CONFIG.get('general', 'source_dir') + '/' + source
 
         text = urllib.request.urlopen(url).read().decode()
         if os.path.isfile(filePath):
