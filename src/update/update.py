@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import os
 import sys
@@ -6,6 +6,7 @@ import configparser
 import urllib.request
 import re
 import datetime
+import logging
 import psycopg2
 import psycopg2.extras
 
@@ -57,24 +58,27 @@ def update_users(cursor, uid_lis, services_users_csv):
 
     # Compares data in UserDB with Ferry database and updates it as necessary
     for uname in userdb_users:
-            if uname in ferry_users:
-                if userdb_users[uname][1] != ferry_users[uname][0]:
-                    actions += 'UPDATE users SET full_name = \'%s\', last_updated = NOW() where uname = \'%s\';\n' \
-                            % (userdb_users[uname][1].replace("'", "''"), uname)
-                if userdb_users[uname][2] != ferry_users[uname][1]:
-                    if userdb_users[uname][2] != 'Null':
-                        status = 'True'
-                    else:
-                        status = 'False'
-                    actions += 'UPDATE users SET expiration_date = %s, status = %s, last_updated = NOW() where uname = \'%s\';\n' \
-                            % (userdb_users[uname][2], status, uname)
-            else:
+        if uname in ferry_users:
+            if userdb_users[uname][1] != ferry_users[uname][0]:
+                actions += "UPDATE users SET full_name = \'%s\', last_updated = NOW() where uname = '%s';\n" \
+                        % (userdb_users[uname][1].replace("'", "''"), uname)
+                logging.info('User full name changed: (%s: %s -> %s)', uname, ferry_users[uname][0], userdb_users[uname][1])
+            if userdb_users[uname][2] != ferry_users[uname][1]:
                 if userdb_users[uname][2] != 'Null':
                     status = 'True'
                 else:
                     status = 'False'
-                actions += "INSERT INTO users (uid, uname, full_name, status, expiration_date, last_updated) VALUES (%s, \'%s\', \'%s\', %s, %s, NOW());\n" \
-                        % (userdb_users[uname][0], uname, userdb_users[uname][1].replace("'", "''"), status, userdb_users[uname][2])
+                actions += "UPDATE users SET expiration_date = %s, status = %s, last_updated = NOW() where uname = '%s';\n" \
+                        % (userdb_users[uname][2], status, uname)
+                logging.info('User expiration date changed: (%s: %s -> %s)', uname, ferry_users[uname][1], userdb_users[uname][2])
+        else:
+            if userdb_users[uname][2] != 'Null':
+                status = 'True'
+            else:
+                status = 'False'
+            actions += "INSERT INTO users (uid, uname, full_name, status, expiration_date, last_updated) VALUES (%s, '%s', '%s', %s, %s, NOW());\n" \
+                    % (userdb_users[uname][0], uname, userdb_users[uname][1].replace("'", "''"), status, userdb_users[uname][2])
+            logging.info('New user found: (%s, %s, %s, %s, %s)', userdb_users[uname][0], uname, userdb_users[uname][1], status, userdb_users[uname][2])
 
     return actions
 
@@ -99,8 +103,9 @@ def update_groups(cursor, gid_lis):
             gid, name = line[0]
             name = name.strip().lower()
             if name not in groups:
-                actions += "INSERT INTO groups (gid, name, type, last_updated) values (%s, \'%s\', 'UnixGroup', NOW());\n" \
+                actions += "INSERT INTO groups (gid, name, type, last_updated) values (%s, '%s', 'UnixGroup', NOW());\n" \
                         % (gid, name)
+                logging.info('New group found: (%s, %s, UnixGroup)', gid, name)
     
     return actions
 
@@ -131,11 +136,13 @@ def update_user_group(cursor, uid_lis):
     for line in lines:
         line = re.findall('(\d+)\t\t(\d+)\t\t.+\t\t.+\t\t.+', line)
         if len(line) == 1:
-           uid, gid = line[0]
-           if uid in uids and gid in groups:
-               if uid not in groups[gid][1]:
-                   actions += "INSERT INTO user_group (uid, groupid, is_leader, last_updated) VALUES (%s, %s, False, NOW());\n" \
+            uid, gid = line[0]
+            if uid in uids and gid in groups:
+                if uid not in groups[gid][1]:
+                    actions += "INSERT INTO user_group (uid, groupid, is_leader, last_updated) VALUES (%s, %s, False, NOW());\n" \
                            % (uid, groups[gid][0])
+                    logging.info('New group membership found: (%s, %s)', uid, gid)
+
 
     return actions
 
@@ -144,13 +151,20 @@ if __name__ == '__main__':
     if len(sys.argv) > 1:
         CONFIGPATH = sys.argv[1]
     else:
-        CONFIGPATH = os.path.dirname(os.path.realpath(__file__)) + "/update.config"
+        CONFIGPATH = os.path.dirname(os.path.realpath(__file__)) + "/test.config"
     CONFIG.read_file(open(CONFIGPATH))
+
+    logging.basicConfig(filename=CONFIG.get('log', 'dir') + '\\' + datetime.datetime.now().strftime('ferry_update_%Y%m%d.log'),
+                        level=getattr(logging, CONFIG.get('log', 'level')),
+                        format='[%(asctime)s][%(levelname)s] %(message)s',
+                        datefmt='%m/%d/%Y %H:%M:%S')
+
+    logging.info('Starting Ferry update script')
 
     # Download source files
     for source in SOURCES:
         url = CONFIG.get('sources', source)
-        filePath = CONFIG.get('path', 'source_dir') + source
+        filePath = CONFIG.get('general', 'source_dir') + source
 
         text = urllib.request.urlopen(url).read().decode()
         if os.path.isfile(filePath):
@@ -167,19 +181,43 @@ if __name__ == '__main__':
     CURSOR = CONN.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
     # Apply changes to Ferry Database
-    actions = update_users(CURSOR, CONFIG.get('path', 'source_dir') + SOURCES[0], CONFIG.get('path', 'source_dir') + SOURCES[2])
+    actions = update_users(CURSOR, CONFIG.get('general', 'source_dir') + SOURCES[0], CONFIG.get('general', 'source_dir') + SOURCES[2])
     if actions != '':
-        #print(actions)
-        CURSOR.execute(actions)
+        logging.debug('Executing:\n%s', actions)
+        try:
+            CURSOR.execute(actions)
+            logging.info('Table users updated')
+        except Exception as e:
+            logging.error('Failed to update data into users table')
+            logging.debug(e)
+    else:
+        logging.info('Table users is up to date')
     
-    actions = update_groups(CURSOR, CONFIG.get('path', 'source_dir') + SOURCES[1])
+    actions = update_groups(CURSOR, CONFIG.get('general', 'source_dir') + SOURCES[1])
     if actions != '':
-        #print(actions)
-        CURSOR.execute(actions)
+        logging.debug('Executing:\n%s', actions)
+        try:
+            CURSOR.execute(actions)
+            logging.info('Table groups updated')
+        except Exception as e:
+            logging.error('Failed to update data into groups table')
+            logging.debug(e)
+    else:
+        logging.info('Table groups is up to date')
     
-    actions = update_user_group(CURSOR, CONFIG.get('path', 'source_dir') + SOURCES[0])
+    actions = update_user_group(CURSOR, CONFIG.get('general', 'source_dir') + SOURCES[0])
     if actions != '':
-        #print(actions)
-        CURSOR.execute(actions)
+        logging.debug('Executing:\n%s', actions)
+        try:
+            CURSOR.execute(actions)
+            logging.info('Table user_group updated')
+        except Exception as e:
+            logging.error('Failed to update data into user_group table')
+            logging.debug(e)
+    else:
+        logging.info('Table user_group is up to date')
 
-    CONN.commit()
+    if CONFIG.get('general', 'dry_run').lower() == 'false':
+        CONN.commit()
+
+    logging.info('Finishing Ferry update script')
