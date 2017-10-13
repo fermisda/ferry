@@ -181,7 +181,7 @@ if __name__ == '__main__':
     CURSOR = CONN.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
     # Apply changes to Ferry Database
-    actions = update_users(CURSOR, CONFIG.get('general', 'source_dir') + SOURCES[0], CONFIG.get('general', 'source_dir') + SOURCES[2])
+    actions = update_users(CURSOR, CONFIG.get('general', 'source_dir') + '/' + SOURCES[0], CONFIG.get('general', 'source_dir') + '/' + SOURCES[2])
     if actions != '':
         logging.debug('Executing:\n%s', actions)
         try:
@@ -193,7 +193,7 @@ if __name__ == '__main__':
     else:
         logging.info('Table users is up to date')
     
-    actions = update_groups(CURSOR, CONFIG.get('general', 'source_dir') + SOURCES[1])
+    actions = update_groups(CURSOR, CONFIG.get('general', 'source_dir') + '/' + SOURCES[1])
     if actions != '':
         logging.debug('Executing:\n%s', actions)
         try:
@@ -205,7 +205,7 @@ if __name__ == '__main__':
     else:
         logging.info('Table groups is up to date')
     
-    actions = update_user_group(CURSOR, CONFIG.get('general', 'source_dir') + SOURCES[0])
+    actions = update_user_group(CURSOR, CONFIG.get('general', 'source_dir') + '/' + SOURCES[0])
     if actions != '':
         logging.debug('Executing:\n%s', actions)
         try:
