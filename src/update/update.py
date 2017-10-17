@@ -60,7 +60,7 @@ def update_users(cursor, uid_lis, services_users_csv):
     for uname in userdb_users:
         if uname in ferry_users:
             if userdb_users[uname][1] != ferry_users[uname][0]:
-                actions += "UPDATE users SET full_name = \'%s\', last_updated = NOW() where uname = '%s';\n" \
+                actions += "UPDATE users SET full_name = '%s', last_updated = NOW() where uname = '%s';\n" \
                         % (userdb_users[uname][1].replace("'", "''"), uname)
                 logging.info('User full name changed: (%s: %s -> %s)', uname, ferry_users[uname][0], userdb_users[uname][1])
             if userdb_users[uname][2] != ferry_users[uname][1]:
