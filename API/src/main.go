@@ -35,9 +35,9 @@ func main () {
 
 	grouter := mux.NewRouter()
 	grouter.HandleFunc("/", handler)
-	grouter.HandleFunc("/getgroups", getGroups)
-	grouter.HandleFunc("/getDN", getDN)
-	grouter.HandleFunc("/getdn", getDN)
+	grouter.HandleFunc("/getUserGroups", getUserGroups)
+	grouter.HandleFunc("/getUserInfo", getUserInfo)
+	grouter.HandleFunc("/getUserCertificateDNs", getUserCertificateDNs)
 	http.Handle("/", grouter)
 	http.ListenAndServe(":8080", nil)
 	

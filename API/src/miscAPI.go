@@ -1,11 +1,16 @@
 package main
 import (
+	"fmt"
 //"fmt"
 //"log"
  _ "github.com/lib/pq"
 "net/http"
 //"encoding/json"
 )
+
+func NotDoneYet(w http.ResponseWriter) {
+	fmt.Println("This function is not done yet!")
+}
 
 func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
