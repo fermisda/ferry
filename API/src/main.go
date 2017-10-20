@@ -38,6 +38,8 @@ func main () {
 	grouter.HandleFunc("/getUserGroups", getUserGroups)
 	grouter.HandleFunc("/getUserInfo", getUserInfo)
 	grouter.HandleFunc("/getUserCertificateDNs", getUserCertificateDNs)
+	grouter.HandleFunc("/getUserFQANs", getUserFQANs)
+	grouter.HandleFunc("/getSuperUserList", getSuperUserList)
 	http.Handle("/", grouter)
 	http.ListenAndServe(":8080", nil)
 	

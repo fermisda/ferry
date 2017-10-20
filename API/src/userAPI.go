@@ -98,6 +98,164 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w,output)
 }
 
+func getUserFQANs(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	uname := q.Get("username")
+	expt := q.Get("experimentname")
+	if uname == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No username specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No username specified.\" }")
+		return
+	}
+	if expt == "" {
+		expt = "%"
+	}
+	
+	rows, err := DBptr.Query(`select T2.name, T1.fqan from
+		                     (select fq.fqan, gf.groupid from grid_fqan as fq left join groups as gf on fq.mapped_group=gf.name where mapped_user=$1) as T1 left join
+		                     (select au.name, ag.groupid from affiliation_units as au left join affiliation_unit_group as ag on au.unitid=ag.unitid) as T2
+		                      on T1.groupid=T2.groupid where T2.name like $2 order by T2.name`,uname,expt)
+	if err != nil {
+		defer log.Fatal(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"error\": \"Error in DB duery.\" }")
+//		http.Error(w,"Error in DB query",404)
+		return
+	}
+	defer rows.Close()
+
+	type jsonout struct {
+		UnitName string `json:"unit_name"`
+		Fqan string `json:"fqan"`
+	}
+	var Out jsonout
+	
+	idx := 0
+	output := "{ [ "
+	for rows.Next() {
+		if idx != 0 {
+			output += ","
+		}
+		rows.Scan(&Out.UnitName,&Out.Fqan)
+//			fmt.Println(Out.Gid,Out.Groupname)
+		outline, jsonerr := json.Marshal(Out)
+		if jsonerr != nil {
+			log.Fatal(jsonerr)
+			}
+		output += string(outline)
+		idx += 1
+	}
+	if idx == 0 {
+		rows, err := DBptr.Query(`select 'user' from users where uname=$1 union select 'experiment' from affiliation_units where name=$2`,uname,expt)
+		if err != nil {
+			defer log.Fatal(err)
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"error\": \"Error in DB duery.\" }")
+	//		http.Error(w,"Error in DB query",404)
+			return
+		}
+		userExists := false
+		exptExists := false
+		for rows.Next() {
+			var item string
+			rows.Scan(&item)
+			if item == `user` {
+				userExists = true
+			}
+			if item == `experiment` {
+				exptExists = true
+			}
+		}
+		w.WriteHeader(http.StatusNotFound)
+
+		if !userExists {
+			output += `"error": "User does not exist.",`
+		}
+		if !exptExists {
+			output += `"error": "Experiment does not exist.",`
+		}
+		output += `"error": "User do not have any assigned FQANs."`
+	}
+
+	output += " ] }"
+	fmt.Fprintf(w,output)
+}
+
+func getSuperUserList(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	expt := q.Get("experimentname")
+	if expt == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No experimentname specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No username specified.\" }")
+		return
+	}
+	
+	rows, err := DBptr.Query(`select distinct us.uname from users as us
+							  right join grid_access as ga on us.uid=ga.uid
+							  left join affiliation_units as au on ga.unitid = au.unitid
+							  where ga.is_superuser=true and au.name=$1`,expt)
+	if err != nil {
+		defer log.Fatal(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"error\": \"Error in DB duery.\" }")
+//		http.Error(w,"Error in DB query",404)
+		return
+	}
+	defer rows.Close()
+
+	type jsonout struct {
+		UnitName string `json:"unit_name"`
+	}
+	var Out jsonout
+	
+	idx := 0
+	output := "{ [ "
+	for rows.Next() {
+		if idx != 0 {
+			output += ","
+		}
+		rows.Scan(&Out.UnitName)
+//			fmt.Println(Out.Gid,Out.Groupname)
+		outline, jsonerr := json.Marshal(Out)
+		if jsonerr != nil {
+			log.Fatal(jsonerr)
+			}
+		output += string(outline)
+		idx += 1
+	}
+	if idx == 0 {
+		rows, err := DBptr.Query(`select 'experiment' from affiliation_units where name=$1`,expt)
+		if err != nil {
+			defer log.Fatal(err)
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"error\": \"Error in DB duery.\" }")
+	//		http.Error(w,"Error in DB query",404)
+			return
+		}
+		exptExists := false
+		for rows.Next() {
+			var item string
+			rows.Scan(&item)
+			if item == `experiment` {
+				exptExists = true
+			}
+		}
+		w.WriteHeader(http.StatusNotFound)
+
+		if !exptExists {
+			output += `"error": "Experiment does not exist.",`
+		}
+		output += `"error": "No super users found,"`
+	}
+
+	output += " ] }"
+	fmt.Fprintf(w,output)
+}
+
 func getUserGroups(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
