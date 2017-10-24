@@ -9,7 +9,7 @@ import (
 )
 
 func NotDoneYet(w http.ResponseWriter) {
-	fmt.Println("This function is not done yet!")
+	fmt.Fprintf(w, `{"error": "This function is not done yet!"}`)
 }
 
 func getPasswdFile(w http.ResponseWriter, r *http.Request) {

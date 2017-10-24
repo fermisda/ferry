@@ -21,7 +21,8 @@ func handler(w http.ResponseWriter, r *http.Request) {
 func main () {
 	
 	fmt.Println("Here we go...")
-	Mydb, err := sql.Open("postgres","user=ferry password=ferry5634 host=fermicloud051.fnal.gov dbname=ferry connect_timeout=60 sslmode=disable")
+//NOTE: here we have SSL mode set to "require" because the host cert on the DB machine is expired as of 10-25-2017. Once that is fixed we should set it to "verify-ca" or "verify-full" so that it actually checks that the cert that the DB machine presents is valid. If you set it to "require" it skips the verification step.
+	Mydb, err := sql.Open("postgres","user=ferry password=ferry5634 host=fermicloud051.fnal.gov dbname=ferry connect_timeout=60 sslmode=require")
 	if err != nil {	   
 		fmt.Println("there is an issue here")
 		log.Fatal(err)
