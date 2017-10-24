@@ -22,7 +22,7 @@ func main () {
 	
 	fmt.Println("Here we go...")
 //NOTE: here we have SSL mode set to "require" because the host cert on the DB machine is expired as of 10-25-2017. Once that is fixed we should set it to "verify-ca" or "verify-full" so that it actually checks that the cert that the DB machine presents is valid. If you set it to "require" it skips the verification step.
-	Mydb, err := sql.Open("postgres","user=ferry password=ferry5634 host=fermicloud051.fnal.gov dbname=ferry connect_timeout=60 sslmode=require")
+	Mydb, err := sql.Open("postgres","user=ferry password=ferry5634 host=fermicloud051.fnal.gov dbname=ferry connect_timeout=60 sslmode=verify-full sslrootcert=/etc/grid-security/certificates/cilogon-osg.pem")
 	if err != nil {	   
 		fmt.Println("there is an issue here")
 		log.Fatal(err)
@@ -96,8 +96,9 @@ func main () {
 		Handler: grouter,
 	}	     
 	
-	var certstring = [1]string{"/etc/pki/tls/certs/ca-bundle.crt"}
-	var certslice []string = certstring[0:1]
+//	var certstring = [1]string{"/etc/pki/tls/certs/ca-bundle.crt"}
+	var certstring = [2]string{"/etc/grid-security/certificates/cilogon-osg.pem","/etc/grid-security/certificates/cilogon-basic.pem"}
+	var certslice []string = certstring[0:2]
 	certpool, err := loadCerts(certslice)
 	if err != nil {
 		log.Fatal(err)

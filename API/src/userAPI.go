@@ -21,7 +21,7 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 	}
 	if expt == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Print("No experimentname specified in http query.")
+		log.Print("No experiment name specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No experimentname specified.\" }")
 		return
 	}
@@ -30,7 +30,7 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		defer log.Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"error\": \"Error in DB duery.\" }")
+		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
 //		http.Error(w,"Error in DB query",404)
 		return
 	}
@@ -67,7 +67,7 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			defer log.Fatal(err)
 			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprintf(w,"{ \"error\": \"Error in DB duery.\" }")
+			fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
 	//		http.Error(w,"Error in DB query",404)
 			return
 		}
@@ -120,7 +120,7 @@ func getUserFQANs(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		defer log.Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"error\": \"Error in DB duery.\" }")
+		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
 //		http.Error(w,"Error in DB query",404)
 		return
 	}
@@ -152,7 +152,7 @@ func getUserFQANs(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			defer log.Fatal(err)
 			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprintf(w,"{ \"error\": \"Error in DB duery.\" }")
+			fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
 	//		http.Error(w,"Error in DB query",404)
 			return
 		}
@@ -201,7 +201,7 @@ func getSuperUserList(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		defer log.Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"error\": \"Error in DB duery.\" }")
+		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
 //		http.Error(w,"Error in DB query",404)
 		return
 	}
@@ -232,7 +232,7 @@ func getSuperUserList(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			defer log.Fatal(err)
 			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprintf(w,"{ \"error\": \"Error in DB duery.\" }")
+			fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
 	//		http.Error(w,"Error in DB query",404)
 			return
 		}
