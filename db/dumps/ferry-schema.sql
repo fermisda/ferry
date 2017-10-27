@@ -286,6 +286,42 @@ ALTER SEQUENCE groups_groupid_seq OWNED BY groups.groupid;
 
 
 --
+-- Name: nas_storage; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
+--
+
+CREATE TABLE nas_storage (
+    nasid integer NOT NULL,
+    server character(255),
+    volume character(255),
+    access_level character(3),
+    hosts text
+);
+
+
+ALTER TABLE public.nas_storage OWNER TO ferry;
+
+--
+-- Name: nas_storage_nasid_seq; Type: SEQUENCE; Schema: public; Owner: ferry
+--
+
+CREATE SEQUENCE nas_storage_nasid_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.nas_storage_nasid_seq OWNER TO ferry;
+
+--
+-- Name: nas_storage_nasid_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: ferry
+--
+
+ALTER SEQUENCE nas_storage_nasid_seq OWNED BY nas_storage.nasid;
+
+
+--
 -- Name: storage_quota; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
 --
 
@@ -452,6 +488,13 @@ ALTER TABLE ONLY groups ALTER COLUMN groupid SET DEFAULT nextval('groups_groupid
 
 
 --
+-- Name: nasid; Type: DEFAULT; Schema: public; Owner: ferry
+--
+
+ALTER TABLE ONLY nas_storage ALTER COLUMN nasid SET DEFAULT nextval('nas_storage_nasid_seq'::regclass);
+
+
+--
 -- Name: quotaid; Type: DEFAULT; Schema: public; Owner: ferry
 --
 
@@ -602,6 +645,14 @@ ALTER TABLE ONLY groups
 
 
 --
+-- Name: pk_nas_storage; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
+--
+
+ALTER TABLE ONLY nas_storage
+    ADD CONSTRAINT pk_nas_storage PRIMARY KEY (nasid);
+
+
+--
 -- Name: idx_22236_idx_compute_resource_0; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
@@ -732,6 +783,20 @@ CREATE INDEX idx_experiment_fqan ON grid_fqan USING btree (mapped_group);
 --
 
 CREATE INDEX idx_experiment_roles ON grid_fqan USING btree (mapped_user);
+
+
+--
+-- Name: idx_grid_fqan; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
+--
+
+CREATE UNIQUE INDEX idx_grid_fqan ON grid_fqan USING btree (fqan, mapped_user, mapped_group);
+
+
+--
+-- Name: idx_grid_fqan_0; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
+--
+
+CREATE UNIQUE INDEX idx_grid_fqan_0 ON grid_fqan USING btree (fqan, mapped_group) WHERE (mapped_user IS NULL);
 
 
 --
