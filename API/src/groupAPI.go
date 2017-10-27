@@ -1,20 +1,59 @@
 package main
 import (
-//"fmt"
-//"log"
- _ "github.com/lib/pq"
-"net/http"
-//"encoding/json"
+	"strings"
+	"database/sql"
+	"fmt"
+	"log"
+	_ "github.com/lib/pq"
+	"net/http"
+	//"encoding/json"
 )
 
 func createGroup(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query()
-//	groupname := q.Get("groupname")
-//	gtype := q.Get("grouptype")
-//	gid := q.Get("gid")
-	NotDoneYet(w)
+	q := r.URL.Query()
+
+	gName := q.Get("groupname")
+	gType := q.Get("grouptype")
+	var gid sql.NullString
+
+	if gName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No groupname specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No groupname specified.\" }")
+		return
+	}
+	if gType == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No grouptype specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No grouptype specified.\" }")
+		return
+	}
+	if q.Get("gid") != "" {
+		gid.Scan(q.Get("gid"))
+	}
+
+	pingerr := DBptr.Ping()
+	if pingerr != nil {
+		log.Fatal(pingerr)
+	}
+
+	_, err := DBptr.Exec("insert into groups (gid, name, type, last_updated) values ($1, $2, $3, NOW())", gid, gName, gType)
+	if err == nil {
+		fmt.Fprintf(w,"{ \"status\": \"success\" }")
+	} else {
+		if strings.Contains(err.Error(), `invalid input value for enum groups_group_type`) {
+			fmt.Fprintf(w,"{ \"error\": \"Invalid grouptype specified in http query.\" }")
+		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint "idx_groups_gid"`) {
+			fmt.Fprintf(w,"{ \"error\": \"GID already exists.\" }")
+		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint "idx_groups_group_name"`) {
+			fmt.Fprintf(w,"{ \"error\": \"Group already exists.\" }")
+		} else {
+			log.Print(err.Error())
+		}
+	}
 }
+
 func deleteGroupt(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 //	q := r.URL.Query()
