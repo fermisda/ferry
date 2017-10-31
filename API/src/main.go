@@ -104,15 +104,13 @@ func main () {
 		log.Fatal(err)
 	}
 	mainsrv.TLSConfig = &tls.Config{
-		ClientAuth: tls.VerifyClientCertIfGiven,
-//tls.RequireAndVerifyClientCert,
+		ClientAuth: tls.RequireAndVerifyClientCert,
 		ClientCAs:  certpool,
 	}
 	
-//	fmt.Println(certpool.Subjects())
 
-	serverror := mainsrv.ListenAndServeTLS("/etc/grid-security/hostcert.pem","/etc/grid-security/hostkey.pem")
-//	serverror := http.ListenAndServeTLS(":8443","/etc/grid-security/hostcert.pem","/etc/grid-security/hostkey.pem",nil)
+// We should probably make the cert and key paths variables in a config file at some point
+	serverror := mainsrv.ListenAndServeTLS("/home/ferry/.cert/hostcert.pem","/home/ferry/.cert/hostkey.pem")
 	if serverror != nil {
 		log.Fatal(serverror)
 	}

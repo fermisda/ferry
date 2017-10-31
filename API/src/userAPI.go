@@ -49,7 +49,7 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 
 	var Out jsonout
 	
-	output := "{ [ "
+	output := "[ "
 	
 	for rows.Next() {
 		if idx != 0 {
@@ -96,7 +96,7 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 		output += `"error": "User does not have any certifcates registered."`
 	}
 
-	output += " ] }"
+	output += " ]"
 	fmt.Fprintf(w,output)
 }
 
@@ -135,7 +135,7 @@ func getUserFQANs(w http.ResponseWriter, r *http.Request) {
 	var Out jsonout
 	
 	idx := 0
-	output := "{ [ "
+	output := "[ "
 	for rows.Next() {
 		if idx != 0 {
 			output += ","
@@ -181,7 +181,7 @@ func getUserFQANs(w http.ResponseWriter, r *http.Request) {
 		output += `"error": "User do not have any assigned FQANs."`
 	}
 
-	output += " ] }"
+	output += " ]"
 	fmt.Fprintf(w,output)
 }
 
@@ -215,7 +215,7 @@ func getSuperUserList(w http.ResponseWriter, r *http.Request) {
 	var Out jsonout
 	
 	idx := 0
-	output := "{ [ "
+	output := "[ "
 	for rows.Next() {
 		if idx != 0 {
 			output += ","
@@ -254,7 +254,7 @@ func getSuperUserList(w http.ResponseWriter, r *http.Request) {
 		output += `"error": "No super users found,"`
 	}
 
-	output += " ] }"
+	output += " ]"
 	fmt.Fprintf(w,output)
 }
 
@@ -291,7 +291,7 @@ func getUserGroups(w http.ResponseWriter, r *http.Request) {
 		
 		for rows.Next() {
 			if idx == 0 {
-				fmt.Fprintf(w,"{ [ ")
+				fmt.Fprintf(w,"[ ")
 			} else {
 				fmt.Fprintf(w,",")
 			}
@@ -307,7 +307,7 @@ func getUserGroups(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w, `{ "error": "User does not exist." }`)		
 		} else {
-			fmt.Fprintf(w," ] }")
+			fmt.Fprintf(w," ]")
 		}		
 	}
 }
@@ -347,7 +347,7 @@ func getUserInfo(w http.ResponseWriter, r *http.Request) {
 		
 		for rows.Next() {
 			if idx == 0 {
-				fmt.Fprintf(w,"{ [ ")
+				fmt.Fprintf(w,"[ ")
 			} else {
 				fmt.Fprintf(w,",")
 			}
@@ -363,7 +363,7 @@ func getUserInfo(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w, `{ "error": "User does not exist." }`)		
 		} else {
-			fmt.Fprintf(w," ] }")
+			fmt.Fprintf(w," ]")
 		}
 	}
 }
