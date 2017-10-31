@@ -1,5 +1,7 @@
 package main
 import (
+	"strconv"
+	"strings"
 "time"
 "fmt"
 "log"
@@ -362,6 +364,80 @@ func getUserInfo(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, `{ "error": "User does not exist." }`)		
 		} else {
 			fmt.Fprintf(w," ] }")
+		}
+	}
+}
+
+func addUserToGroup(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	uName := q.Get("username")
+	gName := q.Get("groupname")
+	isLeader := false
+
+	if uName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No username specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No username specified.\" }")
+		return
+	}
+	if gName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No groupname specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No groupname specified.\" }")
+		return
+	}
+	if q.Get("is_leader") != "" {
+		var err error
+		isLeader, err = strconv.ParseBool(q.Get("is_leader"))
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			log.Print("Invalid is_leader specified in http query.")
+			fmt.Fprintf(w,"{ \"error\": \"Invalid is_leader specified.\" }")
+			return
+		}
+	}
+
+	pingerr := DBptr.Ping()
+	if pingerr != nil {
+		log.Fatal(pingerr)
+	}
+
+	var uid int
+	rows, err := DBptr.Query(`select uid from users where uname=$1`, uName)
+	if err != nil {
+		log.Fatal(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"Error in DB query\n")	
+	} else {
+		rows.Next()
+		rows.Scan(&uid)
+		rows.Close()
+	}
+	var groupid int
+	rows, err = DBptr.Query(`select groupid from groups where name=$1`, gName)
+	if err != nil {
+		log.Fatal(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"Error in DB query\n")	
+	} else {
+		rows.Next()
+		rows.Scan(&groupid)
+		rows.Close()
+	}
+	_, err = DBptr.Exec("insert into user_group (uid, groupid, is_leader, last_updated) values ($1, $2, $3, NOW())", uid, groupid, isLeader)
+	if err == nil {
+		fmt.Fprintf(w,"{ \"status\": \"success\" }")
+	} else {
+		if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
+			fmt.Fprintf(w,"{ \"error\": \"User already belongs to this group.\" }")
+		} else if strings.Contains(err.Error(), `violates foreign key constraint "fk_user_group_users"`) {
+			fmt.Fprintf(w,"{ \"error\": \"User does not exist.\" }")
+		} else if strings.Contains(err.Error(), `violates foreign key constraint "fk_user_group_groups"`) {
+			fmt.Fprintf(w,"{ \"error\": \"Group does not exist.\" }")
+		} else {
+			log.Print(err.Error())
 		}
 	}
 }
