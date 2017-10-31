@@ -1,10 +1,12 @@
 package main
 import (
-//"fmt"
-//"log"
- _ "github.com/lib/pq"
-"net/http"
-//"encoding/json"
+	"strings"
+	"database/sql"
+	"fmt"
+	"log"
+	_ "github.com/lib/pq"
+	"net/http"
+	//"encoding/json"
 )
 
 func createCollaborationUnit(w http.ResponseWriter, r *http.Request) {
@@ -71,11 +73,47 @@ func getCollaborationUnitComputeResources(w http.ResponseWriter, r *http.Request
 
 func createFQAN(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query()
-//	fqan := q.Get("fqan")
-//	mapuser := q.Get("mapped_user")
-//	mapgroup := q.Get("mapped_group")
-	NotDoneYet(w)
+	q := r.URL.Query()
+
+	fqan := q.Get("fqan")
+	mGroup := q.Get("mapped_group")
+	var mUser sql.NullString
+
+	if fqan == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No fqan specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No fqan specified.\" }")
+		return
+	}
+	if mGroup == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No mapped_group specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No mapped_group specified.\" }")
+		return
+	}
+	if q.Get("mapped_user") != "" {
+		mUser.Scan(q.Get("mapped_user"))
+	}
+
+	pingerr := DBptr.Ping()
+	if pingerr != nil {
+		log.Fatal(pingerr)
+	}
+
+	_, err := DBptr.Exec("insert into grid_fqan (fqan, mapped_user, mapped_group, last_updated) values ($1, $2, $3, NOW())", fqan, mUser, mGroup)
+	if err == nil {
+		fmt.Fprintf(w,"{ \"status\": \"success\" }")
+	} else {
+		if strings.Contains(err.Error(), `violates foreign key constraint "fk_experiment_fqan_users"`) {
+			fmt.Fprintf(w,"{ \"error\": \"User doesn't exist.\" }")
+		} else if strings.Contains(err.Error(), `violates foreign key constraint "fk_experiment_fqan_groups"`) {
+			fmt.Fprintf(w,"{ \"error\": \"Group doesn't exist.\" }")
+		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
+			fmt.Fprintf(w,"{ \"error\": \"FQAN already exists.\" }")
+		} else {
+			log.Print(err.Error())
+		}
+	}
 }
 
 func removeFQAN(w http.ResponseWriter, r *http.Request) {
