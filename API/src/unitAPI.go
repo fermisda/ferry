@@ -95,12 +95,12 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 		mUser.Scan(q.Get("mapped_user"))
 	}
 
-	pingerr := DBptr.Ping()
-	if pingerr != nil {
-		log.Fatal(pingerr)
+	cKey, err := DBtx.Start(DBptr)
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	_, err := DBptr.Exec("insert into grid_fqan (fqan, mapped_user, mapped_group, last_updated) values ($1, $2, $3, NOW())", fqan, mUser, mGroup)
+	_, err = DBtx.Exec("insert into grid_fqan (fqan, mapped_user, mapped_group, last_updated) values ($1, $2, $3, NOW())", fqan, mUser, mGroup)
 	if err == nil {
 		fmt.Fprintf(w,"{ \"status\": \"success\" }")
 	} else {
@@ -114,6 +114,8 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 			log.Print(err.Error())
 		}
 	}
+
+	DBtx.Commit(cKey)
 }
 
 func removeFQAN(w http.ResponseWriter, r *http.Request) {

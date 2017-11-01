@@ -399,13 +399,13 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	pingerr := DBptr.Ping()
-	if pingerr != nil {
-		log.Fatal(pingerr)
+	cKey, err := DBtx.Start(DBptr)
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	var uid int
-	rows, err := DBptr.Query(`select uid from users where uname=$1`, uName)
+	rows, err := DBtx.Query(`select uid from users where uname=$1`, uName)
 	if err != nil {
 		log.Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
@@ -416,7 +416,7 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 		rows.Close()
 	}
 	var groupid int
-	rows, err = DBptr.Query(`select groupid from groups where name=$1`, gName)
+	rows, err = DBtx.Query(`select groupid from groups where name=$1`, gName)
 	if err != nil {
 		log.Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
@@ -426,7 +426,7 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 		rows.Scan(&groupid)
 		rows.Close()
 	}
-	_, err = DBptr.Exec("insert into user_group (uid, groupid, is_leader, last_updated) values ($1, $2, $3, NOW())", uid, groupid, isLeader)
+	_, err = DBtx.Exec("insert into user_group (uid, groupid, is_leader, last_updated) values ($1, $2, $3, NOW())", uid, groupid, isLeader)
 	if err == nil {
 		fmt.Fprintf(w,"{ \"status\": \"success\" }")
 	} else {
@@ -440,4 +440,6 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 			log.Print(err.Error())
 		}
 	}
+
+	DBtx.Commit(cKey)
 }
