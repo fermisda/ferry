@@ -1,5 +1,6 @@
 package main
 import (
+	"database/sql"
 	"strconv"
 	"strings"
 "time"
@@ -28,7 +29,13 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	rows, err := DBptr.Query(`select affiliation_units.name, user_certificate.dn, user_certificate.issuer_ca from user_certificate INNER JOIN users on (user_certificate.uid = users.uid) INNER JOIN affiliation_units on (user_certificate.unitid = affiliation_units.unitid) where users.uname=$1 and affiliation_units.name=$2`,uname,expt)
+	rows, err := DBptr.Query(`select t3.name, t1.dn, t1.issuer_ca, c.user_exists, c.unit_exists
+							  from (select 1 as key, uid, dn, unitid, issuer_ca from user_certificate) as t1
+							  join (select uid from users where uname = $1) as t2 on t1.uid = t2.uid
+							  join (select unitid, name from affiliation_units where name = $2) as t3 on t1.unitid = t3.unitid
+							  right join (select 1 as key,
+							     $1 in (select uname from users) as user_exists, 
+							     $2 in (select name from affiliation_units) as unit_exists) as c on c.key = t1.key`,uname,expt)
 	if err != nil {
 		defer log.Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
@@ -40,13 +47,13 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	idx := 0
+	var userExists, exptExists bool
 
 	type jsonout struct {
 		UnitName string `json:"unit_name"`
 		DN string `json:"dn"`
 		Issuer string `json:"issuer_ca"`
 	}
-
 	var Out jsonout
 	
 	output := "[ "
@@ -55,36 +62,19 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 		if idx != 0 {
 			output += ","
 		}
-		rows.Scan(&Out.UnitName,&Out.DN,&Out.Issuer)
-//			fmt.Println(Out.Gid,Out.Groupname)
-		outline, jsonerr := json.Marshal(Out)
-		if jsonerr != nil {
-			log.Fatal(jsonerr)
+		var tmpUnitName, tmpDN, tmpIssuer sql.NullString
+		rows.Scan(&tmpUnitName,&tmpDN,&tmpIssuer,&userExists,&exptExists)
+		if tmpDN.Valid {
+			Out.UnitName, Out.DN, Out.Issuer = tmpUnitName.String, tmpDN.String, tmpIssuer.String
+			outline, jsonerr := json.Marshal(Out)
+			if jsonerr != nil {
+				log.Fatal(jsonerr)
 			}
-		output += string(outline)
-		idx += 1
+			output += string(outline)
+			idx ++
+		}
 	}
 	if idx == 0 {
-		rows, err := DBptr.Query(`select 'user' from users where uname=$1 union select 'experiment' from affiliation_units where name=$2`,uname,expt)
-		if err != nil {
-			defer log.Fatal(err)
-			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
-	//		http.Error(w,"Error in DB query",404)
-			return
-		}
-		userExists := false
-		exptExists := false
-		for rows.Next() {
-			var item string
-			rows.Scan(&item)
-			if item == `user` {
-				userExists = true
-			}
-			if item == `experiment` {
-				exptExists = true
-			}
-		}
 		w.WriteHeader(http.StatusNotFound)
 
 		if !userExists {
@@ -115,10 +105,10 @@ func getUserFQANs(w http.ResponseWriter, r *http.Request) {
 		expt = "%"
 	}
 	
-	rows, err := DBptr.Query(`select T2.name, T1.fqan from
-		                     (select fq.fqan, gf.groupid from grid_fqan as fq left join groups as gf on fq.mapped_group=gf.name where mapped_user=$1) as T1 left join
-		                     (select au.name, ag.groupid from affiliation_units as au left join affiliation_unit_group as ag on au.unitid=ag.unitid) as T2
-		                      on T1.groupid=T2.groupid where T2.name like $2 order by T2.name`,uname,expt)
+	rows, err := DBptr.Query(`select T2.name, T1.fqan, c.user_exists, c.unit_exists
+				  from       (select 1 as key, fq.fqan, gf.groupid from grid_fqan as fq left join groups as gf on fq.mapped_group=gf.name where mapped_user=$1) as T1 
+				  join       (select au.name, ag.groupid from affiliation_units as au left join affiliation_unit_group as ag on au.unitid=ag.unitid where name like $2) as T2 on T1.groupid=T2.groupid
+				  right join (select 1 as key, $1 in (select uname from users) as user_exists, $2 in (select name from affiliation_units) as unit_exists) as c on c.key = t1.key order by T2.name;`,uname,expt)
 	if err != nil {
 		defer log.Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
@@ -127,6 +117,8 @@ func getUserFQANs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer rows.Close()
+
+	var userExists, exptExists bool
 
 	type jsonout struct {
 		UnitName string `json:"unit_name"`
@@ -140,36 +132,19 @@ func getUserFQANs(w http.ResponseWriter, r *http.Request) {
 		if idx != 0 {
 			output += ","
 		}
-		rows.Scan(&Out.UnitName,&Out.Fqan)
-//			fmt.Println(Out.Gid,Out.Groupname)
-		outline, jsonerr := json.Marshal(Out)
-		if jsonerr != nil {
-			log.Fatal(jsonerr)
-			}
-		output += string(outline)
-		idx += 1
+		var tmpUnitName, tmpFqan sql.NullString
+		rows.Scan(&tmpUnitName, &tmpFqan, &userExists, &exptExists)
+		if tmpFqan.Valid {
+			Out.UnitName, Out.Fqan = tmpUnitName.String, tmpFqan.String
+			outline, jsonerr := json.Marshal(Out)
+			if jsonerr != nil {
+				log.Fatal(jsonerr)
+				}
+			output += string(outline)
+			idx ++
+		}
 	}
 	if idx == 0 {
-		rows, err := DBptr.Query(`select 'user' from users where uname=$1 union select 'experiment' from affiliation_units where name=$2`,uname,expt)
-		if err != nil {
-			defer log.Fatal(err)
-			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
-	//		http.Error(w,"Error in DB query",404)
-			return
-		}
-		userExists := false
-		exptExists := false
-		for rows.Next() {
-			var item string
-			rows.Scan(&item)
-			if item == `user` {
-				userExists = true
-			}
-			if item == `experiment` {
-				exptExists = true
-			}
-		}
 		w.WriteHeader(http.StatusNotFound)
 
 		if !userExists {
@@ -196,10 +171,10 @@ func getSuperUserList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	rows, err := DBptr.Query(`select distinct us.uname from users as us
-							  right join grid_access as ga on us.uid=ga.uid
-							  left join affiliation_units as au on ga.unitid = au.unitid
-							  where ga.is_superuser=true and au.name=$1`,expt)
+	rows, err := DBptr.Query(`select t1.uname, c.unit_exists from 
+		                     (select distinct 1 as key, us.uname from users as us right join grid_access as ga on us.uid=ga.uid
+							  left join affiliation_units as au on ga.unitid = au.unitid where ga.is_superuser=true and au.name=$1) as t1
+							  right join (select 1 as key, $1 in (select name from affiliation_units) as unit_exists) as c on c.key = t1.key`,expt)
 	if err != nil {
 		defer log.Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
@@ -209,8 +184,10 @@ func getSuperUserList(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
+	var exptExists bool
+
 	type jsonout struct {
-		UnitName string `json:"unit_name"`
+		Uname string `json:"uname"`
 	}
 	var Out jsonout
 	
@@ -220,38 +197,26 @@ func getSuperUserList(w http.ResponseWriter, r *http.Request) {
 		if idx != 0 {
 			output += ","
 		}
-		rows.Scan(&Out.UnitName)
-//			fmt.Println(Out.Gid,Out.Groupname)
-		outline, jsonerr := json.Marshal(Out)
-		if jsonerr != nil {
-			log.Fatal(jsonerr)
+
+		var tmpUname sql.NullString
+		rows.Scan(&tmpUname, &exptExists)
+		if tmpUname.Valid {
+			Out.Uname = tmpUname.String
+			outline, jsonerr := json.Marshal(Out)
+			if jsonerr != nil {
+				log.Fatal(jsonerr)
 			}
-		output += string(outline)
-		idx += 1
+			output += string(outline)
+			idx ++
+		}
 	}
 	if idx == 0 {
-		rows, err := DBptr.Query(`select 'experiment' from affiliation_units where name=$1`,expt)
-		if err != nil {
-			defer log.Fatal(err)
-			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
-	//		http.Error(w,"Error in DB query",404)
-			return
-		}
-		exptExists := false
-		for rows.Next() {
-			var item string
-			rows.Scan(&item)
-			if item == `experiment` {
-				exptExists = true
-			}
-		}
 		w.WriteHeader(http.StatusNotFound)
 
 		if !exptExists {
 			output += `"error": "Experiment does not exist.",`
 		}
-		output += `"error": "No super users found,"`
+		output += `"error": "No super users found."`
 	}
 
 	output += " ]"
@@ -404,40 +369,33 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 		log.Fatal(err)
 	}
 
-	var uid int
-	rows, err := DBtx.Query(`select uid from users where uname=$1`, uName)
-	if err != nil {
-		log.Fatal(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"Error in DB query\n")	
-	} else {
-		rows.Next()
-		rows.Scan(&uid)
-		rows.Close()
-	}
-	var groupid int
-	rows, err = DBtx.Query(`select groupid from groups where name=$1`, gName)
-	if err != nil {
-		log.Fatal(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"Error in DB query\n")	
-	} else {
-		rows.Next()
-		rows.Scan(&groupid)
-		rows.Close()
-	}
-	_, err = DBtx.Exec("insert into user_group (uid, groupid, is_leader, last_updated) values ($1, $2, $3, NOW())", uid, groupid, isLeader)
+	var res sql.Result
+	res, err = DBtx.Exec(`insert into user_group (uid, groupid, is_leader, last_updated)
+						select uid, groupid, $3, NOW() 
+						from      (select 1 as key, uid from users where uname = $1)     as t1
+						full join (select 1 as key, groupid from groups where name = $2) as t2
+						on t1.key = t2.key`, uName, gName, isLeader)
+
 	if err == nil {
-		fmt.Fprintf(w,"{ \"status\": \"success\" }")
+		nRows, err := res.RowsAffected()
+		if err != nil {
+			log.Fatal(err)
+		}
+		if nRows == 1{
+			fmt.Fprintf(w,"{ \"status\": \"success\" }")
+		} else {
+			fmt.Fprintf(w,"[ { \"error\": \"User does not exist.\" }, { \"error\": \"Group does not exist.\" } ]")
+		}
 	} else {
 		if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
 			fmt.Fprintf(w,"{ \"error\": \"User already belongs to this group.\" }")
-		} else if strings.Contains(err.Error(), `violates foreign key constraint "fk_user_group_users"`) {
+		} else if strings.Contains(err.Error(), `null value in column "uid" violates not-null constraint`) {
 			fmt.Fprintf(w,"{ \"error\": \"User does not exist.\" }")
-		} else if strings.Contains(err.Error(), `violates foreign key constraint "fk_user_group_groups"`) {
+		} else if strings.Contains(err.Error(), `null value in column "groupid" violates not-null constraint`) {
 			fmt.Fprintf(w,"{ \"error\": \"Group does not exist.\" }")
 		} else {
 			log.Print(err.Error())
+			fmt.Fprintf(w,"{ \"error\": \"Something went wrong.\" }")
 		}
 	}
 
