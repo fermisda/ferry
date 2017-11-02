@@ -22,16 +22,21 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 	if expt == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("No experiment name specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No experimentname specified.\" }")
+		fmt.Fprintf(w,"{ \"error\": \"No experiment name specified.\" }")
 		return
 	}
-	
+
+	authorized,authout := authorize(r,AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"error\": \"" + authout + "not authorized.\" }")
+		return
+	}
 	rows, err := DBptr.Query(`select affiliation_units.name, user_certificate.dn, user_certificate.issuer_ca from user_certificate INNER JOIN users on (user_certificate.uid = users.uid) INNER JOIN affiliation_units on (user_certificate.unitid = affiliation_units.unitid) where users.uname=$1 and affiliation_units.name=$2`,uname,expt)
 	if err != nil {
-		defer log.Fatal(err)
+		defer log.Println(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
-//		http.Error(w,"Error in DB query",404)
 		return
 	}
 
@@ -68,7 +73,6 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 			defer log.Fatal(err)
 			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
-	//		http.Error(w,"Error in DB query",404)
 			return
 		}
 		userExists := false
@@ -121,7 +125,6 @@ func getUserFQANs(w http.ResponseWriter, r *http.Request) {
 		defer log.Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
-//		http.Error(w,"Error in DB query",404)
 		return
 	}
 	defer rows.Close()
@@ -153,7 +156,6 @@ func getUserFQANs(w http.ResponseWriter, r *http.Request) {
 			defer log.Fatal(err)
 			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
-	//		http.Error(w,"Error in DB query",404)
 			return
 		}
 		userExists := false
@@ -189,8 +191,8 @@ func getSuperUserList(w http.ResponseWriter, r *http.Request) {
 	expt := q.Get("experimentname")
 	if expt == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Print("No experimentname specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No username specified.\" }")
+		log.Print("No experiment name specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No experiment name specified.\" }")
 		return
 	}
 	
@@ -202,7 +204,6 @@ func getSuperUserList(w http.ResponseWriter, r *http.Request) {
 		defer log.Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
-//		http.Error(w,"Error in DB query",404)
 		return
 	}
 	defer rows.Close()
@@ -233,7 +234,6 @@ func getSuperUserList(w http.ResponseWriter, r *http.Request) {
 			defer log.Fatal(err)
 			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
-	//		http.Error(w,"Error in DB query",404)
 			return
 		}
 		exptExists := false
