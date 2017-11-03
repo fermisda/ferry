@@ -439,16 +439,16 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = DBtx.Exec(fmt.Sprintf(`do $$
-										declare unitid int;
-										declare uid int;
-										declare fqanid int;
+										declare vUnitid int;
+										declare vUid int;
+										declare vFqanid int;
 									begin
-										select a.unitid into unitid from affiliation_units as a where name = '%s';
-										select u.uid into uid from users as u where uname = '%s';
-										select f.fqanid into fqanid from grid_fqan as f where fqan = '%s';
+										select unitid into vUnitid from affiliation_units where name = '%s';
+										select uid into vUid from users where uname = '%s';
+										select fqanid into vFqanid from grid_fqan where fqan = '%s';
 										
 										insert into grid_access (unitid, uid, fqanid, is_superuser, is_banned, last_updated)
-														 values (unitid, uid, fqanid, false, false, NOW());
+														 values (vUnitid, vUid, vFqanid, false, false, NOW());
 									end $$;`, eName, uName, fqan))
 	if err == nil {
 		fmt.Fprintf(w,"{ \"status\": \"success\" }")
@@ -461,6 +461,74 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w,"{ \"error\": \"Experiment does not exist.\" }")
 		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint "idx_grid_access"`) {
 			fmt.Fprintf(w,"{ \"error\": \"This association already exists.\" }")
+		} else {
+			log.Print(err.Error())
+			fmt.Fprintf(w,"{ \"error\": \"Something went wrong.\" }")
+		}
+	}
+
+	DBtx.Commit(cKey)
+}
+
+func setUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	rName := q.Get("resourcename")
+	uName := q.Get("username")
+	shell := q.Get("shell")
+	hDir  := q.Get("homedir")
+
+	if rName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No resourcename specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No resourcename specified.\" }")
+		return
+	}
+	if uName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No username specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No username specified.\" }")
+		return
+	}
+	if shell == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No shell specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No shell specified.\" }")
+		return
+	}
+	if hDir == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No homedir specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No homedir specified.\" }")
+		return
+	}
+
+	cKey, err := DBtx.Start(DBptr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	_, err = DBtx.Exec(fmt.Sprintf(`do $$
+										declare vCompid int;
+										declare vUid int;
+									begin
+										select compid into vCompid from compute_resources where name = '%s';
+										select uid into vUid from users where uname = '%s';
+
+										if vCompid is null then raise 'Resource does not exist.'; end if;
+										if vUid is null then raise 'User does not exist.'; end if;
+										
+										update compute_access set shell = '%s', home_dir = '%s', last_updated = NOW()
+										where compid = vCompid and uid = vUid;
+									end $$;`, rName, uName, shell, hDir))
+	if err == nil {
+		fmt.Fprintf(w,"{ \"status\": \"success\" }")
+	} else {
+		if strings.Contains(err.Error(), `User does not exist.`) {
+			fmt.Fprintf(w,"{ \"error\": \"User does not exist.\" }")
+		} else if strings.Contains(err.Error(), `Resource does not exist.`) {
+			fmt.Fprintf(w,"{ \"error\": \"Resource does not exist.\" }")
 		} else {
 			log.Print(err.Error())
 			fmt.Fprintf(w,"{ \"error\": \"Something went wrong.\" }")

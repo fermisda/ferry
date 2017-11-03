@@ -581,6 +581,14 @@ ALTER TABLE ONLY user_group
 
 
 --
+-- Name: idx_compute_resources; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
+--
+
+ALTER TABLE ONLY compute_resources
+    ADD CONSTRAINT idx_compute_resources UNIQUE (name);
+
+
+--
 -- Name: idx_grid_access; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
 --
 
