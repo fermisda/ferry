@@ -346,7 +346,7 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 
 	uName := q.Get("username")
 	gName := q.Get("groupname")
-	isLeader := false
+	isLeader := q.Get("is_leader")
 
 	if uName == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -360,9 +360,10 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w,"{ \"error\": \"No groupname specified.\" }")
 		return
 	}
-	if q.Get("is_leader") != "" {
-		var err error
-		isLeader, err = strconv.ParseBool(q.Get("is_leader"))
+	if isLeader == "" {
+		isLeader = "false"
+	} else {
+		_, err := strconv.ParseBool(q.Get("is_leader"))
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			log.Print("Invalid is_leader specified in http query.")
@@ -376,23 +377,19 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 		log.Fatal(err)
 	}
 
-	var res sql.Result
-	res, err = DBtx.Exec(`insert into user_group (uid, groupid, is_leader, last_updated)
-						select uid, groupid, $3, NOW() 
-						from      (select 1 as key, uid from users where uname = $1)     as t1
-						full join (select 1 as key, groupid from groups where name = $2) as t2
-						on t1.key = t2.key`, uName, gName, isLeader)
+	_, err = DBtx.Exec(fmt.Sprintf(`do $$
+										declare uid int;
+										declare groupid int;
+									begin
+										select u.uid into uid from users as u where uname = '%s';
+										select g.groupid into groupid from groups as g where name = '%s';
+										
+										insert into user_group (uid, groupid, is_leader, last_updated)
+														values (uid, groupid, %s, NOW());
+									end $$;`, uName, gName, isLeader))
 
 	if err == nil {
-		nRows, err := res.RowsAffected()
-		if err != nil {
-			log.Fatal(err)
-		}
-		if nRows == 1{
-			fmt.Fprintf(w,"{ \"status\": \"success\" }")
-		} else {
-			fmt.Fprintf(w,"[ { \"error\": \"User does not exist.\" }, { \"error\": \"Group does not exist.\" } ]")
-		}
+		fmt.Fprintf(w,"{ \"status\": \"success\" }")
 	} else {
 		if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
 			fmt.Fprintf(w,"{ \"error\": \"User already belongs to this group.\" }")
