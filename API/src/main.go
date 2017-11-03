@@ -9,9 +9,11 @@ import (
 	"time"
 	"net/http"
 	"crypto/tls"
+	"os"
 )
 
 var DBptr *sql.DB
+var AuthorizedDNs []string
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println(r.URL.Path)
@@ -21,6 +23,13 @@ func handler(w http.ResponseWriter, r *http.Request) {
 func main () {
 	
 	fmt.Println("Here we go...")
+
+
+	//Make sure we are not running as root, and exit if we are.
+	if os.Getuid() == 0 {
+		log.Fatal("You are running as root (uid=0). Please run as a different user. Exiting.")
+	}
+
 //NOTE: here we have SSL mode set to "require" because the host cert on the DB machine is expired as of 10-25-2017. Once that is fixed we should set it to "verify-ca" or "verify-full" so that it actually checks that the cert that the DB machine presents is valid. If you set it to "require" it skips the verification step.
 	Mydb, err := sql.Open("postgres","user=ferry password=ferry5634 host=fermicloud051.fnal.gov dbname=ferry connect_timeout=60 sslmode=verify-full sslrootcert=/etc/grid-security/certificates/cilogon-osg.pem")
 	if err != nil {	   
@@ -101,17 +110,26 @@ func main () {
 //	var certstring = [1]string{"/etc/pki/tls/certs/ca-bundle.crt"}
 	var certstring = [2]string{"/etc/grid-security/certificates/cilogon-osg.pem","/etc/grid-security/certificates/cilogon-basic.pem"}
 	var certslice []string = certstring[0:2]
-	certpool, err := loadCerts(certslice)
+	Certpool, err := loadCerts(certslice)
 	if err != nil {
 		log.Fatal(err)
 	}
 	mainsrv.TLSConfig = &tls.Config{
 		ClientAuth: tls.RequireAndVerifyClientCert,
-		ClientCAs:  certpool,
+		ClientCAs:  Certpool,
 	}
 	
-
-// We should probably make the cert and key paths variables in a config file at some point
+	dnlist, listerror := createDNlist("/scratch/kherner/FERRY/ferment/API/src/myDN.list")
+	if listerror != nil {
+		log.Fatal(listerror)
+	}
+	AuthorizedDNs = make([]string, len(dnlist))
+	copy(AuthorizedDNs,dnlist)
+	log.Printf("Authorized DN list created with %d entries.",len(AuthorizedDNs))
+	if len(AuthorizedDNs) == 0 {
+		log.Fatal("Authorized DN slice has zero elements.")
+	}
+	// We should probably make the cert and key paths variables in a config file at some point
 	serverror := mainsrv.ListenAndServeTLS("/home/ferry/.cert/hostcert.pem","/home/ferry/.cert/hostkey.pem")
 	if serverror != nil {
 		log.Fatal(serverror)
