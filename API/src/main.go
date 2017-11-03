@@ -44,6 +44,8 @@ func main () {
 	grouter.HandleFunc("/getSuperUserList"     , getSuperUserList)      
 	grouter.HandleFunc("/getUserGroups"	      , getUserGroups)	       
 	grouter.HandleFunc("/getUserInfo"          , getUserInfo)     
+	grouter.HandleFunc("/addUserToGroup"          , addUserToGroup)
+	grouter.HandleFunc("/setUserExperimentFQAN" , setUserExperimentFQAN)
 	
 	//group API calls
 	grouter.HandleFunc("/getgroupmembers", getGroupMembers)

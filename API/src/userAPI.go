@@ -34,8 +34,8 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 							  join (select uid from users where uname = $1) as t2 on t1.uid = t2.uid
 							  join (select unitid, name from affiliation_units where name = $2) as t3 on t1.unitid = t3.unitid
 							  right join (select 1 as key,
-							     $1 in (select uname from users) as user_exists, 
-							     $2 in (select name from affiliation_units) as unit_exists) as c on c.key = t1.key`,uname,expt)
+							       $1 in (select uname from users) as user_exists, 
+							       $2 in (select name from affiliation_units) as unit_exists) as c on c.key = t1.key`,uname,expt)
 	if err != nil {
 		defer log.Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
@@ -393,6 +393,70 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w,"{ \"error\": \"User does not exist.\" }")
 		} else if strings.Contains(err.Error(), `null value in column "groupid" violates not-null constraint`) {
 			fmt.Fprintf(w,"{ \"error\": \"Group does not exist.\" }")
+		} else {
+			log.Print(err.Error())
+			fmt.Fprintf(w,"{ \"error\": \"Something went wrong.\" }")
+		}
+	}
+
+	DBtx.Commit(cKey)
+}
+
+func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	uName := q.Get("username")
+	fqan  := q.Get("fqan")
+	eName := q.Get("experimentname")
+
+	if uName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No username specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No username specified.\" }")
+		return
+	}
+	if fqan == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No fqan specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No fqan specified.\" }")
+		return
+	}
+	if eName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No experimentname specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No experimentname specified.\" }")
+		return
+	}
+
+	cKey, err := DBtx.Start(DBptr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	_, err = DBtx.Exec(fmt.Sprintf(`do $$
+										declare unitid int;
+										declare uid int;
+										declare fqanid int;
+									begin
+										select a.unitid into unitid from affiliation_units as a where name = '%s';
+										select u.uid into uid from users as u where uname = '%s';
+										select f.fqanid into fqanid from grid_fqan as f where fqan = '%s';
+										
+										insert into grid_access (unitid, uid, fqanid, is_superuser, is_banned, last_updated)
+														 values (unitid, uid, fqanid, false, false, NOW());
+									end $$;`, eName, uName, fqan))
+	if err == nil {
+		fmt.Fprintf(w,"{ \"status\": \"success\" }")
+	} else {
+		if strings.Contains(err.Error(), `null value in column "uid" violates not-null constraint`) {
+			fmt.Fprintf(w,"{ \"error\": \"User does not exist.\" }")
+		} else if strings.Contains(err.Error(), `null value in column "fqanid" violates not-null constraint`) {
+			fmt.Fprintf(w,"{ \"error\": \"FQAN does not exist.\" }")
+		} else if strings.Contains(err.Error(), `null value in column "unitid" violates not-null constraint`) {
+			fmt.Fprintf(w,"{ \"error\": \"Experiment does not exist.\" }")
+		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint "idx_grid_access"`) {
+			fmt.Fprintf(w,"{ \"error\": \"This association already exists.\" }")
 		} else {
 			log.Print(err.Error())
 			fmt.Fprintf(w,"{ \"error\": \"Something went wrong.\" }")
