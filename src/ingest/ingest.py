@@ -649,6 +649,9 @@ def read_vulcan_compute_resources(config, nis, users, groups, cms_groups):
                 if group["gpname"] not in groups:
                     print("Domain: %s group %s doesn\'t exist in userdb!" % (dir,group["gpname"]), file=sys.stderr)
                     continue
+                if group["gpname"] not in cms_groups.values():
+                    print("Domain: %s group %s is not a valid CMS group!" % (dir,group["gpname"]), file=sys.stderr)
+                    continue
                 nis[dir].groups[group["gpname"]]=groups[group["gpname"]]
 
             cursor.execute("select a.userid, t.gpname, a.shell, a.home_dir from res_accts_t1 as a \
