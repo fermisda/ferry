@@ -1,5 +1,6 @@
 package main
 import (
+	"database/sql"
 	"strconv"
 	"log"
 	"encoding/json"
@@ -30,14 +31,126 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 }
 func getGridmapFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query()
-//	collabunit := q.Get("unitname")
-	NotDoneYet(w)
+	q := r.URL.Query()
+	unit := q.Get("unitname")
+	if unit == "" {
+		unit = "%"
+	}
+
+	rows, err := DBptr.Query(`select dn, uname, unit_exists from 
+							 (select 1 as key, * from user_certificate as uc 
+							  left join users as us on uc.uid = us.uid 
+							  left join affiliation_units as au on uc.unitid = au.unitid
+							  where au.name like $1) as t
+	 						  right join (select 1 as key, $1 in (select name from affiliation_units) as unit_exists) as c on t.key = c.key`, unit)
+	if err != nil {
+		defer log.Fatal(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	var unitExists bool
+
+	type jsonout struct {
+		DN string `json:"userdn"`
+		Uname string `json:"mapped_uname"`
+	}
+	var Out jsonout
+
+	idx := 0
+	output := "[ "
+	for rows.Next() {
+		if idx != 0 {
+			output += ","
+		}
+
+		var tmpDN, tmpUname sql.NullString
+		rows.Scan(&tmpDN, &tmpUname, &unitExists)
+		if tmpDN.Valid {
+			Out.DN, Out.Uname = tmpDN.String, tmpUname.String
+			outline, jsonerr := json.Marshal(Out)
+			if jsonerr != nil {
+				log.Fatal(jsonerr)
+			}
+			output += string(outline)
+			idx ++
+		}
+	}
+	if idx == 0 {
+		w.WriteHeader(http.StatusNotFound)
+
+		if !unitExists {
+			output += `"error": "Experiment does not exist.",`
+		}
+		output += `"error": "No DNs found."`
+	}
+
+	output += " ]"
+	fmt.Fprintf(w,output)
 }
 func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query()
-	NotDoneYet(w)
+	q := r.URL.Query()
+	unit := q.Get("unitname")
+	if unit == "" {
+		unit = "%"
+	}
+
+	rows, err := DBptr.Query(`select t.fqan, t.mapped_user, c.unit_exists from
+							 (select 1 as key, gf.fqan, gf.mapped_user, au.name from grid_fqan as gf
+							  left join groups as g on gf.mapped_group = g.name
+							  left join affiliation_unit_group as ag on g.groupid = ag.groupid
+							  left join affiliation_units as au on ag.unitid = au.unitid
+							  where au.name like $1) as t
+							  right join (select 1 as key, $1 in (select name from affiliation_units) as unit_exists) as c on t.key = c.key`, unit)
+	if err != nil {
+		defer log.Fatal(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	var unitExists bool
+
+	type jsonout struct {
+		DN string `json:"fqan"`
+		Uname string `json:"mapped_uname"`
+	}
+	var Out jsonout
+
+	idx := 0
+	output := "[ "
+	for rows.Next() {
+		if idx != 0 {
+			output += ","
+		}
+
+		var tmpDN, tmpUname sql.NullString
+		rows.Scan(&tmpDN, &tmpUname, &unitExists)
+		if tmpDN.Valid {
+			Out.DN, Out.Uname = tmpDN.String, tmpUname.String
+			outline, jsonerr := json.Marshal(Out)
+			if jsonerr != nil {
+				log.Fatal(jsonerr)
+			}
+			output += string(outline)
+			idx ++
+		}
+	}
+	if idx == 0 {
+		w.WriteHeader(http.StatusNotFound)
+
+		if !unitExists {
+			output += `"error": "Experiment does not exist.",`
+		}
+		output += `"error": "No FQANs found."`
+	}
+
+	output += " ]"
+	fmt.Fprintf(w,output)
 }
 
 func getUserUID(w http.ResponseWriter, r *http.Request) {
