@@ -6,7 +6,7 @@ import (
 	"log"
 	_ "github.com/lib/pq"
 	"net/http"
-	//"encoding/json"
+	"encoding/json"
 )
 
 func createGroup(w http.ResponseWriter, r *http.Request) {
@@ -173,11 +173,68 @@ func setGroupCondorQuota(w http.ResponseWriter, r *http.Request) {
 }
 func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query()
-//	groupname := q.Get("groupname")
-//	resource := q.Get("resourcename")
-//	exptname := q.Get("experimentname")
-	NotDoneYet(w)
+	q := r.URL.Query()
+	groupname := q.Get("groupname")
+	resource := q.Get("resourcename")
+	exptname := q.Get("experimentname")
+	if groupname == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No group name specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No group name specified.\" }")
+		return
+	}
+	if resource == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No storage resource specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No storage resource specified.\" }")
+		return
+	}
+	if exptname == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No experiment specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No experiment name specified.\" }")
+		return
+	}
+
+	rows, err := DBptr.Query(`select sq.value, sq.unit, sq.valid_until from storage_quota sq INNER JOIN affiliation_units on affiliation_units.unitid = sq.unitid INNER JOIN storage_resources on storage_resources.storageid = sq.storageid INNER JOIN groups on groups.groupid = sq.groupid where affiliation_units.name = $3 AND storage_resources.type = $2 and groups.name = $1`, groupname, resource, exptname)
+	if err != nil {	
+		defer log.Fatal(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		
+		return
+	}
+		
+	defer rows.Close()	
+	idx := 0
+	output := ""
+	type jsonout struct {
+		Value string `json:"value"`
+		Unit string `json:"unit"`
+		ValidUntil string `json:"valid_until"`
+	}
+	var Out jsonout
+		for rows.Next() {
+		if idx != 0 {
+			output += ","
+		}
+	var tmpValue,tmpUnit,tmpValid sql.NullString
+		rows.Scan(&tmpValue,&tmpUnit,&tmpValid)
+		if tmpValue.Valid {
+			Out.Value, Out.Unit, Out.ValidUntil = tmpValue.String, tmpUnit.String, tmpValid.String
+			outline, jsonerr := json.Marshal(Out)
+			if jsonerr != nil {
+				log.Fatal(jsonerr)
+			}
+			output += string(outline)
+			idx ++
+		}
+		}
+	if idx == 0 {
+		w.WriteHeader(http.StatusNotFound)
+		output += `"error": "Group has no quotas registered."`
+	}
+	fmt.Fprintf(w,output)	
 }
 
 func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
