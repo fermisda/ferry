@@ -14,6 +14,7 @@ import (
 
 var DBptr *sql.DB
 var DBtx Transaction
+var AuthorizedDNs []string
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println(r.URL.Path)
@@ -30,8 +31,8 @@ func main () {
 		log.Fatal("You are running as root (uid=0). Please run as a different user. Exiting.")
 	}
 
-//NOTE: here we have SSL mode set to "require" because the host cert on the DB machine is expired as of 10-25-2017. Once that is fixed we should set it to "verify-ca" or "verify-full" so that it actually checks that the cert that the DB machine presents is valid. If you set it to "require" it skips the verification step.
-Mydb, err := sql.Open("postgres","user=ferry password=ferry5634 host=fermicloud051.fnal.gov dbname=ferry connect_timeout=60 sslmode=verify-full sslrootcert=/etc/grid-security/certificates/cilogon-osg.pem")
+	//NOTE: here we have SSL mode set to "require" because the host cert on the DB machine is expired as of 10-25-2017. Once that is fixed we should set it to "verify-ca" or "verify-full" so that it actually checks that the cert that the DB machine presents is valid. If you set it to "require" it skips the verification step.
+	Mydb, err := sql.Open("postgres","user=ferry password=ferry5634 host=fermicloud051.fnal.gov dbname=ferry connect_timeout=60 sslmode=verify-full sslrootcert=/etc/grid-security/certificates/cilogon-osg.pem")
 	if err != nil {	   
 		fmt.Println("there is an issue here")
 		log.Fatal(err)
@@ -121,7 +122,7 @@ Mydb, err := sql.Open("postgres","user=ferry password=ferry5634 host=fermicloud0
 		ClientCAs:  Certpool,
 	}
 	
-	dnlist, listerror := createDNlist("/scratch/kherner/FERRY/ferment/API/src/myDN.list")
+	dnlist, listerror := createDNlist("myDN.list")
 	if listerror != nil {
 		log.Fatal(listerror)
 	}

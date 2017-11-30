@@ -29,12 +29,12 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	/*authorized,authout := authorize(r,AuthorizedDNs)
+	authorized,authout := authorize(r,AuthorizedDNs)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"error\": \"" + authout + "not authorized.\" }")
 		return
-	}*/
+	}
 	
 	rows, err := DBptr.Query(`select t3.name, t1.dn, t1.issuer_ca, c.user_exists, c.unit_exists
 							  from (select 1 as key, uid, dn, unitid, issuer_ca from user_certificate) as t1
