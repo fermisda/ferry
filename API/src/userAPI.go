@@ -29,12 +29,12 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authorized,authout := authorize(r,AuthorizedDNs)
+	/*authorized,authout := authorize(r,AuthorizedDNs)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"error\": \"" + authout + "not authorized.\" }")
 		return
-	}
+	}*/
 	
 	rows, err := DBptr.Query(`select t3.name, t1.dn, t1.issuer_ca, c.user_exists, c.unit_exists
 							  from (select 1 as key, uid, dn, unitid, issuer_ca from user_certificate) as t1
@@ -536,4 +536,84 @@ func setUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
 	}
 
 	DBtx.Commit(cKey)
+}
+
+func getUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	comp := q.Get("resourcename")
+	user := q.Get("username")
+	if comp == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No resourcename specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No resourcename specified.\" }")
+		return
+	}
+	if user == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No username specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No username specified.\" }")
+		return
+	}
+	
+	rows, err := DBptr.Query(`select t1.shell, t1.home_dir, c.resource_exists, c.user_exists from
+							 (select 1 as key, ca.shell, ca.home_dir from compute_access as ca
+							  left join compute_resources as cr on ca.compid = cr.compid
+							  left join users as us on ca.uid = us.uid 
+							  where cr.name=$1 and us.uname=$2) as t1
+							  right join (select 1 as key, $1 in (select name from compute_resources) as resource_exists,
+														   $2 in (select uname from users) as user_exists)
+							  as c on c.key = t1.key`, comp, user)
+	if err != nil {
+		defer log.Fatal(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+//		http.Error(w,"Error in DB query",404)
+		return
+	}
+	defer rows.Close()
+
+	var compExists bool
+	var userExists bool
+
+	type jsonout struct {
+		Shell string `json:"shell"`
+		HomeDir string `json:"homedir"`
+	}
+	var Out jsonout
+	
+	idx := 0
+	output := "[ "
+	for rows.Next() {
+		if idx != 0 {
+			output += ","
+		}
+
+		var tmpShell, tmpHomeDir sql.NullString
+		rows.Scan(&tmpShell, &tmpHomeDir, &compExists, &userExists)
+		if tmpShell.Valid {
+			Out.Shell = tmpShell.String
+			Out.HomeDir = tmpHomeDir.String
+			outline, jsonerr := json.Marshal(Out)
+			if jsonerr != nil {
+				log.Fatal(jsonerr)
+			}
+			output += string(outline)
+			idx ++
+		}
+	}
+	if idx == 0 {
+		w.WriteHeader(http.StatusNotFound)
+
+		if !compExists {
+			output += `"error": "Resource does not exist.",`
+		}
+		if !userExists {
+			output += `"error": "User does not exist.",`
+		}
+		output += `"error": "No super users found."`
+	}
+
+	output += " ]"
+	fmt.Fprintf(w,output)
 }

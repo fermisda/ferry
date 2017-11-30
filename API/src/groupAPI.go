@@ -164,12 +164,94 @@ func setGroupBatchPriority(w http.ResponseWriter, r *http.Request) {
 }
 func setGroupCondorQuota(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query()
-//	groupname := q.Get("groupname")
-//	resource  := q.Get("resourcename")
-//	//should be an int
-//	gcquota := q.Get("quota")
-	NotDoneYet(w)
+	q := r.URL.Query()
+
+	group := q.Get("groupname")
+	comp  := q.Get("resourcename")
+	quota := q.Get("quota")
+	until := q.Get("validuntil")
+
+	if group == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No groupname specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No groupname specified.\" }")
+		return
+	}
+	if comp == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No resourcename specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No resourcename specified.\" }")
+		return
+	}
+	if quota == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No quota specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No quota specified.\" }")
+		return
+	}
+	if until == "" {
+		until = "null"
+	}
+
+	gName := strings.Split(group, ".")[0]
+
+	var name, qType string
+	if strings.Contains(quota, ".") {
+		name = "GROUP_QUOTA_DYNAMIC_group_" + group
+		qType = "dynamic"
+	} else {
+		name = "GROUP_QUOTA_group_" + group
+		qType = "static"
+	}
+
+	cKey, err := DBtx.Start(DBptr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	_, err = DBtx.Exec(fmt.Sprintf(`do $$
+									declare 
+									    v_groupid int;
+										v_compid int;
+											
+										c_gname constant text := '%s';
+										c_compres constant text := '%s';
+										c_qname constant text := '%s';
+										c_qvalue constant numeric := %s;
+										c_qtype constant text := '%s';
+										c_valid constant date := '%s';
+									begin
+										select groupid into v_groupid from groups where name = c_gname;
+										select compid into v_compid from compute_resources where name = c_compres;
+
+										if v_compid is null then raise 'null value in column "compid"'; end if;
+										
+										if (v_compid, c_qname) not in (select compid, name from compute_batch) then
+										    insert into compute_batch (compid, name, value, type, groupid, valid_until, last_updated)
+															   values (v_compid, c_qname, c_qvalue, c_qtype, v_groupid, c_valid, NOW());
+										else
+											update compute_batch set value = c_qvalue, valid_until = c_valid, last_updated = NOW()
+											where compid = v_compid and name = c_qname;
+										end if;
+									end $$;`, gName, comp, name, quota, qType, until))
+
+	if err == nil {
+		fmt.Fprintf(w,"{ \"status\": \"success\" }")
+	} else {
+		if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
+			fmt.Fprintf(w,"{ \"error\": \"This quota already exists\" }")
+		} else if strings.Contains(err.Error(), `null value in column "compid"`) {
+			fmt.Fprintf(w,"{ \"error\": \"Resource does not exist.\" }")
+		} else if strings.Contains(err.Error(), `invalid input syntax for type date`) ||
+				  strings.Contains(err.Error(), `date/time field value out of range`) {
+			fmt.Fprintf(w,"{ \"error\": \"Invalid expiration date.\" }")
+		} else {
+			log.Print(err.Error())
+			fmt.Fprintf(w,"{ \"error\": \"Something went wrong.\" }")
+		}
+	}
+
+	DBtx.Commit(cKey)
 }
 func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")

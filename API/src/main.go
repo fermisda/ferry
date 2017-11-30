@@ -13,7 +13,7 @@ import (
 )
 
 var DBptr *sql.DB
-var AuthorizedDNs []string
+var DBtx Transaction
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println(r.URL.Path)
@@ -31,7 +31,7 @@ func main () {
 	}
 
 //NOTE: here we have SSL mode set to "require" because the host cert on the DB machine is expired as of 10-25-2017. Once that is fixed we should set it to "verify-ca" or "verify-full" so that it actually checks that the cert that the DB machine presents is valid. If you set it to "require" it skips the verification step.
-	Mydb, err := sql.Open("postgres","user=ferry password=ferry5634 host=fermicloud051.fnal.gov dbname=ferry connect_timeout=60 sslmode=verify-full sslrootcert=/etc/grid-security/certificates/cilogon-osg.pem")
+Mydb, err := sql.Open("postgres","user=ferry password=ferry5634 host=fermicloud051.fnal.gov dbname=ferry connect_timeout=60 sslmode=verify-full sslrootcert=/etc/grid-security/certificates/cilogon-osg.pem")
 	if err != nil {	   
 		fmt.Println("there is an issue here")
 		log.Fatal(err)
@@ -52,9 +52,11 @@ func main () {
 	grouter.HandleFunc("/getUserFQANs"	      , getUserFQANs)     
 	grouter.HandleFunc("/getSuperUserList"     , getSuperUserList)      
 	grouter.HandleFunc("/getUserGroups"	      , getUserGroups)	       
-	grouter.HandleFunc("/getUserInfo"          , getUserInfo)     
+	grouter.HandleFunc("/getUserInfo"          , getUserInfo)
 	grouter.HandleFunc("/addUserToGroup"          , addUserToGroup)
 	grouter.HandleFunc("/setUserExperimentFQAN" , setUserExperimentFQAN)
+	grouter.HandleFunc("/setUserShellAndHomeDir", setUserShellAndHomeDir)
+	grouter.HandleFunc("/getUserShellAndHomeDir", getUserShellAndHomeDir)
 	
 	//group API calls
 	grouter.HandleFunc("/getgroupmembers", getGroupMembers)
@@ -129,7 +131,7 @@ func main () {
 	if len(AuthorizedDNs) == 0 {
 		log.Fatal("Authorized DN slice has zero elements.")
 	}
-	// We should probably make the cert and key paths variables in a config file at some point
+// We should probably make the cert and key paths variables in a config file at some point
 	serverror := mainsrv.ListenAndServeTLS("/home/ferry/.cert/hostcert.pem","/home/ferry/.cert/hostkey.pem")
 	if serverror != nil {
 		log.Fatal(serverror)
