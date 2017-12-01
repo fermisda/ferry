@@ -617,3 +617,171 @@ func getUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
 	output += " ]"
 	fmt.Fprintf(w,output)
 }
+func getUserStorageQuota(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	rName := q.Get("resourcename")
+	uName := q.Get("username")
+	unitName := q.Get("unitname")
+	
+	if rName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No resource name specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No resourcename specified.\" }")
+		return	
+		
+	}
+	if uName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No user name specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No username specified.\" }")
+		return	
+	}
+	if unitName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No unit name specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No unitname specified.\" }")
+		return	
+	}
+
+	rows, err := DBptr.Query(`select sq.path,sq.value, sq.unit, sq.valid_until from storage_quota sq INNER JOIN affiliation_units on affiliation_units.unitid = sq.unitid INNER JOIN storage_resources on storage_resources.storageid = sq.storageid INNER JOIN users on users.uid = sq.uid where affiliation_units.name=$1 AND storage_resources.type=$2 and users.uname=$3`, unitName, rName, uName)
+	if err != nil {	
+		defer log.Fatal(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		
+		return
+	}
+	
+	defer rows.Close()	
+	idx := 0
+	output := ""
+	type jsonout struct {
+		Path string `json:"path"`
+		Value string `json:"value"`
+		Unit string `json:"unit"`
+		ValidUntil string `json:"valid_until"`
+	}
+	var Out jsonout
+	for rows.Next() {
+		if idx != 0 {
+			output += ","
+		}
+		var tmpPath,tmpValue,tmpUnit,tmpValid sql.NullString
+		rows.Scan(&tmpPath,&tmpValue,&tmpUnit,&tmpValid)
+		if tmpValue.Valid {
+			Out.Path, Out.Value, Out.Unit, Out.ValidUntil = tmpPath.String, tmpValue.String, tmpUnit.String, tmpValid.String
+			outline, jsonerr := json.Marshal(Out)
+			if jsonerr != nil {
+				log.Fatal(jsonerr)
+			}
+			output += string(outline)
+			idx ++
+		}
+		}
+	if idx == 0 {
+		w.WriteHeader(http.StatusNotFound)
+		output += `{"error": "User has no quotas registered."}`
+	}
+	fmt.Fprintf(w,output)	
+	
+}
+
+func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+
+	//call authorize function
+	authorized,authout := authorize(r,AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"error\": \"" + authout + "not authorized.\" }")
+		return
+	}
+	
+	q := r.URL.Query()
+	quota    := q.Get("quota")
+	uName    := q.Get("username")
+	unitName := q.Get("unitname")
+	unit     := q.Get("unit")
+	rName := strings.ToUpper(q.Get("resourcename"))
+	isgrp := strings.ToLower(q.Get("isGroup"))
+	validtime := q.Get("valid_until")
+	
+	var isGroup bool
+	if isgrp == "" || isgrp == "false" {
+		isGroup = false
+	}	else {
+		isGroup = true
+	}
+	if quota == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No quota value specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No quota specified.\" }")
+		return
+	}
+	if validtime != "" {
+		validtime = "valid_until = " + validtime + ","
+	}
+	if uName == "" && isGroup == false {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No user name given and isGroup was set to false.")
+		fmt.Fprintf(w,"{ \"error\": \"No username provided.\" }")
+		return	
+	}
+	if rName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No resource type given.")
+		fmt.Fprintf(w,"{ \"error\": \"No resourcename provided.\" }")
+		return	
+	}
+	if unitName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No affiliation unit given.")
+		fmt.Fprintf(w,"{ \"error\": \"No unitname provided.\" }")
+		return	
+	}
+	//set a default unit of "B" for bytes
+	if unit == "" {
+		unit = "B"
+	}
+
+	cKey, err := DBtx.Start(DBptr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+
+	_, err = DBtx.Exec(fmt.Sprintf(`do $$
+							declare vSid int;
+							declare vUid int;
+                                                        declare vUnitid int; 
+							begin
+								select storageid into vSid from storage_resources where name = '%s';
+								select uid into vUid from users where uname = '%s';
+								select unitid into vUnitid from affiliation_units where name = '%s';
+
+								if vSid is null then raise 'Resource does not exist.'; end if;
+								if vUid is null then raise 'User does not exist.'; end if;
+								if vUnitid is null then raise 'Unit does not exist.'; end if;
+										
+								update storage_quota set value = '%s', unit = '%s', %s last_updated = NOW()
+								where storageid = vSid and uid = vUid and unitid = vUnitid;
+							end $$;`, rName, uName, unitName, quota, unit, validtime))
+	if err == nil {
+		fmt.Fprintf(w,"{ \"status\": \"success\" }")
+	} else {
+		if strings.Contains(err.Error(), `User does not exist.`) {
+			fmt.Fprintf(w,"{ \"error\": \"User does not exist.\" }")
+		} else if strings.Contains(err.Error(), `Resource does not exist.`) {
+			fmt.Fprintf(w,"{ \"error\": \"Resource does not exist.\" }")
+		} else {
+			log.Print(err.Error())
+			fmt.Fprintf(w,"{ \"error\": \"Something went wrong.\" }")
+		}
+	}
+
+	DBtx.Commit(cKey)
+}
+

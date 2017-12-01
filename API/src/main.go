@@ -58,6 +58,10 @@ func main () {
 	grouter.HandleFunc("/setUserExperimentFQAN" , setUserExperimentFQAN)
 	grouter.HandleFunc("/setUserShellAndHomeDir", setUserShellAndHomeDir)
 	grouter.HandleFunc("/getUserShellAndHomeDir", getUserShellAndHomeDir)
+	grouter.HandleFunc("/setUserAccessToResource", 	    setUserAccessToResource)     
+	grouter.HandleFunc("/removeUserAccessFromResource", removeUserAccessFromResource)
+	grouter.HandleFunc("/getUserStorageQuota", 	    getUserStorageQuota)
+	grouter.HandleFunc("/setUserStorageQuota", 	    setUserStorageQuota)
 	
 	//group API calls
 	grouter.HandleFunc("/getgroupmembers", getGroupMembers)
@@ -79,8 +83,7 @@ func main () {
 	grouter.HandleFunc("/setGroupCondorQuota", 	    setGroupCondorQuota)         
 	grouter.HandleFunc("/getGroupStorageQuotas", 	    getGroupStorageQuotas)       
 	grouter.HandleFunc("/setGroupStorageQuota", 	    setGroupStorageQuota)        
-	grouter.HandleFunc("/setUserAccessToResource", 	    setUserAccessToResource)     
-	grouter.HandleFunc("/removeUserAccessFromResource", removeUserAccessFromResource)
+
 	// misc API cals
 	grouter.HandleFunc("/getPasswdFile",      getPasswdFile)       
 	grouter.HandleFunc("/getGroupFile", 	  getGroupFile)      
