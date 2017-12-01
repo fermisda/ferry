@@ -481,10 +481,56 @@ func getGroupName(w http.ResponseWriter, r *http.Request) {
 		}		
 	}
 }
-
 func lookupCertificateDN(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 //	q := r.URL.Query() 
 //	certDN := q.Get("certificatedn")
 	NotDoneYet(w)
+}
+func getMappedGidFile(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+
+	rows, err := DBptr.Query(`select fqan, mapped_user, gid from grid_fqan as gf left join groups as g on g.name = gf.mapped_group`)
+
+	if err != nil {
+		defer log.Fatal(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	type jsonentry struct {
+		Fqan string `json:"fqan"`
+		User string `json:"mapped_uname"`
+		Gid string `json:"mapped_gid"`
+	}
+	var Entry jsonentry
+	var Out []jsonentry
+
+	for rows.Next() {
+		var tmpFqan, tmpUser, tmpGid sql.NullString
+		rows.Scan(&tmpFqan, &tmpUser, &tmpGid)
+
+		if tmpFqan.Valid {
+			Entry = jsonentry{tmpFqan.String, tmpUser.String, tmpGid.String}
+			Out = append(Out, Entry)
+		}
+	}
+
+	var output interface{}
+	if len(Out) == 0 {
+		w.WriteHeader(http.StatusNotFound)
+		type jsonerror struct {Error string `json:"error"`}
+		var Err jsonerror
+		Err = jsonerror{"Something went wrong."}
+		output = Err
+	} else {
+		output = Out
+	}
+	jsonout, err := json.Marshal(output)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Fprintf(w, string(jsonout))
 }

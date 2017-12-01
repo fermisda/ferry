@@ -94,6 +94,7 @@ func main () {
 	grouter.HandleFunc("/getGroupGID", 	  getGroupGID)       
 	grouter.HandleFunc("/getGroupName", 	  getGroupName)      
 	grouter.HandleFunc("/lookupCertificateDN",lookupCertificateDN)
+	grouter.HandleFunc("/getMappedGidFile", getMappedGidFile)
 	//collaboration unit API calls
 	grouter.HandleFunc("/createCollaborationUnit",             createCollaborationUnit)           
 	grouter.HandleFunc("/removeCollaborationUnit", 		   removeCollaborationUnit)           
