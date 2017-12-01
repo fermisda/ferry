@@ -58,7 +58,7 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 	var unitExists bool
 	var compExists bool
 
-	type jsonout struct {
+	type jsonuser struct {
 		Uname string `json:"username"`
 		Uid string `json:"uid"`
 		Gid string `json:"gid"`
@@ -66,45 +66,61 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 		Hdir string `json:"homedir"`
 		Shell string `json:"shell"`
 	}
-	var Out jsonout
+	type jsonentry struct {
+		Rname string `json:"resourcename"`
+		Users []jsonuser `json:"users"`
+	}
+	var Entry jsonentry
+	var Out []jsonentry
 
 	prevRname := ""
-	output := "[ { "
 	for rows.Next() {
 		var tmpRname, tmpUname, tmpUid, tmpGid, tmpGecos, tmpHdir, tmpShell sql.NullString
 		rows.Scan(&tmpRname, &tmpUname, &tmpUid, &tmpGid, &tmpGecos, &tmpHdir, &tmpShell, &unitExists, &compExists)
 
 		if tmpRname.Valid {
 			if prevRname == "" {
-				output += fmt.Sprintf(`"%s": [ `, tmpRname.String)
+				Entry.Rname = tmpRname.String
+				Entry.Users = append(Entry.Users, jsonuser{tmpUname.String, tmpUid.String, tmpGid.String,
+						 								   tmpGecos.String, tmpHdir.String, tmpShell.String})
 			} else if prevRname != tmpRname.String {
-				output += fmt.Sprintf(` ], "%s": [ `, tmpRname.String)
+				Out = append(Out, Entry)
+				Entry.Rname = tmpRname.String
+				Entry.Users = nil
+				Entry.Users = append(Entry.Users, jsonuser{tmpUname.String, tmpUid.String, tmpGid.String,
+														   tmpGecos.String, tmpHdir.String, tmpShell.String})
 			} else {
-				output += ","
+				Entry.Users = append(Entry.Users, jsonuser{tmpUname.String, tmpUid.String, tmpGid.String,
+														   tmpGecos.String, tmpHdir.String, tmpShell.String})
 			}
-
-			Out.Uname, Out.Uid, Out.Gid, Out.Gecos, Out.Hdir, Out.Shell = 
-			tmpUname.String, tmpUid.String, tmpGid.String, tmpGecos.String, tmpHdir.String, tmpShell.String
-			outline, jsonerr := json.Marshal(Out)
-			if jsonerr != nil {
-				log.Fatal(jsonerr)
-			}
-			output += string(outline)
 			prevRname = tmpRname.String
 		}
 	}
+	Out = append(Out, Entry)
+
+	var output interface{}
 	if prevRname == "" {
 		w.WriteHeader(http.StatusNotFound)
-
+		type jsonerror struct {Error string `json:"error"`}
+		var Err []jsonerror
 		if !unitExists {
-			fmt.Fprintf(w, `{ "error": "Affiliation unit does not exist." }`)
-		} else if !compExists && comp != "%" {
-			fmt.Fprintf(w, `{ "error": "Resource does not exist." }`)
+			Err = append(Err, jsonerror{"Affiliation unit does not exist."})
 		}
+		if !compExists && comp != "%" {
+			Err = append(Err, jsonerror{"Resource does not exist."})
+		}
+		if len(Err) == 0 {
+			Err = append(Err, jsonerror{"Something went wrong."})
+		}
+		output = Err
 	} else {
-		output += " ] } ]"
-		fmt.Fprintf(w,output)
+		output = Out
 	}
+	jsonout, err := json.Marshal(output)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Fprintf(w, string(jsonout))
 }
 func getGroupFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
@@ -178,8 +194,9 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 			prevGname = tmpGname.String
 		}
 	}
+	Out = append(Out, Entry)
 
-	var out interface{}
+	var output interface{}
 	if prevGname == "" {
 		w.WriteHeader(http.StatusNotFound)
 		type jsonerror struct {Error string `json:"error"`}
@@ -190,15 +207,18 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 		if !compExists && comp != "%" {
 			Err = append(Err, jsonerror{"Resource does not exist."})
 		}
-		out = Err
+		if len(Err) == 0 {
+			Err = append(Err, jsonerror{"Something went wrong."})
+		}
+		output = Err
 	} else {
-		out = Out
+		output = Out
 	}
-	output, err := json.Marshal(out)
+	jsonout, err := json.Marshal(output)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Fprintf(w, string(output))
+	fmt.Fprintf(w, string(jsonout))
 }
 func getGridmapFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
