@@ -18,10 +18,93 @@ func NotDoneYet(w http.ResponseWriter) {
 
 func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query() 
-//	collabunit := q.Get("unitname")
-//	resource := q.Get("resourcename")
-	NotDoneYet(w)
+	q := r.URL.Query()
+	
+	unit := q.Get("unitname")
+	comp := q.Get("resourcename")
+	
+	if unit == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No unitname specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No unitname specified.\" }")
+		return
+	}
+	if comp == "" {
+		comp = "%"
+	}
+
+	rows, err := DBptr.Query(`select cname, uname, uid, gid, full_name, home_dir, shell, unit_exists, comp_exists from (
+								select 1 as key, u.uname, u.uid, g.gid, u.full_name, ca.home_dir, ca.shell, cr.name as cname, au.name as aname
+								from users as u 
+								left join compute_access as ca on u.uid = ca.uid
+								left join groups as g on ca.groupid = g.groupid
+								left join compute_resources as cr on ca.compid = cr.compid
+								left join affiliation_units as au on cr.unitid = au.unitid
+								where au.name = $1 and cr.name like $2 order by cr.name
+							) as t
+								right join (select 1 as key,
+								$1 in (select name from affiliation_units) as unit_exists,
+								$2 in (select name from compute_resources) as comp_exists
+							) as c on t.key = c.key;`, unit, comp)
+
+	if err != nil {
+		defer log.Fatal(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	var unitExists bool
+	var compExists bool
+
+	type jsonout struct {
+		Uname string `json:"username"`
+		Uid string `json:"uid"`
+		Gid string `json:"gid"`
+		Gecos string `json:"gecos"`
+		Hdir string `json:"homedir"`
+		Shell string `json:"shell"`
+	}
+	var Out jsonout
+
+	prevRname := ""
+	output := "[ { "
+	for rows.Next() {
+		var tmpRname, tmpUname, tmpUid, tmpGid, tmpGecos, tmpHdir, tmpShell sql.NullString
+		rows.Scan(&tmpRname, &tmpUname, &tmpUid, &tmpGid, &tmpGecos, &tmpHdir, &tmpShell, &unitExists, &compExists)
+
+		if tmpRname.Valid {
+			if prevRname == "" {
+				output += fmt.Sprintf(`"%s": [ `, tmpRname.String)
+			} else if prevRname != tmpRname.String {
+				output += fmt.Sprintf(` ], "%s": [ `, tmpRname.String)
+			} else {
+				output += ","
+			}
+
+			Out.Uname, Out.Uid, Out.Gid, Out.Gecos, Out.Hdir, Out.Shell = 
+			tmpUname.String, tmpUid.String, tmpGid.String, tmpGecos.String, tmpHdir.String, tmpShell.String
+			outline, jsonerr := json.Marshal(Out)
+			if jsonerr != nil {
+				log.Fatal(jsonerr)
+			}
+			output += string(outline)
+			prevRname = tmpRname.String
+		}
+	}
+	if prevRname == "" {
+		w.WriteHeader(http.StatusNotFound)
+
+		if !unitExists {
+			fmt.Fprintf(w, `{ "error": "Affiliation unit does not exist." }`)
+		} else if !compExists && comp != "%" {
+			fmt.Fprintf(w, `{ "error": "Resource does not exist." }`)
+		}
+	} else {
+		output += " ] } ]"
+		fmt.Fprintf(w,output)
+	}
 }
 func getGroupFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
