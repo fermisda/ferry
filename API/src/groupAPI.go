@@ -171,6 +171,13 @@ func setGroupCondorQuota(w http.ResponseWriter, r *http.Request) {
 	quota := q.Get("quota")
 	until := q.Get("validuntil")
 
+	authorized,authout := authorize(r,AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"error\": \"" + authout + "not authorized.\" }")
+		return
+	}
+
 	if group == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("No groupname specified in http query.")
@@ -320,16 +327,97 @@ func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 }
 
 func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
+
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query()
-//	groupname := q.Get("groupname")
-//	resource := q.Get("resourcename")
-////should be an int
-//	groupquota := q.Get("quota")
-//	unitname := q.Get("unit")
-//	expire := q.Get("valid_until")
-	NotDoneYet(w)
+
+	authorized,authout := authorize(r,AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"error\": \"" + authout + "not authorized.\" }")
+		return
+	}
+
+	q := r.URL.Query()
+	gName := q.Get("groupname")
+	rName := q.Get("resourcename")
+	groupquota := q.Get("quota")
+	unitName := q.Get("unitname")
+	validtime := q.Get("valid_until")
+	unit := q.Get("unit")
+
+	if gName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No group name specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No group name specified.\" }")
+		return
+	}
+	if rName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No storage resource specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No storage resource specified.\" }")
+		return
+	}
+	if unitName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No experiment specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No experiment name specified.\" }")
+		return
+	}	
+	if groupquota == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No quota value specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No quota specified.\" }")
+		return
+	}
+	if validtime == "" {
+		log.Print("No expire time given; assuming it is indefinite.")
+	} else {
+		validtime = "valid_until = " + validtime + ", "
+	}
+	if unit == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No quita unit specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No unit specified.\" }")
+		return
+	}
+	cKey, err := DBtx.Start(DBptr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+
+	_, err = DBtx.Exec(fmt.Sprintf(`do $$
+							declare vSid int;
+							declare vGid int;
+                                                        declare vUnitid int; 
+							begin
+								select storageid into vSid from storage_resources where name = '%s';
+								select gid into vGid from groups where name = '%s';
+								select unitid into vUnitid from affiliation_units where name = '%s';
+
+								if vSid is null then raise 'Resource does not exist.'; end if;
+								if vGid is null then raise 'Group does not exist.'; end if;
+								if vUnitid is null then raise 'Unit does not exist.'; end if;
+										
+								update storage_quota set value = '%s', unit = '%s', %s last_updated = NOW()
+								where storageid = vSid and groupid = vGid and unitid = vUnitid;
+							end $$;`, rName, gName, unitName, groupquota, unit, validtime))
+	if err == nil {
+		fmt.Fprintf(w,"{ \"status\": \"success\" }")
+	} else {
+		if strings.Contains(err.Error(), `Group does not exist.`) {
+			fmt.Fprintf(w,"{ \"error\": \"Group does not exist.\" }")
+		} else if strings.Contains(err.Error(), `Resource does not exist.`) {
+			fmt.Fprintf(w,"{ \"error\": \"Resource does not exist.\" }")
+		} else {
+			log.Print(err.Error())
+			fmt.Fprintf(w,"{ \"error\": \"Something went wrong.\" }")
+		}
+	}
+
+	DBtx.Commit(cKey)
 }
+
 func setUserAccessToResource(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 //	q := r.URL.Query()
@@ -340,6 +428,7 @@ func setUserAccessToResource(w http.ResponseWriter, r *http.Request) {
 //	homepath := q.Get("home_path")
 	NotDoneYet(w)
 }
+
 func removeUserAccessFromResource(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 //	q := r.URL.Query()
