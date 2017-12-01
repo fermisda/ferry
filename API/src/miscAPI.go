@@ -108,9 +108,97 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 }
 func getGroupFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query()
-//	collabunit := q.Get("unitname")
-	NotDoneYet(w)
+	q := r.URL.Query()
+	
+	unit := q.Get("unitname")
+	comp := q.Get("resourcename")
+	
+	if unit == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No unitname specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No unitname specified.\" }")
+		return
+	}
+	if comp == "" {
+		comp = "%"
+	}
+
+	rows, err := DBptr.Query(`select gname, groupid, uname, unit_exists, comp_exists from (
+								select 1 as key, g.name as gname, ca.groupid, u.uname
+								from compute_access as ca
+								left join groups as g on ca.groupid = g.groupid
+								left join users as u on ca.uid = u.uid
+								left join compute_resources as cr on ca.compid = cr.compid
+								left join affiliation_units as au on cr.unitid = au.unitid
+								where au.name = $1 and cr.name like $2 order by ca.groupid
+							) as t
+								right join (select 1 as key,
+								$1 in (select name from affiliation_units) as unit_exists,
+								$2 in (select name from compute_resources) as comp_exists
+							) as c on t.key = c.key;`, unit, comp)
+
+	if err != nil {
+		defer log.Fatal(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	var unitExists bool
+	var compExists bool
+
+	type jsonentry struct {
+		Gname string `json:"groupname"`
+		Gid string `json:"gid"`
+		Unames []string `json:"unames"`
+	}
+	var Entry jsonentry
+	var Out []jsonentry
+
+	prevGname := ""
+	for rows.Next() {
+		var tmpGname, tmpGid, tmpUname sql.NullString
+		rows.Scan(&tmpGname, &tmpGid, &tmpUname, &unitExists, &compExists)
+
+		if tmpGname.Valid {
+			if prevGname == "" {
+				Entry.Gname = tmpGname.String
+				Entry.Gid = tmpGid.String
+				Entry.Unames = append(Entry.Unames, tmpUname.String)
+			} else if prevGname != tmpGname.String {
+				Out = append(Out, Entry)
+				Entry.Gname = tmpGname.String
+				Entry.Gid = tmpGid.String
+				Entry.Unames = nil
+				Entry.Unames = append(Entry.Unames, tmpUname.String)
+			} else {
+				Entry.Unames = append(Entry.Unames, tmpUname.String)
+			}
+			prevGname = tmpGname.String
+		}
+	}
+
+	var out interface{}
+	if prevGname == "" {
+		w.WriteHeader(http.StatusNotFound)
+		type jsonerror struct {Error string `json:"error"`}
+		var Err []jsonerror
+		if !unitExists {
+			Err = append(Err, jsonerror{"Affiliation unit does not exist."})
+		}
+		if !compExists && comp != "%" {
+			Err = append(Err, jsonerror{"Resource does not exist."})
+		}
+		out = Err
+	} else {
+		out = Out
+	}
+	output, err := json.Marshal(out)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Fprintf(w, string(output))
 }
 func getGridmapFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
