@@ -534,3 +534,160 @@ func getMappedGidFile(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
+func getStorageAuthzDBFile(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+
+	rows, err := DBptr.Query(`select u.uname, u.uid, g.gid from users as u
+							  right join user_group as ug on u.uid = ug.uid
+							  left join groups as g on ug.groupid = g.groupid
+							  order by u.uname;`)
+
+	if err != nil {
+		defer log.Fatal(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	type jsonentry struct {
+		Decision string `json:"decision"`
+		User string `json:"username"`
+		Privileges string `json:"privileges"`
+		Uid string `json:"uid"`
+		Gid []string `json:"gid"`
+		Home string `json:"home"`
+		Root string `json:"root"`
+		LastPath string `json:"last_path"`
+	}
+	var Entry jsonentry
+	var Out []jsonentry
+
+	prevUser := ""
+	for rows.Next() {
+		var tmpUser, tmpUid, tmpGid sql.NullString
+		rows.Scan(&tmpUser, &tmpUid, &tmpGid)
+
+		if tmpUser.Valid {
+			if prevUser == "" {
+				Entry.Decision = "authorize"
+				Entry.User = tmpUser.String
+				Entry.Privileges = "read-write"
+				Entry.Uid = tmpUid.String
+				Entry.Gid = append(Entry.Gid, tmpGid.String)
+				Entry.Home = "/"
+				Entry.Root = "pnfs/fnal.gov/usr"
+				Entry.LastPath = "/"
+			} else if prevUser != tmpUser.String {
+				Out = append(Out, Entry)
+				Entry.Decision = "authorize"
+				Entry.User = tmpUser.String
+				Entry.Privileges = "read-write"
+				Entry.Uid = tmpUid.String
+				Entry.Gid = nil
+				Entry.Gid = append(Entry.Gid, tmpGid.String)
+				Entry.Home = "/"
+				Entry.Root = "pnfs/fnal.gov/usr"
+				Entry.LastPath = "/"
+			} else {
+				Entry.Gid = append(Entry.Gid, tmpGid.String)
+			}
+			prevUser = tmpUser.String
+		}
+	}
+	Out = append(Out, Entry)
+
+	var output interface{}
+	if len(Out) == 0 {
+		w.WriteHeader(http.StatusNotFound)
+		type jsonerror struct {Error string `json:"error"`}
+		var Err jsonerror
+		Err = jsonerror{"Something went wrong."}
+		output = Err
+	} else {
+		output = Out
+	}
+	jsonout, err := json.Marshal(output)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Fprintf(w, string(jsonout))
+}
+func getAffiliationMembersRoles(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	
+	unit := q.Get("experimentname")
+	role := q.Get("rolename")
+
+	if unit == "" {
+		unit = "%"
+	}
+	if role == "" {
+		role = "%"
+	}
+
+	rows, err := DBptr.Query(`select t.name, t.fqan, t.uname, t.full_name, unit_exists, fqan_exists from (
+								select 1 as key, au.name, gf.fqan, u.uname, u.full_name
+								from grid_access as ga
+								left join grid_fqan as gf on ga.fqanid = gf.fqanid
+								left join users as u on ga.uid = u.uid
+								left join affiliation_units as au on ga.unitid = au.unitid
+								where au.name like $1 and gf.fqan like $2
+							) as t right join (
+								select 1 as key,
+								$1 in (select name from affiliation_units) as unit_exists,
+								$2 in (select fqan from grid_fqan) as fqan_exists
+							) as c on t.key = c.key;`, unit, role)
+
+	if err != nil {
+		defer log.Fatal(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	var unitExists bool
+	var roleExists bool
+
+	type jsonentry struct {
+		Fqan string `json:"fqan"`
+		User string `json:"username"`
+		Name string `json:"commonname"`
+	}
+	Out := make(map[string][]jsonentry)
+
+	for rows.Next() {
+		var tmpUnit, tmpFqan, tmpUser, tmpName sql.NullString
+		rows.Scan(&tmpUnit, &tmpFqan, &tmpUser, &tmpName, &unitExists, &roleExists)
+
+		if tmpFqan.Valid {
+			Out[tmpUnit.String] = append(Out[tmpUnit.String], jsonentry{tmpFqan.String, tmpUser.String, tmpName.String})
+		}
+	}
+
+	var output interface{}
+	if len(Out) == 0 {
+		w.WriteHeader(http.StatusNotFound)
+		type jsonerror struct {Error string `json:"error"`}
+		var Err []jsonerror
+		if !unitExists {
+			Err = append(Err, jsonerror{"Experiment does not exist."})
+		}
+		if !roleExists {
+			Err = append(Err, jsonerror{"Role does not exist."})
+		}
+		if len(Err) == 0 {
+			Err = append(Err, jsonerror{"No roles were found"})
+		}
+		output = Err
+	} else {
+		output = Out
+	}
+	jsonout, err := json.Marshal(output)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Fprintf(w, string(jsonout))
+}

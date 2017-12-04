@@ -784,4 +784,69 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 
 	DBtx.Commit(cKey)
 }
+func getUserExternalAffiliationAttributes(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	
+	user := q.Get("username")
+	
+	if user == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No username specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No username specified.\" }")
+		return
+	}
 
+	rows, err := DBptr.Query(`select attribute, value, user_exists from
+							 (select 1 as key, a.attribute, a.value, u.uname from external_affiliation_attribute as a 
+							  left join users as u on a.uid = u.uid where uname = $1) as t right join
+							 (select 1 as key, $1 in (select uname from users) as user_exists) as c on t.key = c.key;`, user)
+
+	if err != nil {
+		defer log.Fatal(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	var userExists bool
+
+	type jsonentry struct {
+		Attribute string `json:"attribute"`
+		Value string `json:"value"`
+	}
+	var Entry jsonentry
+	var Out []jsonentry
+
+	for rows.Next() {
+		var tmpAttribute, tmpValue sql.NullString
+		rows.Scan(&tmpAttribute, &tmpValue, &userExists)
+
+		if tmpAttribute.Valid {
+			Entry.Attribute = tmpAttribute.String
+			Entry.Value = tmpValue.String
+			Out = append(Out, Entry)
+		}
+	}
+
+	var output interface{}
+	if len(Out) == 0 {
+		w.WriteHeader(http.StatusNotFound)
+		type jsonerror struct {Error string `json:"error"`}
+		var Err []jsonerror
+		if !userExists {
+			Err = append(Err, jsonerror{"User does not exist."})
+		} else {
+			Err = append(Err, jsonerror{"User does not have external affiliation attributes"})
+		}
+		output = Err
+	} else {
+		output = Out
+	}
+	jsonout, err := json.Marshal(output)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Fprintf(w, string(jsonout))
+}
