@@ -1,14 +1,15 @@
 package main
+
 import (
 	"database/sql"
+	"encoding/json"
+	"fmt"
+	_ "github.com/lib/pq"
+	"log"
+	"net/http"
 	"strconv"
 	"strings"
-"time"
-"fmt"
-"log"
- _ "github.com/lib/pq"
-"net/http"
-"encoding/json"
+	"time"
 )
 
 func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
@@ -19,35 +20,35 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 	if uname == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("No username specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No username specified.\" }")
+		fmt.Fprintf(w, "{ \"error\": \"No username specified.\" }")
 		return
 	}
 	if expt == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("No experiment name specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No experimentname specified.\" }")
+		fmt.Fprintf(w, "{ \"error\": \"No experimentname specified.\" }")
 		return
 	}
 
-	authorized,authout := authorize(r,AuthorizedDNs)
+	authorized, authout := authorize(r, AuthorizedDNs)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"error\": \"" + authout + "not authorized.\" }")
+		fmt.Fprintf(w, "{ \"error\": \""+authout+"not authorized.\" }")
 		return
 	}
-	
+
 	rows, err := DBptr.Query(`select t3.name, t1.dn, t1.issuer_ca, c.user_exists, c.unit_exists
 							  from (select 1 as key, uid, dn, unitid, issuer_ca from user_certificate) as t1
 							  join (select uid from users where uname = $1) as t2 on t1.uid = t2.uid
 							  join (select unitid, name from affiliation_units where name = $2) as t3 on t1.unitid = t3.unitid
 							  right join (select 1 as key,
 							       $1 in (select uname from users) as user_exists, 
-							       $2 in (select name from affiliation_units) as unit_exists) as c on c.key = t1.key`,uname,expt)
+							       $2 in (select name from affiliation_units) as unit_exists) as c on c.key = t1.key`, uname, expt)
 	if err != nil {
 		defer log.Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
-//		http.Error(w,"Error in DB query",404)
+		fmt.Fprintf(w, "{ \"error\": \"Error in DB query.\" }")
+		//		http.Error(w,"Error in DB query",404)
 		return
 	}
 
@@ -58,19 +59,19 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 
 	type jsonout struct {
 		UnitName string `json:"unit_name"`
-		DN string `json:"dn"`
-		Issuer string `json:"issuer_ca"`
+		DN       string `json:"dn"`
+		Issuer   string `json:"issuer_ca"`
 	}
 	var Out jsonout
-	
+
 	output := "[ "
-	
+
 	for rows.Next() {
 		if idx != 0 {
 			output += ","
 		}
 		var tmpUnitName, tmpDN, tmpIssuer sql.NullString
-		rows.Scan(&tmpUnitName,&tmpDN,&tmpIssuer,&userExists,&exptExists)
+		rows.Scan(&tmpUnitName, &tmpDN, &tmpIssuer, &userExists, &exptExists)
 		if tmpDN.Valid {
 			Out.UnitName, Out.DN, Out.Issuer = tmpUnitName.String, tmpDN.String, tmpIssuer.String
 			outline, jsonerr := json.Marshal(Out)
@@ -78,7 +79,7 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 				log.Fatal(jsonerr)
 			}
 			output += string(outline)
-			idx ++
+			idx++
 		}
 	}
 	if idx == 0 {
@@ -94,7 +95,7 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	output += " ]"
-	fmt.Fprintf(w,output)
+	fmt.Fprintf(w, output)
 }
 
 func getUserFQANs(w http.ResponseWriter, r *http.Request) {
@@ -105,22 +106,22 @@ func getUserFQANs(w http.ResponseWriter, r *http.Request) {
 	if uname == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("No username specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No username specified.\" }")
+		fmt.Fprintf(w, "{ \"error\": \"No username specified.\" }")
 		return
 	}
 	if expt == "" {
 		expt = "%"
 	}
-	
+
 	rows, err := DBptr.Query(`select T2.name, T1.fqan, c.user_exists, c.unit_exists
 				  from       (select 1 as key, fq.fqan, gf.groupid from grid_fqan as fq left join groups as gf on fq.mapped_group=gf.name where mapped_user=$1) as T1 
 				  join       (select au.name, ag.groupid from affiliation_units as au left join affiliation_unit_group as ag on au.unitid=ag.unitid where name like $2) as T2 on T1.groupid=T2.groupid
-				  right join (select 1 as key, $1 in (select uname from users) as user_exists, $2 in (select name from affiliation_units) as unit_exists) as c on c.key = t1.key order by T2.name;`,uname,expt)
+				  right join (select 1 as key, $1 in (select uname from users) as user_exists, $2 in (select name from affiliation_units) as unit_exists) as c on c.key = t1.key order by T2.name;`, uname, expt)
 	if err != nil {
 		defer log.Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
-//		http.Error(w,"Error in DB query",404)
+		fmt.Fprintf(w, "{ \"error\": \"Error in DB query.\" }")
+		//		http.Error(w,"Error in DB query",404)
 		return
 	}
 	defer rows.Close()
@@ -129,10 +130,10 @@ func getUserFQANs(w http.ResponseWriter, r *http.Request) {
 
 	type jsonout struct {
 		UnitName string `json:"unit_name"`
-		Fqan string `json:"fqan"`
+		Fqan     string `json:"fqan"`
 	}
 	var Out jsonout
-	
+
 	idx := 0
 	output := "[ "
 	for rows.Next() {
@@ -146,9 +147,9 @@ func getUserFQANs(w http.ResponseWriter, r *http.Request) {
 			outline, jsonerr := json.Marshal(Out)
 			if jsonerr != nil {
 				log.Fatal(jsonerr)
-				}
+			}
 			output += string(outline)
-			idx ++
+			idx++
 		}
 	}
 	if idx == 0 {
@@ -164,7 +165,7 @@ func getUserFQANs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	output += " ]"
-	fmt.Fprintf(w,output)
+	fmt.Fprintf(w, output)
 }
 
 func getSuperUserList(w http.ResponseWriter, r *http.Request) {
@@ -174,19 +175,19 @@ func getSuperUserList(w http.ResponseWriter, r *http.Request) {
 	if expt == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("No experimentname specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No username specified.\" }")
+		fmt.Fprintf(w, "{ \"error\": \"No username specified.\" }")
 		return
 	}
-	
+
 	rows, err := DBptr.Query(`select t1.uname, c.unit_exists from 
 		                     (select distinct 1 as key, us.uname from users as us right join grid_access as ga on us.uid=ga.uid
 							  left join affiliation_units as au on ga.unitid = au.unitid where ga.is_superuser=true and au.name=$1) as t1
-							  right join (select 1 as key, $1 in (select name from affiliation_units) as unit_exists) as c on c.key = t1.key`,expt)
+							  right join (select 1 as key, $1 in (select name from affiliation_units) as unit_exists) as c on c.key = t1.key`, expt)
 	if err != nil {
 		defer log.Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
-//		http.Error(w,"Error in DB query",404)
+		fmt.Fprintf(w, "{ \"error\": \"Error in DB query.\" }")
+		//		http.Error(w,"Error in DB query",404)
 		return
 	}
 	defer rows.Close()
@@ -197,7 +198,7 @@ func getSuperUserList(w http.ResponseWriter, r *http.Request) {
 		Uname string `json:"uname"`
 	}
 	var Out jsonout
-	
+
 	idx := 0
 	output := "[ "
 	for rows.Next() {
@@ -214,7 +215,7 @@ func getSuperUserList(w http.ResponseWriter, r *http.Request) {
 				log.Fatal(jsonerr)
 			}
 			output += string(outline)
-			idx ++
+			idx++
 		}
 	}
 	if idx == 0 {
@@ -227,7 +228,69 @@ func getSuperUserList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	output += " ]"
-	fmt.Fprintf(w,output)
+	fmt.Fprintf(w, output)
+}
+
+func setSuperUser(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+
+	//call authorize function
+	authorized, authout := authorize(r, AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w, "{ \"error\": \""+authout+"not authorized.\" }")
+		return
+	}
+
+	q := r.URL.Query()
+	uName := q.Get("username")
+	unitName := q.Get("unitname")
+	if uName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No user name specified in http query.")
+		fmt.Fprintf(w, "{ \"error\": \"No username specified.\" }")
+		return
+	}
+	if unitName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No unit name specified in http query.")
+		fmt.Fprintf(w, "{ \"error\": \"No unitname specified.\" }")
+		return
+	}
+
+	cKey, err := DBtx.Start(DBptr)
+	if err != nil {
+		log.Println(err)
+		w.WriteHeader(http.StatusServiceUnavailable)
+		fmt.Fprintf(w, "{ \"error\": \"Unable to start database transaction.\" }")
+		return
+	}
+	_, err = DBtx.Exec(fmt.Sprintf(`do $$
+										declare Userid int;
+										declare Unitid int;
+									begin
+										select u.uid into Userid from users as u where uname = '%s';
+										select au.unitid into Unitid from affiliation_units as au where name = '%s';
+										if Userid is null then raise 'User does not exist'; end if;
+										if Unitid is null then raise 'Unit does not exist'; end if;
+										update grid_access set is_superuser=true, last_updated =  NOW())
+                                                                                where uid=Userid and unitid=Unitid;
+									end $$;`, uName, unitName))
+	if err == nil {
+		fmt.Fprintf(w, "{ \"status\": \"success\" }")
+	} else {
+		w.WriteHeader(http.StatusInternalServerError)
+		if strings.Contains(err.Error(), `User does not exist`) {
+			fmt.Fprintf(w, "{ \"error\": \"Uner does not exist.\" }")
+		} else if strings.Contains(err.Error(), `Unit does not exist`) {
+			fmt.Fprintf(w, "{ \"error\": \"Unit does not exist.\" }")
+		} else {
+			log.Print(err.Error())
+			fmt.Fprintf(w, "{ \"error\": \"Something went wrong.\" }")
+		}
+	}
+
+	DBtx.Commit(cKey)
 }
 
 func getUserGroups(w http.ResponseWriter, r *http.Request) {
@@ -237,50 +300,50 @@ func getUserGroups(w http.ResponseWriter, r *http.Request) {
 	if uname == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("No username specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No username specified.\" }")
+		fmt.Fprintf(w, "{ \"error\": \"No username specified.\" }")
 		return
 	}
 	pingerr := DBptr.Ping()
 	if pingerr != nil {
 		log.Fatal(pingerr)
 	}
-	rows, err := DBptr.Query(`select groups.gid, groups.name from groups INNER JOIN user_group on (groups.groupid = user_group.groupid) INNER JOIN users on (user_group.uid = users.uid) where users.uname=$1`,uname)
+	rows, err := DBptr.Query(`select groups.gid, groups.name from groups INNER JOIN user_group on (groups.groupid = user_group.groupid) INNER JOIN users on (user_group.uid = users.uid) where users.uname=$1`, uname)
 	if err != nil {
 		log.Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"Error in DB query\n")	
-	} else {	
+		fmt.Fprintf(w, "Error in DB query\n")
+	} else {
 		defer rows.Close()
-	
+
 		idx := 0
 
 		type jsonout struct {
-			Gid int `json:"gid"`
+			Gid       int    `json:"gid"`
 			Groupname string `json:"groupname"`
 		}
 
 		var Out jsonout
-		
+
 		for rows.Next() {
 			if idx == 0 {
-				fmt.Fprintf(w,"[ ")
+				fmt.Fprintf(w, "[ ")
 			} else {
-				fmt.Fprintf(w,",")
+				fmt.Fprintf(w, ",")
 			}
-			rows.Scan(&Out.Gid,&Out.Groupname)
+			rows.Scan(&Out.Gid, &Out.Groupname)
 			outline, jsonerr := json.Marshal(Out)
 			if jsonerr != nil {
 				log.Fatal(jsonerr)
-				}
-			fmt.Fprintf(w,string(outline))
-			idx += 1
 			}
+			fmt.Fprintf(w, string(outline))
+			idx += 1
+		}
 		if idx == 0 {
 			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprintf(w, `{ "error": "User does not exist." }`)		
+			fmt.Fprintf(w, `{ "error": "User does not exist." }`)
 		} else {
-			fmt.Fprintf(w," ]")
-		}		
+			fmt.Fprintf(w, " ]")
+		}
 	}
 }
 
@@ -291,51 +354,51 @@ func getUserInfo(w http.ResponseWriter, r *http.Request) {
 	if uname == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("No username specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No username specified.\" }")
+		fmt.Fprintf(w, "{ \"error\": \"No username specified.\" }")
 		return
 	}
 	pingerr := DBptr.Ping()
 	if pingerr != nil {
 		log.Fatal(pingerr)
 	}
-	rows, err := DBptr.Query(`select full_name, uid, status, expiration_date from users where uname=$1`,uname)
+	rows, err := DBptr.Query(`select full_name, uid, status, expiration_date from users where uname=$1`, uname)
 	if err != nil {
 		log.Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"Error in DB query\n")	
+		fmt.Fprintf(w, "Error in DB query\n")
 	} else {
 		defer rows.Close()
-	
+
 		idx := 0
 
 		type jsonout struct {
-			FullName string `json:"full_name"`
-			Uid int `json:"uid"`
-			Status bool `json:"status"`
-			ExpDate time.Time `json:"expiration_date"`
+			FullName string    `json:"full_name"`
+			Uid      int       `json:"uid"`
+			Status   bool      `json:"status"`
+			ExpDate  time.Time `json:"expiration_date"`
 		}
 
 		var Out jsonout
-		
+
 		for rows.Next() {
 			if idx == 0 {
-				fmt.Fprintf(w,"[ ")
+				fmt.Fprintf(w, "[ ")
 			} else {
-				fmt.Fprintf(w,",")
+				fmt.Fprintf(w, ",")
 			}
-			rows.Scan(&Out.FullName,&Out.Uid,&Out.Status,&Out.ExpDate)
+			rows.Scan(&Out.FullName, &Out.Uid, &Out.Status, &Out.ExpDate)
 			outline, jsonerr := json.Marshal(Out)
 			if jsonerr != nil {
 				log.Fatal(jsonerr)
-				}
-			fmt.Fprintf(w,string(outline))
-			idx += 1
 			}
+			fmt.Fprintf(w, string(outline))
+			idx += 1
+		}
 		if idx == 0 {
 			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprintf(w, `{ "error": "User does not exist." }`)		
+			fmt.Fprintf(w, `{ "error": "User does not exist." }`)
 		} else {
-			fmt.Fprintf(w," ]")
+			fmt.Fprintf(w, " ]")
 		}
 	}
 }
@@ -351,13 +414,13 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 	if uName == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("No username specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No username specified.\" }")
+		fmt.Fprintf(w, "{ \"error\": \"No username specified.\" }")
 		return
 	}
 	if gName == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("No groupname specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No groupname specified.\" }")
+		fmt.Fprintf(w, "{ \"error\": \"No groupname specified.\" }")
 		return
 	}
 	if isLeader == "" {
@@ -367,7 +430,7 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			log.Print("Invalid is_leader specified in http query.")
-			fmt.Fprintf(w,"{ \"error\": \"Invalid is_leader specified.\" }")
+			fmt.Fprintf(w, "{ \"error\": \"Invalid is_leader specified.\" }")
 			return
 		}
 	}
@@ -389,17 +452,17 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 									end $$;`, uName, gName, isLeader))
 
 	if err == nil {
-		fmt.Fprintf(w,"{ \"status\": \"success\" }")
+		fmt.Fprintf(w, "{ \"status\": \"success\" }")
 	} else {
 		if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
-			fmt.Fprintf(w,"{ \"error\": \"User already belongs to this group.\" }")
+			fmt.Fprintf(w, "{ \"error\": \"User already belongs to this group.\" }")
 		} else if strings.Contains(err.Error(), `null value in column "uid" violates not-null constraint`) {
-			fmt.Fprintf(w,"{ \"error\": \"User does not exist.\" }")
+			fmt.Fprintf(w, "{ \"error\": \"User does not exist.\" }")
 		} else if strings.Contains(err.Error(), `null value in column "groupid" violates not-null constraint`) {
-			fmt.Fprintf(w,"{ \"error\": \"Group does not exist.\" }")
+			fmt.Fprintf(w, "{ \"error\": \"Group does not exist.\" }")
 		} else {
 			log.Print(err.Error())
-			fmt.Fprintf(w,"{ \"error\": \"Something went wrong.\" }")
+			fmt.Fprintf(w, "{ \"error\": \"Something went wrong.\" }")
 		}
 	}
 
@@ -411,25 +474,25 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
 	uName := q.Get("username")
-	fqan  := q.Get("fqan")
+	fqan := q.Get("fqan")
 	eName := q.Get("experimentname")
 
 	if uName == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("No username specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No username specified.\" }")
+		fmt.Fprintf(w, "{ \"error\": \"No username specified.\" }")
 		return
 	}
 	if fqan == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("No fqan specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No fqan specified.\" }")
+		fmt.Fprintf(w, "{ \"error\": \"No fqan specified.\" }")
 		return
 	}
 	if eName == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("No experimentname specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No experimentname specified.\" }")
+		fmt.Fprintf(w, "{ \"error\": \"No experimentname specified.\" }")
 		return
 	}
 
@@ -451,19 +514,19 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 														 values (vUnitid, vUid, vFqanid, false, false, NOW());
 									end $$;`, eName, uName, fqan))
 	if err == nil {
-		fmt.Fprintf(w,"{ \"status\": \"success\" }")
+		fmt.Fprintf(w, "{ \"status\": \"success\" }")
 	} else {
 		if strings.Contains(err.Error(), `null value in column "uid" violates not-null constraint`) {
-			fmt.Fprintf(w,"{ \"error\": \"User does not exist.\" }")
+			fmt.Fprintf(w, "{ \"error\": \"User does not exist.\" }")
 		} else if strings.Contains(err.Error(), `null value in column "fqanid" violates not-null constraint`) {
-			fmt.Fprintf(w,"{ \"error\": \"FQAN does not exist.\" }")
+			fmt.Fprintf(w, "{ \"error\": \"FQAN does not exist.\" }")
 		} else if strings.Contains(err.Error(), `null value in column "unitid" violates not-null constraint`) {
-			fmt.Fprintf(w,"{ \"error\": \"Experiment does not exist.\" }")
+			fmt.Fprintf(w, "{ \"error\": \"Experiment does not exist.\" }")
 		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint "idx_grid_access"`) {
-			fmt.Fprintf(w,"{ \"error\": \"This association already exists.\" }")
+			fmt.Fprintf(w, "{ \"error\": \"This association already exists.\" }")
 		} else {
 			log.Print(err.Error())
-			fmt.Fprintf(w,"{ \"error\": \"Something went wrong.\" }")
+			fmt.Fprintf(w, "{ \"error\": \"Something went wrong.\" }")
 		}
 	}
 
@@ -477,30 +540,30 @@ func setUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
 	rName := q.Get("resourcename")
 	uName := q.Get("username")
 	shell := q.Get("shell")
-	hDir  := q.Get("homedir")
+	hDir := q.Get("homedir")
 
 	if rName == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("No resourcename specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No resourcename specified.\" }")
+		fmt.Fprintf(w, "{ \"error\": \"No resourcename specified.\" }")
 		return
 	}
 	if uName == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("No username specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No username specified.\" }")
+		fmt.Fprintf(w, "{ \"error\": \"No username specified.\" }")
 		return
 	}
 	if shell == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("No shell specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No shell specified.\" }")
+		fmt.Fprintf(w, "{ \"error\": \"No shell specified.\" }")
 		return
 	}
 	if hDir == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("No homedir specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No homedir specified.\" }")
+		fmt.Fprintf(w, "{ \"error\": \"No homedir specified.\" }")
 		return
 	}
 
@@ -523,15 +586,15 @@ func setUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
 										where compid = vCompid and uid = vUid;
 									end $$;`, rName, uName, shell, hDir))
 	if err == nil {
-		fmt.Fprintf(w,"{ \"status\": \"success\" }")
+		fmt.Fprintf(w, "{ \"status\": \"success\" }")
 	} else {
 		if strings.Contains(err.Error(), `User does not exist.`) {
-			fmt.Fprintf(w,"{ \"error\": \"User does not exist.\" }")
+			fmt.Fprintf(w, "{ \"error\": \"User does not exist.\" }")
 		} else if strings.Contains(err.Error(), `Resource does not exist.`) {
-			fmt.Fprintf(w,"{ \"error\": \"Resource does not exist.\" }")
+			fmt.Fprintf(w, "{ \"error\": \"Resource does not exist.\" }")
 		} else {
 			log.Print(err.Error())
-			fmt.Fprintf(w,"{ \"error\": \"Something went wrong.\" }")
+			fmt.Fprintf(w, "{ \"error\": \"Something went wrong.\" }")
 		}
 	}
 
@@ -546,16 +609,16 @@ func getUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
 	if comp == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("No resourcename specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No resourcename specified.\" }")
+		fmt.Fprintf(w, "{ \"error\": \"No resourcename specified.\" }")
 		return
 	}
 	if user == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("No username specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No username specified.\" }")
+		fmt.Fprintf(w, "{ \"error\": \"No username specified.\" }")
 		return
 	}
-	
+
 	rows, err := DBptr.Query(`select t1.shell, t1.home_dir, c.resource_exists, c.user_exists from
 							 (select 1 as key, ca.shell, ca.home_dir from compute_access as ca
 							  left join compute_resources as cr on ca.compid = cr.compid
@@ -567,8 +630,8 @@ func getUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		defer log.Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
-//		http.Error(w,"Error in DB query",404)
+		fmt.Fprintf(w, "{ \"error\": \"Error in DB query.\" }")
+		//		http.Error(w,"Error in DB query",404)
 		return
 	}
 	defer rows.Close()
@@ -577,11 +640,11 @@ func getUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
 	var userExists bool
 
 	type jsonout struct {
-		Shell string `json:"shell"`
+		Shell   string `json:"shell"`
 		HomeDir string `json:"homedir"`
 	}
 	var Out jsonout
-	
+
 	idx := 0
 	output := "[ "
 	for rows.Next() {
@@ -599,7 +662,7 @@ func getUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
 				log.Fatal(jsonerr)
 			}
 			output += string(outline)
-			idx ++
+			idx++
 		}
 	}
 	if idx == 0 {
@@ -615,7 +678,7 @@ func getUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
 	}
 
 	output += " ]"
-	fmt.Fprintf(w,output)
+	fmt.Fprintf(w, output)
 }
 func getUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 
@@ -624,43 +687,43 @@ func getUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	rName := q.Get("resourcename")
 	uName := q.Get("username")
 	unitName := q.Get("unitname")
-	
+
 	if rName == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("No resource name specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No resourcename specified.\" }")
-		return	
-		
+		fmt.Fprintf(w, "{ \"error\": \"No resourcename specified.\" }")
+		return
+
 	}
 	if uName == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("No user name specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No username specified.\" }")
-		return	
+		fmt.Fprintf(w, "{ \"error\": \"No username specified.\" }")
+		return
 	}
 	if unitName == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("No unit name specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No unitname specified.\" }")
-		return	
+		fmt.Fprintf(w, "{ \"error\": \"No unitname specified.\" }")
+		return
 	}
 
 	rows, err := DBptr.Query(`select sq.path,sq.value, sq.unit, sq.valid_until from storage_quota sq INNER JOIN affiliation_units on affiliation_units.unitid = sq.unitid INNER JOIN storage_resources on storage_resources.storageid = sq.storageid INNER JOIN users on users.uid = sq.uid where affiliation_units.name=$1 AND storage_resources.type=$2 and users.uname=$3`, unitName, rName, uName)
-	if err != nil {	
+	if err != nil {
 		defer log.Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
-		
+		fmt.Fprintf(w, "{ \"error\": \"Error in DB query.\" }")
+
 		return
 	}
-	
-	defer rows.Close()	
+
+	defer rows.Close()
 	idx := 0
 	output := ""
 	type jsonout struct {
-		Path string `json:"path"`
-		Value string `json:"value"`
-		Unit string `json:"unit"`
+		Path       string `json:"path"`
+		Value      string `json:"value"`
+		Unit       string `json:"unit"`
 		ValidUntil string `json:"valid_until"`
 	}
 	var Out jsonout
@@ -668,8 +731,8 @@ func getUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 		if idx != 0 {
 			output += ","
 		}
-		var tmpPath,tmpValue,tmpUnit,tmpValid sql.NullString
-		rows.Scan(&tmpPath,&tmpValue,&tmpUnit,&tmpValid)
+		var tmpPath, tmpValue, tmpUnit, tmpValid sql.NullString
+		rows.Scan(&tmpPath, &tmpValue, &tmpUnit, &tmpValid)
 		if tmpValue.Valid {
 			Out.Path, Out.Value, Out.Unit, Out.ValidUntil = tmpPath.String, tmpValue.String, tmpUnit.String, tmpValid.String
 			outline, jsonerr := json.Marshal(Out)
@@ -677,15 +740,15 @@ func getUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 				log.Fatal(jsonerr)
 			}
 			output += string(outline)
-			idx ++
+			idx++
 		}
-		}
+	}
 	if idx == 0 {
 		w.WriteHeader(http.StatusNotFound)
 		output += `{"error": "User has no quotas registered."}`
 	}
-	fmt.Fprintf(w,output)	
-	
+	fmt.Fprintf(w, output)
+
 }
 
 func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
@@ -693,32 +756,32 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
 	//call authorize function
-	authorized,authout := authorize(r,AuthorizedDNs)
+	authorized, authout := authorize(r, AuthorizedDNs)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"error\": \"" + authout + "not authorized.\" }")
+		fmt.Fprintf(w, "{ \"error\": \""+authout+"not authorized.\" }")
 		return
 	}
-	
+
 	q := r.URL.Query()
-	quota    := q.Get("quota")
-	uName    := q.Get("username")
+	quota := q.Get("quota")
+	uName := q.Get("username")
 	unitName := q.Get("unitname")
-	unit     := q.Get("unit")
+	unit := q.Get("unit")
 	rName := strings.ToUpper(q.Get("resourcename"))
 	isgrp := strings.ToLower(q.Get("isGroup"))
 	validtime := q.Get("valid_until")
-	
+
 	var isGroup bool
 	if isgrp == "" || isgrp == "false" {
 		isGroup = false
-	}	else {
+	} else {
 		isGroup = true
 	}
 	if quota == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("No quota value specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No quota specified.\" }")
+		fmt.Fprintf(w, "{ \"error\": \"No quota specified.\" }")
 		return
 	}
 	if validtime != "" {
@@ -727,20 +790,20 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	if uName == "" && isGroup == false {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("No user name given and isGroup was set to false.")
-		fmt.Fprintf(w,"{ \"error\": \"No username provided.\" }")
-		return	
+		fmt.Fprintf(w, "{ \"error\": \"No username provided.\" }")
+		return
 	}
 	if rName == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("No resource type given.")
-		fmt.Fprintf(w,"{ \"error\": \"No resourcename provided.\" }")
-		return	
+		fmt.Fprintf(w, "{ \"error\": \"No resourcename provided.\" }")
+		return
 	}
 	if unitName == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("No affiliation unit given.")
-		fmt.Fprintf(w,"{ \"error\": \"No unitname provided.\" }")
-		return	
+		fmt.Fprintf(w, "{ \"error\": \"No unitname provided.\" }")
+		return
 	}
 	//set a default unit of "B" for bytes
 	if unit == "" {
@@ -751,7 +814,6 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 
 	_, err = DBtx.Exec(fmt.Sprintf(`do $$
 							declare vSid int;
@@ -770,18 +832,91 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 								where storageid = vSid and uid = vUid and unitid = vUnitid;
 							end $$;`, rName, uName, unitName, quota, unit, validtime))
 	if err == nil {
-		fmt.Fprintf(w,"{ \"status\": \"success\" }")
+		fmt.Fprintf(w, "{ \"status\": \"success\" }")
 	} else {
 		if strings.Contains(err.Error(), `User does not exist.`) {
-			fmt.Fprintf(w,"{ \"error\": \"User does not exist.\" }")
+			fmt.Fprintf(w, "{ \"error\": \"User does not exist.\" }")
 		} else if strings.Contains(err.Error(), `Resource does not exist.`) {
-			fmt.Fprintf(w,"{ \"error\": \"Resource does not exist.\" }")
+			fmt.Fprintf(w, "{ \"error\": \"Resource does not exist.\" }")
 		} else {
 			log.Print(err.Error())
-			fmt.Fprintf(w,"{ \"error\": \"Something went wrong.\" }")
+			fmt.Fprintf(w, "{ \"error\": \"Something went wrong.\" }")
 		}
 	}
 
 	DBtx.Commit(cKey)
 }
 
+func addCertDNtoUser(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+
+	authorized, authout := authorize(r, AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w, "{ \"error\": \""+authout+"not authorized.\" }")
+		return
+	}
+
+	q := r.URL.Query()
+	uName := q.Get("username")
+	unitName := q.Get("unitname")
+	subjDN := q.Get("dn")
+	issuer := q.Get("issuer_ca")
+	if uName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No username specified in http query.")
+		fmt.Fprintf(w, "{ \"error\": \"No username specified.\" }")
+		return
+	}
+	if unitName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No unit name specified in http query.")
+		fmt.Fprintf(w, "{ \"error\": \"No unitname specified.\" }")
+		return
+	}
+	if subjDN == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No DN specified in http query.")
+		fmt.Fprintf(w, "{ \"error\": \"No dn specified.\" }")
+		return
+	}
+	if issuer == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No issuer specified in http query.")
+		fmt.Fprintf(w, "{ \"error\": \"No issuer specified.\" }")
+		return
+	}
+	// check if it is already in the database
+
+	cKey, err := DBtx.Start(DBptr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	_, err = DBtx.Exec(fmt.Sprintf(`do $$ 	
+declare 
+u_uid int;
+au_unitid int;
+u_dn constant text := '%s';
+u_issuer constant text := '%s';
+if (u_dn, u_issuer) not in (select dn, issuer_ca from user_certificate as uc join users as u on uc.uid = u.uid join affiliation_units as au on uc.unitid = au.unitid where uc.username = '%s' and au.name='%s' and uc.dn=u_dn and issuer_ca=u_issuer) then 
+		insert into user_certificate (uid, dn, issuer_ca, last_updated, unitid) values(u_uid, u_dn, u_issuer, NOW(), au_initid);
+else 
+raise 'DN and issuer already exist for this user and affiliation unit'; end if;
+end $$;`, subjDN, issuer, uName, unitName))
+	if err == nil {
+		fmt.Fprintf(w, "{ \"status\": \"success\" }")
+	} else {
+		if strings.Contains(err.Error(), `DN and issuer already exist`) {
+
+			fmt.Fprintf(w, "{ \"status\": \"DN and issuer already exist.\" }")
+		} else {
+			log.Print(err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, "{ \"error\": \"Something went wrong.\" }")
+		}
+
+	}
+	
+	DBtx.Commit(cKey)
+}
