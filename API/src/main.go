@@ -62,6 +62,7 @@ func main () {
 	grouter.HandleFunc("/removeUserAccessFromResource", removeUserAccessFromResource)
 	grouter.HandleFunc("/getUserStorageQuota", 	    getUserStorageQuota)
 	grouter.HandleFunc("/setUserStorageQuota", 	    setUserStorageQuota)
+	grouter.HandleFunc("/getUserExternalAffiliationAttributes", 	    getUserExternalAffiliationAttributes)
 	
 	//group API calls
 	grouter.HandleFunc("/getgroupmembers", getGroupMembers)
@@ -94,6 +95,10 @@ func main () {
 	grouter.HandleFunc("/getGroupGID", 	  getGroupGID)       
 	grouter.HandleFunc("/getGroupName", 	  getGroupName)      
 	grouter.HandleFunc("/lookupCertificateDN",lookupCertificateDN)
+	grouter.HandleFunc("/getMappedGidFile", getMappedGidFile)
+	grouter.HandleFunc("/getStorageAuthzDBFile", getStorageAuthzDBFile)
+	grouter.HandleFunc("/getAffiliationMembersRoles", getAffiliationMembersRoles)
+
 	//collaboration unit API calls
 	grouter.HandleFunc("/createCollaborationUnit",             createCollaborationUnit)           
 	grouter.HandleFunc("/removeCollaborationUnit", 		   removeCollaborationUnit)           
