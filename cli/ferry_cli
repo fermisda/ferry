@@ -1,0 +1,164 @@
+#!/usr/bin/env python
+
+import argparse
+import sys
+import re
+
+class FERRYcli(object):
+
+    def __init__(self):
+        parser = argparse.ArgumentParser(epilog=self.CommandList())
+        parser.add_argument('command',help='Subcommand to run')
+        self.cline = parser.parse_args(sys.argv[1:2])
+
+        if not hasattr(self, self.cline.command):
+            print 'Unrecognized command'
+            parser.print_help()
+            exit(1)
+        # use dispatch pattern to invoke method with same name
+        getattr(self, self.cline.command)()
+
+    def CommandList(self):
+        def JustFuncs(MemberList):
+            pattern = re.compile(r'^_')
+            for s in MemberList:
+                if pattern.findall(s):
+                    return False
+                else:
+                    return True
+        # Revmoes all the _* stuff in the class
+        NoUnderscores =  filter(JustFuncs,dir(self))
+        # Add any variables to the list below so they do not get printed
+        OnlyFerry = [ f for f in NoUnderscores if f not in ["CommandList"]]
+        # return just the Ferry function calls for the epilog
+        return "Valid commands are: %s" % ','.join(OnlyFerry)
+
+    def addCertificateDNToUser(self):
+        parser = argparse.ArgumentParser(
+            usage="%(prog)s addUserDN [<args>]")
+        parser.add_argument('uname',help="Username to receive new DN")
+        parser.add_argument('dn',help="Certificate DN to add")
+        args = parser.parse_args(sys.argv[2:])
+        print "Adding DN\n%s\nto user %s" % (args.dn, args.uname)
+
+    def getUserCertificateDNs(self):
+        pass
+    def getUserFQANs(self):
+        pass
+    def getSuperUserList(self):
+        pass
+    def getUserGroups(self):
+        pass
+    def getUserInfo(self):
+        pass
+    def addUserToGroup(self):
+        parser = argparse.ArgumentParser(
+            usage="%(prog)s addUserToGroup [<args>]")
+        parser.add_argument('uname', help="Username to add")
+        args = parser.parse_args(sys.argv[2:])
+        print 'Adding user %s' % args.uname
+
+    def setUserExperimentFQAN(self):
+        pass
+    def setUserShellAndHomeDir(self):
+        pass
+    def getUserShellAndHomeDir(self):
+        pass
+    def setUserAccessToResource(self):
+        pass
+    def removeUserAccessFromResource(self):
+        pass
+    def getUserStorageQuota(self):
+        pass
+    def setUserStorageQuota(self):
+        pass
+    def getUserExternalAffiliationAttributes(self):
+        pass
+    def getgroupmembers(self):
+        pass
+    def createGroup(self):
+        pass
+    def deleteGroupt(self):
+        pass
+    def deleteGroup(self):
+        pass
+    def addGroupToUnit(self):
+        pass
+    def removeGroupFromUnit(self):
+        pass
+    def setPrimaryStatusGroup(self):
+        pass
+    def removePrimaryStatusfromGroup(self):
+        pass
+    def getGroupMembers(self):
+        pass
+    def IsUserLeaderOf(self):
+        pass
+    def setGroupLeader(self):
+        pass
+    def removeGroupLeader(self):
+        pass
+    def getGroupUnits(self):
+        pass
+    def getGroupBatchPriorities(self):
+        pass
+    def getGroupCondorQuotas(self):
+        pass
+    def setGroupBatchPriority(self):
+        pass
+    def setGroupCondorQuota(self):
+        pass
+    def getGroupStorageQuotas(self):
+        pass
+    def setGroupStorageQuota(self):
+        pass
+    def getPasswdFile(self):
+        pass
+    def getGroupFile(self):
+        pass
+    def getGridmapFile(self):
+        pass
+    def getVORoleMapFile(self):
+        pass
+    def getUserUID(self):
+        pass
+    def getUserUname(self):
+        pass
+    def getGroupGID(self):
+        pass
+    def getGroupName(self):
+        pass
+    def lookupCertificateDN(self):
+        pass
+    def getMappedGidFile(self):
+        pass
+    def getStorageAuthzDBFile(self):
+        pass
+    def getAffiliationMembersRoles(self):
+        pass
+    def createCollaborationUnit(self):
+        pass
+    def removeCollaborationUnit(self):
+        pass
+    def setCollaborationUnitInfo(self):
+        pass
+    def getCollaborationUnitMembers(self):
+        pass
+    def getGroupsInCollaborationUnit(self):
+        pass
+    def getGroupLeadersinCollaborationUnit(self):
+        pass
+    def getCollaborationUnitStorageResources(self):
+        pass
+    def getCollaborationUnitComputeResources(self):
+        pass
+    def createFQAN(self):
+        pass
+    def removeFQAN(self):
+        pass
+    def setFQANMappings(self):
+        pass
+
+
+if __name__ == '__main__':
+    FERRYcli()
