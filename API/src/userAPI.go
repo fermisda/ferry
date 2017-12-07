@@ -953,7 +953,6 @@ func addCertDNtoUser(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "{ \"error\": \"No issuer specified.\" }")
 		return
 	}
-	// check if it is already in the database
 
 	cKey, err := DBtx.Start(DBptr)
 	if err != nil {
@@ -961,15 +960,16 @@ func addCertDNtoUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = DBtx.Exec(fmt.Sprintf(`do $$ 	
-declare 
-u_uid int;
-au_unitid int;
+declare  u_uid int;
+declare au_unitid int;
 u_dn constant text := '%s';
 u_issuer constant text := '%s';
-if (u_dn, u_issuer) not in (select dn, issuer_ca from user_certificate as uc join users as u on uc.uid = u.uid join affiliation_units as au on uc.unitid = au.unitid where uc.username = '%s' and au.name='%s' and uc.dn=u_dn and issuer_ca=u_issuer) then 
-		insert into user_certificate (uid, dn, issuer_ca, last_updated, unitid) values(u_uid, u_dn, u_issuer, NOW(), au_initid);
-else 
-raise 'DN and issuer already exist for this user and affiliation unit'; end if;
+u_uname constant text := '%s';
+begin
+select uid into u_uid from users where uname=u_uname;
+select unitid into au_unitid from affiliation_units where name = '%s';
+if (u_dn, u_issuer) not in (select dn, issuer_ca from user_certificate as uc join users as u on uc.uid = u.uid join affiliation_units as au on uc.unitid = au.unitid where u.uname = u_uname and au.unitid=au_unitid and uc.dn=u_dn and issuer_ca=u_issuer) then insert into user_certificate (uid, dn, issuer_ca, last_updated, unitid) values (u_uid, u_dn, u_issuer, NOW(), au_unitid);
+else  raise 'DN and issuer already exist for this user and affiliation unit'; end if;
 end $$;`, subjDN, issuer, uName, unitName))
 	if err == nil {
 		fmt.Fprintf(w, "{ \"status\": \"success\" }")
@@ -984,6 +984,58 @@ end $$;`, subjDN, issuer, uName, unitName))
 		}
 
 	}
+	
+	DBtx.Commit(cKey)
+}
+
+func removeUserCertificateDN(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+
+	authorized, authout := authorize(r, AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w, "{ \"error\": \""+authout+"not authorized.\" }")
+		return
+	}
+
+	q := r.URL.Query()
+	uName := q.Get("username")
+	subjDN := q.Get("dn")
+	if uName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No username specified in http query.")
+		fmt.Fprintf(w, "{ \"error\": \"No username specified.\" }")
+		return
+	}
+	if subjDN == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No DN specified in http query.")
+		fmt.Fprintf(w, "{ \"error\": \"No dn specified.\" }")
+		return
+	}
+
+	cKey, err := DBtx.Start(DBptr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	_, err = DBtx.Exec(fmt.Sprintf(`do $$ 	
+declare  u_uid int;
+u_dn constant text := '%s';
+u_uname constant text := '%s';
+
+begin
+select uid into u_uid from users where uname=u_uname;
+delete from user_certificate where dn=u_dn and uid=u_uid;
+end $$;`, subjDN, uName))
+	if err == nil {
+		fmt.Fprintf(w, "{ \"status\": \"success\" }")
+	} else {
+		log.Print(err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, "{ \"error\": \"" + err.Error() +"\" }")
+	}
+	
 	
 	DBtx.Commit(cKey)
 }
