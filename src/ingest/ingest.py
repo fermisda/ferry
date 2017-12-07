@@ -755,7 +755,31 @@ def read_vulcan_storage_resources(config, users, groups, cms_groups):
 
     return storage_structure
 
-def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, storages, batch_structure):
+def read_nas_storage(config):
+    """
+    read nas storage resources from a list of files and return a nas_structure
+    Args:
+        config:
+
+    Returns: 
+        nas_structure
+
+    """
+    servers = config.config._sections["nas"]
+
+    nas_structure = []
+    for server in servers:
+        for line in open(servers[server], "r").readlines():
+            if re.match("#+\sExport\sname:\s(.+)", line):
+                volume = re.findall("#+\sExport\sname:\s(.+)", line)[0]
+            host_access = re.findall("(.+)\((.+)\)", line)
+            if host_access:
+                nas_structure.append(NasStorage(server, volume, host_access[0][1], host_access[0][0]))
+    
+    return nas_structure
+
+
+def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, storages, batch_structure, nas_structure):
     """
     create mysql dump for ferry database
     Args:
@@ -959,6 +983,11 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
                   % (cr_counter, batch.name, batch.value, batch.type, batch.groupid))
             fd.write(query.replace("'None'", "Null").replace("None", "Null"))
 
+    # populating nas_storage
+    for nas in nas_structure:
+        fd.write("insert into nas_storage (server, volume, access_level, host) values ('%s', '%s', '%s', '%s');\n"
+              % (nas.server, nas.volume, nas.access_level, nas.host))
+
     fd.flush()
     fd.close()
 
@@ -985,6 +1014,9 @@ if __name__ == "__main__":
     # read NIS information
     nis_structure = read_nis(config.config.get("nis", "dir_path"),config.config.get("nis", "exclude_domain"),
                              config.config.get("nis", "name_mapping"),users, gids)
+
+    # read NAS storages
+    nas_structure = read_nas_storage(config)
 
     # read FermiGrid quotas
     batch_structure = read_compute_batch(config)
@@ -1051,5 +1083,5 @@ if __name__ == "__main__":
     #            for k,v in user.vo_membership.items():
     #                for l in v:
     #                    print k, l.__dict__
-    populate_db(config.config, users, gids, vomss, gums, roles,collaborations, nis_structure, storages, batch_structure)
+    populate_db(config.config, users, gids, vomss, gums, roles,collaborations, nis_structure, storages, batch_structure, nas_structure)
     print("Done!")

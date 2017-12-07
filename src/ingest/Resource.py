@@ -100,3 +100,10 @@ class StorageQuota:
 
     def add_mapping(self,name, altname):
         self.alternative_name  = altname
+
+class NasStorage:
+    def __init__(self, server, volume, access_level, host):
+        self.server = server
+        self.volume = volume
+        self.access_level = access_level
+        self.host = host

@@ -49,7 +49,7 @@ CREATE TABLE affiliation_unit_group (
     unitid bigint NOT NULL,
     groupid bigint NOT NULL,
     is_primary smallint,
-    last_updated date DEFAULT ('now'::text)::date
+    last_updated date DEFAULT ('now'::text)::date NOT NULL
 );
 
 
@@ -63,7 +63,7 @@ CREATE TABLE affiliation_units (
     unitid bigint NOT NULL,
     voms_url character varying(200),
     alternative_name character varying(100),
-    last_updated date DEFAULT ('now'::text)::date,
+    last_updated date DEFAULT ('now'::text)::date NOT NULL,
     type character varying(100),
     name character varying(100) NOT NULL
 );
@@ -116,9 +116,10 @@ CREATE TABLE compute_batch (
     compid bigint DEFAULT (0)::bigint NOT NULL,
     groupid bigint,
     name character varying(300) NOT NULL,
-    value bigint,
+    value real,
     type character varying(255),
-    last_updated date DEFAULT ('now'::text)::date
+    last_updated date DEFAULT ('now'::text)::date NOT NULL,
+    valid_until date
 );
 
 
@@ -133,7 +134,7 @@ CREATE TABLE compute_resources (
     name character varying(100),
     default_shell character varying(100),
     unitid integer,
-    last_updated date DEFAULT ('now'::text)::date,
+    last_updated date DEFAULT ('now'::text)::date NOT NULL,
     default_home_dir character varying(100),
     type character varying(100)
 );
@@ -150,7 +151,7 @@ CREATE TABLE grid_fqan (
     fqan character varying(300) NOT NULL,
     mapped_user character varying(100),
     mapped_group character varying(100) NOT NULL,
-    last_updated date DEFAULT ('now'::text)::date
+    last_updated date DEFAULT ('now'::text)::date NOT NULL
 );
 
 
@@ -206,7 +207,7 @@ CREATE TABLE external_affiliation_attribute (
     uid bigint NOT NULL,
     attribute character varying(100) NOT NULL,
     value character varying(100),
-    last_updated date DEFAULT ('now'::text)::date
+    last_updated date DEFAULT ('now'::text)::date NOT NULL
 );
 
 
@@ -237,7 +238,7 @@ CREATE TABLE groups (
     gid bigint,
     name character varying(100) NOT NULL,
     type groups_group_type NOT NULL,
-    last_updated date DEFAULT ('now'::text)::date
+    last_updated date DEFAULT ('now'::text)::date NOT NULL
 );
 
 
@@ -291,10 +292,11 @@ ALTER SEQUENCE groups_groupid_seq OWNED BY groups.groupid;
 
 CREATE TABLE nas_storage (
     nasid integer NOT NULL,
-    server character(255),
-    volume character(255),
-    access_level character(3),
-    hosts text
+    server text,
+    volume text,
+    access_level text,
+    host text,
+    last_updated date DEFAULT ('now'::text)::date NOT NULL
 );
 
 
@@ -378,7 +380,7 @@ CREATE TABLE storage_resources (
     name character varying(100) NOT NULL,
     default_path character varying(255),
     default_quota bigint,
-    last_updated date DEFAULT ('now'::text)::date,
+    last_updated date DEFAULT ('now'::text)::date NOT NULL,
     default_unit character varying(100),
     type character varying(255) NOT NULL
 );
@@ -430,7 +432,7 @@ CREATE TABLE user_group (
     uid bigint NOT NULL,
     groupid bigint NOT NULL,
     is_leader boolean,
-    last_updated date DEFAULT ('now'::text)::date
+    last_updated date DEFAULT ('now'::text)::date NOT NULL
 );
 
 

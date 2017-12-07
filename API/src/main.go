@@ -100,6 +100,7 @@ func main () {
 	grouter.HandleFunc("/getMappedGidFile", getMappedGidFile)
 	grouter.HandleFunc("/getStorageAuthzDBFile", getStorageAuthzDBFile)
 	grouter.HandleFunc("/getAffiliationMembersRoles", getAffiliationMembersRoles)
+	grouter.HandleFunc("/getStorageAccessLists", getStorageAccessLists)
 
 	//collaboration unit API calls
 	grouter.HandleFunc("/createCollaborationUnit",             createCollaborationUnit)           
