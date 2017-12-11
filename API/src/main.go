@@ -66,6 +66,10 @@ func main () {
 	grouter.HandleFunc("/addCertDNtoUser"    ,    addCertDNtoUser)
 	grouter.HandleFunc("/setSuperUser"    ,    setSuperUser)
 	grouter.HandleFunc("/removeUserCertificateDN"    ,    removeUserCertificateDN)
+	grouter.HandleFunc("/setUserInfo"    ,    setUserInfo)
+	grouter.HandleFunc("/setUserExternalAffiliationAttribute",    setUserExternalAffiliationAttribute)
+	grouter.HandleFunc("/removeUserExternalAffiliationAttribute",    removeUserExternalAffiliationAttribute)
+
 	//group API calls
 	grouter.HandleFunc("/getgroupmembers", getGroupMembers)
 	grouter.HandleFunc("/createGroup",                  createGroup)                 

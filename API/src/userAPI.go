@@ -846,6 +846,134 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 
 	DBtx.Commit(cKey)
 }
+func setUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	uName := q.Get("username")
+	attribute := q.Get("attribute")
+	value := q.Get("value")
+
+	if uName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No username specified in http query.")
+		fmt.Fprintf(w, "{ \"error\": \"No username specified.\" }")
+		return
+	}
+	if attribute == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No attribute specified in http query.")
+		fmt.Fprintf(w, "{ \"error\": \"No attribute specified.\" }")
+		return
+	}
+	if value == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No value specified in http query.")
+		fmt.Fprintf(w, "{ \"error\": \"No value specified.\" }")
+		return
+	}
+
+	cKey, err := DBtx.Start(DBptr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	_, err = DBtx.Exec(fmt.Sprintf(`do $$
+									declare v_uid int;
+									
+									declare c_uname text = '%s';
+									declare c_attribute text = '%s';
+									declare c_value text = '%s';
+
+									begin
+										select uid into v_uid from users where uname = c_uname;
+										if v_uid is null then
+											raise 'uname does not exist';
+										end if;
+
+										if (v_uid, c_attribute) not in (select uid, attribute from external_affiliation_attribute) then
+											insert into external_affiliation_attribute (uid, attribute, value)
+											values (v_uid, c_attribute, c_value);
+										else
+											update external_affiliation_attribute set
+												value = c_value,
+												last_updated = NOW()
+											where uid = v_uid and attribute = c_attribute;
+										end if;
+									end $$;`, uName, attribute, value))
+	
+	if err == nil {
+		fmt.Fprintf(w, "{ \"status\": \"success\" }")
+	} else {
+		if strings.Contains(err.Error(), `uname does not exist`) {
+			fmt.Fprintf(w,"{ \"error\": \"User does not exist.\" }")
+		} else {
+			log.Print(err.Error())
+			fmt.Fprintf(w, "{ \"error\": \"Something went wrong.\" }")
+		}
+	}
+
+	DBtx.Commit(cKey)
+}
+func removeUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	uName := q.Get("username")
+	attribute := q.Get("attribute")
+
+	if uName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No username specified in http query.")
+		fmt.Fprintf(w, "{ \"error\": \"No username specified.\" }")
+		return
+	}
+	if attribute == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No attribute specified in http query.")
+		fmt.Fprintf(w, "{ \"error\": \"No attribute specified.\" }")
+		return
+	}
+
+	cKey, err := DBtx.Start(DBptr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	_, err = DBtx.Exec(fmt.Sprintf(`do $$
+									declare v_uid int;
+									
+									declare c_uname text = '%s';
+									declare c_attribute text = '%s';
+
+									begin
+										select uid into v_uid from users where uname = c_uname;
+										if v_uid is null then
+											raise 'uname does not exist';
+										end if;
+
+										if (v_uid, c_attribute) not in (select uid, attribute from external_affiliation_attribute) then
+											raise 'attribute does not exist';
+										end if;
+
+										delete from external_affiliation_attribute where uid = v_uid and attribute = c_attribute;
+									end $$;`, uName, attribute))
+	
+	if err == nil {
+		fmt.Fprintf(w, "{ \"status\": \"success\" }")
+	} else {
+		if strings.Contains(err.Error(), `uname does not exist`) {
+			fmt.Fprintf(w,"{ \"error\": \"User does not exist.\" }")
+		} else if strings.Contains(err.Error(), `attribute does not exist`) {
+			fmt.Fprintf(w,"{ \"error\": \"External affiliation attribute does not exist.\" }")
+		} else {
+			log.Print(err.Error())
+			fmt.Fprintf(w, "{ \"error\": \"Something went wrong.\" }")
+		}
+	}
+
+	DBtx.Commit(cKey)
+}
 func getUserExternalAffiliationAttributes(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
@@ -1037,5 +1165,87 @@ end $$;`, subjDN, uName))
 	}
 	
 	
+	DBtx.Commit(cKey)
+}
+func setUserInfo(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	uid := q.Get("uid")
+	uName := q.Get("username")
+	fName := q.Get("fullname")
+	status := q.Get("status")
+	eDate := q.Get("expiration_date")
+
+	if uid == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No uid specified in http query.")
+		fmt.Fprintf(w, "{ \"error\": \"No uid specified.\" }")
+		return
+	}
+	if uName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No username specified in http query.")
+		fmt.Fprintf(w, "{ \"error\": \"No username specified.\" }")
+		return
+	}
+	if fName == "" {
+		fName = "null"
+	} else {
+		fName = fmt.Sprintf("'%s'", fName)
+	}
+	if status == "" {
+		status = "null"
+	} else {
+		_, err := strconv.ParseBool(status)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			log.Print("Invalid is_leader specified in http query.")
+			fmt.Fprintf(w, "{ \"error\": \"Invalid is_leader specified.\" }")
+			return
+		}
+	}
+	if eDate == "" {
+		eDate = "null"
+	} else {
+		eDate = fmt.Sprintf("'%s'", eDate)
+	}
+
+	cKey, err := DBtx.Start(DBptr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	_, err = DBtx.Exec(fmt.Sprintf(`do $$
+									declare c_uid constant int := %s;
+
+									begin
+										if c_uid not in (select uid from users) then
+											raise 'uid does not exist';
+										end if;
+
+										update users set
+											uname = '%s',
+											full_name = coalesce(%s, full_name),
+											status = coalesce(%s, status),
+											expiration_date = coalesce(%s, expiration_date),
+											last_updated = NOW()
+										where uid = c_uid;
+									end $$;`, uid, uName, fName, status, eDate))
+	
+	if err == nil {
+		fmt.Fprintf(w, "{ \"status\": \"success\" }")
+	} else {
+		if strings.Contains(err.Error(), `uid does not exist`) {
+			fmt.Fprintf(w,"{ \"error\": \"User does not exist.\" }")
+		} else if strings.Contains(err.Error(), `invalid input syntax for type date`) ||
+		   strings.Contains(err.Error(), `date/time field value out of range`) {
+  			fmt.Fprintf(w,"{ \"error\": \"Invalid expiration date.\" }")
+		} else {
+			log.Print(err.Error())
+			fmt.Fprintf(w, "{ \"error\": \"Something went wrong.\" }")
+		}
+	}
+
 	DBtx.Commit(cKey)
 }
