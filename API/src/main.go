@@ -1,5 +1,6 @@
 package main 
 import (
+	"github.com/spf13/viper"
 	"fmt"
 	"log"
 	"database/sql"
@@ -25,14 +26,27 @@ func main () {
 	
 	fmt.Println("Here we go...")
 
+	viper.SetConfigName("default")
+	viper.AddConfigPath(".")
+	cfgErr := viper.ReadInConfig()
+	log.Print(viper.GetString("database.name"))
+	if cfgErr != nil {
+		panic(fmt.Errorf("Fatal error config file: %s \n", cfgErr))
+	}
 
 	//Make sure we are not running as root, and exit if we are.
 	if os.Getuid() == 0 {
 		log.Fatal("You are running as root (uid=0). Please run as a different user. Exiting.")
 	}
 
-	//NOTE: here we have SSL mode set to "require" because the host cert on the DB machine is expired as of 10-25-2017. Once that is fixed we should set it to "verify-ca" or "verify-full" so that it actually checks that the cert that the DB machine presents is valid. If you set it to "require" it skips the verification step.
-	Mydb, err := sql.Open("postgres","user=ferry password=ferry5634 host=fermicloud051.fnal.gov dbname=ferry connect_timeout=60 sslmode=verify-full sslrootcert=/etc/grid-security/certificates/cilogon-osg.pem")
+	//NOTE: By default we have SSL mode set to "require" because the host cert on the DB machine is expired as of 10-25-2017.
+	//		Once that is fixed we should set it to "verify-ca" or "verify-full" so that it actually checks that the cert that the DB machine presents is valid.
+	//		If you set it to "require" it skips the verification step.
+	dbConfig := viper.GetStringMapString("database")
+	connString := fmt.Sprintf("user=%s password=%s host=%s dbname=%s connect_timeout=%s sslmode=%s sslrootcert=%s",
+							  dbConfig["user"], dbConfig["password"], dbConfig["host"], dbConfig["name"],
+							  dbConfig["timeout"], dbConfig["sslmode"], dbConfig["certificate"])
+	Mydb, err := sql.Open("postgres", connString)
 	if err != nil {	   
 		fmt.Println("there is an issue here")
 		log.Fatal(err)
