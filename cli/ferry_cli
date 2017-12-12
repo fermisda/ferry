@@ -3,6 +3,8 @@
 import argparse
 import sys
 import re
+import requests
+
 
 class FERRYcli(object):
 
@@ -10,6 +12,7 @@ class FERRYcli(object):
         parser = argparse.ArgumentParser(epilog=self.CommandList())
         parser.add_argument('command',help='Subcommand to run')
         self.cline = parser.parse_args(sys.argv[1:2])
+        self.FerryURL="https://localhost:8443"
 
         if not hasattr(self, self.cline.command):
             print 'Unrecognized command'
@@ -34,8 +37,7 @@ class FERRYcli(object):
         return "Valid commands are: %s" % ','.join(OnlyFerry)
 
     def addCertificateDNToUser(self):
-        parser = argparse.ArgumentParser(
-            usage="%(prog)s addUserDN [<args>]")
+        parser = argparse.ArgumentParser(usage="%(prog)s addUserDN [<args>]")
         parser.add_argument('uname',help="Username to receive new DN")
         parser.add_argument('dn',help="Certificate DN to add")
         args = parser.parse_args(sys.argv[2:])
@@ -152,8 +154,17 @@ class FERRYcli(object):
         pass
     def getCollaborationUnitComputeResources(self):
         pass
-    def createFQAN(self):
-        pass
+    def addRoleToVO(self):
+        parser = argparse.ArgumentParser(usage="%(prog)s addRoleToVO [<args>]")
+        parser.add_argument('fqan',help="Full FQAN for new role")
+        parser.add_argument('mapped_group',help="GID to which this FQAN will map")
+        parser.add_argument('mapped_user',help="UID to which this FQAN will map")
+        args = parser.parse_args(sys.argv[2:])
+
+        url = "%s/createFQAN/" % self.FerryURL
+        parameters = {'fqan': args.fqan,'mapped_group':args.mapped_group,'mapped_user':args.mapped_user}
+        response = requests.post(url, params=parameters, cert=('../API/hostcert.pem','../API/hostkey.pem'))
+
     def removeFQAN(self):
         pass
     def setFQANMappings(self):
