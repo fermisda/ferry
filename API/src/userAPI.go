@@ -454,6 +454,7 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		fmt.Fprintf(w, "{ \"status\": \"success\" }")
 	} else {
+		w.WriteHeader(http.StatusInternalServerError)
 		if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
 			fmt.Fprintf(w, "{ \"error\": \"User already belongs to this group.\" }")
 		} else if strings.Contains(err.Error(), `null value in column "uid" violates not-null constraint`) {
@@ -516,6 +517,7 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		fmt.Fprintf(w, "{ \"status\": \"success\" }")
 	} else {
+		w.WriteHeader(http.StatusInternalServerError)
 		if strings.Contains(err.Error(), `null value in column "uid" violates not-null constraint`) {
 			fmt.Fprintf(w, "{ \"error\": \"User does not exist.\" }")
 		} else if strings.Contains(err.Error(), `null value in column "fqanid" violates not-null constraint`) {
@@ -588,6 +590,7 @@ func setUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		fmt.Fprintf(w, "{ \"status\": \"success\" }")
 	} else {
+		w.WriteHeader(http.StatusInternalServerError)
 		if strings.Contains(err.Error(), `User does not exist.`) {
 			fmt.Fprintf(w, "{ \"error\": \"User does not exist.\" }")
 		} else if strings.Contains(err.Error(), `Resource does not exist.`) {
@@ -834,6 +837,7 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		fmt.Fprintf(w, "{ \"status\": \"success\" }")
 	} else {
+		w.WriteHeader(http.StatusInternalServerError)
 		if strings.Contains(err.Error(), `User does not exist.`) {
 			fmt.Fprintf(w, "{ \"error\": \"User does not exist.\" }")
 		} else if strings.Contains(err.Error(), `Resource does not exist.`) {
@@ -905,6 +909,7 @@ func setUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Request)
 	if err == nil {
 		fmt.Fprintf(w, "{ \"status\": \"success\" }")
 	} else {
+		w.WriteHeader(http.StatusInternalServerError)
 		if strings.Contains(err.Error(), `uname does not exist`) {
 			fmt.Fprintf(w,"{ \"error\": \"User does not exist.\" }")
 		} else {
@@ -962,6 +967,7 @@ func removeUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Reque
 	if err == nil {
 		fmt.Fprintf(w, "{ \"status\": \"success\" }")
 	} else {
+		w.WriteHeader(http.StatusInternalServerError)
 		if strings.Contains(err.Error(), `uname does not exist`) {
 			fmt.Fprintf(w,"{ \"error\": \"User does not exist.\" }")
 		} else if strings.Contains(err.Error(), `attribute does not exist`) {
@@ -1102,12 +1108,11 @@ end $$;`, subjDN, issuer, uName, unitName))
 	if err == nil {
 		fmt.Fprintf(w, "{ \"status\": \"success\" }")
 	} else {
+		w.WriteHeader(http.StatusInternalServerError)
 		if strings.Contains(err.Error(), `DN and issuer already exist`) {
-
 			fmt.Fprintf(w, "{ \"status\": \"DN and issuer already exist.\" }")
 		} else {
 			log.Print(err.Error())
-			w.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprintf(w, "{ \"error\": \"Something went wrong.\" }")
 		}
 
@@ -1236,6 +1241,7 @@ func setUserInfo(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		fmt.Fprintf(w, "{ \"status\": \"success\" }")
 	} else {
+		w.WriteHeader(http.StatusInternalServerError)
 		if strings.Contains(err.Error(), `uid does not exist`) {
 			fmt.Fprintf(w,"{ \"error\": \"User does not exist.\" }")
 		} else if strings.Contains(err.Error(), `invalid input syntax for type date`) ||

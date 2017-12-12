@@ -245,6 +245,7 @@ func setGroupCondorQuota(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		fmt.Fprintf(w,"{ \"status\": \"success\" }")
 	} else {
+		w.WriteHeader(http.StatusInternalServerError)
 		if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
 			fmt.Fprintf(w,"{ \"error\": \"This quota already exists\" }")
 		} else if strings.Contains(err.Error(), `null value in column "compid"`) {
@@ -405,6 +406,7 @@ func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		fmt.Fprintf(w,"{ \"status\": \"success\" }")
 	} else {
+		w.WriteHeader(http.StatusInternalServerError)
 		if strings.Contains(err.Error(), `Group does not exist.`) {
 			fmt.Fprintf(w,"{ \"error\": \"Group does not exist.\" }")
 		} else if strings.Contains(err.Error(), `Resource does not exist.`) {

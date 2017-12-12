@@ -104,6 +104,7 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		fmt.Fprintf(w,"{ \"status\": \"success\" }")
 	} else {
+		w.WriteHeader(http.StatusInternalServerError)
 		if strings.Contains(err.Error(), `violates foreign key constraint "fk_experiment_fqan_users"`) {
 			fmt.Fprintf(w,"{ \"error\": \"User doesn't exist.\" }")
 		} else if strings.Contains(err.Error(), `violates foreign key constraint "fk_experiment_fqan_groups"`) {
