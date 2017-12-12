@@ -1,0 +1,8 @@
+database:
+  host: REPLACE
+  name: REPLACE
+  user: REPLACE
+  password: REPLACE
+  timeout: 60
+  sslmode: verify-full 
+  certificate: /etc/grid-security/certificates/cilogon-osg.pem
