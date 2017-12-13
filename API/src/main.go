@@ -108,7 +108,7 @@ func main () {
 	// misc API cals
 	grouter.HandleFunc("/getPasswdFile",      getPasswdFile)       
 	grouter.HandleFunc("/getGroupFile", 	  getGroupFile)      
-	grouter.HandleFunc("/getGridmapFile", 	  getGridmapFile)    
+	grouter.HandleFunc("/getGridMapFile", 	  getGridMapFile)
 	grouter.HandleFunc("/getVORoleMapFile",   getVORoleMapFile)  
 	grouter.HandleFunc("/getUserUID", 	  getUserUID)        
 	grouter.HandleFunc("/getUserUname", 	  getUserUname)      

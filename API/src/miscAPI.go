@@ -220,7 +220,7 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
-func getGridmapFile(w http.ResponseWriter, r *http.Request) {
+func getGridMapFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 	unit := q.Get("unitname")
