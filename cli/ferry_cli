@@ -70,9 +70,10 @@ class FERRYcli(object):
 
         url = "%s/setUserExperimentFQAN" % self.FerryURL
         parameters = {'fqan': args.fqan,'username':args.username,'experimentname':args.exp}
-        response = requests.post(url, params=parameters, timeout=(10,10), verify="/fife/local/data/home/boyd/cilogon-osg.pem", cert=('../API/hostcert.pem','../API/hostkey.pem'))
-        jresponse = json.loads(response.text)
-        print ("%s" % (jresponse["error"]))
+        response = requests.post(url, params=parameters, timeout=(10,10), verify="/fife/local/data/home/boyd/cilogon-osg.pem", cert=('/home/ferry/.cert/hostcert.pem','/home/ferry/.cert/hostkey.pem'))
+        if not (response.status_code == 200):
+            jresponse = json.loads(response.text)
+            print ("%s" % (jresponse["error"]))
     def setUserShellAndHomeDir(self):
         pass
     def getUserShellAndHomeDir(self):
@@ -174,9 +175,10 @@ class FERRYcli(object):
 
         url = "%s/createFQAN" % self.FerryURL
         parameters = {'fqan': args.fqan,'mapped_group':args.mapped_group,'mapped_user':args.mapped_user}
-        response = requests.post(url, params=parameters, timeout=(10,10), verify="/fife/local/data/home/boyd/cilogon-osg.pem", cert=('../API/hostcert.pem','../API/hostkey.pem'))
-        jresponse = json.loads(response.text)
-        print ("%s" % (jresponse["error"]))
+        response = requests.post(url, params=parameters, timeout=(10,10), verify="/fife/local/data/home/boyd/cilogon-osg.pem", cert=('/home/ferry/.cert/hostcert.pem','/home/ferry/.cert/hostkey.pem'))
+        if not (response.status_code == 200):
+            jresponse = json.loads(response.text)
+            print ("%s" % (jresponse["error"]))
 
     def removeRoleFromVO (self):
         parser = argparse.ArgumentParser(usage="%(prog)s removeRoleFromVO [<args>]")
@@ -185,9 +187,10 @@ class FERRYcli(object):
 
         url = "%s/removeFQAN" % self.FerryURL
         parameters = {'fqan': args.fqan}
-        response = requests.post(url, params=parameters, timeout=(10,10), verify="/fife/local/data/home/boyd/cilogon-osg.pem", cert=('../API/hostcert.pem','../API/hostkey.pem'))
-        jresponse = json.loads(response.text)
-        print ("%s" % (jresponse["error"]))
+        response = requests.post(url, params=parameters, timeout=(10,10), verify="/fife/local/data/home/boyd/cilogon-osg.pem", cert=('/home/ferry/.cert/hostcert.pem','/home/ferry/.cert/hostkey.pem'))
+        if not (response.status_code == 200):
+            jresponse = json.loads(response.text)
+            print ("%s" % (jresponse["error"]))
 
     def setFQANMappings(self):
         pass
