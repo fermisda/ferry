@@ -6,3 +6,14 @@ database:
   timeout: 60
   sslmode: verify-full 
   certificate: /etc/grid-security/certificates/cilogon-osg.pem
+
+server:
+  port: 8443
+  cert: /home/ferry/.cert/hostcert.pem
+  key: /home/ferry/.cert/hostkey.pem
+  dnlist: myDN.list
+
+certificates:
+  - /etc/grid-security/certificates/cilogon-osg.pem
+  - /etc/grid-security/certificates/cilogon-basic.pem
+# - /etc/pki/tls/certs/ca-bundle.crt  

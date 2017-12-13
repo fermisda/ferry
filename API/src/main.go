@@ -29,7 +29,6 @@ func main () {
 	viper.SetConfigName("default")
 	viper.AddConfigPath(".")
 	cfgErr := viper.ReadInConfig()
-	log.Print(viper.GetString("database.name"))
 	if cfgErr != nil {
 		panic(fmt.Errorf("Fatal error config file: %s \n", cfgErr))
 	}
@@ -132,16 +131,15 @@ func main () {
 	grouter.HandleFunc("/createFQAN",			   createFQAN)                        
 	grouter.HandleFunc("/removeFQAN",			   removeFQAN)                        
 	grouter.HandleFunc("/setFQANMappings",                     setFQANMappings)                    
-	
+
+	srvConfig := viper.GetStringMapString("server")
 	mainsrv := &http.Server{
-		Addr: ":8443",	
+		Addr: fmt.Sprintf(":%s", srvConfig["port"]),
 		ReadTimeout: 10*time.Second,
 		Handler: grouter,
-	}	     
+	}
 	
-//	var certstring = [1]string{"/etc/pki/tls/certs/ca-bundle.crt"}
-	var certstring = [2]string{"/etc/grid-security/certificates/cilogon-osg.pem","/etc/grid-security/certificates/cilogon-basic.pem"}
-	var certslice []string = certstring[0:2]
+	certslice := viper.GetStringSlice("certificates")
 	Certpool, err := loadCerts(certslice)
 	if err != nil {
 		log.Fatal(err)
@@ -151,7 +149,7 @@ func main () {
 		ClientCAs:  Certpool,
 	}
 	
-	dnlist, listerror := createDNlist("myDN.list")
+	dnlist, listerror := createDNlist(srvConfig["dnlist"])
 	if listerror != nil {
 		log.Fatal(listerror)
 	}
@@ -162,7 +160,7 @@ func main () {
 		log.Fatal("Authorized DN slice has zero elements.")
 	}
 // We should probably make the cert and key paths variables in a config file at some point
-	serverror := mainsrv.ListenAndServeTLS("/home/ferry/.cert/hostcert.pem","/home/ferry/.cert/hostkey.pem")
+	serverror := mainsrv.ListenAndServeTLS(srvConfig["cert"], srvConfig["key"])
 	if serverror != nil {
 		log.Fatal(serverror)
 	}
