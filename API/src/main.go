@@ -1,5 +1,6 @@
 package main 
 import (
+	"strings"
 	"github.com/spf13/viper"
 	"fmt"
 	"log"
@@ -16,10 +17,38 @@ import (
 var DBptr *sql.DB
 var DBtx Transaction
 var AuthorizedDNs []string
+var Mainsrv *http.Server
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println(r.URL.Path)
 	fmt.Fprintf(w, "This is a placeholder for paths like %s!", r.URL.Path[1:])
+}
+
+func checkClientIP(client *tls.ClientHelloInfo) (*tls.Config, error) {
+	ip := client.Conn.RemoteAddr().String()
+
+	authIPs := viper.GetStringSlice("whitelist")
+
+	for _, authIP := range authIPs {
+		if authIP == strings.Split(ip, ":")[0] {
+			log.Printf("Host matches authorized IP %s.", authIP)
+			
+			var err error
+			srvConfig := viper.GetStringMapString("server")
+			newConfig := Mainsrv.TLSConfig.Clone()
+			newConfig.ClientAuth = tls.VerifyClientCertIfGiven
+			newConfig.Certificates = make([]tls.Certificate, 1)
+			newConfig.Certificates[0], err = tls.LoadX509KeyPair(srvConfig["cert"], srvConfig["key"])
+			if err != nil {
+				log.Print(err)
+				return nil, err
+			}
+
+			return newConfig, nil
+		}
+	}
+
+	return nil, nil
 }
 
 func main () {
@@ -133,7 +162,7 @@ func main () {
 	grouter.HandleFunc("/setFQANMappings",                     setFQANMappings)                    
 
 	srvConfig := viper.GetStringMapString("server")
-	mainsrv := &http.Server{
+	Mainsrv = &http.Server{
 		Addr: fmt.Sprintf(":%s", srvConfig["port"]),
 		ReadTimeout: 10*time.Second,
 		Handler: grouter,
@@ -144,9 +173,11 @@ func main () {
 	if err != nil {
 		log.Fatal(err)
 	}
-	mainsrv.TLSConfig = &tls.Config{
+	Mainsrv.TLSConfig = &tls.Config{
 		ClientAuth: tls.RequireAndVerifyClientCert,
 		ClientCAs:  Certpool,
+		GetConfigForClient: checkClientIP,
+		Certificates: nil,
 	}
 	
 	dnlist, listerror := createDNlist(srvConfig["dnlist"])
@@ -160,7 +191,7 @@ func main () {
 		log.Fatal("Authorized DN slice has zero elements.")
 	}
 // We should probably make the cert and key paths variables in a config file at some point
-	serverror := mainsrv.ListenAndServeTLS(srvConfig["cert"], srvConfig["key"])
+	serverror := Mainsrv.ListenAndServeTLS(srvConfig["cert"], srvConfig["key"])
 	if serverror != nil {
 		log.Fatal(serverror)
 	}
