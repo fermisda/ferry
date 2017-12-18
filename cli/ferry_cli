@@ -4,6 +4,7 @@ import argparse
 import sys
 import re
 import requests
+import json
 
 
 class FERRYcli(object):
@@ -60,8 +61,19 @@ class FERRYcli(object):
         args = parser.parse_args(sys.argv[2:])
         print ('Adding user %s' % args.uname)
 
-    def setUserExperimentFQAN(self):
-        pass
+    def addRoleToUser(self):
+        parser = argparse.ArgumentParser(usage="%(prog)s addRoleToUser [<args>]")
+        parser.add_argument('fqan',help="Full FQAN for new role")
+        parser.add_argument('username',help="Username of user")
+        parser.add_argument('exp',help="Experiment for which the user will have this role")
+        args = parser.parse_args(sys.argv[2:])
+
+        url = "%s/setUserExperimentFQAN" % self.FerryURL
+        parameters = {'fqan': args.fqan,'username':args.username,'experimentname':args.exp}
+        response = requests.post(url, params=parameters, timeout=(10,10), verify="/fife/local/data/home/boyd/cilogon-osg.pem", cert=('/home/ferry/.cert/hostcert.pem','/home/ferry/.cert/hostkey.pem'))
+        if not (response.status_code == 200):
+            jresponse = json.loads(response.text)
+            print ("%s" % (jresponse["error"]))
     def setUserShellAndHomeDir(self):
         pass
     def getUserShellAndHomeDir(self):
@@ -163,9 +175,10 @@ class FERRYcli(object):
 
         url = "%s/createFQAN" % self.FerryURL
         parameters = {'fqan': args.fqan,'mapped_group':args.mapped_group,'mapped_user':args.mapped_user}
-        response = requests.post(url, params=parameters, timeout=(10,10), verify="/fife/local/data/home/boyd/cilogon-osg.pem", cert=('../API/hostcert.pem','../API/hostkey.pem'))
-        print (response)
-        print (response.text)
+        response = requests.post(url, params=parameters, timeout=(10,10), verify="/fife/local/data/home/boyd/cilogon-osg.pem", cert=('/home/ferry/.cert/hostcert.pem','/home/ferry/.cert/hostkey.pem'))
+        if not (response.status_code == 200):
+            jresponse = json.loads(response.text)
+            print ("%s" % (jresponse["error"]))
 
     def removeRoleFromVO (self):
         parser = argparse.ArgumentParser(usage="%(prog)s removeRoleFromVO [<args>]")
@@ -174,9 +187,10 @@ class FERRYcli(object):
 
         url = "%s/removeFQAN" % self.FerryURL
         parameters = {'fqan': args.fqan}
-        response = requests.post(url, params=parameters, timeout=(10,10), verify="/fife/local/data/home/boyd/cilogon-osg.pem", cert=('../API/hostcert.pem','../API/hostkey.pem'))
-        print (response)
-        print (response.text)
+        response = requests.post(url, params=parameters, timeout=(10,10), verify="/fife/local/data/home/boyd/cilogon-osg.pem", cert=('/home/ferry/.cert/hostcert.pem','/home/ferry/.cert/hostkey.pem'))
+        if not (response.status_code == 200):
+            jresponse = json.loads(response.text)
+            print ("%s" % (jresponse["error"]))
 
     def setFQANMappings(self):
         pass
