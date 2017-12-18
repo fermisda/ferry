@@ -1146,12 +1146,12 @@ func removeUserCertificateDN(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "{ \"error\": \"No dn specified.\" }")
 		return
 	}
-
+	
 	cKey, err := DBtx.Start(DBptr)
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	
 	_, err = DBtx.Exec(fmt.Sprintf(`do $$ 	
 declare  u_uid int;
 u_dn constant text := '%s';
@@ -1163,15 +1163,14 @@ delete from user_certificate where dn=u_dn and uid=u_uid;
 end $$;`, subjDN, uName))
 	if err == nil {
 		fmt.Fprintf(w, "{ \"status\": \"success\" }")
+	DBtx.Commit(cKey)
 	} else {
 		log.Print(err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, "{ \"error\": \"" + err.Error() +"\" }")
 	}
-	
-	
-	DBtx.Commit(cKey)
 }
+
 func setUserInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
@@ -1210,12 +1209,12 @@ func setUserInfo(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+
 	if eDate == "" {
 		eDate = "null"
 	} else {
 		eDate = fmt.Sprintf("'%s'", eDate)
 	}
-
 	cKey, err := DBtx.Start(DBptr)
 	if err != nil {
 		log.Fatal(err)
@@ -1240,18 +1239,101 @@ func setUserInfo(w http.ResponseWriter, r *http.Request) {
 	
 	if err == nil {
 		fmt.Fprintf(w, "{ \"status\": \"success\" }")
+	DBtx.Commit(cKey)
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
 		if strings.Contains(err.Error(), `uid does not exist`) {
 			fmt.Fprintf(w,"{ \"error\": \"User does not exist.\" }")
 		} else if strings.Contains(err.Error(), `invalid input syntax for type date`) ||
-		   strings.Contains(err.Error(), `date/time field value out of range`) {
+			strings.Contains(err.Error(), `date/time field value out of range`) {
   			fmt.Fprintf(w,"{ \"error\": \"Invalid expiration date.\" }")
 		} else {
 			log.Print(err.Error())
 			fmt.Fprintf(w, "{ \"error\": \"Something went wrong.\" }")
 		}
+	}	
+}
+
+func createUser(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+
+	authorized, authout := authorize(r, AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w, "{ \"error\": \""+authout+"not authorized.\" }")
+		return
 	}
 
-	DBtx.Commit(cKey)
+	q := r.URL.Query()
+	uid := q.Get("uid")
+	uName := q.Get("username")
+	firstName := q.Get("firstname")
+	lastName := q.Get("lastname")
+	status, err := strconv.ParseBool(q.Get("status"))
+	expdate := q.Get("expirationdate")
+
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("Invalid status specified in http query.")
+		fmt.Fprintf(w, "{ \"error\": \"Invalid status value. Must be true or false.\" }")
+		return	
+	}
+	if uName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No username specified in http query.")
+		fmt.Fprintf(w, "{ \"error\": \"No username specified.\" }")
+		return
+	}
+	if uid == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No UID specified in http query.")
+		fmt.Fprintf(w, "{ \"error\": \"No uid specified.\" }")
+		return
+	}
+	if firstName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No first name specified in http query.")
+		fmt.Fprintf(w, "{ \"error\": \"No firstname specified.\" }")
+		return
+	}
+	if lastName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No last name specified in http query.")
+		fmt.Fprintf(w, "{ \"error\": \"No lastname specified.\" }")
+		return
+	}
+
+	fullname := firstName + " " + lastName
+
+
+	var checkExist string
+	checkerr := DBptr.QueryRow(`select uname from users where uname=$1 and uid=$2 and full_name=$3`,uName, uid, fullname).Scan(&checkExist)
+	switch {
+	case checkerr == sql.ErrNoRows:
+		cKey, err := DBtx.Start(DBptr)
+		if err != nil {
+			log.Fatal(err)
+		}
+		//actually insert
+		_, err = DBtx.Exec(`insert into users (uname, uid, full_name, status, expiration_date, last_updated) values $1,$2,$3,$4,$5,NOW()`,uName, uid, fullname, status, expdate )
+		
+		if err == nil {
+			fmt.Fprintf(w, "{ \"status\": \"success\" }")
+			DBtx.Commit(cKey)
+			return
+		} else {
+			log.Print(err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, "{ \"error\": \"" + err.Error() +"\" }")
+		}
+	case checkerr != nil:
+		
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, "{ \"error\": \"" + checkerr.Error() +"\" }")	
+	default:
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w, "{ \"error\": \"user " + uName + " already exists.\"}")
+	}
+	
 }
