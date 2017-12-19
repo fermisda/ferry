@@ -4,12 +4,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	_ "github.com/lib/pq"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	_ "github.com/lib/pq"
 )
 
 func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
@@ -905,13 +906,13 @@ func setUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Request)
 											where uid = v_uid and attribute = c_attribute;
 										end if;
 									end $$;`, uName, attribute, value))
-	
+
 	if err == nil {
 		fmt.Fprintf(w, "{ \"status\": \"success\" }")
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
 		if strings.Contains(err.Error(), `uname does not exist`) {
-			fmt.Fprintf(w,"{ \"error\": \"User does not exist.\" }")
+			fmt.Fprintf(w, "{ \"error\": \"User does not exist.\" }")
 		} else {
 			log.Print(err.Error())
 			fmt.Fprintf(w, "{ \"error\": \"Something went wrong.\" }")
@@ -963,15 +964,15 @@ func removeUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Reque
 
 										delete from external_affiliation_attribute where uid = v_uid and attribute = c_attribute;
 									end $$;`, uName, attribute))
-	
+
 	if err == nil {
 		fmt.Fprintf(w, "{ \"status\": \"success\" }")
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
 		if strings.Contains(err.Error(), `uname does not exist`) {
-			fmt.Fprintf(w,"{ \"error\": \"User does not exist.\" }")
+			fmt.Fprintf(w, "{ \"error\": \"User does not exist.\" }")
 		} else if strings.Contains(err.Error(), `attribute does not exist`) {
-			fmt.Fprintf(w,"{ \"error\": \"External affiliation attribute does not exist.\" }")
+			fmt.Fprintf(w, "{ \"error\": \"External affiliation attribute does not exist.\" }")
 		} else {
 			log.Print(err.Error())
 			fmt.Fprintf(w, "{ \"error\": \"Something went wrong.\" }")
@@ -983,13 +984,13 @@ func removeUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Reque
 func getUserExternalAffiliationAttributes(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
-	
+
 	user := q.Get("username")
-	
+
 	if user == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("No username specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No username specified.\" }")
+		fmt.Fprintf(w, "{ \"error\": \"No username specified.\" }")
 		return
 	}
 
@@ -1001,7 +1002,7 @@ func getUserExternalAffiliationAttributes(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		defer log.Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		fmt.Fprintf(w, "{ \"error\": \"Error in DB query.\" }")
 		return
 	}
 	defer rows.Close()
@@ -1010,7 +1011,7 @@ func getUserExternalAffiliationAttributes(w http.ResponseWriter, r *http.Request
 
 	type jsonentry struct {
 		Attribute string `json:"attribute"`
-		Value string `json:"value"`
+		Value     string `json:"value"`
 	}
 	var Entry jsonentry
 	var Out []jsonentry
@@ -1029,7 +1030,9 @@ func getUserExternalAffiliationAttributes(w http.ResponseWriter, r *http.Request
 	var output interface{}
 	if len(Out) == 0 {
 		w.WriteHeader(http.StatusNotFound)
-		type jsonerror struct {Error string `json:"error"`}
+		type jsonerror struct {
+			Error string `json:"error"`
+		}
 		var Err []jsonerror
 		if !userExists {
 			Err = append(Err, jsonerror{"User does not exist."})
@@ -1117,7 +1120,7 @@ end $$;`, subjDN, issuer, uName, unitName))
 		}
 
 	}
-	
+
 	DBtx.Commit(cKey)
 }
 
@@ -1146,12 +1149,12 @@ func removeUserCertificateDN(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "{ \"error\": \"No dn specified.\" }")
 		return
 	}
-	
+
 	cKey, err := DBtx.Start(DBptr)
 	if err != nil {
 		log.Fatal(err)
 	}
-	
+
 	_, err = DBtx.Exec(fmt.Sprintf(`do $$ 	
 declare  u_uid int;
 u_dn constant text := '%s';
@@ -1163,11 +1166,11 @@ delete from user_certificate where dn=u_dn and uid=u_uid;
 end $$;`, subjDN, uName))
 	if err == nil {
 		fmt.Fprintf(w, "{ \"status\": \"success\" }")
-	DBtx.Commit(cKey)
+		DBtx.Commit(cKey)
 	} else {
 		log.Print(err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "{ \"error\": \"" + err.Error() +"\" }")
+		fmt.Fprintf(w, "{ \"error\": \""+err.Error()+"\" }")
 	}
 }
 
@@ -1236,22 +1239,22 @@ func setUserInfo(w http.ResponseWriter, r *http.Request) {
 											last_updated = NOW()
 										where uid = c_uid;
 									end $$;`, uid, uName, fName, status, eDate))
-	
+
 	if err == nil {
 		fmt.Fprintf(w, "{ \"status\": \"success\" }")
-	DBtx.Commit(cKey)
+		DBtx.Commit(cKey)
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
 		if strings.Contains(err.Error(), `uid does not exist`) {
-			fmt.Fprintf(w,"{ \"error\": \"User does not exist.\" }")
+			fmt.Fprintf(w, "{ \"error\": \"User does not exist.\" }")
 		} else if strings.Contains(err.Error(), `invalid input syntax for type date`) ||
 			strings.Contains(err.Error(), `date/time field value out of range`) {
-  			fmt.Fprintf(w,"{ \"error\": \"Invalid expiration date.\" }")
+			fmt.Fprintf(w, "{ \"error\": \"Invalid expiration date.\" }")
 		} else {
 			log.Print(err.Error())
 			fmt.Fprintf(w, "{ \"error\": \"Something went wrong.\" }")
 		}
-	}	
+	}
 }
 
 func createUser(w http.ResponseWriter, r *http.Request) {
@@ -1277,7 +1280,7 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("Invalid status specified in http query.")
 		fmt.Fprintf(w, "{ \"error\": \"Invalid status value. Must be true or false.\" }")
-		return	
+		return
 	}
 	if uName == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -1306,9 +1309,8 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 
 	fullname := firstName + " " + lastName
 
-
 	var checkExist string
-	checkerr := DBptr.QueryRow(`select uname from users where uname=$1 and uid=$2 and full_name=$3`,uName, uid, fullname).Scan(&checkExist)
+	checkerr := DBptr.QueryRow(`select uname from users where uname=$1 and uid=$2 and full_name=$3`, uName, uid, fullname).Scan(&checkExist)
 	switch {
 	case checkerr == sql.ErrNoRows:
 		cKey, err := DBtx.Start(DBptr)
@@ -1316,8 +1318,8 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 			log.Fatal(err)
 		}
 		//actually insert
-		_, err = DBtx.Exec(`insert into users (uname, uid, full_name, status, expiration_date, last_updated) values $1,$2,$3,$4,$5,NOW()`,uName, uid, fullname, status, expdate )
-		
+		_, err = DBtx.Exec(`insert into users (uname, uid, full_name, status, expiration_date, last_updated) values $1,$2,$3,$4,$5,NOW()`, uName, uid, fullname, status, expdate)
+
 		if err == nil {
 			fmt.Fprintf(w, "{ \"status\": \"success\" }")
 			DBtx.Commit(cKey)
@@ -1325,15 +1327,116 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 		} else {
 			log.Print(err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w, "{ \"error\": \"" + err.Error() +"\" }")
+			fmt.Fprintf(w, "{ \"error\": \""+err.Error()+"\" }")
 		}
 	case checkerr != nil:
-		
+
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "{ \"error\": \"" + checkerr.Error() +"\" }")	
+		fmt.Fprintf(w, "{ \"error\": \""+checkerr.Error()+"\" }")
 	default:
 		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, "{ \"error\": \"user " + uName + " already exists.\"}")
+		fmt.Fprintf(w, "{ \"error\": \"user "+uName+" already exists.\"}")
 	}
-	
+
+}
+
+func getMemberAffiliations(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	type jsonerror struct {
+		Error string `json:"error"`
+	}
+	var inputErr []jsonerror
+
+	user := q.Get("username")
+	expOnly := false
+
+	if user == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No username specified in http query.")
+		inputErr = append(inputErr, jsonerror{"No username specified."})
+	}
+	if q.Get("experimentsonly") != "" {
+		var err error
+		if expOnly, err = strconv.ParseBool(q.Get("experimentsonly")); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			log.Print("Invalid experimentsonly specified in http query.")
+			inputErr = append(inputErr, jsonerror{"Invalid experimentsonly specified."})
+		}
+	}
+
+	if len(inputErr) > 0 {
+		jsonout, err := json.Marshal(inputErr)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Fprintf(w, string(jsonout))
+		return
+	}
+
+	rows, err := DBptr.Query(`select name, alternative_name, user_exists from (
+									select 1 as key, * from (
+										select distinct * from (select au.name, au.alternative_name from affiliation_units as au
+																right join grid_access as ga on au.unitid = ga.unitid left join users as u on ga.uid = u.uid
+																where u.uname = $1 and ((voms_url is not null = $2) or not $2)) as u
+
+										union                  (select au.name, au.alternative_name from affiliation_units as au
+																right join user_certificate as uc on au.unitid = uc.unitid left join users as u on uc.uid = u.uid
+																where u.uname = $1 and ((voms_url is not null = $2) or not $2))
+
+										union                  (select au.name, au.alternative_name from affiliation_units as au
+																right join affiliation_unit_group as ag on au.unitid = ag.unitid join user_group as ug on ag.groupid = ug.groupid
+																left join users as u on ug.uid = u.uid
+																where u.uname = $1 and ((voms_url is not null = $2) or not $2))
+									) as t
+									right join (select 1 as key, $1 in (select uname from users) as user_exists) as c on key = c.key
+							 ) as r;`, user, expOnly)
+
+	if err != nil {
+		defer log.Fatal(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	var userExists bool
+
+	type jsonentry struct {
+		Unit  string `json:"unitname"`
+		Aname string `json:"alternativename"`
+	}
+	var Entry jsonentry
+	var Out []jsonentry
+
+	for rows.Next() {
+		var tmpUnit, tmpAname sql.NullString
+		rows.Scan(&tmpUnit, &tmpAname, &userExists)
+
+		if tmpUnit.Valid {
+			Entry.Unit = tmpUnit.String
+			Entry.Aname = tmpAname.String
+			Out = append(Out, Entry)
+		}
+	}
+
+	var output interface{}
+	if len(Out) == 0 {
+		w.WriteHeader(http.StatusNotFound)
+		var queryErr []jsonerror
+		if !userExists {
+			queryErr = append(queryErr, jsonerror{"User does not exist."})
+		} else {
+			queryErr = append(queryErr, jsonerror{"User does not belong to any affiliation unit or experiment."})
+		}
+		output = queryErr
+	} else {
+		output = Out
+	}
+	jsonout, err := json.Marshal(output)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Fprintf(w, string(jsonout))
 }

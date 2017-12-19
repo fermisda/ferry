@@ -88,6 +88,7 @@ func main () {
 //	grouter.HandleFunc("/deleteUser"    ,    deleteUser)
 //	grouter.HandleFunc("/getUserID"    ,    getUserID)
 	grouter.HandleFunc("/getUserUname"    ,    getUserUname)
+	grouter.HandleFunc("/getMemberAffiliations",    getMemberAffiliations)
 
 	//group API calls
 	grouter.HandleFunc("/getgroupmembers", getGroupMembers)
