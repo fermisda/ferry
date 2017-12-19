@@ -37,13 +37,14 @@ class FERRYcli(object):
         # return just the Ferry function calls for the epilog
         return "Valid commands are: %s" % ','.join(OnlyFerry)
 
-    def addCertificateDNToUser(self):
-        parser = argparse.ArgumentParser(usage="%(prog)s addUserDN [<args>]")
-        parser.add_argument('uname',help="Username to receive new DN")
-        parser.add_argument('dn',help="Certificate DN to add")
-        args = parser.parse_args(sys.argv[2:])
-        print ("Adding DN\n%s\nto user %s" % (args.dn, args.uname))
+    def sendRequest(url,paramaters):
+        response = requests.post(url, params=parameters, timeout=(10,10), verify="/fife/local/data/home/boyd/cilogon-osg.pem", cert=('/home/ferry/.cert/hostcert.pem','/home/ferry/.cert/hostkey.pem'))
+        if not (response.status_code == 200):
+            jresponse = json.loads(response.text)
+            print ("%s" % (jresponse["error"]))
 
+    def addCertificateDNToUser(self):
+        pass
     def getUserCertificateDNs(self):
         pass
     def getUserFQANs(self):
@@ -55,12 +56,7 @@ class FERRYcli(object):
     def getUserInfo(self):
         pass
     def addUserToGroup(self):
-        parser = argparse.ArgumentParser(
-            usage="%(prog)s addUserToGroup [<args>]")
-        parser.add_argument('uname', help="Username to add")
-        args = parser.parse_args(sys.argv[2:])
-        print ('Adding user %s' % args.uname)
-
+        pass
     def addRoleToUser(self):
         parser = argparse.ArgumentParser(usage="%(prog)s addRoleToUser [<args>]")
         parser.add_argument('fqan',help="Full FQAN for new role")
@@ -70,10 +66,8 @@ class FERRYcli(object):
 
         url = "%s/setUserExperimentFQAN" % self.FerryURL
         parameters = {'fqan': args.fqan,'username':args.username,'experimentname':args.exp}
-        response = requests.post(url, params=parameters, timeout=(10,10), verify="/fife/local/data/home/boyd/cilogon-osg.pem", cert=('/home/ferry/.cert/hostcert.pem','/home/ferry/.cert/hostkey.pem'))
-        if not (response.status_code == 200):
-            jresponse = json.loads(response.text)
-            print ("%s" % (jresponse["error"]))
+        sendRequest(url,paramaters)
+
     def setUserShellAndHomeDir(self):
         pass
     def getUserShellAndHomeDir(self):
@@ -120,8 +114,18 @@ class FERRYcli(object):
         pass
     def setGroupBatchPriority(self):
         pass
-    def setGroupCondorQuota(self):
-        pass
+    def modifyCondorQuota(self):
+        parser = argparse.ArgumentParser(usage="%(prog)s modifyCondorQuota [<args>]")
+        parser.add_argument('exp',help="Experiment")
+        parser.add_argument('subgroup',help="Second level batch group")
+        parser.add_argument('quotaPerc',help="Percentage of total quota allocated to this group")
+        parser.add_argument('--validDays',help="How many days should this be valid")
+        args = parser.parse_args(sys.argv[2:])
+
+        url = "%s/setGroupCondorQuota" % self.FerryURL
+        parameters = {'groupname': args.exp,'resourcename':args.subgroup,'quota':args.quotaPerc,'validuntil':args.validDays}
+        sendRequest(url,paramaters)
+        
     def getGroupStorageQuotas(self):
         pass
     def setGroupStorageQuota(self):
@@ -175,10 +179,7 @@ class FERRYcli(object):
 
         url = "%s/createFQAN" % self.FerryURL
         parameters = {'fqan': args.fqan,'mapped_group':args.mapped_group,'mapped_user':args.mapped_user}
-        response = requests.post(url, params=parameters, timeout=(10,10), verify="/fife/local/data/home/boyd/cilogon-osg.pem", cert=('/home/ferry/.cert/hostcert.pem','/home/ferry/.cert/hostkey.pem'))
-        if not (response.status_code == 200):
-            jresponse = json.loads(response.text)
-            print ("%s" % (jresponse["error"]))
+        sendRequest(url,paramaters)
 
     def removeRoleFromVO (self):
         parser = argparse.ArgumentParser(usage="%(prog)s removeRoleFromVO [<args>]")
@@ -187,10 +188,7 @@ class FERRYcli(object):
 
         url = "%s/removeFQAN" % self.FerryURL
         parameters = {'fqan': args.fqan}
-        response = requests.post(url, params=parameters, timeout=(10,10), verify="/fife/local/data/home/boyd/cilogon-osg.pem", cert=('/home/ferry/.cert/hostcert.pem','/home/ferry/.cert/hostkey.pem'))
-        if not (response.status_code == 200):
-            jresponse = json.loads(response.text)
-            print ("%s" % (jresponse["error"]))
+        sendRequest(url,paramaters)
 
     def setFQANMappings(self):
         pass
