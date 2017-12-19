@@ -1,12 +1,15 @@
 package main
 import (
-"crypto/x509"
-"fmt"
-"log"
-"net/http"
-"os"
-"bytes"
-"bufio"
+	"crypto/x509"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"bytes"
+	"bufio"
+	"strings"
+	"crypto/tls"
+	"github.com/spf13/viper"
 )
 
 // we probably need   list of authorized DNs too
@@ -34,6 +37,7 @@ func loadCerts(certs []string) (*x509.CertPool, error) {
 	for _, ca := range certs {
 		f, err := os.Open(ca)
 		if err != nil {
+			fmt.Println("Something went wrong opening " + ca) 
 			return nil, err
 		}
 		defer f.Close()
@@ -86,4 +90,31 @@ func authorize( req *http.Request, authDNs []string ) (bool, string) {
 		return authorized, "No CN found or no cert presented."	
 	}
 	
+}
+
+func checkClientIP(client *tls.ClientHelloInfo) (*tls.Config, error) {
+	ip := client.Conn.RemoteAddr().String()
+
+	authIPs := viper.GetStringSlice("whitelist")
+
+	for _, authIP := range authIPs {
+		if authIP == strings.Split(ip, ":")[0] {
+			log.Printf("Host matches authorized IP %s.", authIP)
+			
+			var err error
+			srvConfig := viper.GetStringMapString("server")
+			newConfig := Mainsrv.TLSConfig.Clone()
+			newConfig.ClientAuth = tls.VerifyClientCertIfGiven
+			newConfig.Certificates = make([]tls.Certificate, 1)
+			newConfig.Certificates[0], err = tls.LoadX509KeyPair(srvConfig["cert"], srvConfig["key"])
+			if err != nil {
+				log.Print(err)
+				return nil, err
+			}
+
+			return newConfig, nil
+		}
+	}
+
+	return nil, nil
 }
