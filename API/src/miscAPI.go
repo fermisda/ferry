@@ -344,18 +344,6 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w,output)
 }
 
-func getUserUID(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query() 
-//	uname := q.Get("username")
-	NotDoneYet(w)
-}
-func getUserUname(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query() 
-//	uid := int(q.Get("uid"))
-	NotDoneYet(w)
-}
 func getGroupGID(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()

@@ -1440,3 +1440,75 @@ func getMemberAffiliations(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
+
+func getUserUID(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	uName := q.Get("username")
+	if uName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No username specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No username specified.\" }")
+		return
+	}
+	var uid int
+	checkerr := DBptr.QueryRow(`select uid from users where uname=$1`, uName).Scan(&uid)
+	
+	switch {
+	case checkerr == sql.ErrNoRows: 
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"error\": \"User does not exist.\" }")
+		log.Print("user " + uName + " not found in DB.")
+		return
+		
+	case checkerr != nil: 
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, "{ \"error\": \"Error in DB query.\" }")
+		log.Print("Error in DB query for " + uName + ": " + checkerr.Error())
+		return
+	default:
+		fmt.Fprintf(w, "{ \"uid\": " + strconv.Itoa(uid) + " }")	
+		return
+	}
+}
+
+func getUserUname(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	uidstr := q.Get("uid")
+	uid,err := strconv.Atoi(uidstr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("Invalid uid specified (either missing or not an integer).")
+		fmt.Fprintf(w,"{ \"error\": \"Invalid uid specified.\" }")
+		return	
+	}
+	if uidstr == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No uid specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No uid specified.\" }")
+		return
+	}
+	var uname string
+	checkerr := DBptr.QueryRow(`select uid from users where uid=$1`, uid).Scan(&uname)
+	
+	switch {
+	case checkerr == sql.ErrNoRows: 
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"error\": \"User does not exist.\" }")
+		log.Print("user ID " + uidstr + " not found in DB.")
+		return
+		
+	case checkerr != nil:
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, "{ \"error\": \"Error in DB query.\" }")
+		log.Print("Error in DB query for " + uidstr + ": " + checkerr.Error())
+		return
+	default:
+		fmt.Fprintf(w, "{ \"uname\": \"" + uname  + "\" }")	
+		return
+	}
+}
+
