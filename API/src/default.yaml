@@ -1,3 +1,6 @@
+general:
+  log: ferry.log
+
 database:
   host: REPLACE
   name: REPLACE

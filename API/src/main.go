@@ -28,11 +28,24 @@ func main () {
 	
 	fmt.Println("Here we go...")
 
+	//Setup configutation manager
 	viper.SetConfigName("default")
 	viper.AddConfigPath(".")
 	cfgErr := viper.ReadInConfig()
 	if cfgErr != nil {
 		panic(fmt.Errorf("Fatal error config file: %s \n", cfgErr))
+	}
+
+	//Setup log file
+	generalConfig := viper.GetStringMapString("general")
+
+	if len(generalConfig["log"]) > 0 {
+		logFile, logErr := os.OpenFile(generalConfig["log"], os.O_WRONLY | os.O_CREATE | os.O_APPEND, 0644)
+		if logErr != nil {
+			panic(fmt.Errorf("Fatal error log file: %s \n", logErr))
+		}
+		defer logFile.Close()
+		log.SetOutput(logFile)
 	}
 
 	//Make sure we are not running as root, and exit if we are.
