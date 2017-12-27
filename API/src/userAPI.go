@@ -1306,7 +1306,10 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "{ \"error\": \"No lastname specified.\" }")
 		return
 	}
-
+	if expdate == "" {
+		expdate = "2038-01-01"
+	}
+	
 	fullname := firstName + " " + lastName
 
 	var checkExist string
@@ -1318,7 +1321,12 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 			log.Fatal(err)
 		}
 		//actually insert
-		_, err = DBtx.Exec(`insert into users (uname, uid, full_name, status, expiration_date, last_updated) values $1,$2,$3,$4,$5,NOW()`, uName, uid, fullname, status, expdate)
+//		_, err = DBtx.Exec(`insert into users (uname, uid, full_name, status, expiration_date, last_updated) values $1,$2,$3,$4,$5,NOW()`, uName, uid, fullname, status, expdate)
+
+	//	theStmt := fmt.Sprintf("insert into users (uname, uid, full_name, status, expiration_date, last_updated) values ('%s',%d,'%s','%s','%s',NOW())", uName, uid, fullname, status, expdate)
+	//	fmt.Println(theStmt)
+
+		_, err = DBtx.Exec(fmt.Sprintf("insert into users (uname, uid, full_name, status, expiration_date, last_updated) values ('%s',%s,'%s',%t,'%s', NOW())", uName, uid, fullname, status, expdate))
 
 		if err == nil {
 			fmt.Fprintf(w, "{ \"status\": \"success\" }")
@@ -1492,7 +1500,7 @@ func getUserUname(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var uname string
-	checkerr := DBptr.QueryRow(`select uid from users where uid=$1`, uid).Scan(&uname)
+	checkerr := DBptr.QueryRow(`select uname from users where uid=$1`, uid).Scan(&uname)
 	
 	switch {
 	case checkerr == sql.ErrNoRows: 
@@ -1512,3 +1520,55 @@ func getUserUname(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func deleteUser(w http.ResponseWriter, r *http.Request) {
+	
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	uName := q.Get("username")
+	if uName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No username specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No username specified.\" }")
+		return		
+	}
+	// check if the username is already in the DB. If it is not, say so and exit since there is nothing to delete.
+	var uname string
+	checkerr := DBptr.QueryRow(`select uid from users where uname=$1`, uName).Scan(&uname)
+	
+	switch {
+	case checkerr == sql.ErrNoRows: 
+		// set the header for success since we are already at the desired result
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "{ \"status\": \"Nothing to delete; user does not exist.\" }")
+		log.Print("user ID " + uName + " not found in DB.")
+		return	
+	case checkerr != nil:
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, "{ \"error\": \"Nothing to delete; user does not exist.\" }")
+		log.Print("deleteUser: Error querying DB for user " + uName + ".")
+		return	
+	default:
+		// actually do the deletion now
+		cKey, err := DBtx.Start(DBptr)
+		if err != nil {
+			log.Print(err)
+		}
+		myStmt,myStmterr := DBptr.Prepare(fmt.Sprintf("delete from users where uname='%s'",uName))
+		if myStmterr != nil {
+			log.Print("Error creating prepared statement for deleteUser(" + uName + ").")	
+		}
+		_, err = myStmt.Exec() 
+		if err == nil {	
+			fmt.Fprintf(w, "{ \"status\": \"success\" }")
+			DBtx.Commit(cKey)
+			myStmt.Close()
+			return
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, "{ \"error\": \"%s\" }",err.Error())
+			log.Print("deleteUser: Error during delete action for user " + uName + ": " + err.Error())
+			myStmt.Close()
+			return			
+		}	
+	}
+}
