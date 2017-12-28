@@ -55,6 +55,20 @@ func loadCerts(certs []string) (*x509.CertPool, error) {
 func authorize( req *http.Request, authDNs []string ) (bool, string) {
 	// authorization should fail by default
 	authorized := false
+	ip := req.RemoteAddr
+	log.Printf("Authorization request from %s",ip)
+	// let's first see if the request is coming from a trusted IP. If it is, we let it through and don't worry about the DN.
+	authIPs := viper.GetStringSlice("whitelist")
+	
+	for _, authIP := range authIPs {
+		if authIP == strings.Split(ip, ":")[0] {
+			log.Printf("Host matches authorized IP %s.", authIP)
+			authorized = true
+			return authorized, authIP
+		}
+	}
+	
+	//OK, we did not match an authorized IP, so now we require an authorized certificate DN.
 
 	//string to build the full DN
 	certDN := ""

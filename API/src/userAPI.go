@@ -436,6 +436,13 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	authorized, authout := authorize(r, AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w, "{ \"error\": \""+authout+"not authorized.\" }")
+		return
+	}
+
 	cKey, err := DBtx.Start(DBptr)
 	if err != nil {
 		log.Fatal(err)
@@ -495,6 +502,13 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("No experimentname specified in http query.")
 		fmt.Fprintf(w, "{ \"error\": \"No experimentname specified.\" }")
+		return
+	}
+
+	authorized, authout := authorize(r, AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w, "{ \"error\": \""+authout+"not authorized.\" }")
 		return
 	}
 
@@ -567,6 +581,13 @@ func setUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("No homedir specified in http query.")
 		fmt.Fprintf(w, "{ \"error\": \"No homedir specified.\" }")
+		return
+	}
+
+	authorized, authout := authorize(r, AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w, "{ \"error\": \""+authout+"not authorized.\" }")
 		return
 	}
 
@@ -878,6 +899,13 @@ func setUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	authorized, authout := authorize(r, AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w, "{ \"error\": \""+authout+"not authorized.\" }")
+		return
+	}
+
 	cKey, err := DBtx.Start(DBptr)
 	if err != nil {
 		log.Fatal(err)
@@ -938,6 +966,13 @@ func removeUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Reque
 		w.WriteHeader(http.StatusBadRequest)
 		log.Print("No attribute specified in http query.")
 		fmt.Fprintf(w, "{ \"error\": \"No attribute specified.\" }")
+		return
+	}
+
+	authorized, authout := authorize(r, AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w, "{ \"error\": \""+authout+"not authorized.\" }")
 		return
 	}
 
@@ -1218,6 +1253,14 @@ func setUserInfo(w http.ResponseWriter, r *http.Request) {
 	} else {
 		eDate = fmt.Sprintf("'%s'", eDate)
 	}
+
+	authorized, authout := authorize(r, AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w, "{ \"error\": \""+authout+"not authorized.\" }")
+		return
+	}
+
 	cKey, err := DBtx.Start(DBptr)
 	if err != nil {
 		log.Fatal(err)
@@ -1531,6 +1574,14 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w,"{ \"error\": \"No username specified.\" }")
 		return		
 	}
+
+	authorized, authout := authorize(r, AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w, "{ \"error\": \""+authout+"not authorized.\" }")
+		return
+	}
+
 	// check if the username is already in the DB. If it is not, say so and exit since there is nothing to delete.
 	var uname string
 	checkerr := DBptr.QueryRow(`select uid from users where uname=$1`, uName).Scan(&uname)
