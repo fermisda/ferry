@@ -137,41 +137,57 @@ func getGroupLeadersinAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()	
 	type jsonout struct {
 		GName string `json:"groupname"`
-		UName string `json:"username"`
-		UID int  `json:"uid"`
+		UID []int  `json:"uid"`
+		UName []string `json:"username"`
 	}
-		var Entry jsonout
-		var Out []jsonout
+	var Entry jsonout
+	var Out []jsonout
+	var (
+		tmpUID int
+		tmpUname,tmpGname string
+	)		
+	for rows.Next() {
 		
-		for rows.Next() {
-			var (
-				tmpUID int
-				tmpUname,tmpGname string
-			)
-			rows.Scan(&tmpGname,&tmpUID,&tmpUname)
+		rows.Scan(&tmpGname,&tmpUID,&tmpUname)
+		if (Entry.GName == tmpGname) {
 			Entry.GName = tmpGname
-			Entry.UID = tmpUID
-			Entry.UName = tmpUname
-			Out = append(Out, Entry)
-		}
-		var output interface{}
-		if len(Out) == 0 {
-			w.WriteHeader(http.StatusNotFound)
-			type jsonerror struct {
-				Error string `json:"error"`
-			}
-			var queryErr []jsonerror
-			queryErr = append(queryErr, jsonerror{"This affiliation unit has no groups with assigned leaders."})
-			output = queryErr
+			Entry.UID = append(Entry.UID,tmpUID)
+			Entry.UName = append(Entry.UName,tmpUname)
 		} else {
-			output = Out
+			if ( Entry.GName != "" ) {
+				Out  = append(Out,Entry)
+			}
+			Entry.GName = tmpGname
+			Entry.UID = make([]int, 0)
+			Entry.UID = append(Entry.UID,tmpUID)
+			Entry.UName = make([]string, 0)
+			Entry.UName = append(Entry.UName,tmpUname)
 		}
-		jsonoutput, err := json.Marshal(output)
-		if err != nil {
-			log.Print(err.Error())
+	
+	}
+	if ( Entry.GName != "" ) {
+		Out  = append(Out,Entry)
+	}
+	
+//	Out = append(Out, Entry)
+	var output interface{}
+	if len(Out) == 0 {
+		w.WriteHeader(http.StatusNotFound)
+		type jsonerror struct {
+			Error string `json:"error"`
 		}
-		fmt.Fprintf(w, string(jsonoutput))
-		
+		var queryErr []jsonerror
+		queryErr = append(queryErr, jsonerror{"This affiliation unit has no groups with assigned leaders."})
+		output = queryErr
+	} else {
+		output = Out
+	}
+	jsonoutput, err := json.Marshal(output)
+	if err != nil {
+		log.Print(err.Error())
+	}
+	fmt.Fprintf(w, string(jsonoutput))
+	
 }
 
 func getCollaborationUnitStorageResources(w http.ResponseWriter, r *http.Request) {

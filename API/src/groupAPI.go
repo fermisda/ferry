@@ -33,6 +33,13 @@ func createGroup(w http.ResponseWriter, r *http.Request) {
 		gid.Scan(q.Get("gid"))
 	}
 
+	authorized,authout := authorize(r,AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"error\": \"" + authout + "not authorized.\" }")
+		return
+	}
+
 	cKey, err := DBtx.Start(DBptr)
 	if err != nil {
 		log.Fatal(err)
@@ -139,12 +146,19 @@ func getGroupUnits(w http.ResponseWriter, r *http.Request) {
 }
 func getGroupBatchPriorities(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query()
-//	groupname := q.Get("groupname")
+	q := r.URL.Query()
+	groupname := q.Get("groupname")
 //	resource := q.Get("resourcename")
-//	exptname := q.Get("experimentname")
+	if groupname == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No groupname specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No groupname specified.\" }")
+		return
+	}
+	
 	NotDoneYet(w)
 }
+
 func getGroupCondorQuotas(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 //	q := r.URL.Query()
