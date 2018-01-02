@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"net/http"
 	"strconv"
 	"strings"
@@ -20,7 +20,7 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 	expt := q.Get("experimentname")
 	if uname == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Print("No username specified in http query.")
+		log.WithFields(QueryFields(r)).Error("No username specified in http query.")
 		fmt.Fprintf(w, "{ \"error\": \"No username specified.\" }")
 		return
 	}
