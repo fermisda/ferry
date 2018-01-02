@@ -138,10 +138,10 @@ func main () {
 	grouter.HandleFunc("/getAffiliationMembersRoles", getAffiliationMembersRoles)
 	grouter.HandleFunc("/getStorageAccessLists", getStorageAccessLists)
 
-	//collaboration unit API calls
-	grouter.HandleFunc("/createCollaborationUnit",             createCollaborationUnit)           
-	grouter.HandleFunc("/removeCollaborationUnit", 		   removeCollaborationUnit)           
-	grouter.HandleFunc("/setCollaborationUnitInfo", 	   setCollaborationUnitInfo)          
+	//affiliation unit API calls
+	grouter.HandleFunc("/createAffiliationUnit",             createAffiliationUnit)           
+	grouter.HandleFunc("/removeAffiliationUnit", 		   removeAffiliationUnit)           
+	grouter.HandleFunc("/setAffiliationUnitInfo", 	   setAffiliationUnitInfo)          
 	grouter.HandleFunc("/getCollaborationUnitMembers",	   getCollaborationUnitMembers)       
 	grouter.HandleFunc("/getGroupsInAffiliationUnit", 	   getGroupsInAffiliationUnit)      
 	grouter.HandleFunc("/getGroupLeadersinAffiliationUnit",  getGroupLeadersinAffiliationUnit)
