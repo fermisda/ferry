@@ -47,6 +47,7 @@ func createGroup(w http.ResponseWriter, r *http.Request) {
 
 	_, err = DBtx.Exec("insert into groups (gid, name, type, last_updated) values ($1, $2, $3, NOW())", gid, gName, gType)
 	if err == nil {
+		DBtx.Commit(cKey)
 		fmt.Fprintf(w,"{ \"status\": \"success\" }")
 	} else {
 		if strings.Contains(err.Error(), `invalid input value for enum groups_group_type`) {
@@ -59,8 +60,6 @@ func createGroup(w http.ResponseWriter, r *http.Request) {
 			log.Print(err.Error())
 		}
 	}
-
-	DBtx.Commit(cKey)
 }
 
 func deleteGroupt(w http.ResponseWriter, r *http.Request) {
