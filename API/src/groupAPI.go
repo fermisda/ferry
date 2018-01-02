@@ -33,6 +33,13 @@ func createGroup(w http.ResponseWriter, r *http.Request) {
 		gid.Scan(q.Get("gid"))
 	}
 
+	authorized,authout := authorize(r,AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"error\": \"" + authout + "not authorized.\" }")
+		return
+	}
+
 	cKey, err := DBtx.Start(DBptr)
 	if err != nil {
 		log.Fatal(err)
@@ -40,6 +47,7 @@ func createGroup(w http.ResponseWriter, r *http.Request) {
 
 	_, err = DBtx.Exec("insert into groups (gid, name, type, last_updated) values ($1, $2, $3, NOW())", gid, gName, gType)
 	if err == nil {
+		DBtx.Commit(cKey)
 		fmt.Fprintf(w,"{ \"status\": \"success\" }")
 	} else {
 		if strings.Contains(err.Error(), `invalid input value for enum groups_group_type`) {
@@ -52,8 +60,6 @@ func createGroup(w http.ResponseWriter, r *http.Request) {
 			log.Print(err.Error())
 		}
 	}
-
-	DBtx.Commit(cKey)
 }
 
 func deleteGroupt(w http.ResponseWriter, r *http.Request) {
@@ -139,12 +145,19 @@ func getGroupUnits(w http.ResponseWriter, r *http.Request) {
 }
 func getGroupBatchPriorities(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query()
-//	groupname := q.Get("groupname")
+	q := r.URL.Query()
+	groupname := q.Get("groupname")
 //	resource := q.Get("resourcename")
-//	exptname := q.Get("experimentname")
+	if groupname == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No groupname specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No groupname specified.\" }")
+		return
+	}
+	
 	NotDoneYet(w)
 }
+
 func getGroupCondorQuotas(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 //	q := r.URL.Query()

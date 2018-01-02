@@ -6,34 +6,306 @@ import (
 	"log"
 	_ "github.com/lib/pq"
 	"net/http"
-	//"encoding/json"
+	"encoding/json"
+	"strconv"
 )
 
-func createCollaborationUnit(w http.ResponseWriter, r *http.Request) {
+func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query()
-//	unitname := q.Get("unitname")
-//	voms_url := q.Get("voms_url")
-//	alternative_name := q.Get("alternative_name")
-	NotDoneYet(w)
-	//requires auth
-}
-func removeCollaborationUnit(w http.ResponseWriter, r *http.Request) { 
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query()
-//	unitname := q.Get("unitname")	
-	NotDoneYet(w)
-	//requires auth
+	q := r.URL.Query()
+	unitName := q.Get("unitname")
+	voms_url := q.Get("voms_url")
+	altName := q.Get("alternative_name")
+	unitType := q.Get("type") 
+//only the unit name is actually required; the others can be empty
+	if unitName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No experiment specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No experiment name specified.\" }")
+		return
+	}
+	if voms_url == "" {
+		voms_url = "NULL"
+	} else {
+		voms_url = "'" + voms_url + "'"
+	}
+	if altName == "" {
+		altName = "NULL"
+	} else {
+		altName = "'" + altName + "'"
+	}
+	if unitType == "" {
+		unitType = "NULL"
+	} else {
+		unitType = "'" + unitType + "'"
+	}
+	authorized,authout := authorize(r,AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"error\": \"" + authout + "not authorized.\" }")
+		return
+	}
+
+	// check if it already exists
+	var unitId int
+	checkerr := DBptr.QueryRow(`select unitid from affiliation_units where name=$1`,unitName).Scan(&unitId)
+	log.Print("unitID = " + strconv.Itoa(unitId))
+	switch {
+	case checkerr == sql.ErrNoRows:
+		// OK, it doesn't exist, let's add it now.
+		
+		// start a transaction
+		cKey, err := DBtx.Start(DBptr)
+		if err != nil {
+			log.Print("Error starting DB transaction: " + err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w,"{ \"error\": \"Error starting database transaction.\" }")
+			return
+		}
+		
+		// string for the insert statement
+		createstr := fmt.Sprintf("insert into affiliation_units (voms_url, alternative_name, last_updated, name ) values (%s, %s, NOW(), '%s')", voms_url, altName,unitName)
+		//create prepared statement
+		stmt, err := DBptr.Prepare(createstr)
+		if err != nil {
+			log.Print("Error preparing DB command: " + err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w,"{ \"error\": \"Error preparing database command.\" }")
+			return
+		}
+		//run said statement and check errors
+		_, err = stmt.Exec()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			log.Print("Error adding " + unitName + " to affiliation_units: " + err.Error())
+			fmt.Fprintf(w,"{ \"error\": \"Error executing DB insert.\" }")
+			DBtx.Rollback()
+		} else {
+			// error is nil, so it's a success. Commit the transaction and return success.
+			DBtx.Commit(cKey)
+			w.WriteHeader(http.StatusOK)
+			log.Print("Successfully added " + unitName + " to affiliation_units.")
+			fmt.Fprintf(w,"{ \"status\": \"success.\" }")
+		}
+		stmt.Close()
+		return
+	case checkerr != nil:
+		//other weird error
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Print("Cannot create affiliation unit " + unitName + ": " + checkerr.Error())
+		fmt.Fprintf(w,"{ \"error\": \"Database error; check logs.\" }")
+		return
+	default:
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("Cannot create affiliation unit " + unitName + "; another unit with that name already exists.")
+		fmt.Fprintf(w,"{ \"error\": \"Unit %s already exists.\" }",unitName)
+		return
+	} 
 }
 
-func setCollaborationUnitInfo(w http.ResponseWriter, r *http.Request) { 
+func removeAffiliationUnit(w http.ResponseWriter, r *http.Request) { 
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query()
-//	unitname := q.Get("unitname")
-//	voms_url := q.Get("voms_url")
-//	alternative_name := q.Get("alternative_name")
-	NotDoneYet(w)
-	/// Requires AUTH
+	q := r.URL.Query()
+	unitName := q.Get("unitname")	
+	if unitName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No experiment specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No experiment name specified.\" }")
+		return
+	}
+	//requires auth	
+	authorized,authout := authorize(r,AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"error\": \"" + authout + "not authorized.\" }")
+		return
+	}
+//check if it is really there already
+	// check if it already exists
+	var unitId int
+	checkerr := DBptr.QueryRow(`select unitid from affiliation_units where name=$1`,unitName).Scan(&unitId)
+	log.Print("unitID = " + strconv.Itoa(unitId))
+	switch {
+	case checkerr == sql.ErrNoRows:
+		// OK, it doesn't exist, let's add it now.
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("Cannot delete affiliation unit " + unitName + "; unit does not exist.")
+		fmt.Fprintf(w,"{ \"error\": \"Unit %s does not exist.\" }",unitName)
+		return	
+	case checkerr != nil:
+		//other weird error
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Print("Cannot remove affiliation unit " + unitName + ": " + checkerr.Error())
+		fmt.Fprintf(w,"{ \"error\": \"Database error; check logs.\" }")
+		return
+	default:
+
+		cKey, err := DBtx.Start(DBptr)
+		if err != nil {
+			log.Print("Error starting DB transaction: " + err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w,"{ \"error\": \"Error starting database transaction.\" }")
+			return
+		}
+			// string for the remove statement
+		removestr := fmt.Sprintf("delete from affiliation_units where name='%s'", unitName)
+		//create prepared statement
+		stmt, err := DBptr.Prepare(removestr)
+		if err != nil {
+			log.Print("Error preparing DB command: " + err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w,"{ \"error\": \"Error preparing database command.\" }")
+			return
+		}
+		//run said statement and check errors
+		_, err = stmt.Exec()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			log.Print("Error adding " + unitName + " to affiliation_units: " + err.Error())
+			fmt.Fprintf(w,"{ \"error\": \"Error executing DB insert.\" }")
+		} else {
+			// error is nil, so it's a success. Commit the transaction and return success.
+			DBtx.Commit(cKey)
+			w.WriteHeader(http.StatusOK)
+			log.Print("Successfully added " + unitName + " to affiliation_units.")
+			fmt.Fprintf(w,"{ \"status\": \"success.\" }")
+		}
+		stmt.Close()
+		return	
+	}
+}
+
+
+func setAffiliationUnitInfo(w http.ResponseWriter, r *http.Request) { 
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	unitName := q.Get("unitname")
+	voms_url := q.Get("voms_url")
+	altName := q.Get("alternative_name")
+	unitType := q.Get("type")
+//	unitId := q.Get("unitid")
+//only unitName is required
+	if unitName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No experiment specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No experiment name specified.\" }")
+		return
+	}
+	if unitType == "" && voms_url == "" && altName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No values specified to modify.")
+		fmt.Fprintf(w,"{ \"error\": \"No values (voms_url, type, alternative_name) specified to modify.\" }")
+		return
+	}
+
+	//require auth	
+	authorized,authout := authorize(r,AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"error\": \"" + authout + "not authorized.\" }")
+		return
+	}
+//check if it is really there already
+	// check if it already exists and grab current values
+	var (
+		tmpId int
+		tmpaltName sql.NullString 
+		tmpvoms sql.NullString
+		tmpType sql.NullString
+	)
+	checkerr := DBptr.QueryRow(`select unitid, voms_url, alternative_name, type from affiliation_units where name=$1`,unitName).Scan(&tmpId, &tmpvoms, &tmpaltName, &tmpType)
+	log.Print("unitID = " + strconv.Itoa(tmpId))
+	switch {
+	case checkerr == sql.ErrNoRows:
+		// OK, it doesn't exist, bail out
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("Affiliation unit " + unitName + " not in database.")
+		fmt.Fprintf(w,"{ \"error\": \"Unit %s does not exist.\" }",unitName)
+		return		
+	case checkerr != nil:
+		//other weird error
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Print("Cannot update affiliation unit " + unitName + ": " + checkerr.Error())
+		fmt.Fprintf(w,"{ \"error\": \"Database error; check logs.\" }")
+		return
+	default:
+		// It exists, start updating
+
+		//start making our prepared statement string
+		modstr := "update affiliation_units (voms_url, alternative_name, type, last_updated) values "
+
+		// parse the values and get the quotes right. 
+		// Keep the existing values for those fields that were not explicitly set by the API call.
+		if voms_url == "" {
+			if tmpvoms.Valid == false {
+				voms_url = "NULL"
+			} else {
+				voms_url = "'" + tmpvoms.String + "'"
+			}
+		} else {
+			voms_url = "'" + voms_url + "'"
+		}
+		if altName == "" {
+			if tmpaltName.Valid == false {
+				altName = "NULL"
+			} else {
+				altName = "'" + tmpaltName.String + "'"
+			}
+		} else {
+			altName = "'" + altName + "'"
+		}
+		if unitType == "" {
+			if tmpType.Valid == false {
+				unitType = "NULL"
+			} else {
+				unitType = "'" + tmpType.String + "'"
+			}
+		} else {
+			unitType = "'" + unitType + "'"
+		}
+	
+		valstr := fmt.Sprintf("(%s, %s, %s, NOW()) where name='%s'", voms_url, altName, unitType, unitName)
+		log.Print("Full string is " + modstr + valstr)
+		return
+		// start DB transaction
+		
+		cKey, err := DBtx.Start(DBptr)
+		if err != nil {
+			log.Print("Error starting DB transaction: " + err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w,"{ \"error\": \"Error starting database transaction.\" }")
+			DBtx.Rollback()
+			return
+		}
+		
+		stmt, err := DBtx.tx.Prepare(modstr + valstr)
+		if err != nil {
+			log.Print("Error preparing DB command: " + err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w,"{ \"error\": \"Error preparing database command.\" }")
+			return
+		}
+
+	//run said statement and check errors
+		_, err = stmt.Exec()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			log.Print("Error updating " + unitName + " in affiliation_units: " + err.Error())
+			fmt.Fprintf(w,"{ \"error\": \"Error executing DB update.\" }")
+			rberr := DBtx.Rollback()
+			if rberr != nil {
+				log.Print("Error during rollback: " + rberr.Error())
+			}
+		} else {
+			// error is nil, so it's a success. Commit the transaction and return success.
+			DBtx.Commit(cKey)
+			w.WriteHeader(http.StatusOK)
+			log.Print("Successfully set values for " + unitName + " in affiliation_units.")
+			fmt.Fprintf(w,"{ \"status\": \"success.\" }")
+		}
+		stmt.Close()
+		return
+	}
 }
 
 func getCollaborationUnitMembers(w http.ResponseWriter, r *http.Request) {
@@ -43,18 +315,151 @@ func getCollaborationUnitMembers(w http.ResponseWriter, r *http.Request) {
 	NotDoneYet(w)
 }
 
-func getGroupsInCollaborationUnit(w http.ResponseWriter, r *http.Request) {
+func getGroupsInAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query() 
-//	collabunit := q.Get("unitname")
-	NotDoneYet(w)
+	q := r.URL.Query()
+	unitName := q.Get("unitname")
+
+	if unitName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No unit name specified in http query.")
+		fmt.Fprintf(w, "{ \"error\": \"No unitname specified.\" }")
+		return	
+	}
+	
+	var unitId int
+	checkerr := DBptr.QueryRow(`select unitid from affiliation_units where name=$1`,unitName).Scan(&unitId)
+	switch {
+	case checkerr == sql.ErrNoRows: 
+		// set the header for success since we are already at the desired result
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w, "{ \"error\": \"Affiliation unit does not exist.\" }")
+		log.Print("unit " + unitName + " not found in DB.")
+		return	
+	case checkerr != nil:
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, "{ \"error\": \"Database error.\" }")
+		log.Print("deleteUser: Error querying DB for unit " + unitName + ".")
+		return	
+	default:
+		
+		rows, err := DBptr.Query(`select gid, groups.name from affiliation_unit_group as aug join groups on aug.groupid = groups.groupid where aug.unitid=$1`, unitId)
+		if err != nil {
+			defer log.Print(err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, "{ \"error\": \"Error in DB query.\" }")
+			return
+		}
+		
+		defer rows.Close()
+		type jsonout struct {
+			GId int  `json:"gid"`
+			GName string `json:"name"`
+		}
+		var Entry jsonout
+		var Out []jsonout
+		
+		for rows.Next() {
+			var tmpGID int
+			var tmpGname string
+			rows.Scan(&tmpGID,&tmpGname)
+			Entry.GId = tmpGID
+			Entry.GName = tmpGname
+			Out = append(Out, Entry)
+		}
+		var output interface{}
+		if len(Out) == 0 {
+			w.WriteHeader(http.StatusNotFound)
+			type jsonerror struct {
+				Error string `json:"error"`
+			}
+			var queryErr []jsonerror
+			queryErr = append(queryErr, jsonerror{"This affiliation unit has no groups."})
+			output = queryErr
+		} else {
+			output = Out
+		}
+		jsonoutput, err := json.Marshal(output)
+		if err != nil {
+			log.Print(err.Error())
+		}
+		fmt.Fprintf(w, string(jsonoutput))
+	}
+	
 }
 
-func getGroupLeadersinCollaborationUnit(w http.ResponseWriter, r *http.Request) {
+func getGroupLeadersinAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query()
-//	collabunit := q.Get("unitname")
-	NotDoneYet(w)
+	q := r.URL.Query()
+	unitName := q.Get("unitname")
+	if unitName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Print("No unit name specified in http query.")
+		fmt.Fprintf(w, "{ \"error\": \"No unitname specified.\" }")
+		return	
+	}
+	
+	rows, err := DBptr.Query(`select groups.name, user_group.uid, users.uname  from user_group join users on users.uid = user_group.uid join groups on groups.groupid = user_group.groupid where is_leader=TRUE and user_group.groupid in (select groupid from affiliation_unit_group left outer join affiliation_units as au on affiliation_unit_group.unitid= au.unitid where au.name=$1) order by groups.name`,unitName)
+	if err != nil {
+		defer log.Print(err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, "{ \"error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()	
+	type jsonout struct {
+		GName string `json:"groupname"`
+		UID []int  `json:"uid"`
+		UName []string `json:"username"`
+	}
+	var Entry jsonout
+	var Out []jsonout
+	var (
+		tmpUID int
+		tmpUname,tmpGname string
+	)		
+	for rows.Next() {
+		
+		rows.Scan(&tmpGname,&tmpUID,&tmpUname)
+		if (Entry.GName == tmpGname) {
+			Entry.GName = tmpGname
+			Entry.UID = append(Entry.UID,tmpUID)
+			Entry.UName = append(Entry.UName,tmpUname)
+		} else {
+			if ( Entry.GName != "" ) {
+				Out  = append(Out,Entry)
+			}
+			Entry.GName = tmpGname
+			Entry.UID = make([]int, 0)
+			Entry.UID = append(Entry.UID,tmpUID)
+			Entry.UName = make([]string, 0)
+			Entry.UName = append(Entry.UName,tmpUname)
+		}
+	
+	}
+	if ( Entry.GName != "" ) {
+		Out  = append(Out,Entry)
+	}
+	
+//	Out = append(Out, Entry)
+	var output interface{}
+	if len(Out) == 0 {
+		w.WriteHeader(http.StatusNotFound)
+		type jsonerror struct {
+			Error string `json:"error"`
+		}
+		var queryErr []jsonerror
+		queryErr = append(queryErr, jsonerror{"This affiliation unit has no groups with assigned leaders."})
+		output = queryErr
+	} else {
+		output = Out
+	}
+	jsonoutput, err := json.Marshal(output)
+	if err != nil {
+		log.Print(err.Error())
+	}
+	fmt.Fprintf(w, string(jsonoutput))
+	
 }
 
 func getCollaborationUnitStorageResources(w http.ResponseWriter, r *http.Request) {
