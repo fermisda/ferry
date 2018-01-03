@@ -10,8 +10,9 @@ import (
 	"time"
 )
 
-func NotDoneYet(w http.ResponseWriter) {
+func NotDoneYet(w http.ResponseWriter, r *http.Request, t time.Time) {
 	fmt.Fprintf(w, `{"error": "This function is not done yet!"}`)
+	log.WithFields(QueryFields(r, t)).Print("This function is not done yet!")
 }
 
 func getPasswdFile(w http.ResponseWriter, r *http.Request) {
@@ -478,7 +479,7 @@ func lookupCertificateDN(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 //	q := r.URL.Query() 
 //	certDN := q.Get("certificatedn")
-	NotDoneYet(w)
+	NotDoneYet(w, r, startTime)
 }
 func getMappedGidFile(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
