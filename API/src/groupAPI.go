@@ -21,13 +21,13 @@ func createGroup(w http.ResponseWriter, r *http.Request) {
 
 	if gName == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No groupname specified.\" }")
 		return
 	}
 	if gType == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.WithFields(QueryFields(r, startTime)).Print("No grouptype specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Error("No grouptype specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No grouptype specified.\" }")
 		return
 	}
@@ -59,7 +59,7 @@ func createGroup(w http.ResponseWriter, r *http.Request) {
 		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint "idx_groups_group_name"`) {
 			fmt.Fprintf(w,"{ \"error\": \"Group already exists.\" }")
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Print(err.Error())
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 		}
 	}
 }
@@ -164,7 +164,7 @@ func getGroupBatchPriorities(w http.ResponseWriter, r *http.Request) {
 //	resource := q.Get("resourcename")
 	if groupname == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No groupname specified.\" }")
 		return
 	}
@@ -210,19 +210,19 @@ func setGroupCondorQuota(w http.ResponseWriter, r *http.Request) {
 
 	if group == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No groupname specified.\" }")
 		return
 	}
 	if comp == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.WithFields(QueryFields(r, startTime)).Print("No resourcename specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Error("No resourcename specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No resourcename specified.\" }")
 		return
 	}
 	if quota == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.WithFields(QueryFields(r, startTime)).Print("No quota specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Error("No quota specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No quota specified.\" }")
 		return
 	}
@@ -284,7 +284,7 @@ func setGroupCondorQuota(w http.ResponseWriter, r *http.Request) {
 				  strings.Contains(err.Error(), `date/time field value out of range`) {
 			fmt.Fprintf(w,"{ \"error\": \"Invalid expiration date.\" }")
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Print(err.Error())
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 			fmt.Fprintf(w,"{ \"error\": \"Something went wrong.\" }")
 		}
 	}
@@ -300,19 +300,19 @@ func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 	exptname := q.Get("experimentname")
 	if groupname == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.WithFields(QueryFields(r, startTime)).Print("No group name specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Error("No group name specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No group name specified.\" }")
 		return
 	}
 	if resource == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.WithFields(QueryFields(r, startTime)).Print("No storage resource specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Error("No storage resource specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No storage resource specified.\" }")
 		return
 	}
 	if exptname == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.WithFields(QueryFields(r, startTime)).Print("No experiment specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Error("No experiment specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No experiment name specified.\" }")
 		return
 	}
@@ -379,36 +379,36 @@ func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
 
 	if gName == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.WithFields(QueryFields(r, startTime)).Print("No group name specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Error("No group name specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No group name specified.\" }")
 		return
 	}
 	if rName == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.WithFields(QueryFields(r, startTime)).Print("No storage resource specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Error("No storage resource specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No storage resource specified.\" }")
 		return
 	}
 	if unitName == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.WithFields(QueryFields(r, startTime)).Print("No experiment specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Error("No experiment specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No experiment name specified.\" }")
 		return
 	}	
 	if groupquota == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.WithFields(QueryFields(r, startTime)).Print("No quota value specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Error("No quota value specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No quota specified.\" }")
 		return
 	}
 	if validtime == "" {
-		log.WithFields(QueryFields(r, startTime)).Print("No expire time given; assuming it is indefinite.")
+		log.WithFields(QueryFields(r, startTime)).Error("No expire time given; assuming it is indefinite.")
 	} else {
 		validtime = "valid_until = " + validtime + ", "
 	}
 	if unit == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.WithFields(QueryFields(r, startTime)).Print("No quita unit specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Error("No quita unit specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No unit specified.\" }")
 		return
 	}
@@ -443,7 +443,7 @@ func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
 		} else if strings.Contains(err.Error(), `Resource does not exist.`) {
 			fmt.Fprintf(w,"{ \"error\": \"Resource does not exist.\" }")
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Print(err.Error())
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 			fmt.Fprintf(w,"{ \"error\": \"Something went wrong.\" }")
 		}
 	}

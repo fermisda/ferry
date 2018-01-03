@@ -1,5 +1,6 @@
-general:
-  log: ferry.log
+log:
+  file: ferry.log
+  level: info
 
 database:
   host: REPLACE

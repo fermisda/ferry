@@ -12,7 +12,7 @@ import (
 
 func NotDoneYet(w http.ResponseWriter, r *http.Request, t time.Time) {
 	fmt.Fprintf(w, `{"error": "This function is not done yet!"}`)
-	log.WithFields(QueryFields(r, t)).Print("This function is not done yet!")
+	log.WithFields(QueryFields(r, t)).Error("This function is not done yet!")
 }
 
 func getPasswdFile(w http.ResponseWriter, r *http.Request) {
@@ -25,7 +25,7 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 	
 	if unit == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.WithFields(QueryFields(r, startTime)).Print("No unitname specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No unitname specified.\" }")
 		return
 	}
@@ -132,7 +132,7 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 	
 	if unit == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.WithFields(QueryFields(r, startTime)).Print("No unitname specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No unitname specified.\" }")
 		return
 	}
@@ -355,7 +355,7 @@ func getGroupGID(w http.ResponseWriter, r *http.Request) {
 	var iGid bool
 	if gName == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No groupname specified.\" }")
 		return
 	}
@@ -364,7 +364,7 @@ func getGroupGID(w http.ResponseWriter, r *http.Request) {
 		iGid, err = strconv.ParseBool(q.Get("include_gid"))
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			log.WithFields(QueryFields(r, startTime)).Print("Invalid include_gid specified in http query.")
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid include_gid specified in http query.")
 			fmt.Fprintf(w,"{ \"error\": \"Invalid include_gid specified.\" }")
 			return
 		}
@@ -423,12 +423,12 @@ func getGroupName(w http.ResponseWriter, r *http.Request) {
 	gid := q.Get("gid")
 	if gid == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.WithFields(QueryFields(r, startTime)).Print("No gid specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Error("No gid specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No gid specified.\" }")
 		return
 	} else if _, err := strconv.Atoi(gid); err != nil  {
 		w.WriteHeader(http.StatusBadRequest)
-		log.WithFields(QueryFields(r, startTime)).Print("Invalid gid specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Error("Invalid gid specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"Invalid gid specified.\" }")
 		return
 	}
@@ -700,7 +700,7 @@ func getStorageAccessLists(w http.ResponseWriter, r *http.Request) {
 	}
 	/*if resource == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.WithFields(QueryFields(r, startTime)).Print("No resourcename specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Error("No resourcename specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No resourcename specified.\" }")
 		return
 	}*/

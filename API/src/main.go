@@ -21,7 +21,8 @@ var AuthorizedDNs []string
 var Mainsrv *http.Server
 
 func handler(w http.ResponseWriter, r *http.Request) {
-	fmt.Println(r.URL.Path)
+	startTime := time.Now()
+	log.WithFields(QueryFields(r, startTime)).Debug(r.URL.Path)
 	fmt.Fprintf(w, "This is a placeholder for paths like %s!", r.URL.Path[1:])
 }
 
@@ -38,8 +39,6 @@ func QueryFields(r *http.Request, t time.Time) log.Fields {
 
 func main() {
 
-	fmt.Println("Here we go...")
-
 	//Setup configutation manager
 	viper.SetConfigName("default")
 	viper.AddConfigPath(".")
@@ -49,16 +48,28 @@ func main() {
 	}
 
 	//Setup log file
-	generalConfig := viper.GetStringMapString("general")
+	logConfig := viper.GetStringMapString("log")
 
-	if len(generalConfig["log"]) > 0 {
-		logFile, logErr := os.OpenFile(generalConfig["log"], os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
-		if logErr != nil {
-			panic(fmt.Errorf("Fatal error log file: %s \n", logErr))
+	if len(logConfig) > 0 {
+		if len(logConfig["file"]) > 0 {
+			logFile, logErr := os.OpenFile(logConfig["file"], os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+			if logErr != nil {
+				log.Errorf("Error log file: %s \n", logErr)
+			}
+			defer logFile.Close()
+			log.SetOutput(logFile)
 		}
-		defer logFile.Close()
-		log.SetOutput(logFile)
+		if len(logConfig["level"]) > 0 {
+			level, logErr := log.ParseLevel(logConfig["level"])
+			if logErr != nil {
+				log.Error(logErr)
+			} else {
+				log.SetLevel(level)
+			}
+		}
 	}
+
+	log.Debug("Here we go...")
 
 	//Make sure we are not running as root, and exit if we are.
 	if os.Getuid() == 0 {
@@ -74,7 +85,7 @@ func main() {
 		dbConfig["timeout"], dbConfig["sslmode"], dbConfig["certificate"])
 	Mydb, err := sql.Open("postgres", connString)
 	if err != nil {
-		fmt.Println("there is an issue here")
+		log.Error("there is an issue here")
 		log.Fatal(err)
 	} else {
 		DBptr = Mydb
@@ -188,7 +199,7 @@ func main() {
 	}
 	AuthorizedDNs = make([]string, len(dnlist))
 	copy(AuthorizedDNs, dnlist)
-	log.Printf("Authorized DN list created with %d entries.", len(AuthorizedDNs))
+	log.Debugf("Authorized DN list created with %d entries.", len(AuthorizedDNs))
 	if len(AuthorizedDNs) == 0 {
 		log.Fatal("Authorized DN slice has zero elements.")
 	}
