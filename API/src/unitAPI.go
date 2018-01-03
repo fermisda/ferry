@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"encoding/json"
 	"strconv"
+	"time"
 )
 
 func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
@@ -312,7 +313,7 @@ func getCollaborationUnitMembers(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 //	q := r.URL.Query()
 //	collabunit := q.Get("unitname")
-	NotDoneYet(w)
+	NotDoneYet(w, r, startTime)
 }
 
 func getGroupsInAffiliationUnit(w http.ResponseWriter, r *http.Request) {
@@ -466,14 +467,14 @@ func getCollaborationUnitStorageResources(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 //	q := r.URL.Query()
 //	collabunit := q.Get("unitname")
-	NotDoneYet(w)
+	NotDoneYet(w, r, startTime)
 }
 
 func getCollaborationUnitComputeResources(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 //	q := r.URL.Query()
 //	collabunit := q.Get("unitname")
-	NotDoneYet(w)
+	NotDoneYet(w, r, startTime)
 }
 
 func createFQAN(w http.ResponseWriter, r *http.Request) {
@@ -528,7 +529,7 @@ func removeFQAN(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 //	q := r.URL.Query()
 //	fqan := q.Get("fqan")
-	NotDoneYet(w)
+	NotDoneYet(w, r, startTime)
 }
 
 func setFQANMappings(w http.ResponseWriter, r *http.Request) {
@@ -537,5 +538,5 @@ func setFQANMappings(w http.ResponseWriter, r *http.Request) {
 //	fqan := q.Get("fqan")
 //	mapuser := q.Get("mapped_user")
 //	mapgroup := q.Get("mapped_group")
-	NotDoneYet(w)
+	NotDoneYet(w, r, startTime)
 }
