@@ -28,17 +28,17 @@ func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 	}
 	if voms_url == "" {
 		voms_url = "NULL"
-	} else {
+	} else if voms_url != "NULL" {
 		voms_url = "'" + voms_url + "'"
 	}
 	if altName == "" {
 		altName = "NULL"
-	} else {
+	} else if altName != "NULL" {
 		altName = "'" + altName + "'"
 	}
 	if unitType == "" {
 		unitType = "NULL"
-	} else {
+	} else if unitType != "NULL" {
 		unitType = "'" + unitType + "'"
 	}
 	authorized,authout := authorize(r,AuthorizedDNs)
@@ -68,7 +68,7 @@ func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 		// string for the insert statement
 		createstr := fmt.Sprintf("insert into affiliation_units (voms_url, alternative_name, last_updated, name ) values (%s, %s, NOW(), '%s')", voms_url, altName,unitName)
 		//create prepared statement
-		stmt, err := DBptr.Prepare(createstr)
+		stmt, err := DBtx.tx.Prepare(createstr)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Print("Error preparing DB command: " + err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -153,7 +153,7 @@ func removeAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 			// string for the remove statement
 		removestr := fmt.Sprintf("delete from affiliation_units where name='%s'", unitName)
 		//create prepared statement
-		stmt, err := DBptr.Prepare(removestr)
+		stmt, err := DBtx.tx.Prepare(removestr)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Print("Error preparing DB command: " + err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -246,7 +246,7 @@ func setAffiliationUnitInfo(w http.ResponseWriter, r *http.Request) {
 			} else {
 				voms_url = "'" + tmpvoms.String + "'"
 			}
-		} else {
+		} else if voms_url != "NULL" {
 			voms_url = "'" + voms_url + "'"
 		}
 		if altName == "" {
@@ -255,7 +255,7 @@ func setAffiliationUnitInfo(w http.ResponseWriter, r *http.Request) {
 			} else {
 				altName = "'" + tmpaltName.String + "'"
 			}
-		} else {
+		} else if altName != "NULL" {
 			altName = "'" + altName + "'"
 		}
 		if unitType == "" {
@@ -264,7 +264,7 @@ func setAffiliationUnitInfo(w http.ResponseWriter, r *http.Request) {
 			} else {
 				unitType = "'" + tmpType.String + "'"
 			}
-		} else {
+		} else if unitType != "NULL" {
 			unitType = "'" + unitType + "'"
 		}
 	
@@ -312,12 +312,94 @@ func setAffiliationUnitInfo(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getCollaborationUnitMembers(w http.ResponseWriter, r *http.Request) {
+func getAffiliationUnitMembers(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query()
-//	collabunit := q.Get("unitname")
-	NotDoneYet(w, r, startTime)
+	q := r.URL.Query()
+	unitName := q.Get("unitname")
+	
+	if unitName == "" {
+                w.WriteHeader(http.StatusBadRequest)
+                log.WithFields(QueryFields(r, startTime)).Print("No unit name specified in http query.")
+                fmt.Fprintf(w, "{ \"error\": \"No unitname specified.\" }")
+                return
+        }
+	
+        var unitId int
+        checkerr := DBptr.QueryRow(`select unitid from affiliation_units where name=$1`,unitName).Scan(&unitId)
+        switch {
+        case checkerr == sql.ErrNoRows:
+                // set the header for success since we are already at the desired result                                                                                                     
+                w.WriteHeader(http.StatusBadRequest)
+                fmt.Fprintf(w, "{ \"error\": \"Affiliation unit does not exist.\" }")
+                log.WithFields(QueryFields(r, startTime)).Print("unit " + unitName + " not found in DB.")
+                return
+        case checkerr != nil:
+                w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, "{ \"error\": \"Database error.\" }")
+                log.WithFields(QueryFields(r, startTime)).Print("deleteUser: Error querying DB for unit " + unitName + ".")
+                return
+        default:
+		log.WithFields(QueryFields(r, startTime)).Print("Fetching members of unit " + unitName)
+	}
+	rows, err := DBptr.Query(`select ca.uid, users.uname from compute_access as ca join users on ca.uid = users.uid join compute_resources as cr on cr.compid = ca.compid where cr.unitid=$1 order by ca.uid`, unitId)
+	if err != nil {
+		defer log.WithFields(QueryFields(r, startTime)).Print(err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, "{ \"error\": \"Error in DB query.\" }")
+		return
+	}
+	
+	defer rows.Close()
+	type jsonout struct {
+		UID int  `json:"uid"`
+		UName string `json:"username"`
+	}
+	var Entry jsonout
+	var Out []jsonout
+	namemap := make(map[int]string)
+	var tmpUID int
+	var tmpUname string		
+	for rows.Next() {
+		rows.Scan(&tmpUID,&tmpUname)
+		namemap[tmpUID] = tmpUname
+	}
+	
+	rowsug, err := DBptr.Query(`select DISTINCT ug.uid, users.uname from user_group as ug join affiliation_unit_group as aug on aug.groupid = ug.groupid join users on ug.uid = users.uid where aug.unitid=$1 order by ug.uid`,unitId)
+	if err != nil {
+		defer log.WithFields(QueryFields(r, startTime)).Print(err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, "{ \"error\": \"Error in DB query.\" }")
+		return
+	}
+	
+	defer rowsug.Close()
+	for rowsug.Next() {
+		rowsug.Scan(&tmpUID,&tmpUname)
+		namemap[tmpUID] = tmpUname
+	}
+	for uid, uname := range namemap {		
+		Entry.UID= uid
+		Entry.UName = uname
+		Out = append(Out, Entry)
+	}
+	var output interface{}
+	if len(Out) == 0 {
+		w.WriteHeader(http.StatusNotFound)
+		type jsonerror struct {
+			Error string `json:"error"`
+		}
+		var queryErr []jsonerror
+		queryErr = append(queryErr, jsonerror{"This affiliation unit has no groups."})
+		output = queryErr
+	} else {
+		output = Out
+	}
+	jsonoutput, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Print(err.Error())
+	}
+	fmt.Fprintf(w, string(jsonoutput))	
 }
 
 func getGroupsInAffiliationUnit(w http.ResponseWriter, r *http.Request) {
@@ -406,7 +488,7 @@ func getGroupLeadersinAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 		return	
 	}
 	
-	rows, err := DBptr.Query(`select groups.name, user_group.uid, users.uname  from user_group join users on users.uid = user_group.uid join groups on groups.groupid = user_group.groupid where is_leader=TRUE and user_group.groupid in (select groupid from affiliation_unit_group left outer join affiliation_units as au on affiliation_unit_group.unitid= au.unitid where au.name=$1) order by groups.name`,unitName)
+	rows, err := DBptr.Query(`select DISTINCT groups.name, user_group.uid, users.uname  from user_group join users on users.uid = user_group.uid join groups on groups.groupid = user_group.groupid where is_leader=TRUE and user_group.groupid in (select groupid from affiliation_unit_group left outer join affiliation_units as au on affiliation_unit_group.unitid= au.unitid where au.name=$1) order by groups.name`,unitName)
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Print(err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
@@ -469,7 +551,7 @@ func getGroupLeadersinAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 	
 }
 
-func getCollaborationUnitStorageResources(w http.ResponseWriter, r *http.Request) {
+func getAffiliationUnitStorageResources(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 //	q := r.URL.Query()
@@ -477,7 +559,7 @@ func getCollaborationUnitStorageResources(w http.ResponseWriter, r *http.Request
 	NotDoneYet(w, r, startTime)
 }
 
-func getCollaborationUnitComputeResources(w http.ResponseWriter, r *http.Request) {
+func getAffiliationUnitComputeResources(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 //	q := r.URL.Query()
