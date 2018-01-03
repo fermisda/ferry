@@ -2,14 +2,12 @@ package main
 import (
 	"database/sql"
 	"strconv"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"encoding/json"
 	"fmt"
-//"fmt"
-//"log"
- _ "github.com/lib/pq"
-"net/http"
-//"encoding/json"
+ 	_ "github.com/lib/pq"
+	"net/http"
+	"time"
 )
 
 func NotDoneYet(w http.ResponseWriter) {
@@ -17,6 +15,7 @@ func NotDoneYet(w http.ResponseWriter) {
 }
 
 func getPasswdFile(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 	
@@ -25,7 +24,7 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 	
 	if unit == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Print("No unitname specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Print("No unitname specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No unitname specified.\" }")
 		return
 	}
@@ -48,7 +47,7 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 							) as c on t.key = c.key;`, unit, comp)
 
 	if err != nil {
-		defer log.Fatal(err)
+		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
 		return
@@ -118,11 +117,12 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
-		log.Fatal(err)
+		log.WithFields(QueryFields(r, startTime)).Fatal(err)
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
 func getGroupFile(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 	
@@ -131,7 +131,7 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 	
 	if unit == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Print("No unitname specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Print("No unitname specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No unitname specified.\" }")
 		return
 	}
@@ -154,7 +154,7 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 							) as c on t.key = c.key;`, unit, comp)
 
 	if err != nil {
-		defer log.Fatal(err)
+		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
 		return
@@ -216,11 +216,12 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
-		log.Fatal(err)
+		log.WithFields(QueryFields(r, startTime)).Fatal(err)
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
 func getGridMapFile(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 	unit := q.Get("unitname")
@@ -235,7 +236,7 @@ func getGridMapFile(w http.ResponseWriter, r *http.Request) {
 							  where au.name like $1) as t
 	 						  right join (select 1 as key, $1 in (select name from affiliation_units) as unit_exists) as c on t.key = c.key`, unit)
 	if err != nil {
-		defer log.Fatal(err)
+		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
 		return
@@ -263,7 +264,7 @@ func getGridMapFile(w http.ResponseWriter, r *http.Request) {
 			Out.DN, Out.Uname = tmpDN.String, tmpUname.String
 			outline, jsonerr := json.Marshal(Out)
 			if jsonerr != nil {
-				log.Fatal(jsonerr)
+				log.WithFields(QueryFields(r, startTime)).Fatal(jsonerr)
 			}
 			output += string(outline)
 			idx ++
@@ -282,6 +283,7 @@ func getGridMapFile(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w,output)
 }
 func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 	unit := q.Get("unitname")
@@ -297,7 +299,7 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 							  where au.name like $1) as t
 							  right join (select 1 as key, $1 in (select name from affiliation_units) as unit_exists) as c on t.key = c.key`, unit)
 	if err != nil {
-		defer log.Fatal(err)
+		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
 		return
@@ -325,7 +327,7 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 			Out.DN, Out.Uname = tmpDN.String, tmpUname.String
 			outline, jsonerr := json.Marshal(Out)
 			if jsonerr != nil {
-				log.Fatal(jsonerr)
+				log.WithFields(QueryFields(r, startTime)).Fatal(jsonerr)
 			}
 			output += string(outline)
 			idx ++
@@ -345,13 +347,14 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func getGroupGID(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 	gName := q.Get("groupname")
 	var iGid bool
 	if gName == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Print("No groupname specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No groupname specified.\" }")
 		return
 	}
@@ -360,7 +363,7 @@ func getGroupGID(w http.ResponseWriter, r *http.Request) {
 		iGid, err = strconv.ParseBool(q.Get("include_gid"))
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			log.Print("Invalid include_gid specified in http query.")
+			log.WithFields(QueryFields(r, startTime)).Print("Invalid include_gid specified in http query.")
 			fmt.Fprintf(w,"{ \"error\": \"Invalid include_gid specified.\" }")
 			return
 		}
@@ -368,12 +371,12 @@ func getGroupGID(w http.ResponseWriter, r *http.Request) {
 
 	pingerr := DBptr.Ping()
 	if pingerr != nil {
-		log.Fatal(pingerr)
+		log.WithFields(QueryFields(r, startTime)).Fatal(pingerr)
 	}
 	
 	rows, err := DBptr.Query(`select groupid, gid from groups where name=$1`, gName)
 	if err != nil {
-		log.Fatal(err)
+		log.WithFields(QueryFields(r, startTime)).Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"Error in DB query\n")	
 	} else {	
@@ -398,7 +401,7 @@ func getGroupGID(w http.ResponseWriter, r *http.Request) {
 			}
 			outline, jsonerr := json.Marshal(Out)
 			if jsonerr != nil {
-				log.Fatal(jsonerr)
+				log.WithFields(QueryFields(r, startTime)).Fatal(jsonerr)
 			}
 			fmt.Fprintf(w,string(outline))
 			idx++
@@ -413,29 +416,30 @@ func getGroupGID(w http.ResponseWriter, r *http.Request) {
 }
 
 func getGroupName(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 	gid := q.Get("gid")
 	if gid == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Print("No gid specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Print("No gid specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No gid specified.\" }")
 		return
 	} else if _, err := strconv.Atoi(gid); err != nil  {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Print("Invalid gid specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Print("Invalid gid specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"Invalid gid specified.\" }")
 		return
 	}
 
 	pingerr := DBptr.Ping()
 	if pingerr != nil {
-		log.Fatal(pingerr)
+		log.WithFields(QueryFields(r, startTime)).Fatal(pingerr)
 	}
 	
 	rows, err := DBptr.Query(`select name from groups where gid=$1`, gid)
 	if err != nil {
-		log.Fatal(err)
+		log.WithFields(QueryFields(r, startTime)).Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"Error in DB query\n")	
 	} else {	
@@ -456,7 +460,7 @@ func getGroupName(w http.ResponseWriter, r *http.Request) {
 			rows.Scan(&Out.Groupname)
 			outline, jsonerr := json.Marshal(Out)
 			if jsonerr != nil {
-				log.Fatal(jsonerr)
+				log.WithFields(QueryFields(r, startTime)).Fatal(jsonerr)
 				}
 			fmt.Fprintf(w,string(outline))
 			idx++
@@ -470,18 +474,20 @@ func getGroupName(w http.ResponseWriter, r *http.Request) {
 	}
 }
 func lookupCertificateDN(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 //	q := r.URL.Query() 
 //	certDN := q.Get("certificatedn")
 	NotDoneYet(w)
 }
 func getMappedGidFile(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
 	rows, err := DBptr.Query(`select fqan, mapped_user, gid from grid_fqan as gf left join groups as g on g.name = gf.mapped_group`)
 
 	if err != nil {
-		defer log.Fatal(err)
+		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
 		return
@@ -518,11 +524,12 @@ func getMappedGidFile(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
-		log.Fatal(err)
+		log.WithFields(QueryFields(r, startTime)).Fatal(err)
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
 func getStorageAuthzDBFile(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
 	rows, err := DBptr.Query(`select u.uname, u.uid, g.gid from users as u
@@ -531,7 +538,7 @@ func getStorageAuthzDBFile(w http.ResponseWriter, r *http.Request) {
 							  order by u.uname;`)
 
 	if err != nil {
-		defer log.Fatal(err)
+		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
 		return
@@ -597,11 +604,12 @@ func getStorageAuthzDBFile(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
-		log.Fatal(err)
+		log.WithFields(QueryFields(r, startTime)).Fatal(err)
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
 func getAffiliationMembersRoles(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 	
@@ -629,7 +637,7 @@ func getAffiliationMembersRoles(w http.ResponseWriter, r *http.Request) {
 							) as c on t.key = c.key;`, unit, role)
 
 	if err != nil {
-		defer log.Fatal(err)
+		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
 		return
@@ -675,11 +683,12 @@ func getAffiliationMembersRoles(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
-		log.Fatal(err)
+		log.WithFields(QueryFields(r, startTime)).Fatal(err)
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
 func getStorageAccessLists(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 	
@@ -690,7 +699,7 @@ func getStorageAccessLists(w http.ResponseWriter, r *http.Request) {
 	}
 	/*if resource == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Print("No resourcename specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Print("No resourcename specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No resourcename specified.\" }")
 		return
 	}*/
@@ -698,7 +707,7 @@ func getStorageAccessLists(w http.ResponseWriter, r *http.Request) {
 	rows, err := DBptr.Query(`select server, volume, access_level, host from nas_storage where server like $1;`, resource)
 
 	if err != nil {
-		defer log.Fatal(err)
+		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
 		return
@@ -740,7 +749,7 @@ func getStorageAccessLists(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
-		log.Fatal(err)
+		log.WithFields(QueryFields(r, startTime)).Fatal(err)
 	}
 	fmt.Fprintf(w, string(jsonout))
 }

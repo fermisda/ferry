@@ -1,7 +1,6 @@
 package main
 
 import (
-	"net"
 	"database/sql"
 	"fmt"
 
@@ -26,8 +25,15 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "This is a placeholder for paths like %s!", r.URL.Path[1:])
 }
 
-func foo(c net.Conn, s http.ConnState) {
-	log.Print(s)
+//QueryFields builds fields for a logger from a http request
+func QueryFields(r *http.Request, t time.Time) log.Fields {
+	subject := ParseDN(r.TLS.PeerCertificates[0].Subject.Names, "/")
+	return log.Fields{
+		"client":   r.RemoteAddr,
+		"subject":  subject,
+		"query":    r.URL,
+		"duration": time.Since(t).Seconds(),
+	}
 }
 
 func main() {
@@ -162,7 +168,6 @@ func main() {
 		Addr:        fmt.Sprintf(":%s", srvConfig["port"]),
 		ReadTimeout: 10 * time.Second,
 		Handler:     grouter,
-		ConnState:	 foo,
 	}
 
 	certslice := viper.GetStringSlice("certificates")

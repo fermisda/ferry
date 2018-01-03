@@ -3,13 +3,15 @@ import (
 	"strings"
 	"database/sql"
 	"fmt"
-	"log"
 	_ "github.com/lib/pq"
 	"net/http"
 	"encoding/json"
+	"time"
+	log "github.com/sirupsen/logrus"
 )
 
 func createGroup(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 
@@ -19,13 +21,13 @@ func createGroup(w http.ResponseWriter, r *http.Request) {
 
 	if gName == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Print("No groupname specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No groupname specified.\" }")
 		return
 	}
 	if gType == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Print("No grouptype specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Print("No grouptype specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No grouptype specified.\" }")
 		return
 	}
@@ -42,7 +44,7 @@ func createGroup(w http.ResponseWriter, r *http.Request) {
 
 	cKey, err := DBtx.Start(DBptr)
 	if err != nil {
-		log.Fatal(err)
+		log.WithFields(QueryFields(r, startTime)).Fatal(err)
 	}
 
 	_, err = DBtx.Exec("insert into groups (gid, name, type, last_updated) values ($1, $2, $3, NOW())", gid, gName, gType)
@@ -57,18 +59,20 @@ func createGroup(w http.ResponseWriter, r *http.Request) {
 		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint "idx_groups_group_name"`) {
 			fmt.Fprintf(w,"{ \"error\": \"Group already exists.\" }")
 		} else {
-			log.Print(err.Error())
+			log.WithFields(QueryFields(r, startTime)).Print(err.Error())
 		}
 	}
 }
 
 func deleteGroupt(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 //	q := r.URL.Query()
 //	groupname := q.Get("groupname")
 	NotDoneYet(w)
 }
 func deleteGroup(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 //	q := r.URL.Query()
 // should be an int
@@ -76,6 +80,7 @@ func deleteGroup(w http.ResponseWriter, r *http.Request) {
 	NotDoneYet(w) 
 }
 func addGroupToUnit(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 //	q := r.URL.Query()
 //	groupname := q.Get("groupname")
@@ -85,6 +90,7 @@ func addGroupToUnit(w http.ResponseWriter, r *http.Request) {
 	NotDoneYet(w)
 }
 func removeGroupFromUnit(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 //	q := r.URL.Query()
 //	groupname := q.Get("groupname")
@@ -92,6 +98,7 @@ func removeGroupFromUnit(w http.ResponseWriter, r *http.Request) {
 	NotDoneYet(w)
 }
 func setPrimaryStatusGroup(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 //	q := r.URL.Query()
 //	groupname := q.Get("groupname")
@@ -100,6 +107,7 @@ func setPrimaryStatusGroup(w http.ResponseWriter, r *http.Request) {
 }
 
 func removePrimaryStatusfromGroup(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 //	q := r.URL.Query()
 //	groupname := q.Get("groupname")
@@ -107,6 +115,7 @@ func removePrimaryStatusfromGroup(w http.ResponseWriter, r *http.Request) {
 	NotDoneYet(w)
 }
 func getGroupMembers(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 //	q := r.URL.Query() 
 //	groupname := q.Get("groupname")
@@ -115,6 +124,7 @@ func getGroupMembers(w http.ResponseWriter, r *http.Request) {
 	NotDoneYet(w)
 }
 func IsUserLeaderOf(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 //	q := r.URL.Query()
 //	uname := q.Get("username")
@@ -122,6 +132,7 @@ func IsUserLeaderOf(w http.ResponseWriter, r *http.Request) {
 	NotDoneYet(w)
 }
 func setGroupLeader(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 //	q := r.URL.Query()
 //	uname := q.Get("username")
@@ -129,6 +140,7 @@ func setGroupLeader(w http.ResponseWriter, r *http.Request) {
 	NotDoneYet(w)
 }
 func removeGroupLeader(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 //	q := r.URL.Query()
 //	uname := q.Get("username")
@@ -136,6 +148,7 @@ func removeGroupLeader(w http.ResponseWriter, r *http.Request) {
 	NotDoneYet(w)
 }
 func getGroupUnits(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 //	q := r.URL.Query()
 //	groupname := q.Get("groupname")
@@ -144,13 +157,14 @@ func getGroupUnits(w http.ResponseWriter, r *http.Request) {
 	NotDoneYet(w)
 }
 func getGroupBatchPriorities(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 	groupname := q.Get("groupname")
 //	resource := q.Get("resourcename")
 	if groupname == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Print("No groupname specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No groupname specified.\" }")
 		return
 	}
@@ -159,6 +173,7 @@ func getGroupBatchPriorities(w http.ResponseWriter, r *http.Request) {
 }
 
 func getGroupCondorQuotas(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 //	q := r.URL.Query()
 //	groupname := q.Get("groupname")
@@ -167,6 +182,7 @@ func getGroupCondorQuotas(w http.ResponseWriter, r *http.Request) {
 	NotDoneYet(w)
 }
 func setGroupBatchPriority(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 //	q := r.URL.Query()
 //	groupname := q.Get("groupname")
@@ -176,6 +192,7 @@ func setGroupBatchPriority(w http.ResponseWriter, r *http.Request) {
 	NotDoneYet(w)
 }
 func setGroupCondorQuota(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 
@@ -193,19 +210,19 @@ func setGroupCondorQuota(w http.ResponseWriter, r *http.Request) {
 
 	if group == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Print("No groupname specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No groupname specified.\" }")
 		return
 	}
 	if comp == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Print("No resourcename specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Print("No resourcename specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No resourcename specified.\" }")
 		return
 	}
 	if quota == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Print("No quota specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Print("No quota specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No quota specified.\" }")
 		return
 	}
@@ -226,7 +243,7 @@ func setGroupCondorQuota(w http.ResponseWriter, r *http.Request) {
 
 	cKey, err := DBtx.Start(DBptr)
 	if err != nil {
-		log.Fatal(err)
+		log.WithFields(QueryFields(r, startTime)).Fatal(err)
 	}
 
 	_, err = DBtx.Exec(fmt.Sprintf(`do $$
@@ -267,7 +284,7 @@ func setGroupCondorQuota(w http.ResponseWriter, r *http.Request) {
 				  strings.Contains(err.Error(), `date/time field value out of range`) {
 			fmt.Fprintf(w,"{ \"error\": \"Invalid expiration date.\" }")
 		} else {
-			log.Print(err.Error())
+			log.WithFields(QueryFields(r, startTime)).Print(err.Error())
 			fmt.Fprintf(w,"{ \"error\": \"Something went wrong.\" }")
 		}
 	}
@@ -275,6 +292,7 @@ func setGroupCondorQuota(w http.ResponseWriter, r *http.Request) {
 	DBtx.Commit(cKey)
 }
 func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 	groupname := q.Get("groupname")
@@ -282,26 +300,26 @@ func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 	exptname := q.Get("experimentname")
 	if groupname == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Print("No group name specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Print("No group name specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No group name specified.\" }")
 		return
 	}
 	if resource == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Print("No storage resource specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Print("No storage resource specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No storage resource specified.\" }")
 		return
 	}
 	if exptname == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Print("No experiment specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Print("No experiment specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No experiment name specified.\" }")
 		return
 	}
 
 	rows, err := DBptr.Query(`select sq.value, sq.unit, sq.valid_until from storage_quota sq INNER JOIN affiliation_units on affiliation_units.unitid = sq.unitid INNER JOIN storage_resources on storage_resources.storageid = sq.storageid INNER JOIN groups on groups.groupid = sq.groupid where affiliation_units.name = $3 AND storage_resources.type = $2 and groups.name = $1`, groupname, resource, exptname)
 	if err != nil {	
-		defer log.Fatal(err)
+		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
 		
@@ -327,7 +345,7 @@ func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 			Out.Value, Out.Unit, Out.ValidUntil = tmpValue.String, tmpUnit.String, tmpValid.String
 			outline, jsonerr := json.Marshal(Out)
 			if jsonerr != nil {
-				log.Fatal(jsonerr)
+				log.WithFields(QueryFields(r, startTime)).Fatal(jsonerr)
 			}
 			output += string(outline)
 			idx ++
@@ -341,7 +359,7 @@ func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 }
 
 func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
-
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
 	authorized,authout := authorize(r,AuthorizedDNs)
@@ -361,42 +379,42 @@ func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
 
 	if gName == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Print("No group name specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Print("No group name specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No group name specified.\" }")
 		return
 	}
 	if rName == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Print("No storage resource specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Print("No storage resource specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No storage resource specified.\" }")
 		return
 	}
 	if unitName == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Print("No experiment specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Print("No experiment specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No experiment name specified.\" }")
 		return
 	}	
 	if groupquota == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Print("No quota value specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Print("No quota value specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No quota specified.\" }")
 		return
 	}
 	if validtime == "" {
-		log.Print("No expire time given; assuming it is indefinite.")
+		log.WithFields(QueryFields(r, startTime)).Print("No expire time given; assuming it is indefinite.")
 	} else {
 		validtime = "valid_until = " + validtime + ", "
 	}
 	if unit == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Print("No quita unit specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Print("No quita unit specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No unit specified.\" }")
 		return
 	}
 	cKey, err := DBtx.Start(DBptr)
 	if err != nil {
-		log.Fatal(err)
+		log.WithFields(QueryFields(r, startTime)).Fatal(err)
 	}
 
 
@@ -425,7 +443,7 @@ func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
 		} else if strings.Contains(err.Error(), `Resource does not exist.`) {
 			fmt.Fprintf(w,"{ \"error\": \"Resource does not exist.\" }")
 		} else {
-			log.Print(err.Error())
+			log.WithFields(QueryFields(r, startTime)).Print(err.Error())
 			fmt.Fprintf(w,"{ \"error\": \"Something went wrong.\" }")
 		}
 	}
@@ -434,6 +452,7 @@ func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
 }
 
 func setUserAccessToResource(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 //	q := r.URL.Query()
 //	uname := q.Get("username")
@@ -445,6 +464,7 @@ func setUserAccessToResource(w http.ResponseWriter, r *http.Request) {
 }
 
 func removeUserAccessFromResource(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 //	q := r.URL.Query()
 //	uname := q.Get("username")

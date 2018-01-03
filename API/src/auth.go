@@ -10,6 +10,7 @@ import (
 	"strings"
 	"crypto/tls"
 	"github.com/spf13/viper"
+	"crypto/x509/pkix"
 )
 
 // we probably need   list of authorized DNs too
@@ -52,45 +53,45 @@ func loadCerts(certs []string) (*x509.CertPool, error) {
 	return pool, nil
 }
 
+//ParseDN parses a []pkix.AttributeTypeAndValue into a string.
+func ParseDN(names []pkix.AttributeTypeAndValue, sep string) string {
+	var oid = map[string]string{
+		"2.5.4.3":                    "CN",
+		"2.5.4.4":                    "SN",
+		"2.5.4.5":                    "serialNumber",
+		"2.5.4.6":                    "C",
+		"2.5.4.7":                    "L",
+		"2.5.4.8":                    "ST",
+		"2.5.4.9":                    "streetAddress",
+		"2.5.4.10":                   "O",
+		"2.5.4.11":                   "OU",
+		"2.5.4.12":                   "title",
+		"2.5.4.17":                   "postalCode",
+		"2.5.4.42":                   "GN",
+		"2.5.4.43":                   "initials",
+		"2.5.4.44":                   "generationQualifier",
+		"2.5.4.46":                   "dnQualifier",
+		"2.5.4.65":                   "pseudonym",
+		"0.9.2342.19200300.100.1.25": "DC",
+		"1.2.840.113549.1.9.1":       "emailAddress",
+		"0.9.2342.19200300.100.1.1":  "userid",
+	}
+
+	var subject []string
+	for _, i := range names {
+		subject = append(subject, fmt.Sprintf("%s=%s", oid[i.Type.String()], i.Value))
+	}
+	return sep + strings.Join(subject, sep)
+}
+
 func authorize( req *http.Request, authDNs []string ) (bool, string) {
 	// authorization should fail by default
 	authorized := false
-	ip := req.RemoteAddr
-	log.Printf("Authorization request from %s",ip)
-	// let's first see if the request is coming from a trusted IP. If it is, we let it through and don't worry about the DN.
-	authIPs := viper.GetStringSlice("whitelist")
-	
-	for _, authIP := range authIPs {
-		if authIP == strings.Split(ip, ":")[0] {
-			log.Printf("Host matches authorized IP %s.", authIP)
-			authorized = true
-			return authorized, authIP
-		}
-	}
-	
-	//OK, we did not match an authorized IP, so now we require an authorized certificate DN.
 
 	//string to build the full DN
 	certDN := ""
 	for _, presCert := range req.TLS.PeerCertificates {
-		
-		for _, certnames := range presCert.Subject.Names {
-			// check the encoding type and set the value if it matches what we expect for "our" certs and proxies
-			switch certnames.Type.String() {
-			case "0.9.2342.19200300.100.1.25":  // Domain Component or "DC"
-				certDN = certDN + "/DC=" + certnames.Value.(string)
-			case "2.5.4.6": // Country or "C"
-				certDN = certDN + "/C=" + certnames.Value.(string)
-			case "2.5.4.10": // Organization or "O"
-				certDN = certDN + "/O=" + certnames.Value.(string)
-			case "2.5.4.11": // Organizational Unit or "OU"
-				certDN = certDN + "/OU=" + certnames.Value.(string)
-			case "2.5.4.3": // Common Name or "CN"
-				certDN = certDN + "/CN=" + certnames.Value.(string)	
-			default: //something we don't expect
-				certDN = certDN + "/UNKNOWN="  + certnames.Value.(string)
-			}
-		}
+		certDN = ParseDN(presCert.Subject.Names, "/")
 		for _, authDN := range authDNs {
 			if authDN == certDN {
 				authorized = true
