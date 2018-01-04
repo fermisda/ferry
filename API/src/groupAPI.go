@@ -295,19 +295,170 @@ func getGroupMembers(w http.ResponseWriter, r *http.Request) {
 func IsUserLeaderOf(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query()
-//	uname := q.Get("username")
-//	groupname := q.Get("groupname")
-	NotDoneYet(w, r, startTime)
+	q := r.URL.Query()
+	uName := q.Get("username")
+	groupname := q.Get("groupname")
+	
+	if groupname == "" {	
+		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified.")
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w,"{ \"error\": \"No groupname specified\" }")
+		return
+	}
+	if uName == "" {	
+		log.WithFields(QueryFields(r, startTime)).Print("No username specified.")
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w,"{ \"error\": \"No username specified\" }")
+		return
+	}
+	var groupId, uId int
+	grouperr := DBptr.QueryRow(`select groupid from groups where name=$1`,groupname).Scan(&groupId)
+	switch {
+	case grouperr == sql.ErrNoRows:
+		log.WithFields(QueryFields(r, startTime)).Print("Group " + groupname + " does not exist.")
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w,"{ \"error\": \"Group " + groupname + " does not exist.\" }")
+		return
+	case grouperr != nil:
+		log.WithFields(QueryFields(r, startTime)).Print("Group ID query error: " + grouperr.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		return
+	default:
+		// group is good, now make sure the user exists
+		usererr := DBptr.QueryRow(`select uid from users where uname=$1`,uName).Scan(&uId)
+		switch {
+		case usererr == sql.ErrNoRows:
+			log.WithFields(QueryFields(r, startTime)).Print("User " + uName + " does not exist.")
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(w,"{ \"error\": \"User " + uName + " does not exist.\" }")
+			return
+		case usererr != nil:
+			log.WithFields(QueryFields(r, startTime)).Print("User ID query error: " + usererr.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+			return
+		default:
+			var isLeader bool
+			checkerr := DBptr.QueryRow(`select is_leader from user_group as ug join users on users.uid=ug.uid join groups on groups.groupid=ug.groupid where users.uname=$1 and groups.name=$2`,uName,groupname).Scan(&isLeader)
+			leaderstr := strconv.FormatBool(isLeader)
+			switch {
+			case checkerr == sql.ErrNoRows:
+				log.WithFields(QueryFields(r, startTime)).Print("User " + uName + " not a member of "+ groupname)
+				w.WriteHeader(http.StatusNotFound)
+				fmt.Fprintf(w,"{ \"error\": \"User is not a member of this group.\" }")
+				return
+			case checkerr != nil:
+				log.WithFields(QueryFields(r, startTime)).Print("Group leader query error: " + checkerr.Error())
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+				return	
+			default:
+				w.WriteHeader(http.StatusOK)
+				log.WithFields(QueryFields(r, startTime)).Print(uName + " is a leader of " + groupname + ": " + leaderstr)
+				fmt.Fprintf(w,"{ \"leader\": \"" + leaderstr + "\" }")
+				return
+			}
+		}
+	}					
 }
 func setGroupLeader(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query()
-//	uname := q.Get("username")
-//	groupname := q.Get("groupname")
-	NotDoneYet(w, r, startTime)
+	q := r.URL.Query()
+	uName := q.Get("username")
+	groupname := q.Get("groupname")
+	
+	if groupname == "" {	
+		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified.")
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w,"{ \"error\": \"No groupname specified\" }")
+		return
+	}
+	if uName == "" {	
+		log.WithFields(QueryFields(r, startTime)).Print("No username specified.")
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w,"{ \"error\": \"No username specified\" }")
+		return
+	}
+
+	//requires authorization
+	authorized,authout := authorize(r,AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"error\": \"" + authout + "not authorized.\" }")
+		return
+	}
+	
+	cKey, err := DBtx.Start(DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Print("Error starting DB transaction: " + err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w,"{ \"error\": \"Error starting database transaction.\" }")
+		return
+	}
+	
+	var groupId, uId int
+	grouperr := DBptr.QueryRow(`select groupid from groups where name=$1`,groupname).Scan(&groupId)
+	switch {
+	case grouperr == sql.ErrNoRows:
+		log.WithFields(QueryFields(r, startTime)).Print("Group " + groupname + " does not exist.")
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w,"{ \"error\": \"Group " + groupname + " does not exist.\" }")
+		return
+	case grouperr != nil:
+		log.WithFields(QueryFields(r, startTime)).Print("Group ID query error: " + grouperr.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		return
+	default:
+		// group is good, now make sure the user exists
+		usererr := DBptr.QueryRow(`select uid from users where uname=$1`,uName).Scan(&uId)
+		switch {
+		case usererr == sql.ErrNoRows:
+			log.WithFields(QueryFields(r, startTime)).Print("User " + uName + " does not exist.")
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(w,"{ \"error\": \"User " + uName + " does not exist.\" }")
+			return
+		case usererr != nil:
+			log.WithFields(QueryFields(r, startTime)).Print("User ID query error: " + usererr.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+			return
+		default:
+			setstr := fmt.Sprintf(`do $$ begin if exists (select uid,groupid from user_group where groupid=%d and uid=%d) then update user_group set is_leader=true, last_updated=NOW() where groupid=%d and uid=%d; else raise 'User is not a member of this group.'; end if ; end $$;`, groupId, uId, groupId, uId)
+			stmt, err := DBtx.tx.Prepare(setstr)
+			if err != nil {
+				log.WithFields(QueryFields(r, startTime)).Print("Error preparing DB command: " + err.Error())
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprintf(w,"{ \"error\": \"Error preparing database command.\" }")
+				return
+			}
+			//run said statement and check errors
+			_, err = stmt.Exec()
+			if err != nil {
+				if strings.Contains(err.Error(),`User is not a member of this group`) {
+					w.WriteHeader(http.StatusBadRequest)
+					log.WithFields(QueryFields(r, startTime)).Print("User " + uName + " is not a member of " + groupname + ".")
+					fmt.Fprintf(w,"{ \"error\": \"User not a member of group.\" }")
+				} else {
+					w.WriteHeader(http.StatusInternalServerError)
+					log.WithFields(QueryFields(r, startTime)).Print("Error setting " + uName + " leader of " + groupname + ": " + err.Error())
+					fmt.Fprintf(w,"{ \"error\": \"Error executing DB update.\" }")		
+				}
+				return
+			} else {
+				// error is nil, so it's a success. Commit the transaction and return success.
+				DBtx.Commit(cKey)
+				w.WriteHeader(http.StatusOK)
+				log.WithFields(QueryFields(r, startTime)).Print("Successfully set " + uName + " as leader of " + groupname + ".")
+				fmt.Fprintf(w,"{ \"status\": \"success.\" }")
+			}
+			return
+		}
+	}
 }
+
 func removeGroupLeader(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
