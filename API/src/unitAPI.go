@@ -568,9 +568,72 @@ func getAffiliationUnitStorageResources(w http.ResponseWriter, r *http.Request) 
 func getAffiliationUnitComputeResources(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query()
-//	collabunit := q.Get("unitname")
-	NotDoneYet(w, r, startTime)
+	q := r.URL.Query()
+	unitName := q.Get("unitname")
+	if unitName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.WithFields(QueryFields(r, startTime)).Print("No unit name specified in http query.")
+		fmt.Fprintf(w, "{ \"error\": \"No unitname specified.\" }")
+		return	
+	}
+	
+	rows, err := DBptr.Query(`select cr.name, cr.type, cr.default_shell, cr.default_home_dir from compute_resources as cr join affiliation_units as au on au.unitid = cr.unitid where au.name=$1 order by name`, unitName)  
+	if err != nil {
+		defer log.WithFields(QueryFields(r, startTime)).Print(err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, "{ \"error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()	
+	type jsonout struct {
+		Name string `json:"name"`
+		Type string `json:"type"`
+		Defshell string `json:"defaultshell"`
+		Defdir string `json:"defaulthomedir"`
+	}
+	var (
+		Entry jsonout
+		Out []jsonout
+		tmpName string
+		tmpType,tmpShell,tmpDir sql.NullString
+	)		
+	for rows.Next() {
+		rows.Scan(&tmpName,&tmpType,&tmpShell,&tmpDir)	
+		Entry.Name = tmpName
+		if tmpType.Valid {
+			Entry.Type = tmpType.String
+		} else {
+			Entry.Type = "NULL"
+		}
+		if tmpShell.Valid {
+			Entry.Defshell = tmpShell.String
+		} else {
+			Entry.Defshell = "NULL"
+		}
+		if tmpDir.Valid {
+			Entry.Defdir = tmpDir.String
+		} else {
+			Entry.Defdir = "NULL"
+		}
+		Out = append(Out, Entry)	
+	}
+		var output interface{}
+	if len(Out) == 0 {
+		w.WriteHeader(http.StatusNotFound)
+		type jsonerror struct {
+			Error string `json:"error"`
+		}
+		var queryErr []jsonerror
+		queryErr = append(queryErr, jsonerror{"This affiliation unit has no compute resources."})
+		output = queryErr
+	} else {
+		output = Out
+	}
+	jsonoutput, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Print(err.Error())
+	}
+	fmt.Fprintf(w, string(jsonoutput))
 }
 
 func createFQAN(w http.ResponseWriter, r *http.Request) {
