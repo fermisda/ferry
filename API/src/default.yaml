@@ -2,10 +2,10 @@ general:
   log: ferry.log
 
 database:
-  host: REPLACE
-  name: REPLACE
-  user: REPLACE
-  password: REPLACE
+  host: fermicloud051.fnal.gov
+  name: ferry
+  user: ferry
+  password: ferry5634
   timeout: 60
   sslmode: verify-full 
   certificate: /etc/grid-security/certificates/cilogon-osg.pem
