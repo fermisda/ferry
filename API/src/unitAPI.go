@@ -391,8 +391,10 @@ func getAffiliationUnitMembers(w http.ResponseWriter, r *http.Request) {
 		}
 		var queryErr []jsonerror
 		queryErr = append(queryErr, jsonerror{"This affiliation unit has no groups."})
+		log.WithFields(QueryFields(r, startTime)).Error("This affiliation unit has no groups.")
 		output = queryErr
 	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonoutput, err := json.Marshal(output)
@@ -463,8 +465,10 @@ func getGroupsInAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 			}
 			var queryErr []jsonerror
 			queryErr = append(queryErr, jsonerror{"This affiliation unit has no groups."})
+			log.WithFields(QueryFields(r, startTime)).Error("This affiliation unit has no groups.")
 			output = queryErr
 		} else {
+			log.WithFields(QueryFields(r, startTime)).Info("Success!")
 			output = Out
 		}
 		jsonoutput, err := json.Marshal(output)
@@ -539,8 +543,10 @@ func getGroupLeadersinAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 		}
 		var queryErr []jsonerror
 		queryErr = append(queryErr, jsonerror{"This affiliation unit has no groups with assigned leaders."})
+		log.WithFields(QueryFields(r, startTime)).Error("This affiliation unit has no groups with assigned leaders.")
 		output = queryErr
 	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonoutput, err := json.Marshal(output)
@@ -599,14 +605,18 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 
 	_, err = DBtx.Exec("insert into grid_fqan (fqan, mapped_user, mapped_group, last_updated) values ($1, $2, $3, NOW())", fqan, mUser, mGroup)
 	if err == nil {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w,"{ \"status\": \"success\" }")
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
 		if strings.Contains(err.Error(), `violates foreign key constraint "fk_experiment_fqan_users"`) {
+			log.WithFields(QueryFields(r, startTime)).Error("User doesn't exist.")
 			fmt.Fprintf(w,"{ \"error\": \"User doesn't exist.\" }")
 		} else if strings.Contains(err.Error(), `violates foreign key constraint "fk_experiment_fqan_groups"`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Group doesn't exist.")
 			fmt.Fprintf(w,"{ \"error\": \"Group doesn't exist.\" }")
 		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
+			log.WithFields(QueryFields(r, startTime)).Error("FQAN already exists.")
 			fmt.Fprintf(w,"{ \"error\": \"FQAN already exists.\" }")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())

@@ -50,13 +50,17 @@ func createGroup(w http.ResponseWriter, r *http.Request) {
 	_, err = DBtx.Exec("insert into groups (gid, name, type, last_updated) values ($1, $2, $3, NOW())", gid, gName, gType)
 	if err == nil {
 		DBtx.Commit(cKey)
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w,"{ \"status\": \"success\" }")
 	} else {
 		if strings.Contains(err.Error(), `invalid input value for enum groups_group_type`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid grouptype specified in http query.")
 			fmt.Fprintf(w,"{ \"error\": \"Invalid grouptype specified in http query.\" }")
 		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint "idx_groups_gid"`) {
+			log.WithFields(QueryFields(r, startTime)).Error("GID already exists.")
 			fmt.Fprintf(w,"{ \"error\": \"GID already exists.\" }")
 		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint "idx_groups_group_name"`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Group already exists.")
 			fmt.Fprintf(w,"{ \"error\": \"Group already exists.\" }")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
@@ -273,15 +277,19 @@ func setGroupCondorQuota(w http.ResponseWriter, r *http.Request) {
 									end $$;`, gName, comp, name, quota, qType, until))
 
 	if err == nil {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w,"{ \"status\": \"success\" }")
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
 		if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
-			fmt.Fprintf(w,"{ \"error\": \"This quota already exists\" }")
+			log.WithFields(QueryFields(r, startTime)).Error("This quota already exists.")
+			fmt.Fprintf(w,"{ \"error\": \"This quota already exists.\" }")
 		} else if strings.Contains(err.Error(), `null value in column "compid"`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
 			fmt.Fprintf(w,"{ \"error\": \"Resource does not exist.\" }")
 		} else if strings.Contains(err.Error(), `invalid input syntax for type date`) ||
 				  strings.Contains(err.Error(), `date/time field value out of range`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid expiration date.")
 			fmt.Fprintf(w,"{ \"error\": \"Invalid expiration date.\" }")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
@@ -354,6 +362,9 @@ func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 	if idx == 0 {
 		w.WriteHeader(http.StatusNotFound)
 		output += `"error": "Group has no quotas registered."`
+		log.WithFields(QueryFields(r, startTime)).Error("Group has no quotas registered.")
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 	}
 	fmt.Fprintf(w,output)	
 }
@@ -435,12 +446,15 @@ func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
 								where storageid = vSid and groupid = vGid and unitid = vUnitid;
 							end $$;`, rName, gName, unitName, groupquota, unit, validtime))
 	if err == nil {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w,"{ \"status\": \"success\" }")
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
 		if strings.Contains(err.Error(), `Group does not exist.`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
 			fmt.Fprintf(w,"{ \"error\": \"Group does not exist.\" }")
 		} else if strings.Contains(err.Error(), `Resource does not exist.`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
 			fmt.Fprintf(w,"{ \"error\": \"Resource does not exist.\" }")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())

@@ -105,15 +105,19 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 		var Err []jsonerror
 		if !unitExists {
 			Err = append(Err, jsonerror{"Affiliation unit does not exist."})
+			log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
 		}
 		if !compExists && comp != "%" {
 			Err = append(Err, jsonerror{"Resource does not exist."})
+			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
 		}
 		if len(Err) == 0 {
 			Err = append(Err, jsonerror{"Something went wrong."})
+			log.WithFields(QueryFields(r, startTime)).Error("Something went wrong.")
 		}
 		output = Err
 	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonout, err := json.Marshal(output)
@@ -204,15 +208,19 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 		var Err []jsonerror
 		if !unitExists {
 			Err = append(Err, jsonerror{"Affiliation unit does not exist."})
+			log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
 		}
 		if !compExists && comp != "%" {
 			Err = append(Err, jsonerror{"Resource does not exist."})
+			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
 		}
 		if len(Err) == 0 {
 			Err = append(Err, jsonerror{"Something went wrong."})
+			log.WithFields(QueryFields(r, startTime)).Error("Something went wrong.")
 		}
 		output = Err
 	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonout, err := json.Marshal(output)
@@ -276,8 +284,12 @@ func getGridMapFile(w http.ResponseWriter, r *http.Request) {
 
 		if !unitExists {
 			output += `"error": "Experiment does not exist.",`
+			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
 		}
 		output += `"error": "No DNs found."`
+		log.WithFields(QueryFields(r, startTime)).Error("No DNs found.")
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 	}
 
 	output += " ]"
@@ -339,8 +351,12 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 
 		if !unitExists {
 			output += `"error": "Experiment does not exist.",`
+			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
 		}
 		output += `"error": "No FQANs found."`
+		log.WithFields(QueryFields(r, startTime)).Error("No FQANs found.")
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 	}
 
 	output += " ]"
@@ -409,8 +425,10 @@ func getGroupGID(w http.ResponseWriter, r *http.Request) {
 		}
 		if idx == 0 {
 			w.WriteHeader(http.StatusNotFound)
+			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
 			fmt.Fprintf(w, `{ "error": "Group does not exist." }`)
 		} else {
+			log.WithFields(QueryFields(r, startTime)).Info("Success!")
 			fmt.Fprintf(w," ]")
 		}		
 	}
@@ -468,8 +486,10 @@ func getGroupName(w http.ResponseWriter, r *http.Request) {
 			}
 		if idx == 0 {
 			w.WriteHeader(http.StatusNotFound)
+			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
 			fmt.Fprintf(w, `{ "error": "Group does not exist." }`)
 		} else {
+			log.WithFields(QueryFields(r, startTime)).Info("Success!")
 			fmt.Fprintf(w," ]")
 		}		
 	}
@@ -519,8 +539,10 @@ func getMappedGidFile(w http.ResponseWriter, r *http.Request) {
 		type jsonerror struct {Error string `json:"error"`}
 		var Err jsonerror
 		Err = jsonerror{"Something went wrong."}
+		log.WithFields(QueryFields(r, startTime)).Error("Something went wrong.")
 		output = Err
 	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonout, err := json.Marshal(output)
@@ -599,8 +621,10 @@ func getStorageAuthzDBFile(w http.ResponseWriter, r *http.Request) {
 		type jsonerror struct {Error string `json:"error"`}
 		var Err jsonerror
 		Err = jsonerror{"Something went wrong."}
+		log.WithFields(QueryFields(r, startTime)).Error("Something went wrong.")
 		output = Err
 	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonout, err := json.Marshal(output)
@@ -671,15 +695,19 @@ func getAffiliationMembersRoles(w http.ResponseWriter, r *http.Request) {
 		var Err []jsonerror
 		if !unitExists {
 			Err = append(Err, jsonerror{"Experiment does not exist."})
+			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
 		}
 		if !roleExists {
 			Err = append(Err, jsonerror{"Role does not exist."})
+			log.WithFields(QueryFields(r, startTime)).Error("Role does not exist.")
 		}
 		if len(Err) == 0 {
 			Err = append(Err, jsonerror{"No roles were found"})
+			log.WithFields(QueryFields(r, startTime)).Error("No roles were found")
 		}
 		output = Err
 	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonout, err := json.Marshal(output)
@@ -743,9 +771,11 @@ func getStorageAccessLists(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		type jsonerror struct {Error string `json:"error"`}
 		var Err jsonerror
-		Err = jsonerror{"Storage resource does not exist"}
+		Err = jsonerror{"Storage resource does not exist."}
+		log.WithFields(QueryFields(r, startTime)).Error("Storage resource does not exist.")
 		output = Err
 	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonout, err := json.Marshal(output)

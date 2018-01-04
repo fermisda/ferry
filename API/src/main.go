@@ -26,7 +26,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "This is a placeholder for paths like %s!", r.URL.Path[1:])
 }
 
-//QueryFields builds fields for a logger from a http request
+//QueryFields builds fields for a logger from an http request
 func QueryFields(r *http.Request, t time.Time) log.Fields {
 	subject := ParseDN(r.TLS.PeerCertificates[0].Subject.Names, "/")
 	return log.Fields{

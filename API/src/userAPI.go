@@ -89,11 +89,16 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 
 		if !userExists {
 			output += `"error": "User does not exist.",`
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 		}
 		if !exptExists {
 			output += `"error": "Experiment does not exist.",`
+			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
 		}
 		output += `"error": "User does not have any certifcates registered."`
+		log.WithFields(QueryFields(r, startTime)).Error("User does not have any certifcates registered.")
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 	}
 
 	output += " ]"
@@ -160,11 +165,16 @@ func getUserFQANs(w http.ResponseWriter, r *http.Request) {
 
 		if !userExists {
 			output += `"error": "User does not exist.",`
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 		}
 		if !exptExists {
 			output += `"error": "Experiment does not exist.",`
+			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
 		}
 		output += `"error": "User do not have any assigned FQANs."`
+		log.WithFields(QueryFields(r, startTime)).Error("User do not have any assigned FQANs.")
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 	}
 
 	output += " ]"
@@ -227,8 +237,12 @@ func getSuperUserList(w http.ResponseWriter, r *http.Request) {
 
 		if !exptExists {
 			output += `"error": "Experiment does not exist.",`
+			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
 		}
 		output += `"error": "No super users found."`
+		log.WithFields(QueryFields(r, startTime)).Error("No super users found.")
+	} else {	
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 	}
 
 	output += " ]"
@@ -282,12 +296,15 @@ func setSuperUser(w http.ResponseWriter, r *http.Request) {
                                                                                 where uid=Userid and unitid=Unitid;
 									end $$;`, uName, unitName))
 	if err == nil {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w, "{ \"status\": \"success\" }")
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
 		if strings.Contains(err.Error(), `User does not exist`) {
-			fmt.Fprintf(w, "{ \"error\": \"Uner does not exist.\" }")
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			fmt.Fprintf(w, "{ \"error\": \"User does not exist.\" }")
 		} else if strings.Contains(err.Error(), `Unit does not exist`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Unit does not exist.")
 			fmt.Fprintf(w, "{ \"error\": \"Unit does not exist.\" }")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
@@ -346,8 +363,10 @@ func getUserGroups(w http.ResponseWriter, r *http.Request) {
 		}
 		if idx == 0 {
 			w.WriteHeader(http.StatusNotFound)
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 			fmt.Fprintf(w, `{ "error": "User does not exist." }`)
 		} else {
+			log.WithFields(QueryFields(r, startTime)).Info("Success!")
 			fmt.Fprintf(w, " ]")
 		}
 	}
@@ -403,8 +422,11 @@ func getUserInfo(w http.ResponseWriter, r *http.Request) {
 		}
 		if idx == 0 {
 			w.WriteHeader(http.StatusNotFound)
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 			fmt.Fprintf(w, `{ "error": "User does not exist." }`)
 		} else {
+			
+			log.WithFields(QueryFields(r, startTime)).Info("Success!")
 			fmt.Fprintf(w, " ]")
 		}
 	}
@@ -467,14 +489,18 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 									end $$;`, uName, gName, isLeader))
 
 	if err == nil {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w, "{ \"status\": \"success\" }")
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
 		if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
+			log.WithFields(QueryFields(r, startTime)).Error("User already belongs to this group.")
 			fmt.Fprintf(w, "{ \"error\": \"User already belongs to this group.\" }")
 		} else if strings.Contains(err.Error(), `null value in column "uid" violates not-null constraint`) {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 			fmt.Fprintf(w, "{ \"error\": \"User does not exist.\" }")
 		} else if strings.Contains(err.Error(), `null value in column "groupid" violates not-null constraint`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
 			fmt.Fprintf(w, "{ \"error\": \"Group does not exist.\" }")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
@@ -538,16 +564,21 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 														 values (vUnitid, vUid, vFqanid, false, false, NOW());
 									end $$;`, eName, uName, fqan))
 	if err == nil {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w, "{ \"status\": \"success\" }")
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
 		if strings.Contains(err.Error(), `null value in column "uid" violates not-null constraint`) {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 			fmt.Fprintf(w, "{ \"error\": \"User does not exist.\" }")
 		} else if strings.Contains(err.Error(), `null value in column "fqanid" violates not-null constraint`) {
+			log.WithFields(QueryFields(r, startTime)).Error("FQAN does not exist.")
 			fmt.Fprintf(w, "{ \"error\": \"FQAN does not exist.\" }")
 		} else if strings.Contains(err.Error(), `null value in column "unitid" violates not-null constraint`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
 			fmt.Fprintf(w, "{ \"error\": \"Experiment does not exist.\" }")
 		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint "idx_grid_access"`) {
+			log.WithFields(QueryFields(r, startTime)).Error("This association already exists.")
 			fmt.Fprintf(w, "{ \"error\": \"This association already exists.\" }")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
@@ -619,12 +650,15 @@ func setUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
 										where compid = vCompid and uid = vUid;
 									end $$;`, rName, uName, shell, hDir))
 	if err == nil {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w, "{ \"status\": \"success\" }")
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
 		if strings.Contains(err.Error(), `User does not exist.`) {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 			fmt.Fprintf(w, "{ \"error\": \"User does not exist.\" }")
 		} else if strings.Contains(err.Error(), `Resource does not exist.`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
 			fmt.Fprintf(w, "{ \"error\": \"Resource does not exist.\" }")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
@@ -705,11 +739,16 @@ func getUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
 
 		if !compExists {
 			output += `"error": "Resource does not exist.",`
+			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
 		}
 		if !userExists {
 			output += `"error": "User does not exist.",`
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 		}
 		output += `"error": "No super users found."`
+		log.WithFields(QueryFields(r, startTime)).Error("No super users found.")
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 	}
 
 	output += " ]"
@@ -781,9 +820,11 @@ func getUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	if idx == 0 {
 		w.WriteHeader(http.StatusNotFound)
 		output += `{"error": "User has no quotas registered."}`
+		log.WithFields(QueryFields(r, startTime)).Error("User has no quotas registered.")
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 	}
 	fmt.Fprintf(w, output)
-
 }
 
 func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
@@ -867,12 +908,15 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 								where storageid = vSid and uid = vUid and unitid = vUnitid;
 							end $$;`, rName, uName, unitName, quota, unit, validtime))
 	if err == nil {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w, "{ \"status\": \"success\" }")
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
 		if strings.Contains(err.Error(), `User does not exist.`) {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 			fmt.Fprintf(w, "{ \"error\": \"User does not exist.\" }")
 		} else if strings.Contains(err.Error(), `Resource does not exist.`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
 			fmt.Fprintf(w, "{ \"error\": \"Resource does not exist.\" }")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
@@ -947,10 +991,12 @@ func setUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Request)
 									end $$;`, uName, attribute, value))
 
 	if err == nil {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w, "{ \"status\": \"success\" }")
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
 		if strings.Contains(err.Error(), `uname does not exist`) {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 			fmt.Fprintf(w, "{ \"error\": \"User does not exist.\" }")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
@@ -1013,12 +1059,15 @@ func removeUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Reque
 									end $$;`, uName, attribute))
 
 	if err == nil {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w, "{ \"status\": \"success\" }")
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
 		if strings.Contains(err.Error(), `uname does not exist`) {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 			fmt.Fprintf(w, "{ \"error\": \"User does not exist.\" }")
 		} else if strings.Contains(err.Error(), `attribute does not exist`) {
+			log.WithFields(QueryFields(r, startTime)).Error("External affiliation attribute does not exist.")
 			fmt.Fprintf(w, "{ \"error\": \"External affiliation attribute does not exist.\" }")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
@@ -1084,12 +1133,15 @@ func getUserExternalAffiliationAttributes(w http.ResponseWriter, r *http.Request
 		var Err []jsonerror
 		if !userExists {
 			Err = append(Err, jsonerror{"User does not exist."})
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 		} else {
 			Err = append(Err, jsonerror{"User does not have external affiliation attributes"})
+			log.WithFields(QueryFields(r, startTime)).Error("User does not have external affiliation attributes")
 		}
 		output = Err
 	} else {
 		output = Out
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
@@ -1158,10 +1210,12 @@ if (u_dn, u_issuer) not in (select dn, issuer_ca from user_certificate as uc joi
 else  raise 'DN and issuer already exist for this user and affiliation unit'; end if;
 end $$;`, subjDN, issuer, uName, unitName))
 	if err == nil {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w, "{ \"status\": \"success\" }")
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
 		if strings.Contains(err.Error(), `DN and issuer already exist`) {
+			log.WithFields(QueryFields(r, startTime)).Error("DN and issuer already exist.")
 			fmt.Fprintf(w, "{ \"status\": \"DN and issuer already exist.\" }")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
@@ -1215,6 +1269,7 @@ select uid into u_uid from users where uname=u_uname;
 delete from user_certificate where dn=u_dn and uid=u_uid;
 end $$;`, subjDN, uName))
 	if err == nil {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w, "{ \"status\": \"success\" }")
 		DBtx.Commit(cKey)
 	} else {
@@ -1300,14 +1355,17 @@ func setUserInfo(w http.ResponseWriter, r *http.Request) {
 									end $$;`, uid, uName, fName, status, eDate))
 
 	if err == nil {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w, "{ \"status\": \"success\" }")
 		DBtx.Commit(cKey)
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
 		if strings.Contains(err.Error(), `uid does not exist`) {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 			fmt.Fprintf(w, "{ \"error\": \"User does not exist.\" }")
 		} else if strings.Contains(err.Error(), `invalid input syntax for type date`) ||
 			strings.Contains(err.Error(), `date/time field value out of range`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid expiration date.")
 			fmt.Fprintf(w, "{ \"error\": \"Invalid expiration date.\" }")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
@@ -1388,6 +1446,7 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 		_, err = DBtx.Exec(fmt.Sprintf("insert into users (uname, uid, full_name, status, expiration_date, last_updated) values ('%s',%s,'%s',%t,'%s', NOW())", uName, uid, fullname, status, expdate))
 
 		if err == nil {
+			log.WithFields(QueryFields(r, startTime)).Info("Success!")
 			fmt.Fprintf(w, "{ \"status\": \"success\" }")
 			DBtx.Commit(cKey)
 			return
@@ -1399,9 +1458,11 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 	case checkerr != nil:
 
 		w.WriteHeader(http.StatusInternalServerError)
+		log.WithFields(QueryFields(r, startTime)).Error(checkerr.Error())
 		fmt.Fprintf(w, "{ \"error\": \""+checkerr.Error()+"\" }")
 	default:
 		w.WriteHeader(http.StatusBadRequest)
+		log.WithFields(QueryFields(r, startTime)).Error("user "+uName+" already exists.")
 		fmt.Fprintf(w, "{ \"error\": \"user "+uName+" already exists.\"}")
 	}
 
@@ -1494,12 +1555,15 @@ func getMemberAffiliations(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		var queryErr []jsonerror
 		if !userExists {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 			queryErr = append(queryErr, jsonerror{"User does not exist."})
 		} else {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not belong to any affiliation unit or experiment.")
 			queryErr = append(queryErr, jsonerror{"User does not belong to any affiliation unit or experiment."})
 		}
 		output = queryErr
 	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonout, err := json.Marshal(output)
@@ -1537,6 +1601,7 @@ func getUserUID(w http.ResponseWriter, r *http.Request) {
 		return
 	default:
 		fmt.Fprintf(w, "{ \"uid\": " + strconv.Itoa(uid) + " }")	
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		return
 	}
 }
@@ -1574,8 +1639,9 @@ func getUserUname(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "{ \"error\": \"Error in DB query.\" }")
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query for " + uidstr + ": " + checkerr.Error())
 		return
-	default:
+	default:		
 		fmt.Fprintf(w, "{ \"uname\": \"" + uname  + "\" }")	
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		return
 	}
 }
@@ -1628,6 +1694,7 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 		_, err = myStmt.Exec() 
 		if err == nil {	
 			fmt.Fprintf(w, "{ \"status\": \"success\" }")
+			log.WithFields(QueryFields(r, startTime)).Info("Success!")
 			DBtx.Commit(cKey)
 			myStmt.Close()
 			return
