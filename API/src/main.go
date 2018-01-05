@@ -32,8 +32,9 @@ func QueryFields(r *http.Request, t time.Time) log.Fields {
 	return log.Fields{
 		"client":   r.RemoteAddr,
 		"subject":  subject,
+		"action":	r.URL.Path[1:],
 		"query":    r.URL,
-		"duration": time.Since(t).Seconds(),
+		"duration": time.Since(t).Nanoseconds() / 1E6,
 	}
 }
 
