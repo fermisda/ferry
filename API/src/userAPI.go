@@ -1707,3 +1707,191 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 		}	
 	}
 }
+
+func getUserAccessToComputeResources(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	type jsonerror struct {
+		Error string `json:"error"`
+	}
+	var inputErr []jsonerror
+
+	user := q.Get("username")
+
+	if user == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		inputErr = append(inputErr, jsonerror{"No username specified."})
+	}
+
+	if len(inputErr) > 0 {
+		jsonout, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		}
+		fmt.Fprintf(w, string(jsonout))
+		return
+	}
+
+	rows, err := DBptr.Query(`select  name, type, shell, home_dir, user_exists from
+							(select 1 as key, u.uname, cr.name, cr.type, ca.* from
+								compute_access as ca left join
+								users as u on ca.uid = u.uid left join
+								compute_resources as cr on ca.compid = cr.compid
+								where u.uname = $1
+							) as t 
+							right join (
+								select 1 as key, $1 in (select uname from users) as user_exists
+							) as c on t.key = c.key;`, user)
+
+	if err != nil {
+		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	var userExists bool
+
+	type jsonentry struct {
+		Rname string `json:"resourcename"`
+		Rtype string `json:"resourcetype"`
+		Shell string `json:"shell"`
+		Home  string `json:"home_dir"`
+	}
+	var Entry jsonentry
+	var Out []jsonentry
+
+	for rows.Next() {
+		var tmpRname, tmpRtype, tmpShell, tmpHome sql.NullString
+		rows.Scan(&tmpRname, &tmpRtype, &tmpShell, &tmpHome, &userExists)
+
+		if tmpRname.Valid {
+			Entry.Rname = tmpRname.String
+			Entry.Rtype = tmpRtype.String
+			Entry.Shell = tmpShell.String
+			Entry.Home  = tmpHome.String
+			Out = append(Out, Entry)
+		}
+	}
+
+	var output interface{}
+	if len(Out) == 0 {
+		w.WriteHeader(http.StatusNotFound)
+		var queryErr []jsonerror
+		if !userExists {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			queryErr = append(queryErr, jsonerror{"User does not exist."})
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not have access to any compute resource.")
+			queryErr = append(queryErr, jsonerror{"User does not have access to any compute resource."})
+		}
+		output = queryErr
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonout, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Fatal(err)
+	}
+	fmt.Fprintf(w, string(jsonout))
+}
+
+func getUserAllStorageQuotas(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	type jsonerror struct {
+		Error string `json:"error"`
+	}
+	var inputErr []jsonerror
+
+	user := q.Get("username")
+
+	if user == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		inputErr = append(inputErr, jsonerror{"No username specified."})
+	}
+
+	if len(inputErr) > 0 {
+		jsonout, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		}
+		fmt.Fprintf(w, string(jsonout))
+		return
+	}
+
+	rows, err := DBptr.Query(`select  name, path, value, unit, valid_until, user_exists from
+							(select 1 as key, u.uname, sr.name, sr.type, sq.* from
+								storage_quota as sq left join
+								users as u on sq.uid = u.uid left join
+								storage_resources as sr on sq.storageid = sr.storageid
+								where u.uname = $1
+							) as t 
+							right join (
+								select 1 as key, $1 in (select uname from users) as user_exists
+							) as c on t.key = c.key;`, user)
+
+	if err != nil {
+		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	var userExists bool
+
+	type jsonentry struct {
+		Rname string `json:"resourcename"`
+		Path  string `json:"path"`
+		Value string `json:"value"`
+		Unit  string `json:"unit"`
+		Until string `json:"validuntil"`
+	}
+	var Entry jsonentry
+	var Out []jsonentry
+
+	for rows.Next() {
+		var tmpRname, tmpPath, tmpValue, tmpUnit, tmpUntil sql.NullString
+		rows.Scan(&tmpRname, &tmpPath, &tmpValue, &tmpUnit, &tmpUntil, &userExists)
+
+		if tmpRname.Valid {
+			Entry.Rname = tmpRname.String
+			Entry.Path = tmpPath.String
+			Entry.Value = tmpValue.String
+			Entry.Unit  = tmpUnit.String
+			Entry.Until  = tmpUntil.String
+			Out = append(Out, Entry)
+		}
+	}
+
+	var output interface{}
+	if len(Out) == 0 {
+		w.WriteHeader(http.StatusNotFound)
+		var queryErr []jsonerror
+		if !userExists {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			queryErr = append(queryErr, jsonerror{"User does not exist."})
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not have any assigned storage quotas.")
+			queryErr = append(queryErr, jsonerror{"User does not have any assigned storage quotas."})
+		}
+		output = queryErr
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonout, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Fatal(err)
+	}
+	fmt.Fprintf(w, string(jsonout))
+}

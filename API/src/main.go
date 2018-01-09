@@ -28,14 +28,17 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 //QueryFields builds fields for a logger from an http request
 func QueryFields(r *http.Request, t time.Time) log.Fields {
-	subject := ParseDN(r.TLS.PeerCertificates[0].Subject.Names, "/")
-	return log.Fields{
-		"client":   r.RemoteAddr,
-		"subject":  subject,
-		"action":	r.URL.Path[1:],
-		"query":    r.URL,
-		"duration": time.Since(t).Nanoseconds() / 1E6,
+	fields := make(log.Fields)
+
+	fields["client"] = r.RemoteAddr
+	fields["action"] = r.URL.Path[1:]
+	fields["query"] = r.URL
+	fields["duration"] = time.Since(t).Nanoseconds() / 1E6
+	if len(r.TLS.PeerCertificates) > 0 {
+		fields["subject"] = ParseDN(r.TLS.PeerCertificates[0].Subject.Names, "/")
 	}
+
+	return fields
 }
 
 func main() {
@@ -126,6 +129,8 @@ func main() {
 	grouter.HandleFunc("/deleteUser"    ,    deleteUser)
 	grouter.HandleFunc("/getUserUname"    ,    getUserUname)
 	grouter.HandleFunc("/getMemberAffiliations",    getMemberAffiliations)
+	grouter.HandleFunc("/getUserAccessToComputeResources",    getUserAccessToComputeResources)
+	grouter.HandleFunc("/getUserAllStorageQuotas",    getUserAllStorageQuotas)
 
 	//group API calls
 	grouter.HandleFunc("/getgroupmembers", getGroupMembers)
