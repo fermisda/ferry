@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net"
 	"database/sql"
 	"fmt"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/gorilla/mux"
 	_ "github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
+	golog "log"
 	"github.com/spf13/viper"
 )
 
@@ -39,6 +41,19 @@ func QueryFields(r *http.Request, t time.Time) log.Fields {
 	}
 
 	return fields
+}
+
+func gatekeeper(c net.Conn, s http.ConnState) {
+	fields := make(log.Fields)
+
+	fields["client"] = c.RemoteAddr()
+	fields["state"] = s.String()
+
+	if s.String() == "new" {
+		log.WithFields(fields).Info("New connection started.")
+	} else {
+		log.WithFields(fields).Debug("Connection status changed.")
+	}
 }
 
 func main() {
@@ -186,6 +201,8 @@ func main() {
 		Addr:        fmt.Sprintf(":%s", srvConfig["port"]),
 		ReadTimeout: 10 * time.Second,
 		Handler:     grouter,
+		ConnState:	 gatekeeper,
+		ErrorLog:	 golog.New(log.StandardLogger().Writer(), "", 0),
 	}
 
 	certslice := viper.GetStringSlice("certificates")
@@ -211,6 +228,7 @@ func main() {
 		log.Fatal("Authorized DN slice has zero elements.")
 	}
 	// We should probably make the cert and key paths variables in a config file at some point
+	log.WithFields(log.Fields{"port": Mainsrv.Addr[1:]}).Infof("Starting FERRY API")
 	serverror := Mainsrv.ListenAndServeTLS(srvConfig["cert"], srvConfig["key"])
 	if serverror != nil {
 		log.Fatal(serverror)
