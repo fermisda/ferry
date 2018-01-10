@@ -1896,3 +1896,133 @@ func getUserAllStorageQuotas(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
+
+func setUserAccessToResource(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	uname := q.Get("username")
+	gName := q.Get("groupname")
+	rName := q.Get("resourcename")
+	shell := q.Get("shell")
+	homedir := q.Get("home_dir")
+	if uname == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No value for username specified.\" }")
+		return
+	}
+	if rName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.WithFields(QueryFields(r, startTime)).Error("No compute resource specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No value for resourcename specified.\" }")
+		return
+	}
+	
+	if gName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.WithFields(QueryFields(r, startTime)).Error("No group name specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No value for groupname specified.\" }")
+		return
+	}
+	
+	authorized, authout := authorize(r, AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w, "{ \"error\": \""+authout+"not authorized.\" }")
+		return
+	}
+	
+	var defShell,defhome sql.NullString
+	var grpid,compid,uid int
+	
+	// see if the user/group/resource combination is already there. If so, then we might just be doing an update.
+	
+	err := DBptr.QueryRow(`select uid, groupid, compid, shell, home_dir from compute_access as ca join groups on ca.groupid=groups.groupid join users as u on u.uid=ca.uid join compute_resources as cr on cr.compid=ca.compid where cr.name=$1 and users.uname=$2 and groups.name=$3`,rName,uname,gName).Scan(&uid,&grpid,&compid,&defShell,defhome)
+	switch {
+	case err == sql.ErrNoRows:
+		
+		// OK, we don't have this combo, so we do an insert now
+		
+		//grab the default home dir and shell paths for the given compid
+		
+		checkerr := DBptr.QueryRow(`select default_shell, default_home_dir from compute_resources as cr where cr.name=$1`,rName).Scan(&defShell,&defhome)
+		if checkerr == sql.ErrNoRows {
+			// the given compid does not exist in this case. Exit accordingly.	
+			log.WithFields(QueryFields(r, startTime)).Error("resource " + rName + " does not exist.")
+			w.WriteHeader(http.StatusNoContent)
+			fmt.Fprintf(w, "{ \"error\": \"Resource does not exist.\" }")
+			return	
+		}
+		//check if the query specified a shell or directory value
+		if shell != "" {
+			defShell.Valid = true
+			defShell.String = shell
+		}
+		if homedir != "" {
+			defhome.Valid = true
+			defhome.String = homedir
+		}
+
+		// now, do the actual insert
+
+		_, inserr := DBptr.Exec(`insert into compute_access (compid, uid, groupid, last_updated, shell, home_dir) values ( (select compid from crompute_resources where compid.name=$1), (select uid from users where uname=$2), (select groupid from groups where groups.name=$3), NOW(), $4,$5)`, rName, uname, gName, defShell, defhome)
+		if inserr != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + inserr.Error())
+			// now we also need to do a bunch of other checks here
+			if strings.Contains(inserr.Error(),"null value in column \"compid\"") {
+				w.WriteHeader(http.StatusNoContent)
+				fmt.Fprintf(w, "{ \"error\": \"Resource does not exist.\" }")
+				return	
+				
+			} else if strings.Contains(inserr.Error(),"null value in column \"uid\"") {
+				w.WriteHeader(http.StatusNoContent)
+				fmt.Fprintf(w, "{ \"error\": \"User does not exist.\" }")
+				return	
+			} else if strings.Contains(inserr.Error(),"null value in column \"groupid\"") {
+				w.WriteHeader(http.StatusNoContent)
+				fmt.Fprintf(w, "{ \"error\": \"Group does not exist.\" }")
+				return		
+			} else {
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprintf(w, "{ \"error\": \"Error in DB insert.\" }")
+				return		
+			}
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully inserted (%s,%s,%s,%s,%s) into compute_access.",rName, uname, gName, defShell, defhome))
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprintf(w, "{ \"status\": \"success\" }")
+			return			
+		}
+		
+	case err != nil:
+		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error()) 
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, "{ \"error\": \"Error in DB query.\" }")
+		return		
+		
+	default: // OK, we already have this user/group/resource combo. We just need to check if the shells are the same or whatnot
+		
+		if defShell.String == shell && defhome.String == homedir {
+			// everything in the DB is already the same as the request, so don't do anything
+			log.WithFields(QueryFields(r, startTime)).Print("The request already exists in the database. Nothing to do.")
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprintf(w, "{ \"status\": \"success\" }")
+			return	
+		} else {
+			_, moderr := DBptr.Exec(`update compute_access set shell=$1,home_dir=$2,last_updated=NOW() where groupid=$3 and uid=$4 and compid=$5`,defShell,defhome,grpid,uid,compid)
+			if moderr != nil {
+				log.WithFields(QueryFields(r, startTime)).Error("Error in DB update: " + err.Error()) 
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprintf(w, "{ \"error\": \"Error in DB update.\" }")
+				return		
+			} else {
+				
+				log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully updated (%s,%s,%s,%s,%s) in compute_access.",rName, uname, gName, defShell, defhome))
+				w.WriteHeader(http.StatusOK)
+				fmt.Fprintf(w, "{ \"status\": \"success\" }")
+				return		
+			}	
+		}
+	}
+}

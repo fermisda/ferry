@@ -863,18 +863,6 @@ func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
 	DBtx.Commit(cKey)
 }
 
-func setUserAccessToResource(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query()
-//	uname := q.Get("username")
-//	groupname := q.Get("groupname")
-//	resource := q.Get("resourcename")
-//	shell := q.Get("shell")
-//	homepath := q.Get("home_path")
-	NotDoneYet(w, r, startTime)
-}
-
 func removeUserAccessFromResource(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
