@@ -128,7 +128,7 @@ func addGroupToUnit(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case checkerr == sql.ErrNoRows:
 		log.WithFields(QueryFields(r, startTime)).Print("Affiliation unit " + unitName + " does not exist.")
-		w.WriteHeader(http.StatusNotFound)
+	//	w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"error\": \"Affiliation unit " + unitName + " does not exist.\" }")
 		return
 	case checkerr != nil:
@@ -290,12 +290,90 @@ func removePrimaryStatusfromGroup(w http.ResponseWriter, r *http.Request) {
 func getGroupMembers(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query() 
-//	groupname := q.Get("groupname")
-//	//should be a bool
-//	getLeaders := q.Get("return_leaders")
-	NotDoneYet(w, r, startTime)
+	q := r.URL.Query() 
+	groupname := q.Get("groupname")
+	//	//should be a bool
+	
+	getLeaders := false
+	gl := q.Get("return_leaders")
+	if gl != "" {
+		getl,glerr := strconv.ParseBool(gl)	
+		if glerr != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			log.WithFields(QueryFields(r, startTime)).Print("Invalid value of return_leaders: " + gl + ". Must be true or false.")
+			fmt.Fprintf(w,"{ \"error\": \"Invalid value for return_leaders. Must be true or false\" }")		
+			return
+		} else {
+			getLeaders = getl
+		}
+	}
+	
+	type jsonout struct {
+		UID int `json:"uid"`
+		Uname string `json:"username"`
+		Leader string `json:"is_leader,omitempty"`
+	}
+	var grpid,tmpuid int
+	var tmpuname string
+	var tmpleader bool
+	var tmpout jsonout
+	var Out []jsonout
+
+	err := DBptr.QueryRow(`select groupid from groups where name=$1`,groupname).Scan(&grpid)
+	switch {
+	case err == sql.ErrNoRows:
+		log.WithFields(QueryFields(r, startTime)).Print("Group " + groupname + " does not exist.")
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"error\": \"Group " + groupname + " does not exist.\" }")
+		return	
+		
+	case err != nil:
+		log.WithFields(QueryFields(r, startTime)).Print("Group ID query error: " + err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		return
+		
+	default:
+		rows, err := DBptr.Query(`select users.uname, users.uid, user_group.is_leader from user_group join users on users.uid=user_group.uid where user_group.groupid=$1`,grpid)
+		if err != nil {	
+			log.WithFields(QueryFields(r, startTime)).Print("Database query error: " + err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")		
+			return
+		}
+		
+		defer rows.Close()
+		for rows.Next() {
+			rows.Scan(&tmpuname,&tmpuid,&tmpleader)
+			tmpout.Uname = tmpuname
+			tmpout.UID = tmpuid
+			if getLeaders == true {
+				tmpout.Leader = strconv.FormatBool(tmpleader)
+			}
+			Out = append(Out,tmpout)
+		}
+		
+		var output interface{}
+		if len(Out) == 0 {
+			type jsonerror struct {
+				Error string `json:"error"`
+			}
+			var queryErr []jsonerror
+			queryErr = append(queryErr, jsonerror{"This group has no members."})
+			log.WithFields(QueryFields(r, startTime)).Error("Group " + groupname + " has no members")
+			output = queryErr
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Info("Success!")
+			output = Out
+		}
+		jsonoutput, err := json.Marshal(output)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		}
+		fmt.Fprintf(w, string(jsonoutput))	
+	}
 }
+
 func IsUserLeaderOf(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
@@ -647,7 +725,7 @@ func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := DBptr.Query(`select sq.value, sq.unit, sq.valid_until from storage_quota sq INNER JOIN affiliation_units on affiliation_units.unitid = sq.unitid INNER JOIN storage_resources on storage_resources.storageid = sq.storageid INNER JOIN groups on groups.groupid = sq.groupid where affiliation_units.name = $3 AND storage_resources.type = $2 and groups.name = $1`, groupname, resource, exptname)
 	if err != nil {	
-		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		defer log.WithFields(QueryFields(r, startTime)).Print("Error in DB query: " + err.Error())
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
 		
@@ -805,4 +883,143 @@ func removeUserAccessFromResource(w http.ResponseWriter, r *http.Request) {
 //	groupname := q.Get("groupname")
 //	resource := q.Get("resourcename")    
 	NotDoneYet(w, r, startTime)
+}
+
+func setGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	rName := q.Get("resourcename")
+	gName := q.Get("groupname")
+	if gName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No value for groupname specified.\" }")
+		return
+	}
+	if rName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.WithFields(QueryFields(r, startTime)).Error("No compute resource specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No value for resourcename specified.\" }")
+		return
+	}
+	shell := q.Get("default_shell")
+	homedir := q.Get("default_home_dir")
+	var nullshell,nullhomedir sql.NullString
+	var gid,compid int
+	
+	//require auth	
+	authorized,authout := authorize(r,AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"error\": \"" + authout + "not authorized.\" }")
+		return
+	}
+	
+
+	type jsonout struct {
+	Uid int `json:"uid"`
+	Uname string `json:"username"`
+	}
+
+
+
+	//first thing we do is check that that resource exists
+	err := DBptr.QueryRow(`select compid from compute_resources where name=$1`,rName).Scan(&compid)
+	switch {
+	case err == sql.ErrNoRows:
+		log.WithFields(QueryFields(r, startTime)).Print("Compute resource " + rName + " does not exist.")
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"error\": \"Compute resource " + rName + " does not exist.\" }")
+		return
+	case err != nil:
+		log.WithFields(QueryFields(r, startTime)).Print("Error in compute resource DB query: "+err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w,"{ \"error\": \"Compute resource DB query error.\" }")
+		return
+		
+	default:
+		log.WithFields(QueryFields(r, startTime)).Print("Resource "+ rName + "has compid " + strconv.Itoa(compid))	
+	}
+
+
+
+
+	//now, get all users is this group
+//	rows, err := DBptr.Query(`select users.uid,users.uname, groupid, shell, home_dir from compute_access as ca join groups on groups.groupid=ca.groupid join where groups.name=$1 and cr.compid=$2`,gName,compid)
+// if the query expects to change the existing values, set them up now
+	if shell != "" { 
+		nullshell.Valid = true
+		nullshell.String = shell 
+	}
+	if homedir != "" {
+		nullhomedir.Valid = true
+		nullhomedir.String = homedir
+	}
+	
+	switch {
+		// does not exist already, so do an insert
+	case err == sql.ErrNoRows:
+		//start yer transaction
+		cKey, terr := DBtx.Start(DBptr)
+		if terr != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + terr.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w,"{ \"error\": \"Error starting database transaction.\" }")
+			return
+		}
+		
+		_, inserr := DBtx.Exec(`insert into compute_access (compid, groupid, last_updated, shell, home_dir) values ($1,$2,NOW(),$3,$4)`, compid, gid, nullshell, nullhomedir)
+		if inserr != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error in database insert: " + inserr.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w,"{ \"error\": \"Error in database insertion.\" }")
+			return
+		} else {
+			err = DBtx.Commit(cKey)
+			log.WithFields(QueryFields(r, startTime)).Error("Set access for " + gName + " in " + rName)
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprintf(w,"{ \"result\": \"success.\" }")
+			return		
+		}
+	case err != nil:
+		log.WithFields(QueryFields(r, startTime)).Error("Error checking database: " + err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w,"{ \"error\": \"Error querying database.\" }")
+		return
+		
+	default:
+		//already exists, so we are just changing the shell and/or home dir values
+		
+		//start transaction
+		// start a transaction
+		cKey, err := DBtx.Start(DBptr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w,"{ \"error\": \"Error starting database transaction.\" }")
+			return
+		}
+		
+		execstmt:= `update compute_access (shell, home_dir) values ($1,$2) where compid=$3 and groupid=$4`
+		_, moderr := DBtx.Exec(execstmt,nullshell, nullhomedir, compid, gid)
+		if moderr != nil {
+			log.WithFields(QueryFields(r, startTime)).Print("Error from Update: " + moderr.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w,"{ \"error\": \"Error in database transaction.\" }")
+			return	
+			
+		} else {
+			commerr := DBtx.Commit(cKey)
+			if commerr != nil {
+				log.WithFields(QueryFields(r, startTime)).Error("Problem with committing addition of " + rName + " to compute_resources.")
+			} else {
+				log.WithFields(QueryFields(r, startTime)).Info("Added " + rName + " to compute_resources.")
+			}
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprintf(w,"{ \"result\": \"success.\" }")
+			return			
+		}	
+	}
+	
 }

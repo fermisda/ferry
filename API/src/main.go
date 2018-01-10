@@ -187,6 +187,7 @@ func main() {
 	grouter.HandleFunc("/getStorageAuthzDBFile", getStorageAuthzDBFile)
 	grouter.HandleFunc("/getAffiliationMembersRoles", getAffiliationMembersRoles)
 	grouter.HandleFunc("/getStorageAccessLists", getStorageAccessLists)
+	grouter.HandleFunc("/createComputeResource", createComputeResource)
 
 	//affiliation unit API calls
 	grouter.HandleFunc("/createAffiliationUnit",             createAffiliationUnit)           
