@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/fsnotify/fsnotify"
 	"net"
 	"database/sql"
 	"fmt"
@@ -65,6 +66,10 @@ func main() {
 	if cfgErr != nil {
 		panic(fmt.Errorf("Fatal error config file: %s \n", cfgErr))
 	}
+	viper.WatchConfig()
+	viper.OnConfigChange(func(e fsnotify.Event) {
+		log.WithFields(log.Fields{"file": e.Name}).Debug("Config file changed.")
+	})
 
 	//Setup log file
 	logConfig := viper.GetStringMapString("log")
