@@ -1581,7 +1581,7 @@ func getUserUID(w http.ResponseWriter, r *http.Request) {
 	if uName == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No username specified.\" }")
+		fmt.Fprintf(w,"{ \"error\": \"No username specified (use username=foo in the API query).\" }")
 		return
 	}
 	var uid int
@@ -1611,19 +1611,20 @@ func getUserUname(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 	uidstr := q.Get("uid")
+	if uidstr == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.WithFields(QueryFields(r, startTime)).Error("No uid specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No uid specified (use uid=<number> in API query).\" }")
+		return
+	}
 	uid,err := strconv.Atoi(uidstr)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("Invalid uid specified (either missing or not an integer).")
-		fmt.Fprintf(w,"{ \"error\": \"Invalid uid specified.\" }")
+		fmt.Fprintf(w,"{ \"error\": \"Invalid uid format.\" }")
 		return	
 	}
-	if uidstr == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		log.WithFields(QueryFields(r, startTime)).Error("No uid specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No uid specified.\" }")
-		return
-	}
+	
 	var uname string
 	checkerr := DBptr.QueryRow(`select uname from users where uid=$1`, uid).Scan(&uname)
 	
