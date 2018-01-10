@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net"
 	"database/sql"
 	"fmt"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/gorilla/mux"
 	_ "github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
+	golog "log"
 	"github.com/spf13/viper"
 )
 
@@ -28,12 +30,29 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 //QueryFields builds fields for a logger from an http request
 func QueryFields(r *http.Request, t time.Time) log.Fields {
-	subject := ParseDN(r.TLS.PeerCertificates[0].Subject.Names, "/")
-	return log.Fields{
-		"client":   r.RemoteAddr,
-		"subject":  subject,
-		"query":    r.URL,
-		"duration": time.Since(t).Seconds(),
+	fields := make(log.Fields)
+
+	fields["client"] = r.RemoteAddr
+	fields["action"] = r.URL.Path[1:]
+	fields["query"] = r.URL
+	fields["duration"] = time.Since(t).Nanoseconds() / 1E6
+	if len(r.TLS.PeerCertificates) > 0 {
+		fields["subject"] = ParseDN(r.TLS.PeerCertificates[0].Subject.Names, "/")
+	}
+
+	return fields
+}
+
+func gatekeeper(c net.Conn, s http.ConnState) {
+	fields := make(log.Fields)
+
+	fields["client"] = c.RemoteAddr()
+	fields["state"] = s.String()
+
+	if s.String() == "new" {
+		log.WithFields(fields).Info("New connection started.")
+	} else {
+		log.WithFields(fields).Debug("Connection status changed.")
 	}
 }
 
@@ -106,6 +125,7 @@ func main() {
 	grouter.HandleFunc("/getUserGroups", getUserGroups)
 	grouter.HandleFunc("/getUserInfo", getUserInfo)
 	grouter.HandleFunc("/addUserToGroup", addUserToGroup)
+	grouter.HandleFunc("/addUsertoExperiment", setUserExperimentFQAN)
 	grouter.HandleFunc("/setUserExperimentFQAN", setUserExperimentFQAN)
 	grouter.HandleFunc("/setUserShellAndHomeDir", setUserShellAndHomeDir)
 	grouter.HandleFunc("/getUserShellAndHomeDir", getUserShellAndHomeDir)
@@ -124,6 +144,8 @@ func main() {
 	grouter.HandleFunc("/deleteUser"    ,    deleteUser)
 	grouter.HandleFunc("/getUserUname"    ,    getUserUname)
 	grouter.HandleFunc("/getMemberAffiliations",    getMemberAffiliations)
+	grouter.HandleFunc("/getUserAccessToComputeResources",    getUserAccessToComputeResources)
+	grouter.HandleFunc("/getUserAllStorageQuotas",    getUserAllStorageQuotas)
 
 	//group API calls
 	grouter.HandleFunc("/getgroupmembers", getGroupMembers)
@@ -180,6 +202,8 @@ func main() {
 		Addr:        fmt.Sprintf(":%s", srvConfig["port"]),
 		ReadTimeout: 10 * time.Second,
 		Handler:     grouter,
+		ConnState:	 gatekeeper,
+		ErrorLog:	 golog.New(log.StandardLogger().Writer(), "", 0),
 	}
 
 	certslice := viper.GetStringSlice("certificates")
@@ -205,6 +229,7 @@ func main() {
 		log.Fatal("Authorized DN slice has zero elements.")
 	}
 	// We should probably make the cert and key paths variables in a config file at some point
+	log.WithFields(log.Fields{"port": Mainsrv.Addr[1:]}).Infof("Starting FERRY API")
 	serverror := Mainsrv.ListenAndServeTLS(srvConfig["cert"], srvConfig["key"])
 	if serverror != nil {
 		log.Fatal(serverror)
