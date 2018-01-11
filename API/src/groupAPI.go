@@ -1011,3 +1011,49 @@ func setGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
 	}
 	
 }
+
+func getAllGroups(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	
+	rows, err := DBptr.Query(`select name, groupid from groups`)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
+		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+	
+	type jsonout struct {
+		groupname string `json:"name"`
+		grpid int `json:"groupid"`
+		
+	} 
+	var tmpout jsonout
+	var Out []jsonout
+	
+	for rows.Next() {
+		rows.Scan(&tmpout.groupname,&tmpout.grpid)
+		Out = append(Out, tmpout)
+	}
+
+	var output interface{}	
+	if len(Out) == 0 {
+		type jsonerror struct {
+			Error string `json:"error"`
+		}
+		var queryErr []jsonerror
+		queryErr = append(queryErr, jsonerror{"Query returned no groups."})
+		log.WithFields(QueryFields(r, startTime)).Error("Query returned no groups.")
+		output = queryErr
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonoutput, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+	}
+	fmt.Fprintf(w, string(jsonoutput))
+}
