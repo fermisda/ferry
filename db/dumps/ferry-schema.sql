@@ -571,7 +571,7 @@ ALTER TABLE ONLY users
 --
 
 ALTER TABLE ONLY user_certificate
-    ADD CONSTRAINT idx_22283_primary PRIMARY KEY (uid, dn, unitid);
+    ADD CONSTRAINT idx_22283_primary PRIMARY KEY (dn, unitid);
 
 
 --
@@ -743,21 +743,14 @@ CREATE INDEX idx_22271_idx_storage_quota_3 ON storage_quota USING btree (storage
 -- Name: idx_22283_idx_user_certificate; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
-CREATE INDEX idx_22283_idx_user_certificate ON user_certificate USING btree (uid);
+CREATE INDEX idx_22283_idx_user_certificate ON user_certificate USING btree (unitid);
 
 
 --
 -- Name: idx_22283_idx_user_certificate_0; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
-CREATE INDEX idx_22283_idx_user_certificate_0 ON user_certificate USING btree (unitid);
-
-
---
--- Name: idx_22283_idx_user_certificate_1; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
---
-
-CREATE INDEX idx_22283_idx_user_certificate_1 ON user_certificate USING btree (dn);
+CREATE INDEX idx_22283_idx_user_certificate_0 ON user_certificate USING btree (dn);
 
 
 --
