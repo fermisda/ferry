@@ -2,7 +2,7 @@ package main
 import (
 	"crypto/x509"
 	"fmt"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"net/http"
 	"os"
 	"bytes"
@@ -11,6 +11,7 @@ import (
 	"crypto/tls"
 	"github.com/spf13/viper"
 	"crypto/x509/pkix"
+	"time"
 )
 
 // we probably need   list of authorized DNs too
@@ -85,6 +86,7 @@ func ParseDN(names []pkix.AttributeTypeAndValue, sep string) string {
 }
 
 func authorize( req *http.Request, authDNs []string ) (bool, string) {
+	thetime := time.Now()
 	// authorization should fail by default
 	authorized := false
 
@@ -95,7 +97,7 @@ func authorize( req *http.Request, authDNs []string ) (bool, string) {
 		for _, authDN := range authDNs {
 			if authDN == certDN {
 				authorized = true
-				log.Printf("Cert matches authorized DN %s.",certDN)
+				log.WithFields(QueryFields(req, thetime)).Print("Cert matches authorized DN " + certDN)
 			}
 		}
 	}
