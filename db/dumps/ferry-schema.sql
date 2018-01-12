@@ -56,6 +56,19 @@ CREATE TABLE affiliation_unit_group (
 ALTER TABLE public.affiliation_unit_group OWNER TO ferry;
 
 --
+-- Name: affiliation_unit_user_certificate; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
+--
+
+CREATE TABLE affiliation_unit_user_certificate (
+    dn text NOT NULL,
+    unitid bigint NOT NULL,
+    last_updated date DEFAULT ('now'::text)::date
+);
+
+
+ALTER TABLE public.affiliation_unit_user_certificate OWNER TO ferry;
+
+--
 -- Name: affiliation_units; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
 --
 
@@ -410,19 +423,18 @@ ALTER SEQUENCE storage_resource_storageid_seq OWNED BY storage_resources.storage
 
 
 --
--- Name: user_certificate; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
+-- Name: user_certificates; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
 --
 
-CREATE TABLE user_certificate (
-    uid bigint NOT NULL,
+CREATE TABLE user_certificates (
     dn character varying(300) NOT NULL,
+    uid bigint NOT NULL,
     issuer_ca character varying(120) NOT NULL,
-    last_updated date DEFAULT ('now'::text)::date NOT NULL,
-    unitid bigint NOT NULL
+    last_updated date DEFAULT ('now'::text)::date NOT NULL
 );
 
 
-ALTER TABLE public.user_certificate OWNER TO ferry;
+ALTER TABLE public.user_certificates OWNER TO ferry;
 
 --
 -- Name: user_group; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
@@ -567,14 +579,6 @@ ALTER TABLE ONLY users
 
 
 --
--- Name: idx_22283_primary; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
---
-
-ALTER TABLE ONLY user_certificate
-    ADD CONSTRAINT idx_22283_primary PRIMARY KEY (dn, unitid);
-
-
---
 -- Name: idx_22287_primary; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
 --
 
@@ -623,6 +627,14 @@ ALTER TABLE ONLY users
 
 
 --
+-- Name: pk_affiliation_unit_user_certificate_dn; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
+--
+
+ALTER TABLE ONLY affiliation_unit_user_certificate
+    ADD CONSTRAINT pk_affiliation_unit_user_certificate_dn PRIMARY KEY (unitid, dn);
+
+
+--
 -- Name: pk_compute_batch; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
 --
 
@@ -660,6 +672,14 @@ ALTER TABLE ONLY groups
 
 ALTER TABLE ONLY nas_storage
     ADD CONSTRAINT pk_nas_storage PRIMARY KEY (nasid);
+
+
+--
+-- Name: pk_user_certificates; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
+--
+
+ALTER TABLE ONLY user_certificates
+    ADD CONSTRAINT pk_user_certificates PRIMARY KEY (dn);
 
 
 --
@@ -740,20 +760,6 @@ CREATE INDEX idx_22271_idx_storage_quota_3 ON storage_quota USING btree (storage
 
 
 --
--- Name: idx_22283_idx_user_certificate; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
---
-
-CREATE INDEX idx_22283_idx_user_certificate ON user_certificate USING btree (unitid);
-
-
---
--- Name: idx_22283_idx_user_certificate_0; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
---
-
-CREATE INDEX idx_22283_idx_user_certificate_0 ON user_certificate USING btree (dn);
-
-
---
 -- Name: idx_22287_idx_user_group; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
@@ -765,6 +771,20 @@ CREATE INDEX idx_22287_idx_user_group ON user_group USING btree (uid);
 --
 
 CREATE INDEX idx_22287_idx_user_group_0 ON user_group USING btree (groupid);
+
+
+--
+-- Name: idx_affiliation_unit_user_certificate_dn; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
+--
+
+CREATE INDEX idx_affiliation_unit_user_certificate_dn ON affiliation_unit_user_certificate USING btree (dn);
+
+
+--
+-- Name: idx_affiliation_unit_user_certificate_unitid; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
+--
+
+CREATE INDEX idx_affiliation_unit_user_certificate_unitid ON affiliation_unit_user_certificate USING btree (unitid);
 
 
 --
@@ -814,6 +834,29 @@ CREATE INDEX idx_storage_quota ON storage_quota USING btree (uid);
 --
 
 CREATE INDEX idx_storage_quota_0 ON storage_quota USING btree (unitid);
+
+
+--
+-- Name: idx_user_certificates_uid; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
+--
+
+CREATE INDEX idx_user_certificates_uid ON user_certificates USING btree (uid);
+
+
+--
+-- Name: fk_affiliation_unit_user_certificate; Type: FK CONSTRAINT; Schema: public; Owner: ferry
+--
+
+ALTER TABLE ONLY affiliation_unit_user_certificate
+    ADD CONSTRAINT fk_affiliation_unit_user_certificate FOREIGN KEY (dn) REFERENCES user_certificates(dn);
+
+
+--
+-- Name: fk_affiliation_unit_user_certificate_affiliation_units; Type: FK CONSTRAINT; Schema: public; Owner: ferry
+--
+
+ALTER TABLE ONLY affiliation_unit_user_certificate
+    ADD CONSTRAINT fk_affiliation_unit_user_certificate_affiliation_units FOREIGN KEY (unitid) REFERENCES affiliation_units(unitid);
 
 
 --
@@ -961,19 +1004,11 @@ ALTER TABLE ONLY external_affiliation_attribute
 
 
 --
--- Name: fk_user_certificate_experiments; Type: FK CONSTRAINT; Schema: public; Owner: ferry
+-- Name: fk_user_certificates_users; Type: FK CONSTRAINT; Schema: public; Owner: ferry
 --
 
-ALTER TABLE ONLY user_certificate
-    ADD CONSTRAINT fk_user_certificate_experiments FOREIGN KEY (unitid) REFERENCES affiliation_units(unitid);
-
-
---
--- Name: fk_user_certificate_users; Type: FK CONSTRAINT; Schema: public; Owner: ferry
---
-
-ALTER TABLE ONLY user_certificate
-    ADD CONSTRAINT fk_user_certificate_users FOREIGN KEY (uid) REFERENCES users(uid);
+ALTER TABLE ONLY user_certificates
+    ADD CONSTRAINT fk_user_certificates_users FOREIGN KEY (uid) REFERENCES users(uid);
 
 
 --
