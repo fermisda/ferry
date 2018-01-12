@@ -1524,7 +1524,8 @@ func getMemberAffiliations(w http.ResponseWriter, r *http.Request) {
 																where u.uname = $1 and ((voms_url is not null = $2) or not $2)) as u
 
 										union                  (select au.name, au.alternative_name from affiliation_units as au
-																right join user_certificate as uc on au.unitid = uc.unitid left join users as u on uc.uid = u.uid
+																right join affiliation_unit_user_certificate as ac on au.unitid = ac.unitid
+																left join user_certificates as uc on ac.dn = uc.dn left join users as u on uc.uid = u.uid
 																where u.uname = $1 and ((voms_url is not null = $2) or not $2))
 
 										union                  (select au.name, au.alternative_name from affiliation_units as au
