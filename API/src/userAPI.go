@@ -39,13 +39,17 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := DBptr.Query(`select t3.name, t1.dn, t1.issuer_ca, c.user_exists, c.unit_exists
-							  from (select 1 as key, uid, dn, unitid, issuer_ca from user_certificate) as t1
-							  join (select uid from users where uname = $1) as t2 on t1.uid = t2.uid
-							  join (select unitid, name from affiliation_units where name = $2) as t3 on t1.unitid = t3.unitid
-							  right join (select 1 as key,
-							       $1 in (select uname from users) as user_exists, 
-							       $2 in (select name from affiliation_units) as unit_exists) as c on c.key = t1.key`, uname, expt)
+	rows, err := DBptr.Query(`select name, dn, issuer_ca, user_exists, unit_exists from (
+								select 1 as key, name, uc.dn, issuer_ca from affiliation_unit_user_certificate as ac
+								left join user_certificates as uc on ac.dn = uc.dn
+								left join users as u on uc.uid = u.uid
+								left join affiliation_units as au on ac.unitid = au.unitid
+								where uname = $1 and name = $2
+							) as t right join (
+								select 1 as key,
+								$1 in (select uname from users) as user_exists,
+								$2 in (select name from affiliation_units) as unit_exists
+							) as c on t.key = c.key;`, uname, expt)
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
