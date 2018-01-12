@@ -1026,15 +1026,15 @@ func getAllGroups(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 	
 	type jsonout struct {
-		groupname string `json:"name"`
-		grpid int `json:"groupid"`
+		Groupname string `json:"name"`
+		Grpid int `json:"groupid"`
 		
 	} 
 	var tmpout jsonout
 	var Out []jsonout
 	
 	for rows.Next() {
-		rows.Scan(&tmpout.groupname,&tmpout.grpid)
+		rows.Scan(&tmpout.Groupname,&tmpout.Grpid)
 		Out = append(Out, tmpout)
 	}
 

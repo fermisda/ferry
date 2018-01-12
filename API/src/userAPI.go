@@ -2026,3 +2026,48 @@ func setUserAccessToResource(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
+func getAllUsers(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	
+	rows, err := DBptr.Query(`select uname, uid from users`)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
+		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+	
+	type jsonout struct {
+		Uname string `json:"username"`
+		UID int `json:"uid"`
+		
+	} 
+	var tmpout jsonout
+	var Out []jsonout
+	
+	for rows.Next() {
+		rows.Scan(&tmpout.Uname,&tmpout.UID)
+		Out = append(Out, tmpout)
+	}
+
+	var output interface{}	
+	if len(Out) == 0 {
+		type jsonerror struct {
+			Error string `json:"error"`
+		}
+		var queryErr []jsonerror
+		queryErr = append(queryErr, jsonerror{"Query returned no users."})
+		log.WithFields(QueryFields(r, startTime)).Error("Query returned no users.")
+		output = queryErr
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonoutput, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+	}
+	fmt.Fprintf(w, string(jsonoutput))
+}

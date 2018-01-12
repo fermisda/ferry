@@ -784,3 +784,124 @@ func getStorageAccessLists(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
+
+func createComputeResource(w http.ResponseWriter, r *http.Request) {
+	
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	
+	rName := q.Get("resourcename")
+	unitName := q.Get("unitname")
+	rType := q.Get("type")
+	shell := q.Get("default_shell")
+	homedir := q.Get("default_home_dir")
+	var nullshell,nullhomedir sql.NullString
+	if rName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.WithFields(QueryFields(r, startTime)).Print("No resource name specified in http query.")
+		fmt.Fprintf(w, "{ \"error\": \"No resourcename specified.\" }")
+		return
+	}
+	if rType == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.WithFields(QueryFields(r, startTime)).Print("No resource type specified in http query.")
+		fmt.Fprintf(w, "{ \"error\": \"No type specified.\" }")
+		return	
+	}
+//	if unitName == "" {
+//		unitName = "NULL"
+//	}
+	if shell != "" { 
+		nullshell.Valid = true
+		nullshell.String = shell 
+	}
+	if homedir != "" {
+		nullhomedir.Valid = true
+		nullhomedir.String = homedir
+	}
+	//require auth	
+	authorized,authout := authorize(r,AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"error\": \"" + authout + "not authorized.\" }")
+		return
+	}
+
+	var unitID sql.NullInt64
+
+	var newcompId int
+	// select the highest existing value of compid
+	compiderr := DBptr.QueryRow(`select compid from compute_resources order by compid desc limit 1`).Scan(&newcompId)
+	if compiderr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error selecting compids: " + compiderr.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w,"{ \"error\": \"Error determining new compid.\" }")
+		return
+	}
+	//add one to the new compid
+	newcompId += 1
+
+	//figure out the unitID if we need it
+	
+	if unitName != "" {
+		uniterr := DBptr.QueryRow(`select unitid from affiliation_units where name=$1`,unitName).Scan(&unitID)
+		if uniterr != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error determining unitid for " + unitName + ": " + uniterr.Error())
+			fmt.Fprintf(w,"{ \"error\": \"Error determining unitID for " + unitName + ". You cannot add a unit name that does not already exist in affiliation_units.\" }")
+			return
+		}
+	}
+	
+	//now, make sure the the resource does not already exist. If it does, bail out. If it does not, do the insertion
+
+	var compId int;	
+	checkerr := DBptr.QueryRow(`select compid from  compute_resources where name=$1`,rName).Scan(&compId)
+	
+	switch {
+	case checkerr == sql.ErrNoRows:
+		// OK, it does not already exist, so we start a transaction
+		cKey, err := DBtx.Start(DBptr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w,"{ \"error\": \"Error starting database transaction.\" }")
+			return
+		}
+		
+		//	addstr := fmt.Sprintf(`do declare cmpid bigint;  begin select compid into cmpid from compute_resources order by compid desc limit 1; if exists (select name from compute_resources where name=$1) then raise 'resource already exists'; else insert into compute_resources (compid, name, default_shell, unitid, last_updated, default_home_dir, type) values (cmpid+1,$1,$2,$3,NOW(),$4,$5); end if ;  end ;`)
+		addstr := fmt.Sprintf(`insert into compute_resources (compid, name, default_shell, unitid, last_updated, default_home_dir, type) values ($1,$2,$3,$4,NOW(),$5,$6)`)
+		
+		
+		//	err = DBtx.tx.QueryRow("do $$ declare cmpid bigint;  begin select compid into cmpid from compute_resources order by compid desc limit 1; if exists (select name from compute_resources where name=$1) then raise 'resource already exists'; else insert into compute_resources (compid, name, default_shell, unitid, last_updated, default_home_dir, type) values (cmpid+1,$1,$2,$3,NOW(),$4,$5) returning cmpid+1; end if ;  end $$ ;",rName,nullshell,unitID,nullhomedir,rType).Scan(&compId)
+		
+		_, err = DBtx.tx.Exec(addstr,newcompId,rName,nullshell,unitID,nullhomedir,rType)
+		
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w,"{ \"error\": \"Error in database transaction.\" }")
+			//	DBtx.Rollback()
+			return
+		} else {
+			DBtx.Commit(cKey)
+			log.WithFields(QueryFields(r, startTime)).Error("Added " + rName + " to compute_resources.")
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprintf(w,"{ \"result\": \"success.\" }")
+			return		
+		}
+		
+	case checkerr != nil:
+		//some other error, exit with status 500
+		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + checkerr.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w,"{ \"error\": \"Error in database check.\" }")
+		return
+	default:
+		// if we get here, it means that the unit already exists. Bail out.
+		log.WithFields(QueryFields(r, startTime)).Error("Resource " + rName + " already exists.")
+		fmt.Fprintf(w,"{ \"error\": \"Resource already exists.\" }")
+		return	
+	}
+
+}
