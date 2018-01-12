@@ -239,10 +239,11 @@ func getGridMapFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := DBptr.Query(`select dn, uname, unit_exists from 
-							 (select 1 as key, * from user_certificate as uc 
-							  left join users as us on uc.uid = us.uid 
-							  left join affiliation_units as au on uc.unitid = au.unitid
-							  where au.name like $1) as t
+							 (select distinct 1 as key, uc.dn, us.uname from  affiliation_unit_user_certificate as ac
+								left join user_certificates as uc on ac.dn = uc.dn
+								left join users as us on uc.uid = us.uid
+								left join affiliation_units as au on ac.unitid = au.unitid
+								where au.name like $1) as t
 	 						  right join (select 1 as key, $1 in (select name from affiliation_units) as unit_exists) as c on t.key = c.key`, unit)
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
