@@ -949,12 +949,6 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
                     fd.write("insert into grid_access values  (%d,%d,%d,False,False,NOW());\n" % \
                              (int(user.uid),cu.unitid, fqanid ))
 
-                if cu.unitid not in user.certificates.keys():
-                    continue
-                for certs in user.certificates[cu.unitid]:
-                    fd.write("insert into user_certificate (uid,dn,issuer_ca,unitid,last_updated) values (%d,\'%s\',"
-                            "\'%s\',%d,NOW());\n" % (int(user.uid), certs.dn,certs.ca,experiment_counter))
-
                 fd.flush()
     for uname, user in users.items():
         #if uname!='kherner':
@@ -962,6 +956,15 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
         for gid in user.groups:
             groupid = gid_map[gid]
             fd.write("insert into user_group values (%d,%d,%s);\n" % (int(user.uid), groupid, user.groups[gid].is_leader))
+
+    # populating user_certificates table
+    for user in users.values():
+        for dn, details in user.certificates.items():
+            fd.write("insert into user_certificates (dn,uid,issuer_ca,last_updated) "
+                     "values (\'%s\',%d,\'%s\',NOW());\n" % (dn, int(user.uid), details['ca']))
+            for experiment in details['experiments']:
+                fd.write("insert into affiliation_unit_user_certificate (unitid,dn,last_updated) "
+                         "values (%d,\'%s\',NOW());\n" % (experiment, dn))
 
     # populating external_affiliation_attribute
     for uname, user in users.items():

@@ -70,15 +70,15 @@ class User:
         self.status = status
 
     def add_cert(self, cert):
-        if cert.experiment_id not in self.certificates.keys():
-            self.certificates[cert.experiment_id]=[]
-            self.certificates[cert.experiment_id].append(cert)
+        if cert.dn not in self.certificates.keys():
+            self.certificates[cert.dn]={'ca': cert.ca, 'experiments': []}
+            self.certificates[cert.dn]['experiments'].append(cert.experiment_id)
         else:
-            for c in self.certificates[cert.experiment_id]:
-                if cert.dn == c.dn and cert.ca == c.ca:
-                    return
-            self.certificates[cert.experiment_id].append(cert)
-        return
+            if cert.ca != self.certificates[cert.dn]['ca']:
+                print("Conflicting issuer CA information on certificate %s:\n%s != %s" %
+                (cert.dn, self.certificates[cert.dn]['ca'], cert.ca))
+            if cert.experiment_id not in self.certificates[cert.dn]['experiments']:
+                self.certificates[cert.dn]['experiments'].append(cert.experiment_id)
 
     def add_external_affiliation(self, attribute, value):
         if (attribute, value) not in self.external_affiliations:
