@@ -151,6 +151,7 @@ func main() {
 	grouter.HandleFunc("/getMemberAffiliations",    getMemberAffiliations)
 	grouter.HandleFunc("/getUserAccessToComputeResources",    getUserAccessToComputeResources)
 	grouter.HandleFunc("/getUserAllStorageQuotas",    getUserAllStorageQuotas)
+	grouter.HandleFunc("/getAllUsers",  getAllUsers)
 
 	//group API calls
 	grouter.HandleFunc("/getgroupmembers", getGroupMembers)
@@ -172,6 +173,7 @@ func main() {
 	grouter.HandleFunc("/setGroupCondorQuota", setGroupCondorQuota)
 	grouter.HandleFunc("/getGroupStorageQuotas", getGroupStorageQuotas)
 	grouter.HandleFunc("/setGroupStorageQuota", setGroupStorageQuota)
+	grouter.HandleFunc("/getAllGroups",  getAllGroups)
 
 	// misc API cals
 	grouter.HandleFunc("/getPasswdFile", getPasswdFile)
@@ -202,6 +204,7 @@ func main() {
 	grouter.HandleFunc("/createFQAN",			   createFQAN)                        
 	grouter.HandleFunc("/removeFQAN",			   removeFQAN)                        
 	grouter.HandleFunc("/setFQANMappings",                     setFQANMappings)                    
+	grouter.HandleFunc("/getAllAffiliationUnits",                     getAllAffiliationUnits)
 
 	srvConfig := viper.GetStringMapString("server")
 	Mainsrv = &http.Server{

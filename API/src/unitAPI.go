@@ -706,3 +706,49 @@ func setFQANMappings(w http.ResponseWriter, r *http.Request) {
 //	mapgroup := q.Get("mapped_group")
 	NotDoneYet(w, r, startTime)
 }
+
+func getAllAffiliationUnits(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	
+	rows, err := DBptr.Query(`select name, unitid from affiliation_units`)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
+		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+	
+	type jsonout struct {
+		Uname string `json:"name"`
+		Unitid int `json:"unitid"`
+		
+	} 
+	var tmpout jsonout
+	var Out []jsonout
+	
+	for rows.Next() {
+		rows.Scan(&tmpout.Uname,&tmpout.Unitid)
+		Out = append(Out, tmpout)
+	}
+
+	var output interface{}	
+	if len(Out) == 0 {
+		type jsonerror struct {
+			Error string `json:"error"`
+		}
+		var queryErr []jsonerror
+		queryErr = append(queryErr, jsonerror{"Query returned no units."})
+		log.WithFields(QueryFields(r, startTime)).Error("Query returned no units.")
+		output = queryErr
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonoutput, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+	}
+	fmt.Fprintf(w, string(jsonoutput))
+}
