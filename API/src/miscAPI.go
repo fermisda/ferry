@@ -240,10 +240,11 @@ func getGridMapFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := DBptr.Query(`select dn, uname, unit_exists from 
-							 (select 1 as key, * from user_certificate as uc 
-							  left join users as us on uc.uid = us.uid 
-							  left join affiliation_units as au on uc.unitid = au.unitid
-							  where au.name like $1) as t
+							 (select distinct 1 as key, uc.dn, us.uname from  affiliation_unit_user_certificate as ac
+								left join user_certificates as uc on ac.dn = uc.dn
+								left join users as us on uc.uid = us.uid
+								left join affiliation_units as au on ac.unitid = au.unitid
+								where au.name like $1) as t
 	 						  right join (select 1 as key, $1 in (select name from affiliation_units) as unit_exists) as c on t.key = c.key`, unit)
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
@@ -498,9 +499,73 @@ func getGroupName(w http.ResponseWriter, r *http.Request) {
 func lookupCertificateDN(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query() 
-//	certDN := q.Get("certificatedn")
-	NotDoneYet(w, r, startTime)
+	q := r.URL.Query()
+
+	type jsonerror struct {
+		Error string `json:"error"`
+	}
+	var inputErr []jsonerror
+
+	certdn := q.Get("certificatedn")
+
+	if certdn == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.WithFields(QueryFields(r, startTime)).Error("No certificatedn name specified in http query.")
+		inputErr = append(inputErr, jsonerror{"No certificatedn name specified."})
+	}
+
+	if len(inputErr) > 0 {
+		jsonout, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		}
+		fmt.Fprintf(w, string(jsonout))
+		return
+	}
+
+	rows, err := DBptr.Query(`select u.uid, uname from user_certificates as uc left join users as u on uc.uid = u.uid where dn = $1;`, certdn)
+	if err != nil {	
+		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		return
+	}	
+	defer rows.Close()
+
+	type jsonentry struct {
+		Uid  string `json:"uid"`
+		Uname  string `json:"uname"`
+	}
+	var Entry jsonentry
+	var Out []jsonentry
+
+	for rows.Next() {
+		var tmpUid, tmpUname sql.NullString
+		rows.Scan(&tmpUid, &tmpUname)
+
+		if tmpUid.Valid {
+			Entry.Uid = tmpUid.String
+			Entry.Uname = tmpUname.String
+			Out = append(Out, Entry)
+		}
+	}
+
+	var output interface{}
+	if len(Out) == 0 {
+		w.WriteHeader(http.StatusNotFound)
+		var queryErr []jsonerror
+		log.WithFields(QueryFields(r, startTime)).Error("Certificate DN does not exist.")
+		queryErr = append(queryErr, jsonerror{"Certificate DN does not exist."})
+		output = queryErr
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonout, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Fatal(err)
+	}
+	fmt.Fprintf(w, string(jsonout))
 }
 func getMappedGidFile(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()

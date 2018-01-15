@@ -552,11 +552,101 @@ func removeGroupLeader(w http.ResponseWriter, r *http.Request) {
 func getGroupUnits(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query()
-//	groupname := q.Get("groupname")
-////should be a bool
-//	expt_only := q.Get("experimentsonly")
-	NotDoneYet(w, r, startTime)
+	q := r.URL.Query()
+
+	type jsonerror struct {
+		Error string `json:"error"`
+	}
+	var inputErr []jsonerror
+
+	group := q.Get("groupname")
+	expOnly := false
+
+	if group == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.WithFields(QueryFields(r, startTime)).Error("No group name specified in http query.")
+		inputErr = append(inputErr, jsonerror{"No group name specified."})
+	}
+	if q.Get("experimentsonly") != "" {
+		var err error
+		if expOnly, err = strconv.ParseBool(q.Get("experimentsonly")); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid experimentsonly specified in http query.")
+			inputErr = append(inputErr, jsonerror{"Invalid experimentsonly specified."})
+		}
+	}
+
+	if len(inputErr) > 0 {
+		jsonout, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		}
+		fmt.Fprintf(w, string(jsonout))
+		return
+	}
+
+	rows, err := DBptr.Query(`select name, type, voms_url, alternative_name, group_exists from (
+								select 1 as key, au.* from
+									affiliation_unit_group as ag left join
+									groups as g on ag.groupid = g.groupid left join
+									affiliation_units as au on ag.unitid = au.unitid
+								where g.name = $1 and ((voms_url is not null = $2) or not $2)
+							) as t right join (
+								select 1 as key, $1 in (select name from groups) as group_exists
+							) as c on t.key = c.key;`, group, expOnly)
+	if err != nil {	
+		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		return
+	}	
+	defer rows.Close()
+
+	var groupExists bool
+
+	type jsonentry struct {
+		Unit  string `json:"unitname"`
+		Type  string `json:"type"`
+		Voms  string `json:"vomsurl"`
+		Aname string `json:"alternativename"`
+	}
+	var Entry jsonentry
+	var Out []jsonentry
+
+	for rows.Next() {
+		var tmpUnit, tmpType, tmpVoms, tmpAname sql.NullString
+		rows.Scan(&tmpUnit, &tmpType, &tmpVoms, &tmpAname, &groupExists)
+
+		if tmpUnit.Valid {
+			Entry.Unit = tmpUnit.String
+			Entry.Type = tmpType.String
+			Entry.Voms = tmpVoms.String
+			Entry.Aname = tmpAname.String
+			Out = append(Out, Entry)
+		}
+	}
+
+	var output interface{}
+	if len(Out) == 0 {
+		w.WriteHeader(http.StatusNotFound)
+		var queryErr []jsonerror
+		if !groupExists {
+			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+			queryErr = append(queryErr, jsonerror{"Group does not exist."})
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Error("Group does not belong to any unit.")
+			queryErr = append(queryErr, jsonerror{"Group does not belong to any unit."})
+		}
+		output = queryErr
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonout, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Fatal(err)
+	}
+	fmt.Fprintf(w, string(jsonout))
 }
 func getGroupBatchPriorities(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()

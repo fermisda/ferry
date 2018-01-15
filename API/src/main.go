@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/fsnotify/fsnotify"
 	"net"
 	"database/sql"
 	"fmt"
@@ -65,6 +66,10 @@ func main() {
 	if cfgErr != nil {
 		panic(fmt.Errorf("Fatal error config file: %s \n", cfgErr))
 	}
+	viper.WatchConfig()
+	viper.OnConfigChange(func(e fsnotify.Event) {
+		log.WithFields(log.Fields{"file": e.Name}).Debug("Config file changed.")
+	})
 
 	//Setup log file
 	logConfig := viper.GetStringMapString("log")
@@ -134,7 +139,7 @@ func main() {
 	grouter.HandleFunc("/getUserStorageQuota", 	    getUserStorageQuota)
 	grouter.HandleFunc("/setUserStorageQuota", 	    setUserStorageQuota)
 	grouter.HandleFunc("/getUserExternalAffiliationAttributes", 	    getUserExternalAffiliationAttributes)
-	grouter.HandleFunc("/addCertDNtoUser"    ,    addCertDNtoUser)
+	grouter.HandleFunc("/addCertificateDNToUser"    ,    addCertificateDNToUser)
 	grouter.HandleFunc("/setSuperUser"    ,    setSuperUser)
 	grouter.HandleFunc("/removeUserCertificateDN"    ,    removeUserCertificateDN)
 	grouter.HandleFunc("/setUserInfo"    ,    setUserInfo)
@@ -186,6 +191,7 @@ func main() {
 	grouter.HandleFunc("/getStorageAccessLists", getStorageAccessLists)
 	grouter.HandleFunc("/createComputeResource", createComputeResource)
 	grouter.HandleFunc("/setComputeResourceInfo", setComputeResourceInfo)
+	grouter.HandleFunc("/getGroupUnits", getGroupUnits)
 
 	//affiliation unit API calls
 	grouter.HandleFunc("/createAffiliationUnit",             createAffiliationUnit)           

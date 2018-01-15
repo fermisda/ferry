@@ -116,7 +116,7 @@ func checkClientIP(client *tls.ClientHelloInfo) (*tls.Config, error) {
 
 	for _, authIP := range authIPs {
 		if authIP == strings.Split(ip, ":")[0] {
-			log.Printf("Host matches authorized IP %s.", authIP)
+			log.WithFields(log.Fields{"client": ip}).Info("Host matches authorized IP.")
 			
 			var err error
 			srvConfig := viper.GetStringMapString("server")

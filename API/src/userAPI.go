@@ -39,13 +39,17 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := DBptr.Query(`select t3.name, t1.dn, t1.issuer_ca, c.user_exists, c.unit_exists
-							  from (select 1 as key, uid, dn, unitid, issuer_ca from user_certificate) as t1
-							  join (select uid from users where uname = $1) as t2 on t1.uid = t2.uid
-							  join (select unitid, name from affiliation_units where name = $2) as t3 on t1.unitid = t3.unitid
-							  right join (select 1 as key,
-							       $1 in (select uname from users) as user_exists, 
-							       $2 in (select name from affiliation_units) as unit_exists) as c on c.key = t1.key`, uname, expt)
+	rows, err := DBptr.Query(`select name, dn, issuer_ca, user_exists, unit_exists from (
+								select 1 as key, name, uc.dn, issuer_ca from affiliation_unit_user_certificate as ac
+								left join user_certificates as uc on ac.dn = uc.dn
+								left join users as u on uc.uid = u.uid
+								left join affiliation_units as au on ac.unitid = au.unitid
+								where uname = $1 and name = $2
+							) as t right join (
+								select 1 as key,
+								$1 in (select uname from users) as user_exists,
+								$2 in (select name from affiliation_units) as unit_exists
+							) as c on t.key = c.key;`, uname, expt)
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
@@ -1151,7 +1155,7 @@ func getUserExternalAffiliationAttributes(w http.ResponseWriter, r *http.Request
 
 }
 
-func addCertDNtoUser(w http.ResponseWriter, r *http.Request) {
+func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
@@ -1198,25 +1202,34 @@ func addCertDNtoUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = DBtx.Exec(fmt.Sprintf(`do $$ 	
-declare  u_uid int;
-declare au_unitid int;
-u_dn constant text := '%s';
-u_issuer constant text := '%s';
-u_uname constant text := '%s';
-begin
-select uid into u_uid from users where uname=u_uname;
-select unitid into au_unitid from affiliation_units where name = '%s';
-if (u_dn, u_issuer) not in (select dn, issuer_ca from user_certificate as uc join users as u on uc.uid = u.uid join affiliation_units as au on uc.unitid = au.unitid where u.uname = u_uname and au.unitid=au_unitid and uc.dn=u_dn and issuer_ca=u_issuer) then insert into user_certificate (uid, dn, issuer_ca, last_updated, unitid) values (u_uid, u_dn, u_issuer, NOW(), au_unitid);
-else  raise 'DN and issuer already exist for this user and affiliation unit'; end if;
-end $$;`, subjDN, issuer, uName, unitName))
+										declare  u_uid int;
+										declare au_unitid int;
+										u_dn constant text := '%s';
+										u_issuer constant text := '%s';
+										u_uname constant text := '%s';
+									begin
+										select uid into u_uid from users where uname=u_uname;
+										select unitid into au_unitid from affiliation_units where name = '%s';
+										if u_dn not in (select dn from user_certificates) then
+											insert into user_certificates (dn, uid, issuer_ca, last_updated) values (u_dn, u_uid, u_issuer, NOW());
+										end if;
+										insert into affiliation_unit_user_certificate (unitid, dn, last_updated) values (au_unitid, u_dn, NOW());
+									end $$;`, subjDN, issuer, uName, unitName))
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w, "{ \"status\": \"success\" }")
 	} else {
+		log.Print(err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
-		if strings.Contains(err.Error(), `DN and issuer already exist`) {
-			log.WithFields(QueryFields(r, startTime)).Error("DN and issuer already exist.")
-			fmt.Fprintf(w, "{ \"status\": \"DN and issuer already exist.\" }")
+		if strings.Contains(err.Error(), `pk_affiliation_unit_user_certificate_dn`) {
+			log.WithFields(QueryFields(r, startTime)).Error("DN already exists and is assigned to this affiliation unit.")
+			fmt.Fprintf(w, "{ \"status\": \"DN already exists and is assigned to this affiliation unit.\" }")
+		} else if strings.Contains(err.Error(), `"uid" violates not-null constraint`) {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			fmt.Fprintf(w, "{ \"status\": \"User does not exist.\" }")
+		} else if strings.Contains(err.Error(), `"unitid" violates not-null constraint`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
+			fmt.Fprintf(w, "{ \"status\": \"Affiliation unit does not exist.\" }")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 			fmt.Fprintf(w, "{ \"error\": \"Something went wrong.\" }")
@@ -1511,7 +1524,8 @@ func getMemberAffiliations(w http.ResponseWriter, r *http.Request) {
 																where u.uname = $1 and ((voms_url is not null = $2) or not $2)) as u
 
 										union                  (select au.name, au.alternative_name from affiliation_units as au
-																right join user_certificate as uc on au.unitid = uc.unitid left join users as u on uc.uid = u.uid
+																right join affiliation_unit_user_certificate as ac on au.unitid = ac.unitid
+																left join user_certificates as uc on ac.dn = uc.dn left join users as u on uc.uid = u.uid
 																where u.uname = $1 and ((voms_url is not null = $2) or not $2))
 
 										union                  (select au.name, au.alternative_name from affiliation_units as au
