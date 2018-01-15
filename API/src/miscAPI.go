@@ -8,6 +8,7 @@ import (
  	_ "github.com/lib/pq"
 	"net/http"
 	"time"
+	"strings"
 )
 
 func NotDoneYet(w http.ResponseWriter, r *http.Request, t time.Time) {
@@ -808,18 +809,28 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Print("No resource type specified in http query.")
 		fmt.Fprintf(w, "{ \"error\": \"No type specified.\" }")
 		return	
+	} else if strings.ToUpper(rType) == "NULL" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.WithFields(QueryFields(r, startTime)).Print("'NULL' is an invalid resource type.")
+		fmt.Fprintf(w, "{ \"error\": \"Resource type of NULL is not allowed.\" }")
+		return	
 	}
 //	if unitName == "" {
 //		unitName = "NULL"
-//	}
-	if shell != "" { 
+	//	}
+	if shell == "" || strings.ToUpper(strings.TrimSpace(shell)) == "NULL" {
+		nullshell.Valid = false
+	} else {
 		nullshell.Valid = true
 		nullshell.String = shell 
 	}
-	if homedir != "" {
+	if homedir == "" ||  strings.ToUpper(strings.TrimSpace(homedir)) == "NULL" {
+		nullhomedir.Valid=false
+	} else {
 		nullhomedir.Valid = true
 		nullhomedir.String = homedir
 	}
+
 	//require auth	
 	authorized,authout := authorize(r,AuthorizedDNs)
 	if authorized == false {
@@ -904,4 +915,129 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 		return	
 	}
 
+}
+
+func setComputeResourceInfo(w http.ResponseWriter, r *http.Request) {
+	
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	
+	rName := q.Get("resourcename")
+	unitName := q.Get("unitname")
+	rType := q.Get("type")
+	shell := q.Get("default_shell")
+	homedir := q.Get("default_home_dir")
+
+	if rName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.WithFields(QueryFields(r, startTime)).Print("No resource name specified in http query.")
+		fmt.Fprintf(w, "{ \"error\": \"No resourcename specified.\" }")
+		return
+	}
+	if strings.ToUpper(strings.TrimSpace(rType)) == "NULL" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.WithFields(QueryFields(r, startTime)).Print("'NULL' is an invalid resource type.")
+		fmt.Fprintf(w, "{ \"error\": \"Resource type of NULL is not allowed.\" }")
+		return	
+	}
+	
+	//require auth	
+	authorized,authout := authorize(r,AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"error\": \"" + authout + "not authorized.\" }")
+		return
+	}
+
+	var ( 
+		nullshell,nullhomedir sql.NullString
+		unitID sql.NullInt64
+		currentType string
+		compid  int
+	)
+
+	// check if resource exists and grab existing values of everything if so
+	err := DBptr.QueryRow(`select distinct compid, default_shell, unitid, default_home_dir, type from compute_resources where name=$1`,rName).Scan(&compid,&nullshell,&unitID,&nullhomedir,&currentType)
+	switch {
+	case err == sql.ErrNoRows:
+		// nothing returned from the select, so the resource does not exist.
+		w.WriteHeader(http.StatusNotFound)
+		log.WithFields(QueryFields(r, startTime)).Print("compute resource with name " + rName + " not found in compute_resources table. Exiting.")
+		fmt.Fprintf(w, "{ \"error\": \"resource does not exist. Use createComputeResource to add a new resource.\" }")
+		return	
+	case err != nil:
+		w.WriteHeader(http.StatusInternalServerError)
+		log.WithFields(QueryFields(r, startTime)).Print("Error in DQ query: " + err.Error())
+		fmt.Fprintf(w, "{ \"error\": \"Error in DB query.\" }")
+		return	
+	default:
+		
+		//actually change stuff
+		// if you specfied a new type in the API call (not NULL, as checked for earlier), change it here. Otherwise we keep the existing one
+		if rType != "" { 
+			currentType = rType
+		}
+		// if you are changing the shell type, do it here. Variations of "NULL" as the string will assume you want it to be null in the database. If you did not specify shell in the query, then we keep the existing value.
+		if shell != "" {
+			if strings.ToUpper(strings.TrimSpace(shell)) != "NULL" {
+				nullshell.Valid = true
+				nullshell.String = shell 
+			} else {
+				nullshell.Valid = false
+				nullshell.String = ""
+			}
+		}
+
+		// and the same for default_home_dir, following the same rule as shell.
+		if homedir != "" {
+			if strings.ToUpper(strings.TrimSpace(homedir)) != "NULL" {
+				nullhomedir.Valid = true
+				nullhomedir.String = homedir
+			} else {
+				nullhomedir.Valid = false
+				nullhomedir.String = ""
+			}
+		}
+		
+		// if you specified a new affiliation unit, find the new ID and change it. Otherwise keep whatever the select returned, even if it is null
+		if unitName != "" {
+			if strings.ToUpper(strings.TrimSpace(unitName)) != "NULL" {
+				var tmpunitid sql.NullInt64
+				iderr := DBptr.QueryRow(`select unitid from affiliation_units where name=$1`,unitName).Scan(&tmpunitid)
+				// FIX THIS
+				if iderr != nil && iderr != sql.ErrNoRows {
+					//some error selecting the new unit ID. Keep the old one!
+				} else {
+					unitID = tmpunitid
+				}
+			} else {
+				//ah, so the "new" unitName is some variation of NULL, so that means you want to set unitid to null in the DB. Do that by setting unitID.Valid to false
+				unitID.Valid = false
+			}
+		} // end if unitName != ""
+		
+		//transaction start, and update command
+		cKey, err := DBtx.Start(DBptr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w,"{ \"error\": \"Error starting database transaction.\" }")
+			return
+		}
+		
+		_, commerr := DBtx.Exec(`update compute_resources set default_shell=$1, unitid=$2, last_updated=NOW(), default_home_dir=$3, type=$4 where name=$5`, nullshell, unitID, nullhomedir, currentType, rName)
+		if commerr != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			log.WithFields(QueryFields(r, startTime)).Error("Error during DB update " + commerr.Error())
+			fmt.Fprintf(w,"{ \"error\": \"Database error during update.\" }")
+			return
+		} else {
+			// if no error, commit and all that
+			DBtx.Commit(cKey)
+			w.WriteHeader(http.StatusOK)
+			log.WithFields(QueryFields(r, startTime)).Info("Successfully updated " + unitName + ".")
+			fmt.Fprintf(w,"{ \"status\": \"success.\" }")
+		}
+	} //end switch
 }
