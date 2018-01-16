@@ -1106,3 +1106,106 @@ func setComputeResourceInfo(w http.ResponseWriter, r *http.Request) {
 		}
 	} //end switch
 }
+
+func createStorageResource(w http.ResponseWriter, r *http.Request) {
+	
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	
+	rName := strings.TrimSpace(q.Get("resourcename"))
+	defunit := strings.TrimSpace(strings.ToUpper(q.Get("default_unit")))
+	rType := strings.TrimSpace(strings.ToLower(q.Get("type")))
+	
+	defpath := strings.TrimSpace(q.Get("default_path"))
+	defquota := strings.TrimSpace(q.Get("default_quota"))
+
+	if rName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.WithFields(QueryFields(r, startTime)).Print("No resource name specified in http query.")
+		fmt.Fprintf(w, "{ \"error\": \"No resourcename specified.\" }")
+		return
+	}
+	if rType == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.WithFields(QueryFields(r, startTime)).Print("No resource type specified in http query.")
+		fmt.Fprintf(w, "{ \"error\": \"No type specified.\" }")
+		return	
+	} else if strings.ToUpper(strings.TrimSpace(rType)) == "NULL" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.WithFields(QueryFields(r, startTime)).Print("'NULL' is an invalid resource type.")
+		fmt.Fprintf(w, "{ \"error\": \"Resource type of NULL is not allowed.\" }")
+		return	
+	}
+	var(
+		nullpath,nullunit sql.NullString
+		nullquota sql.NullInt64
+	)
+	if defpath != "" && strings.ToUpper(defpath) != "NULL" {
+		nullpath.Valid = true
+		nullpath.String = defpath
+	}
+	if defquota != "" && strings.ToUpper(defquota) != "NULL" {
+		nullquota.Valid = true
+		convquota,converr := strconv.ParseInt(defquota,10,64)
+		if converr != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error converting default_quota to int: " + converr.Error())
+			fmt.Fprintf(w,"{ \"error\": \"Error converting default_quota to int. Check format.\" }")
+			return
+		}
+		nullquota.Int64 = convquota
+	}
+	if defpath != "" && strings.ToUpper(defpath) != "NULL" {
+		nullpath.Valid = true
+		nullpath.String = defpath
+	}
+	if defunit != "" && strings.ToUpper(defunit) != "NULL" {
+		nullunit.Valid = true
+		nullunit.String = defunit
+	}
+
+	// CHECK IF UNIT already exists; add if not
+	var storageid int
+	checkerr := DBptr.QueryRow(`select storageid from storage_resources where name=$1`,rName).Scan(&storageid)
+	switch {
+	case checkerr == sql.ErrNoRows:
+			// OK, it does not already exist, so we start a transaction
+		cKey, err := DBtx.Start(DBptr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w,"{ \"error\": \"Error starting database transaction.\" }")
+			return
+		}
+		_, inserterr := DBtx.tx.Exec(`insert into storage_resources (name, default_path, default_quota, last_updated, default_unit, type) values ($1,$2,$3,NOW(),$4,$5)`, rName, nullpath, nullquota, nullunit, rType)
+		
+		if inserterr != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insertionn: " + inserterr.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w,"{ \"error\": \"Error in database transaction.\" }")
+			//	DBtx.Rollback()
+			return
+		} else {
+			DBtx.Commit(cKey)
+			log.WithFields(QueryFields(r, startTime)).Error("Added " + rName + " to compute_resources.")
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprintf(w,"{ \"result\": \"success.\" }")
+			return		
+		}		
+	case checkerr != nil:
+		//some other error, exit with status 500
+		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + checkerr.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w,"{ \"error\": \"Error in database check.\" }")
+		return
+	default:
+		// if we get here, it means that the unit already exists. Bail out.
+		log.WithFields(QueryFields(r, startTime)).Error("Resource " + rName + " already exists.")
+		fmt.Fprintf(w,"{ \"error\": \"Resource already exists.\" }")
+		return	
+		
+
+
+
+}
+}
