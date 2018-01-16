@@ -1273,23 +1273,46 @@ func removeUserCertificateDN(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = DBtx.Exec(fmt.Sprintf(`do $$ 	
-declare  u_uid int;
-u_dn constant text := '%s';
-u_uname constant text := '%s';
+										declare  u_uid int;
+										u_dn constant text := '%s';
+										u_uname constant text := '%s';
 
-begin
-select uid into u_uid from users where uname=u_uname;
-delete from user_certificate where dn=u_dn and uid=u_uid;
-end $$;`, subjDN, uName))
+									begin
+										select uid into u_uid from users where uname=u_uname;
+										if u_uid is null then
+											raise 'uname does not exist';
+										end if;
+										if u_dn not in (select dn from user_certificates) then
+											raise 'dn does not exist';
+										end if;
+										if (u_dn, u_uid) not in (select dn, uid from user_certificates) then
+											raise 'dn uid association does not exist';
+										end if;
+
+										delete from affiliation_unit_user_certificate where dn=u_dn;
+										delete from user_certificates where dn=u_dn and uid=u_uid;
+									end $$;`, subjDN, uName))
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w, "{ \"status\": \"success\" }")
-		DBtx.Commit(cKey)
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "{ \"error\": \""+err.Error()+"\" }")
+		if strings.Contains(err.Error(), `uname does not exist`) {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			fmt.Fprintf(w, "{ \"error\": \"User does not exist.\" }")
+		} else if strings.Contains(err.Error(), `dn does not exist`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Certificate DN does not exist.")
+			fmt.Fprintf(w, "{ \"error\": \"Certificate DN does not exist.\" }")
+		} else if strings.Contains(err.Error(), `dn uid association does not exist`) {
+			log.WithFields(QueryFields(r, startTime)).Error("DN UID association does not exist.")
+			fmt.Fprintf(w, "{ \"error\": \"DN UID association does not exist.\" }")
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			fmt.Fprintf(w, "{ \"error\": \"Something went wrong.\" }")
+		}
 	}
+
+	DBtx.Commit(cKey)
 }
 
 func setUserInfo(w http.ResponseWriter, r *http.Request) {
