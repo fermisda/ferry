@@ -1177,12 +1177,6 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "{ \"error\": \"No username specified.\" }")
 		return
 	}
-	if unitName == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		log.WithFields(QueryFields(r, startTime)).Error("No unit name specified in http query.")
-		fmt.Fprintf(w, "{ \"error\": \"No unitname specified.\" }")
-		return
-	}
 	if subjDN == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No DN specified in http query.")
@@ -1202,18 +1196,28 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = DBtx.Exec(fmt.Sprintf(`do $$ 	
-										declare  u_uid int;
+										declare u_uid int;
 										declare au_unitid int;
+										declare new_dn bool;
 										u_dn constant text := '%s';
 										u_issuer constant text := '%s';
 										u_uname constant text := '%s';
+										au_name constant text := '%s';
 									begin
+										new_dn = false;
 										select uid into u_uid from users where uname=u_uname;
-										select unitid into au_unitid from affiliation_units where name = '%s';
 										if u_dn not in (select dn from user_certificates) then
+											new_dn = true;
 											insert into user_certificates (dn, uid, issuer_ca, last_updated) values (u_dn, u_uid, u_issuer, NOW());
 										end if;
-										insert into affiliation_unit_user_certificate (unitid, dn, last_updated) values (au_unitid, u_dn, NOW());
+										if au_name != '' then
+											select unitid into au_unitid from affiliation_units where name = au_name;
+											insert into affiliation_unit_user_certificate (unitid, dn, last_updated) values (au_unitid, u_dn, NOW());
+										else
+											if not new_dn then
+												raise 'duplicated dn';
+											end if;
+										end if;
 									end $$;`, subjDN, issuer, uName, unitName))
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
@@ -1224,6 +1228,9 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(err.Error(), `pk_affiliation_unit_user_certificate_dn`) {
 			log.WithFields(QueryFields(r, startTime)).Error("DN already exists and is assigned to this affiliation unit.")
 			fmt.Fprintf(w, "{ \"status\": \"DN already exists and is assigned to this affiliation unit.\" }")
+		} else if strings.Contains(err.Error(), `duplicated dn`) {
+			log.WithFields(QueryFields(r, startTime)).Error("DN already exists.")
+			fmt.Fprintf(w, "{ \"status\": \"DN already exists.\" }")
 		} else if strings.Contains(err.Error(), `"uid" violates not-null constraint`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 			fmt.Fprintf(w, "{ \"status\": \"User does not exist.\" }")
