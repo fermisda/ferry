@@ -189,8 +189,10 @@ func main() {
 	grouter.HandleFunc("/getStorageAuthzDBFile", getStorageAuthzDBFile)
 	grouter.HandleFunc("/getAffiliationMembersRoles", getAffiliationMembersRoles)
 	grouter.HandleFunc("/getStorageAccessLists", getStorageAccessLists)
-	//grouter.HandleFunc("/createComputeResource", createComputeResource)
+	grouter.HandleFunc("/createComputeResource", createComputeResource)
+	grouter.HandleFunc("/setComputeResourceInfo", setComputeResourceInfo)
 	grouter.HandleFunc("/getGroupUnits", getGroupUnits)
+	grouter.HandleFunc("/createStorageResource", createStorageResource)
 
 	//affiliation unit API calls
 	grouter.HandleFunc("/createAffiliationUnit",             createAffiliationUnit)           
