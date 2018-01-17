@@ -193,6 +193,7 @@ func main() {
 	grouter.HandleFunc("/setComputeResourceInfo", setComputeResourceInfo)
 	grouter.HandleFunc("/getGroupUnits", getGroupUnits)
 	grouter.HandleFunc("/createStorageResource", createStorageResource)
+	grouter.HandleFunc("/setStorageResourceInfo", setStorageResourceInfo)
 	grouter.HandleFunc("/getAllCAs",  getAllCAs)
 
 	//affiliation unit API calls
