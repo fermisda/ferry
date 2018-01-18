@@ -648,20 +648,73 @@ func getGroupUnits(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
+
 func getGroupBatchPriorities(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
-	groupname := q.Get("groupname")
-//	resource := q.Get("resourcename")
+	groupname := strings.TrimSpace(q.Get("groupname"))
+	rName := strings.TrimSpace(q.Get("resourcename"))
+//	expName := strings.TrimSpace(q.Get("experimentname"))
 	if groupname == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
 		fmt.Fprintf(w,"{ \"error\": \"No groupname specified.\" }")
 		return
 	}
+	if rName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.WithFields(QueryFields(r, startTime)).Error("No resource name specified in http query.")
+		fmt.Fprintf(w,"{ \"error\": \"No resourcename specified.\" }")
+		return
+	}	
 	
-	NotDoneYet(w, r, startTime)
+	rows, err := DBptr.Query(`select groups.name, cb.value, cb.valid_until from compute_batch as cb join compute_resources as cr on cb.compid=cr.compid join groups on groups.groupid=cb.groupid where cb.type='priority' and cr.name=$1 `,rName)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.WithFields(QueryFields(r, startTime)).Error("No resource name specified in DB query: " + err.Error())
+		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	var tmpName string
+	var tmpTime sql.NullString
+	var tmpVal float64
+	type jsonout struct {
+		Grpname string `json:"groupname"`
+		Value float64 `json:"priority"`
+		Validtime string `json:"valid_until,omitempty"`
+	}
+	var tmpout jsonout
+	var Out []jsonout
+	for rows.Next() {
+		rows.Scan(&tmpName,&tmpVal,&tmpTime)
+		tmpout.Grpname = tmpName
+		tmpout.Value = tmpVal
+		if tmpTime.Valid {
+			tmpout.Validtime = tmpTime.String 
+		}
+		Out = append(Out, tmpout)
+	}
+	var output interface{}	
+	if len(Out) == 0 {
+		type jsonerror struct {
+			Error string `json:"error"`
+		}
+		var queryErr []jsonerror
+		queryErr = append(queryErr, jsonerror{"Query returned no groups."})
+		log.WithFields(QueryFields(r, startTime)).Error("Query returned no groups.")
+		output = queryErr
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonoutput, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+	}
+	fmt.Fprintf(w, string(jsonoutput))
 }
 
 func getGroupCondorQuotas(w http.ResponseWriter, r *http.Request) {
