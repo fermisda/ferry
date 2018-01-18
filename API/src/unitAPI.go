@@ -710,8 +710,15 @@ func setFQANMappings(w http.ResponseWriter, r *http.Request) {
 func getAllAffiliationUnits(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	voname := strings.TrimSpace(q.Get("voname"))
+
+//	querystr := `select name, voms_url from affiliation_units where voms_url is not null`
+//	if voname != "" {
+//		querystr := `select name, voms_url from affiliation_units where voms_url is not null and voms_url like %$1%`
+//	}
 	
-	rows, err := DBptr.Query(`select name, unitid from affiliation_units`)
+	rows, err := DBptr.Query(`select name, voms_url from affiliation_units where voms_url is not null and voms_url like $1`,"%" + voname + "%")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
@@ -722,14 +729,17 @@ func getAllAffiliationUnits(w http.ResponseWriter, r *http.Request) {
 	
 	type jsonout struct {
 		Uname string `json:"name"`
-		Unitid int `json:"unitid"`
+//		Unitid int `json:"unitid"`
+		Voms string `json:"voms_url,omitempty"`
 		
 	} 
+
 	var tmpout jsonout
 	var Out []jsonout
 	
 	for rows.Next() {
-		rows.Scan(&tmpout.Uname,&tmpout.Unitid)
+	//	rows.Scan(&tmpout.Uname,&tmpout.Unitid)
+		rows.Scan(&tmpout.Uname,&tmpout.Voms)
 		Out = append(Out, tmpout)
 	}
 
