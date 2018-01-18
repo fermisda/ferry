@@ -109,6 +109,103 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, output)
 }
 
+func getAllUsersCertificateDNs(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	type jsonerror struct {
+		Error string `json:"error"`
+	}
+	var inputErr []jsonerror
+
+	expt := q.Get("experimentname")
+	if expt == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.WithFields(QueryFields(r, startTime)).Error("No experiment name specified in http query.")
+		inputErr = append(inputErr, jsonerror{"No experiment name specified in http query."})
+	}
+	if len(inputErr) > 0 {
+		jsonout, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		}
+		fmt.Fprintf(w, string(jsonout))
+		return
+	}
+
+	authorized, authout := authorize(r, AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w, "{ \"error\": \""+authout+"not authorized.\" }")
+		return
+	}
+
+	rows, err := DBptr.Query(`select uname, name, dn, issuer_ca, unit_exists from (
+								select 1 as key, uname, name, uc.dn, issuer_ca from affiliation_unit_user_certificate as ac
+								left join user_certificates as uc on ac.dn = uc.dn
+								left join users as u on uc.uid = u.uid
+								left join affiliation_units as au on ac.unitid = au.unitid
+								where name = $1 order by uname
+							) as t right join (
+								select 1 as key,
+								$1 in (select name from affiliation_units) as unit_exists
+							) as c on t.key = c.key;`, expt)
+	if err != nil {
+		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	var exptExists bool
+	type jsoncert struct {
+		UnitName string `json:"unit_name"`
+		DN       string `json:"dn"`
+		Issuer   string `json:"issuer_ca"`
+	}
+	type jsonuser struct {
+		Uname string `json:"username"`
+		Certs []jsoncert `json:"certificates"`
+	}
+	var Out []jsonuser
+
+	prevUname := ""
+	for rows.Next() {
+		var tmpUname, tmpUnitName, tmpDN, tmpIssuer sql.NullString
+		rows.Scan(&tmpUname, &tmpUnitName, &tmpDN, &tmpIssuer, &exptExists)
+		if tmpUname.Valid {
+			if prevUname != tmpUname.String {
+				Out = append(Out, jsonuser{tmpUname.String, make([]jsoncert, 0)})
+				prevUname = tmpUname.String
+			}
+			Out[len(Out)-1].Certs = append(Out[len(Out)-1].Certs, jsoncert{tmpUnitName.String, tmpDN.String, tmpIssuer.String})
+		}
+	}
+
+	var output interface{}	
+	if len(Out) == 0 {
+		var queryErr []jsonerror
+		if !exptExists {
+			queryErr = append(queryErr, jsonerror{"Experiment does not exist."})
+			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
+		} else {
+			queryErr = append(queryErr, jsonerror{"Query returned no users."})
+			log.WithFields(QueryFields(r, startTime)).Error("Query returned no users.")
+		}
+		output = queryErr
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonoutput, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+	}
+	fmt.Fprintf(w, string(jsonoutput))
+}
+
 func getUserFQANs(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
