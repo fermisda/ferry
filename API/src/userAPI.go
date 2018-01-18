@@ -2073,8 +2073,24 @@ func setUserAccessToResource(w http.ResponseWriter, r *http.Request) {
 func getAllUsers(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	
-	rows, err := DBptr.Query(`select uname, uid from users`)
+	q := r.URL.Query()
+	ao := strings.TrimSpace(q.Get("active"))
+	activeonly := false
+
+	if ao != "" {
+		if activebool,err := strconv.ParseBool(ao) ; err == nil {
+			activeonly = activebool
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
+			fmt.Fprintf(w,"{ \"error\": \"Invalid value for active. Must be true or false (or omit it from the query).\" }")
+			return
+		}
+	}
+	querystr := `select uname, uid, full_name from users order by uname`
+	if ao != "" {
+		querystr = "select uname, uid, full_name from users where status='" + strconv.FormatBool(activeonly) + "' order by uname"
+	}
+	rows, err := DBptr.Query(querystr)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
@@ -2086,13 +2102,14 @@ func getAllUsers(w http.ResponseWriter, r *http.Request) {
 	type jsonout struct {
 		Uname string `json:"username"`
 		UID int `json:"uid"`
+		Fullname string `json:"full_name"`
 		
 	} 
 	var tmpout jsonout
 	var Out []jsonout
 	
 	for rows.Next() {
-		rows.Scan(&tmpout.Uname,&tmpout.UID)
+		rows.Scan(&tmpout.Uname,&tmpout.UID,&tmpout.Fullname)
 		Out = append(Out, tmpout)
 	}
 
