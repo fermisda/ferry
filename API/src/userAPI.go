@@ -121,10 +121,20 @@ func getAllUsersCertificateDNs(w http.ResponseWriter, r *http.Request) {
 
 	expt := q.Get("experimentname")
 	if expt == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		log.WithFields(QueryFields(r, startTime)).Error("No experiment name specified in http query.")
-		inputErr = append(inputErr, jsonerror{"No experiment name specified in http query."})
+		expt = "%"
 	}
+	ao := strings.TrimSpace(q.Get("active"))
+	activeonly := false
+
+	if ao != "" {
+		if activebool,err := strconv.ParseBool(ao) ; err == nil {
+			activeonly = activebool
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
+			inputErr = append(inputErr, jsonerror{"Invalid value for active. Must be true or false (or omit it from the query)."})
+		}
+	}
+
 	if len(inputErr) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
@@ -146,11 +156,11 @@ func getAllUsersCertificateDNs(w http.ResponseWriter, r *http.Request) {
 								left join user_certificates as uc on ac.dn = uc.dn
 								left join users as u on uc.uid = u.uid
 								left join affiliation_units as au on ac.unitid = au.unitid
-								where name = $1 order by uname
+								where name like $1 and (status = $2 or not $2) order by uname
 							) as t right join (
 								select 1 as key,
 								$1 in (select name from affiliation_units) as unit_exists
-							) as c on t.key = c.key;`, expt)
+							) as c on t.key = c.key;`, expt, activeonly)
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
 		w.WriteHeader(http.StatusNotFound)
