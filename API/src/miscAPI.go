@@ -23,30 +23,20 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 	
 	unit := q.Get("unitname")
 	comp := q.Get("resourcename")
-	
-	if unit == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No unitname specified.\" }")
-		return
-	}
-	if comp == "" {
-		comp = "%"
-	}
 
-	rows, err := DBptr.Query(`select cname, uname, uid, gid, full_name, home_dir, shell, unit_exists, comp_exists from (
-								select 1 as key, u.uname, u.uid, g.gid, u.full_name, ca.home_dir, ca.shell, cr.name as cname, au.name as aname
+	rows, err := DBptr.Query(`select aname, rname, uname, uid, gid, full_name, home_dir, shell, unit_exists, comp_exists from (
+								select 1 as key, au.name as aname, u.uname, u.uid, g.gid, u.full_name, ca.home_dir, ca.shell, cr.name as rname
 								from users as u 
 								left join compute_access as ca on u.uid = ca.uid
 								left join groups as g on ca.groupid = g.groupid
 								left join compute_resources as cr on ca.compid = cr.compid
 								left join affiliation_units as au on cr.unitid = au.unitid
-								where au.name = $1 and cr.name like $2 order by cr.name
+								where (au.name = $1 or $3) and (cr.name = $2 or $4) order by au.name, cr.name
 							) as t
 								right join (select 1 as key,
 								$1 in (select name from affiliation_units) as unit_exists,
 								$2 in (select name from compute_resources) as comp_exists
-							) as c on t.key = c.key;`, unit, comp)
+							) as c on t.key = c.key;`, unit, comp, unit == "", comp == "")
 
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
@@ -67,40 +57,35 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 		Hdir string `json:"homedir"`
 		Shell string `json:"shell"`
 	}
-	type jsonentry struct {
+	type jsonresource struct {
 		Rname string `json:"resourcename"`
 		Users []jsonuser `json:"users"`
 	}
-	var Entry jsonentry
-	var Out []jsonentry
+	type jsonunit struct {
+		Aname string `json:"unitname"`
+		Resources []jsonresource `json:"resources"`
+	}
+	var Out []jsonunit
 
-	prevRname := ""
 	for rows.Next() {
-		var tmpRname, tmpUname, tmpUid, tmpGid, tmpGecos, tmpHdir, tmpShell sql.NullString
-		rows.Scan(&tmpRname, &tmpUname, &tmpUid, &tmpGid, &tmpGecos, &tmpHdir, &tmpShell, &unitExists, &compExists)
+		var tmpAname, tmpRname, tmpUname, tmpUid, tmpGid, tmpGecos, tmpHdir, tmpShell sql.NullString
+		rows.Scan(&tmpAname, &tmpRname, &tmpUname, &tmpUid, &tmpGid, &tmpGecos, &tmpHdir, &tmpShell, &unitExists, &compExists)
 
 		if tmpRname.Valid {
-			if prevRname == "" {
-				Entry.Rname = tmpRname.String
-				Entry.Users = append(Entry.Users, jsonuser{tmpUname.String, tmpUid.String, tmpGid.String,
-						 								   tmpGecos.String, tmpHdir.String, tmpShell.String})
-			} else if prevRname != tmpRname.String {
-				Out = append(Out, Entry)
-				Entry.Rname = tmpRname.String
-				Entry.Users = nil
-				Entry.Users = append(Entry.Users, jsonuser{tmpUname.String, tmpUid.String, tmpGid.String,
-														   tmpGecos.String, tmpHdir.String, tmpShell.String})
-			} else {
-				Entry.Users = append(Entry.Users, jsonuser{tmpUname.String, tmpUid.String, tmpGid.String,
-														   tmpGecos.String, tmpHdir.String, tmpShell.String})
+			if len(Out) == 0 || Out[len(Out) - 1].Aname != tmpAname.String {
+				Out = append(Out, jsonunit{tmpAname.String, make([]jsonresource, 0)})
 			}
-			prevRname = tmpRname.String
+			Res := &Out[len(Out) - 1].Resources
+			if len(*Res) == 0 || (*Res)[len(*Res) - 1].Rname != tmpRname.String {
+				*Res = append(*Res, jsonresource{tmpRname.String, make([]jsonuser, 0)})
+			}
+			Usr := &(*Res)[len(*Res) - 1].Users
+			*Usr = append(*Usr, jsonuser{tmpUname.String, tmpUid.String, tmpGid.String, tmpGecos.String, tmpHdir.String, tmpShell.String})
 		}
 	}
-	Out = append(Out, Entry)
 
 	var output interface{}
-	if prevRname == "" {
+	if len(Out) == 0 {
 		w.WriteHeader(http.StatusNotFound)
 		type jsonerror struct {Error string `json:"error"`}
 		var Err []jsonerror
