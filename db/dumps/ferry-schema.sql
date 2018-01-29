@@ -49,7 +49,7 @@ CREATE TABLE affiliation_unit_group (
     unitid bigint NOT NULL,
     groupid bigint NOT NULL,
     is_primary smallint,
-    last_updated date DEFAULT ('now'::text)::date NOT NULL
+    last_updated timestamp with time zone DEFAULT ('now'::text)::date NOT NULL
 );
 
 
@@ -62,7 +62,7 @@ ALTER TABLE public.affiliation_unit_group OWNER TO ferry;
 CREATE TABLE affiliation_unit_user_certificate (
     dn text NOT NULL,
     unitid bigint NOT NULL,
-    last_updated date DEFAULT ('now'::text)::date
+    last_updated timestamp with time zone DEFAULT ('now'::text)::date
 );
 
 
@@ -76,7 +76,7 @@ CREATE TABLE affiliation_units (
     unitid bigint NOT NULL,
     voms_url character varying(200),
     alternative_name character varying(100),
-    last_updated date DEFAULT ('now'::text)::date NOT NULL,
+    last_updated timestamp with time zone DEFAULT ('now'::text)::date NOT NULL,
     type character varying(100),
     name character varying(100) NOT NULL
 );
@@ -114,7 +114,7 @@ CREATE TABLE compute_access (
     uid bigint NOT NULL,
     groupid bigint NOT NULL,
     shell character varying(30) DEFAULT '/bin/bash'::character varying NOT NULL,
-    last_updated date DEFAULT ('now'::text)::date NOT NULL,
+    last_updated timestamp with time zone DEFAULT ('now'::text)::date NOT NULL,
     home_dir character varying(100)
 );
 
@@ -131,7 +131,7 @@ CREATE TABLE compute_batch (
     name character varying(300) NOT NULL,
     value real,
     type character varying(255),
-    last_updated date DEFAULT ('now'::text)::date NOT NULL,
+    last_updated timestamp with time zone DEFAULT ('now'::text)::date NOT NULL,
     valid_until date
 );
 
@@ -147,7 +147,7 @@ CREATE TABLE compute_resources (
     name character varying(100),
     default_shell character varying(100),
     unitid integer,
-    last_updated date DEFAULT ('now'::text)::date NOT NULL,
+    last_updated timestamp with time zone DEFAULT ('now'::text)::date NOT NULL,
     default_home_dir character varying(100),
     type character varying(100)
 );
@@ -164,7 +164,7 @@ CREATE TABLE grid_fqan (
     fqan character varying(300) NOT NULL,
     mapped_user character varying(100),
     mapped_group character varying(100) NOT NULL,
-    last_updated date DEFAULT ('now'::text)::date NOT NULL
+    last_updated timestamp with time zone DEFAULT ('now'::text)::date NOT NULL
 );
 
 
@@ -220,7 +220,7 @@ CREATE TABLE external_affiliation_attribute (
     uid bigint NOT NULL,
     attribute character varying(100) NOT NULL,
     value character varying(100),
-    last_updated date DEFAULT ('now'::text)::date NOT NULL
+    last_updated timestamp with time zone DEFAULT ('now'::text)::date NOT NULL
 );
 
 
@@ -236,7 +236,7 @@ CREATE TABLE grid_access (
     fqanid bigint NOT NULL,
     is_superuser boolean,
     is_banned boolean,
-    last_updated date DEFAULT ('now'::text)::date NOT NULL
+    last_updated timestamp with time zone DEFAULT ('now'::text)::date NOT NULL
 );
 
 
@@ -251,7 +251,7 @@ CREATE TABLE groups (
     gid bigint,
     name character varying(100) NOT NULL,
     type groups_group_type NOT NULL,
-    last_updated date DEFAULT ('now'::text)::date NOT NULL
+    last_updated timestamp with time zone DEFAULT ('now'::text)::date NOT NULL
 );
 
 
@@ -309,7 +309,7 @@ CREATE TABLE nas_storage (
     volume text,
     access_level text,
     host text,
-    last_updated date DEFAULT ('now'::text)::date NOT NULL
+    last_updated timestamp with time zone DEFAULT ('now'::text)::date NOT NULL
 );
 
 
@@ -343,7 +343,7 @@ ALTER SEQUENCE nas_storage_nasid_seq OWNED BY nas_storage.nasid;
 CREATE TABLE storage_quota (
     groupid bigint,
     path text,
-    last_updated date DEFAULT ('now'::text)::date NOT NULL,
+    last_updated timestamp with time zone DEFAULT ('now'::text)::date NOT NULL,
     value text NOT NULL,
     unit character varying(100) NOT NULL,
     valid_until date,
@@ -393,7 +393,7 @@ CREATE TABLE storage_resources (
     name character varying(100) NOT NULL,
     default_path character varying(255),
     default_quota bigint,
-    last_updated date DEFAULT ('now'::text)::date NOT NULL,
+    last_updated timestamp with time zone DEFAULT ('now'::text)::date NOT NULL,
     default_unit character varying(100),
     type character varying(255) NOT NULL
 );
@@ -430,7 +430,7 @@ CREATE TABLE user_certificates (
     dn character varying(300) NOT NULL,
     uid bigint NOT NULL,
     issuer_ca character varying(120) NOT NULL,
-    last_updated date DEFAULT ('now'::text)::date NOT NULL
+    last_updated timestamp with time zone DEFAULT ('now'::text)::date NOT NULL
 );
 
 
@@ -444,7 +444,7 @@ CREATE TABLE user_group (
     uid bigint NOT NULL,
     groupid bigint NOT NULL,
     is_leader boolean,
-    last_updated date DEFAULT ('now'::text)::date NOT NULL
+    last_updated timestamp with time zone DEFAULT ('now'::text)::date NOT NULL
 );
 
 
@@ -459,7 +459,7 @@ CREATE TABLE users (
     uname character varying(100) NOT NULL,
     status boolean,
     expiration_date date,
-    last_updated date DEFAULT ('now'::text)::date NOT NULL,
+    last_updated timestamp with time zone DEFAULT ('now'::text)::date NOT NULL,
     full_name character varying(255)
 );
 
