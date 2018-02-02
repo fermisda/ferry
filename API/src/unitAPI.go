@@ -21,9 +21,8 @@ func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 	unitType := q.Get("type") 
 //only the unit name is actually required; the others can be empty
 	if unitName == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No experiment specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No experiment name specified.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No experiment name specified.\" }")
 		return
 	}
 	if voms_url == "" {
@@ -44,7 +43,7 @@ func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 	authorized,authout := authorize(r,AuthorizedDNs)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"error\": \"" + authout + "not authorized.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
 		return
 	}
 
@@ -60,8 +59,8 @@ func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 		cKey, err := DBtx.Start(DBptr)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w,"{ \"error\": \"Error starting database transaction.\" }")
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 			return
 		}
 		
@@ -71,21 +70,19 @@ func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 		stmt, err := DBtx.tx.Prepare(createstr)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error preparing DB command: " + err.Error())
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w,"{ \"error\": \"Error preparing database command.\" }")
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error preparing database command.\" }")
 			return
 		}
 		//run said statement and check errors
 		_, err = stmt.Exec()
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
 			log.WithFields(QueryFields(r, startTime)).Error("Error adding " + unitName + " to affiliation_units: " + err.Error())
-			fmt.Fprintf(w,"{ \"error\": \"Error executing DB insert.\" }")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB insert.\" }")
 			DBtx.Rollback()
 		} else {
 			// error is nil, so it's a success. Commit the transaction and return success.
 			DBtx.Commit(cKey)
-			w.WriteHeader(http.StatusOK)
 			log.WithFields(QueryFields(r, startTime)).Info("Successfully added " + unitName + " to affiliation_units.")
 			fmt.Fprintf(w,"{ \"status\": \"success.\" }")
 		}
@@ -93,14 +90,13 @@ func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 		return
 	case checkerr != nil:
 		//other weird error
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusNotFound)
 		log.WithFields(QueryFields(r, startTime)).Error("Cannot create affiliation unit " + unitName + ": " + checkerr.Error())
-		fmt.Fprintf(w,"{ \"error\": \"Database error; check logs.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Database error; check logs.\" }")
 		return
 	default:
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("Cannot create affiliation unit " + unitName + "; another unit with that name already exists.")
-		fmt.Fprintf(w,"{ \"error\": \"Unit %s already exists.\" }",unitName)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Unit %s already exists.\" }",unitName)
 		return
 	} 
 }
@@ -111,16 +107,15 @@ func removeAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	unitName := q.Get("unitname")	
 	if unitName == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No experiment specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No experiment name specified.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No experiment name specified.\" }")
 		return
 	}
 	//requires auth	
 	authorized,authout := authorize(r,AuthorizedDNs)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"error\": \"" + authout + "not authorized.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
 		return
 	}
 //check if it is really there already
@@ -131,23 +126,22 @@ func removeAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case checkerr == sql.ErrNoRows:
 		// OK, it doesn't exist, let's add it now.
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("Cannot delete affiliation unit " + unitName + "; unit does not exist.")
-		fmt.Fprintf(w,"{ \"error\": \"Unit %s does not exist.\" }",unitName)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Unit %s does not exist.\" }",unitName)
 		return	
 	case checkerr != nil:
 		//other weird error
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusNotFound)
 		log.WithFields(QueryFields(r, startTime)).Error("Cannot remove affiliation unit " + unitName + ": " + checkerr.Error())
-		fmt.Fprintf(w,"{ \"error\": \"Database error; check logs.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Database error; check logs.\" }")
 		return
 	default:
 
 		cKey, err := DBtx.Start(DBptr)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w,"{ \"error\": \"Error starting database transaction.\" }")
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 			return
 		}
 			// string for the remove statement
@@ -156,20 +150,18 @@ func removeAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 		stmt, err := DBtx.tx.Prepare(removestr)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error preparing DB command: " + err.Error())
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w,"{ \"error\": \"Error preparing database command.\" }")
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error preparing database command.\" }")
 			return
 		}
 		//run said statement and check errors
 		_, err = stmt.Exec()
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
 			log.WithFields(QueryFields(r, startTime)).Error("Error adding " + unitName + " to affiliation_units: " + err.Error())
-			fmt.Fprintf(w,"{ \"error\": \"Error executing DB insert.\" }")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB insert.\" }")
 		} else {
 			// error is nil, so it's a success. Commit the transaction and return success.
 			DBtx.Commit(cKey)
-			w.WriteHeader(http.StatusOK)
 			log.WithFields(QueryFields(r, startTime)).Info("Successfully added " + unitName + " to affiliation_units.")
 			fmt.Fprintf(w,"{ \"status\": \"success.\" }")
 		}
@@ -190,15 +182,13 @@ func setAffiliationUnitInfo(w http.ResponseWriter, r *http.Request) {
 //	unitId := q.Get("unitid")
 //only unitName is required
 	if unitName == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No experiment specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No experiment name specified.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No experiment name specified.\" }")
 		return
 	}
 	if unitType == "" && voms_url == "" && altName == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No values specified to modify.")
-		fmt.Fprintf(w,"{ \"error\": \"No values (voms_url, type, alternative_name) specified to modify.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No values (voms_url, type, alternative_name) specified to modify.\" }")
 		return
 	}
 
@@ -206,7 +196,7 @@ func setAffiliationUnitInfo(w http.ResponseWriter, r *http.Request) {
 	authorized,authout := authorize(r,AuthorizedDNs)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"error\": \"" + authout + "not authorized.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
 		return
 	}
 //check if it is really there already
@@ -222,15 +212,14 @@ func setAffiliationUnitInfo(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case checkerr == sql.ErrNoRows:
 		// OK, it doesn't exist, bail out
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit " + unitName + " not in database.")
-		fmt.Fprintf(w,"{ \"error\": \"Unit %s does not exist.\" }",unitName)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Unit %s does not exist.\" }",unitName)
 		return		
 	case checkerr != nil:
 		//other weird error
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusNotFound)
 		log.WithFields(QueryFields(r, startTime)).Error("Cannot update affiliation unit " + unitName + ": " + checkerr.Error())
-		fmt.Fprintf(w,"{ \"error\": \"Database error; check logs.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Database error; check logs.\" }")
 		return
 	default:
 		// It exists, start updating
@@ -276,8 +265,8 @@ func setAffiliationUnitInfo(w http.ResponseWriter, r *http.Request) {
 		cKey, err := DBtx.Start(DBptr)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w,"{ \"error\": \"Error starting database transaction.\" }")
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 			DBtx.Rollback()
 			return
 		}
@@ -285,17 +274,16 @@ func setAffiliationUnitInfo(w http.ResponseWriter, r *http.Request) {
 		stmt, err := DBtx.tx.Prepare(modstr + valstr)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error preparing DB command: " + err.Error())
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w,"{ \"error\": \"Error preparing database command.\" }")
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error preparing database command.\" }")
 			return
 		}
 
 	//run said statement and check errors
 		_, err = stmt.Exec()
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
 			log.WithFields(QueryFields(r, startTime)).Error("Error updating " + unitName + " in affiliation_units: " + err.Error())
-			fmt.Fprintf(w,"{ \"error\": \"Error executing DB update.\" }")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB update.\" }")
 			rberr := DBtx.Rollback()
 			if rberr != nil {
 				log.WithFields(QueryFields(r, startTime)).Error("Error during rollback: " + rberr.Error())
@@ -303,7 +291,6 @@ func setAffiliationUnitInfo(w http.ResponseWriter, r *http.Request) {
 		} else {
 			// error is nil, so it's a success. Commit the transaction and return success.
 			DBtx.Commit(cKey)
-			w.WriteHeader(http.StatusOK)
 			log.WithFields(QueryFields(r, startTime)).Info("Successfully set values for " + unitName + " in affiliation_units.")
 			fmt.Fprintf(w,"{ \"status\": \"success.\" }")
 		}
@@ -319,9 +306,8 @@ func getAffiliationUnitMembers(w http.ResponseWriter, r *http.Request) {
 	unitName := q.Get("unitname")
 	
 	if unitName == "" {
-                w.WriteHeader(http.StatusBadRequest)
                 log.WithFields(QueryFields(r, startTime)).Error("No unit name specified in http query.")
-                fmt.Fprintf(w, "{ \"error\": \"No unitname specified.\" }")
+                fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
                 return
         }
 	
@@ -329,14 +315,13 @@ func getAffiliationUnitMembers(w http.ResponseWriter, r *http.Request) {
         checkerr := DBptr.QueryRow(`select unitid from affiliation_units where name=$1`,unitName).Scan(&unitId)
         switch {
         case checkerr == sql.ErrNoRows:
-                // set the header for success since we are already at the desired result                                                                                                     
-                w.WriteHeader(http.StatusBadRequest)
-                fmt.Fprintf(w, "{ \"error\": \"Affiliation unit does not exist.\" }")
+                // set the header for success since we are already at the desired result
+                fmt.Fprintf(w, "{ \"ferry_error\": \"Affiliation unit does not exist.\" }")
                 log.WithFields(QueryFields(r, startTime)).Error("unit " + unitName + " not found in DB.")
                 return
         case checkerr != nil:
-                w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "{ \"error\": \"Database error.\" }")
+                w.WriteHeader(http.StatusNotFound)
+				fmt.Fprintf(w, "{ \"ferry_error\": \"Database error.\" }")
                 log.WithFields(QueryFields(r, startTime)).Error("deleteUser: Error querying DB for unit " + unitName + ".")
                 return
         default:
@@ -345,8 +330,8 @@ func getAffiliationUnitMembers(w http.ResponseWriter, r *http.Request) {
 	rows, err := DBptr.Query(`select ca.uid, users.uname from compute_access as ca join users on ca.uid = users.uid join compute_resources as cr on cr.compid = ca.compid where cr.unitid=$1 order by ca.uid`, unitId)
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "{ \"error\": \"Error in DB query.\" }")
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
 	
@@ -368,8 +353,8 @@ func getAffiliationUnitMembers(w http.ResponseWriter, r *http.Request) {
 	rowsug, err := DBptr.Query(`select DISTINCT ug.uid, users.uname from user_group as ug join affiliation_unit_group as aug on aug.groupid = ug.groupid join users on ug.uid = users.uid where aug.unitid=$1 order by ug.uid`,unitId)
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "{ \"error\": \"Error in DB query.\" }")
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
 	
@@ -385,9 +370,8 @@ func getAffiliationUnitMembers(w http.ResponseWriter, r *http.Request) {
 	}
 	var output interface{}
 	if len(Out) == 0 {
-		w.WriteHeader(http.StatusNotFound)
 		type jsonerror struct {
-			Error string `json:"error"`
+			Error string `json:"ferry_error"`
 		}
 		var queryErr []jsonerror
 		queryErr = append(queryErr, jsonerror{"This affiliation unit has no groups."})
@@ -411,9 +395,8 @@ func getGroupsInAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 	unitName := q.Get("unitname")
 
 	if unitName == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No unit name specified in http query.")
-		fmt.Fprintf(w, "{ \"error\": \"No unitname specified.\" }")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
 		return	
 	}
 	
@@ -422,13 +405,12 @@ func getGroupsInAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case checkerr == sql.ErrNoRows: 
 		// set the header for success since we are already at the desired result
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, "{ \"error\": \"Affiliation unit does not exist.\" }")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Affiliation unit does not exist.\" }")
 		log.WithFields(QueryFields(r, startTime)).Error("unit " + unitName + " not found in DB.")
 		return	
 	case checkerr != nil:
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "{ \"error\": \"Database error.\" }")
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Database error.\" }")
 		log.WithFields(QueryFields(r, startTime)).Error("deleteUser: Error querying DB for unit " + unitName + ".")
 		return	
 	default:
@@ -436,8 +418,8 @@ func getGroupsInAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 		rows, err := DBptr.Query(`select gid, groups.name from affiliation_unit_group as aug join groups on aug.groupid = groups.groupid where aug.unitid=$1`, unitId)
 		if err != nil {
 			defer log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w, "{ \"error\": \"Error in DB query.\" }")
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 			return
 		}
 		
@@ -459,9 +441,8 @@ func getGroupsInAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 		}
 		var output interface{}
 		if len(Out) == 0 {
-			w.WriteHeader(http.StatusNotFound)
 			type jsonerror struct {
-				Error string `json:"error"`
+				Error string `json:"ferry_error"`
 			}
 			var queryErr []jsonerror
 			queryErr = append(queryErr, jsonerror{"This affiliation unit has no groups."})
@@ -486,17 +467,16 @@ func getGroupLeadersinAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	unitName := q.Get("unitname")
 	if unitName == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No unit name specified in http query.")
-		fmt.Fprintf(w, "{ \"error\": \"No unitname specified.\" }")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
 		return	
 	}
 	
 	rows, err := DBptr.Query(`select DISTINCT groups.name, user_group.uid, users.uname  from user_group join users on users.uid = user_group.uid join groups on groups.groupid = user_group.groupid where is_leader=TRUE and user_group.groupid in (select groupid from affiliation_unit_group left outer join affiliation_units as au on affiliation_unit_group.unitid= au.unitid where au.name=$1) order by groups.name`,unitName)
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "{ \"error\": \"Error in DB query.\" }")
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
 	defer rows.Close()	
@@ -537,9 +517,8 @@ func getGroupLeadersinAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 //	Out = append(Out, Entry)
 	var output interface{}
 	if len(Out) == 0 {
-		w.WriteHeader(http.StatusNotFound)
 		type jsonerror struct {
-			Error string `json:"error"`
+			Error string `json:"ferry_error"`
 		}
 		var queryErr []jsonerror
 		queryErr = append(queryErr, jsonerror{"This affiliation unit has no groups with assigned leaders."})
@@ -571,17 +550,16 @@ func getAffiliationUnitComputeResources(w http.ResponseWriter, r *http.Request) 
 	q := r.URL.Query()
 	unitName := q.Get("unitname")
 	if unitName == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Print("No unit name specified in http query.")
-		fmt.Fprintf(w, "{ \"error\": \"No unitname specified.\" }")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
 		return	
 	}
 	
 	rows, err := DBptr.Query(`select cr.name, cr.type, cr.default_shell, cr.default_home_dir from compute_resources as cr join affiliation_units as au on au.unitid = cr.unitid where au.name=$1 order by name`, unitName)  
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Print(err.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "{ \"error\": \"Error in DB query.\" }")
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
 	defer rows.Close()	
@@ -619,9 +597,8 @@ func getAffiliationUnitComputeResources(w http.ResponseWriter, r *http.Request) 
 	}
 		var output interface{}
 	if len(Out) == 0 {
-		w.WriteHeader(http.StatusNotFound)
 		type jsonerror struct {
-			Error string `json:"error"`
+			Error string `json:"ferry_error"`
 		}
 		var queryErr []jsonerror
 		queryErr = append(queryErr, jsonerror{"This affiliation unit has no compute resources."})
@@ -646,15 +623,13 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 	var mUser sql.NullString
 
 	if fqan == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No fqan specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No fqan specified.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No fqan specified.\" }")
 		return
 	}
 	if mGroup == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No mapped_group specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No mapped_group specified.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No mapped_group specified.\" }")
 		return
 	}
 	if q.Get("mapped_user") != "" {
@@ -663,7 +638,7 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 
 	cKey, err := DBtx.Start(DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 
 	_, err = DBtx.Exec("insert into grid_fqan (fqan, mapped_user, mapped_group, last_updated) values ($1, $2, $3, NOW())", fqan, mUser, mGroup)
@@ -671,16 +646,15 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w,"{ \"status\": \"success\" }")
 	} else {
-		w.WriteHeader(http.StatusInternalServerError)
 		if strings.Contains(err.Error(), `violates foreign key constraint "fk_experiment_fqan_users"`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User doesn't exist.")
-			fmt.Fprintf(w,"{ \"error\": \"User doesn't exist.\" }")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"User doesn't exist.\" }")
 		} else if strings.Contains(err.Error(), `violates foreign key constraint "fk_experiment_fqan_groups"`) {
 			log.WithFields(QueryFields(r, startTime)).Error("Group doesn't exist.")
-			fmt.Fprintf(w,"{ \"error\": \"Group doesn't exist.\" }")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Group doesn't exist.\" }")
 		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
 			log.WithFields(QueryFields(r, startTime)).Error("FQAN already exists.")
-			fmt.Fprintf(w,"{ \"error\": \"FQAN already exists.\" }")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"FQAN already exists.\" }")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 		}
@@ -720,9 +694,9 @@ func getAllAffiliationUnits(w http.ResponseWriter, r *http.Request) {
 	
 	rows, err := DBptr.Query(`select name, voms_url from affiliation_units where voms_url is not null and voms_url like $1`,"%" + voname + "%")
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusNotFound)
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
-		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
 	defer rows.Close()
@@ -746,7 +720,7 @@ func getAllAffiliationUnits(w http.ResponseWriter, r *http.Request) {
 	var output interface{}	
 	if len(Out) == 0 {
 		type jsonerror struct {
-			Error string `json:"error"`
+			Error string `json:"ferry_error"`
 		}
 		var queryErr []jsonerror
 		queryErr = append(queryErr, jsonerror{"Query returned no units."})

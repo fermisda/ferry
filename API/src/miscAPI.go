@@ -12,7 +12,7 @@ import (
 )
 
 func NotDoneYet(w http.ResponseWriter, r *http.Request, t time.Time) {
-	fmt.Fprintf(w, `{"error": "This function is not done yet!"}`)
+	fmt.Fprintf(w, `{"ferry_error": "This function is not done yet!"}`)
 	log.WithFields(QueryFields(r, t)).Error("This function is not done yet!")
 }
 
@@ -39,9 +39,9 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 							) as c on t.key = c.key;`, unit, comp, unit == "", comp == "")
 
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
 	defer rows.Close()
@@ -86,8 +86,7 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 
 	var output interface{}
 	if len(Out) == 0 {
-		w.WriteHeader(http.StatusNotFound)
-		type jsonerror struct {Error string `json:"error"`}
+		type jsonerror struct {Error string `json:"ferry_error"`}
 		var Err []jsonerror
 		if !unitExists {
 			Err = append(Err, jsonerror{"Affiliation unit does not exist."})
@@ -108,7 +107,7 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
@@ -121,9 +120,8 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 	comp := q.Get("resourcename")
 	
 	if unit == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No unitname specified.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No unitname specified.\" }")
 		return
 	}
 	if comp == "" {
@@ -145,9 +143,9 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 							) as c on t.key = c.key;`, unit, comp)
 
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
 	defer rows.Close()
@@ -189,8 +187,7 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 
 	var output interface{}
 	if prevGname == "" {
-		w.WriteHeader(http.StatusNotFound)
-		type jsonerror struct {Error string `json:"error"`}
+		type jsonerror struct {Error string `json:"ferry_error"`}
 		var Err []jsonerror
 		if !unitExists {
 			Err = append(Err, jsonerror{"Affiliation unit does not exist."})
@@ -211,7 +208,7 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
@@ -232,9 +229,9 @@ func getGridMapFile(w http.ResponseWriter, r *http.Request) {
 								where au.name like $1) as t
 	 						  right join (select 1 as key, $1 in (select name from affiliation_units) as unit_exists) as c on t.key = c.key`, unit)
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
 	defer rows.Close()
@@ -260,20 +257,18 @@ func getGridMapFile(w http.ResponseWriter, r *http.Request) {
 			Out.DN, Out.Uname = tmpDN.String, tmpUname.String
 			outline, jsonerr := json.Marshal(Out)
 			if jsonerr != nil {
-				log.WithFields(QueryFields(r, startTime)).Fatal(jsonerr)
+				log.WithFields(QueryFields(r, startTime)).Error(jsonerr)
 			}
 			output += string(outline)
 			idx ++
 		}
 	}
 	if idx == 0 {
-		w.WriteHeader(http.StatusNotFound)
-
 		if !unitExists {
-			output += `"error": "Experiment does not exist.",`
+			output += `"ferry_error": "Experiment does not exist.",`
 			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
 		}
-		output += `"error": "No DNs found."`
+		output += `"ferry_error": "No DNs found."`
 		log.WithFields(QueryFields(r, startTime)).Error("No DNs found.")
 	} else {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
@@ -299,9 +294,9 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 							  where au.name like $1) as t
 							  right join (select 1 as key, $1 in (select name from affiliation_units) as unit_exists) as c on t.key = c.key`, unit)
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
 	defer rows.Close()
@@ -327,20 +322,18 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 			Out.DN, Out.Uname = tmpDN.String, tmpUname.String
 			outline, jsonerr := json.Marshal(Out)
 			if jsonerr != nil {
-				log.WithFields(QueryFields(r, startTime)).Fatal(jsonerr)
+				log.WithFields(QueryFields(r, startTime)).Error(jsonerr)
 			}
 			output += string(outline)
 			idx ++
 		}
 	}
 	if idx == 0 {
-		w.WriteHeader(http.StatusNotFound)
-
 		if !unitExists {
-			output += `"error": "Experiment does not exist.",`
+			output += `"ferry_error": "Experiment does not exist.",`
 			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
 		}
-		output += `"error": "No FQANs found."`
+		output += `"ferry_error": "No FQANs found."`
 		log.WithFields(QueryFields(r, startTime)).Error("No FQANs found.")
 	} else {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
@@ -357,30 +350,28 @@ func getGroupGID(w http.ResponseWriter, r *http.Request) {
 	gName := q.Get("groupname")
 	var iGid bool
 	if gName == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No groupname specified.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified.\" }")
 		return
 	}
 	if q.Get("include_gid") != "" {
 		var err error
 		iGid, err = strconv.ParseBool(q.Get("include_gid"))
 		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
 			log.WithFields(QueryFields(r, startTime)).Error("Invalid include_gid specified in http query.")
-			fmt.Fprintf(w,"{ \"error\": \"Invalid include_gid specified.\" }")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid include_gid specified.\" }")
 			return
 		}
 	}
 
 	pingerr := DBptr.Ping()
 	if pingerr != nil {
-		log.WithFields(QueryFields(r, startTime)).Fatal(pingerr)
+		log.WithFields(QueryFields(r, startTime)).Error(pingerr)
 	}
 	
 	rows, err := DBptr.Query(`select groupid, gid from groups where name=$1`, gName)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"Error in DB query\n")	
 	} else {	
@@ -405,15 +396,14 @@ func getGroupGID(w http.ResponseWriter, r *http.Request) {
 			}
 			outline, jsonerr := json.Marshal(Out)
 			if jsonerr != nil {
-				log.WithFields(QueryFields(r, startTime)).Fatal(jsonerr)
+				log.WithFields(QueryFields(r, startTime)).Error(jsonerr)
 			}
 			fmt.Fprintf(w,string(outline))
 			idx++
 		}
 		if idx == 0 {
-			w.WriteHeader(http.StatusNotFound)
 			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
-			fmt.Fprintf(w, `{ "error": "Group does not exist." }`)
+			fmt.Fprintf(w, `{ "ferry_error": "Group does not exist." }`)
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Info("Success!")
 			fmt.Fprintf(w," ]")
@@ -427,25 +417,23 @@ func getGroupName(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	gid := q.Get("gid")
 	if gid == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No gid specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No gid specified.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No gid specified.\" }")
 		return
 	} else if _, err := strconv.Atoi(gid); err != nil  {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("Invalid gid specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"Invalid gid specified.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid gid specified.\" }")
 		return
 	}
 
 	pingerr := DBptr.Ping()
 	if pingerr != nil {
-		log.WithFields(QueryFields(r, startTime)).Fatal(pingerr)
+		log.WithFields(QueryFields(r, startTime)).Error(pingerr)
 	}
 	
 	rows, err := DBptr.Query(`select name from groups where gid=$1`, gid)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"Error in DB query\n")	
 	} else {	
@@ -466,15 +454,14 @@ func getGroupName(w http.ResponseWriter, r *http.Request) {
 			rows.Scan(&Out.Groupname)
 			outline, jsonerr := json.Marshal(Out)
 			if jsonerr != nil {
-				log.WithFields(QueryFields(r, startTime)).Fatal(jsonerr)
+				log.WithFields(QueryFields(r, startTime)).Error(jsonerr)
 				}
 			fmt.Fprintf(w,string(outline))
 			idx++
 			}
 		if idx == 0 {
-			w.WriteHeader(http.StatusNotFound)
 			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
-			fmt.Fprintf(w, `{ "error": "Group does not exist." }`)
+			fmt.Fprintf(w, `{ "ferry_error": "Group does not exist." }`)
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Info("Success!")
 			fmt.Fprintf(w," ]")
@@ -487,14 +474,13 @@ func lookupCertificateDN(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
 	type jsonerror struct {
-		Error string `json:"error"`
+		Error string `json:"ferry_error"`
 	}
 	var inputErr []jsonerror
 
 	certdn := q.Get("certificatedn")
 
 	if certdn == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No certificatedn name specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No certificatedn name specified."})
 	}
@@ -502,7 +488,7 @@ func lookupCertificateDN(w http.ResponseWriter, r *http.Request) {
 	if len(inputErr) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Fatal(err)
+			log.WithFields(QueryFields(r, startTime)).Error(err)
 		}
 		fmt.Fprintf(w, string(jsonout))
 		return
@@ -510,9 +496,9 @@ func lookupCertificateDN(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := DBptr.Query(`select u.uid, uname from user_certificates as uc left join users as u on uc.uid = u.uid where dn = $1;`, certdn)
 	if err != nil {	
-		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}	
 	defer rows.Close()
@@ -537,7 +523,6 @@ func lookupCertificateDN(w http.ResponseWriter, r *http.Request) {
 
 	var output interface{}
 	if len(Out) == 0 {
-		w.WriteHeader(http.StatusNotFound)
 		var queryErr []jsonerror
 		log.WithFields(QueryFields(r, startTime)).Error("Certificate DN does not exist.")
 		queryErr = append(queryErr, jsonerror{"Certificate DN does not exist."})
@@ -548,7 +533,7 @@ func lookupCertificateDN(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
@@ -559,9 +544,9 @@ func getMappedGidFile(w http.ResponseWriter, r *http.Request) {
 	rows, err := DBptr.Query(`select fqan, mapped_user, gid from grid_fqan as gf left join groups as g on g.name = gf.mapped_group`)
 
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
 	defer rows.Close()
@@ -586,8 +571,7 @@ func getMappedGidFile(w http.ResponseWriter, r *http.Request) {
 
 	var output interface{}
 	if len(Out) == 0 {
-		w.WriteHeader(http.StatusNotFound)
-		type jsonerror struct {Error string `json:"error"`}
+		type jsonerror struct {Error string `json:"ferry_error"`}
 		var Err jsonerror
 		Err = jsonerror{"Something went wrong."}
 		log.WithFields(QueryFields(r, startTime)).Error("Something went wrong.")
@@ -598,7 +582,7 @@ func getMappedGidFile(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
@@ -612,9 +596,9 @@ func getStorageAuthzDBFile(w http.ResponseWriter, r *http.Request) {
 							  order by u.uname;`)
 
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
 	defer rows.Close()
@@ -668,8 +652,7 @@ func getStorageAuthzDBFile(w http.ResponseWriter, r *http.Request) {
 
 	var output interface{}
 	if len(Out) == 0 {
-		w.WriteHeader(http.StatusNotFound)
-		type jsonerror struct {Error string `json:"error"`}
+		type jsonerror struct {Error string `json:"ferry_error"`}
 		var Err jsonerror
 		Err = jsonerror{"Something went wrong."}
 		log.WithFields(QueryFields(r, startTime)).Error("Something went wrong.")
@@ -680,7 +663,7 @@ func getStorageAuthzDBFile(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
@@ -713,9 +696,9 @@ func getAffiliationMembersRoles(w http.ResponseWriter, r *http.Request) {
 							) as c on t.key = c.key;`, unit, role)
 
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
 	defer rows.Close()
@@ -741,8 +724,7 @@ func getAffiliationMembersRoles(w http.ResponseWriter, r *http.Request) {
 
 	var output interface{}
 	if len(Out) == 0 {
-		w.WriteHeader(http.StatusNotFound)
-		type jsonerror struct {Error string `json:"error"`}
+		type jsonerror struct {Error string `json:"ferry_error"`}
 		var Err []jsonerror
 		if !unitExists {
 			Err = append(Err, jsonerror{"Experiment does not exist."})
@@ -763,7 +745,7 @@ func getAffiliationMembersRoles(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
@@ -778,18 +760,17 @@ func getStorageAccessLists(w http.ResponseWriter, r *http.Request) {
 		resource = "%"
 	}
 	/*if resource == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No resourcename specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No resourcename specified.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No resourcename specified.\" }")
 		return
 	}*/
 
 	rows, err := DBptr.Query(`select server, volume, access_level, host from nas_storage where server like $1;`, resource)
 
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
 	defer rows.Close()
@@ -819,8 +800,7 @@ func getStorageAccessLists(w http.ResponseWriter, r *http.Request) {
 
 	var output interface{}
 	if prevServer == "" {
-		w.WriteHeader(http.StatusNotFound)
-		type jsonerror struct {Error string `json:"error"`}
+		type jsonerror struct {Error string `json:"ferry_error"`}
 		var Err jsonerror
 		Err = jsonerror{"Storage resource does not exist."}
 		log.WithFields(QueryFields(r, startTime)).Error("Storage resource does not exist.")
@@ -831,7 +811,7 @@ func getStorageAccessLists(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
@@ -849,20 +829,17 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 	homedir := q.Get("default_home_dir")
 	var nullshell,nullhomedir sql.NullString
 	if rName == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Print("No resource name specified in http query.")
-		fmt.Fprintf(w, "{ \"error\": \"No resourcename specified.\" }")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No resourcename specified.\" }")
 		return
 	}
 	if rType == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Print("No resource type specified in http query.")
-		fmt.Fprintf(w, "{ \"error\": \"No type specified.\" }")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No type specified.\" }")
 		return	
 	} else if strings.ToUpper(rType) == "NULL" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Print("'NULL' is an invalid resource type.")
-		fmt.Fprintf(w, "{ \"error\": \"Resource type of NULL is not allowed.\" }")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Resource type of NULL is not allowed.\" }")
 		return	
 	}
 //	if unitName == "" {
@@ -885,7 +862,7 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 	authorized,authout := authorize(r,AuthorizedDNs)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"error\": \"" + authout + "not authorized.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
 		return
 	}
 
@@ -896,8 +873,7 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 	compiderr := DBptr.QueryRow(`select compid from compute_resources order by compid desc limit 1`).Scan(&newcompId)
 	if compiderr != nil {
 		log.WithFields(QueryFields(r, startTime)).Error("Error selecting compids: " + compiderr.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w,"{ \"error\": \"Error determining new compid.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error determining new compid.\" }")
 		return
 	}
 	//add one to the new compid
@@ -909,7 +885,7 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 		uniterr := DBptr.QueryRow(`select unitid from affiliation_units where name=$1`,unitName).Scan(&unitID)
 		if uniterr != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error determining unitid for " + unitName + ": " + uniterr.Error())
-			fmt.Fprintf(w,"{ \"error\": \"Error determining unitID for " + unitName + ". You cannot add a unit name that does not already exist in affiliation_units.\" }")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error determining unitID for " + unitName + ". You cannot add a unit name that does not already exist in affiliation_units.\" }")
 			return
 		}
 	}
@@ -925,8 +901,8 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 		cKey, err := DBtx.Start(DBptr)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w,"{ \"error\": \"Error starting database transaction.\" }")
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 			return
 		}
 		
@@ -940,14 +916,13 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 		
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w,"{ \"error\": \"Error in database transaction.\" }")
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in database transaction.\" }")
 			//	DBtx.Rollback()
 			return
 		} else {
 			DBtx.Commit(cKey)
 			log.WithFields(QueryFields(r, startTime)).Error("Added " + rName + " to compute_resources.")
-			w.WriteHeader(http.StatusOK)
 			fmt.Fprintf(w,"{ \"result\": \"success.\" }")
 			return		
 		}
@@ -955,13 +930,13 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 	case checkerr != nil:
 		//some other error, exit with status 500
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + checkerr.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w,"{ \"error\": \"Error in database check.\" }")
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in database check.\" }")
 		return
 	default:
 		// if we get here, it means that the unit already exists. Bail out.
 		log.WithFields(QueryFields(r, startTime)).Error("Resource " + rName + " already exists.")
-		fmt.Fprintf(w,"{ \"error\": \"Resource already exists.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Resource already exists.\" }")
 		return	
 	}
 
@@ -980,15 +955,13 @@ func setComputeResourceInfo(w http.ResponseWriter, r *http.Request) {
 	homedir := q.Get("default_home_dir")
 
 	if rName == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Print("No resource name specified in http query.")
-		fmt.Fprintf(w, "{ \"error\": \"No resourcename specified.\" }")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No resourcename specified.\" }")
 		return
 	}
 	if strings.ToUpper(strings.TrimSpace(rType)) == "NULL" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Print("'NULL' is an invalid resource type.")
-		fmt.Fprintf(w, "{ \"error\": \"Resource type of NULL is not allowed.\" }")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Resource type of NULL is not allowed.\" }")
 		return	
 	}
 	
@@ -996,7 +969,7 @@ func setComputeResourceInfo(w http.ResponseWriter, r *http.Request) {
 	authorized,authout := authorize(r,AuthorizedDNs)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"error\": \"" + authout + "not authorized.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
 		return
 	}
 
@@ -1012,14 +985,13 @@ func setComputeResourceInfo(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case err == sql.ErrNoRows:
 		// nothing returned from the select, so the resource does not exist.
-		w.WriteHeader(http.StatusNotFound)
 		log.WithFields(QueryFields(r, startTime)).Print("compute resource with name " + rName + " not found in compute_resources table. Exiting.")
-		fmt.Fprintf(w, "{ \"error\": \"resource does not exist. Use createComputeResource to add a new resource.\" }")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"resource does not exist. Use createComputeResource to add a new resource.\" }")
 		return	
 	case err != nil:
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusNotFound)
 		log.WithFields(QueryFields(r, startTime)).Print("Error in DQ query: " + err.Error())
-		fmt.Fprintf(w, "{ \"error\": \"Error in DB query.\" }")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return	
 	default:
 		
@@ -1071,21 +1043,20 @@ func setComputeResourceInfo(w http.ResponseWriter, r *http.Request) {
 		cKey, err := DBtx.Start(DBptr)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w,"{ \"error\": \"Error starting database transaction.\" }")
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 			return
 		}
 		
 		_, commerr := DBtx.Exec(`update compute_resources set default_shell=$1, unitid=$2, last_updated=NOW(), default_home_dir=$3, type=$4 where name=$5`, nullshell, unitID, nullhomedir, currentType, rName)
 		if commerr != nil {
-			w.WriteHeader(http.StatusInternalServerError)
+			w.WriteHeader(http.StatusNotFound)
 			log.WithFields(QueryFields(r, startTime)).Error("Error during DB update " + commerr.Error())
-			fmt.Fprintf(w,"{ \"error\": \"Database error during update.\" }")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Database error during update.\" }")
 			return
 		} else {
 			// if no error, commit and all that
 			DBtx.Commit(cKey)
-			w.WriteHeader(http.StatusOK)
 			log.WithFields(QueryFields(r, startTime)).Info("Successfully updated " + unitName + ".")
 			fmt.Fprintf(w,"{ \"status\": \"success.\" }")
 		}
@@ -1106,20 +1077,17 @@ func createStorageResource(w http.ResponseWriter, r *http.Request) {
 	defquota := strings.TrimSpace(q.Get("default_quota"))
 
 	if rName == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Print("No resource name specified in http query.")
-		fmt.Fprintf(w, "{ \"error\": \"No resourcename specified.\" }")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No resourcename specified.\" }")
 		return
 	}
 	if rType == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Print("No resource type specified in http query.")
-		fmt.Fprintf(w, "{ \"error\": \"No type specified.\" }")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No type specified.\" }")
 		return	
 	} else if strings.ToUpper(strings.TrimSpace(rType)) == "NULL" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Print("'NULL' is an invalid resource type.")
-		fmt.Fprintf(w, "{ \"error\": \"Resource type of NULL is not allowed.\" }")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Resource type of NULL is not allowed.\" }")
 		return	
 	}
 	var(
@@ -1135,7 +1103,7 @@ func createStorageResource(w http.ResponseWriter, r *http.Request) {
 		convquota,converr := strconv.ParseInt(defquota,10,64)
 		if converr != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error converting default_quota to int: " + converr.Error())
-			fmt.Fprintf(w,"{ \"error\": \"Error converting default_quota to int. Check format.\" }")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error converting default_quota to int. Check format.\" }")
 			return
 		}
 		nullquota.Int64 = convquota
@@ -1158,35 +1126,34 @@ func createStorageResource(w http.ResponseWriter, r *http.Request) {
 		cKey, err := DBtx.Start(DBptr)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w,"{ \"error\": \"Error starting database transaction.\" }")
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 			return
 		}
 		_, inserterr := DBtx.tx.Exec(`insert into storage_resources (name, default_path, default_quota, last_updated, default_unit, type) values ($1,$2,$3,NOW(),$4,$5)`, rName, nullpath, nullquota, nullunit, rType)
 		
 		if inserterr != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insertionn: " + inserterr.Error())
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w,"{ \"error\": \"Error in database transaction.\" }")
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in database transaction.\" }")
 			//	DBtx.Rollback()
 			return
 		} else {
 			DBtx.Commit(cKey)
 			log.WithFields(QueryFields(r, startTime)).Error("Added " + rName + " to compute_resources.")
-			w.WriteHeader(http.StatusOK)
 			fmt.Fprintf(w,"{ \"result\": \"success.\" }")
 			return		
 		}		
 	case checkerr != nil:
 		//some other error, exit with status 500
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + checkerr.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w,"{ \"error\": \"Error in database check.\" }")
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in database check.\" }")
 		return
 	default:
 		// if we get here, it means that the unit already exists. Bail out.
 		log.WithFields(QueryFields(r, startTime)).Error("Resource " + rName + " already exists.")
-		fmt.Fprintf(w,"{ \"error\": \"Resource already exists.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Resource already exists.\" }")
 		return	
 	}
 }
@@ -1205,15 +1172,13 @@ func setStorageResourceInfo(w http.ResponseWriter, r *http.Request) {
 	defquota := strings.TrimSpace(q.Get("default_quota"))
 	
 	if rName == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Print("No resource name specified in http query.")
-		fmt.Fprintf(w, "{ \"error\": \"No resourcename specified.\" }")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No resourcename specified.\" }")
 		return
 	}
 	if rType == "null" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Print("'null' is an invalid resource type.")
-		fmt.Fprintf(w, "{ \"error\": \"Resource type of null is not allowed.\" }")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Resource type of null is not allowed.\" }")
 		return	
 	}
 	
@@ -1221,7 +1186,7 @@ func setStorageResourceInfo(w http.ResponseWriter, r *http.Request) {
 	authorized,authout := authorize(r,AuthorizedDNs)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"error\": \"" + authout + "not authorized.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
 		return
 	}
 	
@@ -1237,14 +1202,13 @@ func setStorageResourceInfo(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case err == sql.ErrNoRows:
 		// nothing returned from the select, so the resource does not exist.
-		w.WriteHeader(http.StatusNotFound)
 		log.WithFields(QueryFields(r, startTime)).Print("Storage resource with name " + rName + " not found in compute_resources table. Exiting.")
-		fmt.Fprintf(w, "{ \"error\": \"resource does not exist. Use createStorageResource to add a new resource.\" }")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"resource does not exist. Use createStorageResource to add a new resource.\" }")
 		return	
 	case err != nil:
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusNotFound)
 		log.WithFields(QueryFields(r, startTime)).Print("Error in DB query: " + err.Error())
-		fmt.Fprintf(w, "{ \"error\": \"Error in DB query.\" }")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return	
 	default:
 		
@@ -1271,7 +1235,7 @@ func setStorageResourceInfo(w http.ResponseWriter, r *http.Request) {
 				convquota,converr := strconv.ParseInt(defquota,10,64)
 				if converr != nil {
 					log.WithFields(QueryFields(r, startTime)).Error("Error converting default_quota to int: " + converr.Error())
-					fmt.Fprintf(w,"{ \"error\": \"Error converting default_quota to int. Check format.\" }")
+					fmt.Fprintf(w,"{ \"ferry_error\": \"Error converting default_quota to int. Check format.\" }")
 					return
 				}
 				nullquota.Int64 = convquota
@@ -1295,21 +1259,20 @@ func setStorageResourceInfo(w http.ResponseWriter, r *http.Request) {
 		cKey, err := DBtx.Start(DBptr)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w,"{ \"error\": \"Error starting database transaction.\" }")
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 			return
 		}
 		
 		_, commerr := DBtx.Exec(`update storage_resources set default_path=$1, default_quota=$2, last_updated=NOW(), default_unit=$3, type=$4 where name=$5`, nullpath, nullquota, nullunit, currentType, rName)
 		if commerr != nil {
-			w.WriteHeader(http.StatusInternalServerError)
+			w.WriteHeader(http.StatusNotFound)
 			log.WithFields(QueryFields(r, startTime)).Error("Error during DB update: " + commerr.Error())
-			fmt.Fprintf(w,"{ \"error\": \"Database error during update.\" }")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Database error during update.\" }")
 			return
 		} else {
 			// if no error, commit and all that
 			DBtx.Commit(cKey)
-			w.WriteHeader(http.StatusOK)
 			log.WithFields(QueryFields(r, startTime)).Info("Successfully updated " + rName + ".")
 			fmt.Fprintf(w,"{ \"status\": \"success.\" }")
 		}
@@ -1323,9 +1286,9 @@ func getAllCAs(w http.ResponseWriter, r *http.Request) {
 	
 	rows, err := DBptr.Query(`select distinct issuer_ca from user_certificates;`)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusNotFound)
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
-		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
 	defer rows.Close()
@@ -1341,7 +1304,7 @@ func getAllCAs(w http.ResponseWriter, r *http.Request) {
 	var output interface{}	
 	if len(Out) == 0 {
 		type jsonerror struct {
-			Error string `json:"error"`
+			Error string `json:"ferry_error"`
 		}
 		var queryErr []jsonerror
 		queryErr = append(queryErr, jsonerror{"Query returned no users."})

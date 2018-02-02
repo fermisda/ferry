@@ -21,15 +21,13 @@ func createGroup(w http.ResponseWriter, r *http.Request) {
 	var gid sql.NullString
 
 	if gName == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No groupname specified.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified.\" }")
 		return
 	}
 	if gType == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No grouptype specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No grouptype specified.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No grouptype specified.\" }")
 		return
 	}
 	if q.Get("gid") != "" {
@@ -39,13 +37,13 @@ func createGroup(w http.ResponseWriter, r *http.Request) {
 	authorized,authout := authorize(r,AuthorizedDNs)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"error\": \"" + authout + "not authorized.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
 		return
 	}
 
 	cKey, err := DBtx.Start(DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 
 	_, err = DBtx.Exec("insert into groups (gid, name, type, last_updated) values ($1, $2, $3, NOW())", gid, gName, gType)
@@ -56,13 +54,13 @@ func createGroup(w http.ResponseWriter, r *http.Request) {
 	} else {
 		if strings.Contains(err.Error(), `invalid input value for enum groups_group_type`) {
 			log.WithFields(QueryFields(r, startTime)).Error("Invalid grouptype specified in http query.")
-			fmt.Fprintf(w,"{ \"error\": \"Invalid grouptype specified in http query.\" }")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid grouptype specified in http query.\" }")
 		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint "idx_groups_gid"`) {
 			log.WithFields(QueryFields(r, startTime)).Error("GID already exists.")
-			fmt.Fprintf(w,"{ \"error\": \"GID already exists.\" }")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"GID already exists.\" }")
 		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint "idx_groups_group_name"`) {
 			log.WithFields(QueryFields(r, startTime)).Error("Group already exists.")
-			fmt.Fprintf(w,"{ \"error\": \"Group already exists.\" }")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Group already exists.\" }")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 		}
@@ -97,28 +95,25 @@ func addGroupToUnit(w http.ResponseWriter, r *http.Request) {
 		isPrimary,err := strconv.Atoi(isPrimarystr)
 		if err != nil || isPrimary > 1 || isPrimary < 0 {
 			log.WithFields(QueryFields(r, startTime)).Print("Invalid value of is_primary (must be 0 or 1).")
-			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprintf(w,"{ \"error\": \"Invalid value for is_primary (must be 0 or 1).\" }")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid value for is_primary (must be 0 or 1).\" }")
 			return
 		}
 	}
 	if groupname == "" {	
 		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified.")
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w,"{ \"error\": \"No groupname specified\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified\" }")
 		return
 	}
 	if unitName == "" {	
 		log.WithFields(QueryFields(r, startTime)).Print("No unitname specified.")
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w,"{ \"error\": \"No unitname specified\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No unitname specified\" }")
 		return
 	}
 
 	authorized,authout := authorize(r,AuthorizedDNs)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"error\": \"" + authout + "not authorized.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
 		return
 	}
 	//make sure that the requested group and unit exist; bail out if they don't
@@ -129,12 +124,12 @@ func addGroupToUnit(w http.ResponseWriter, r *http.Request) {
 	case checkerr == sql.ErrNoRows:
 		log.WithFields(QueryFields(r, startTime)).Print("Affiliation unit " + unitName + " does not exist.")
 	//	w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"error\": \"Affiliation unit " + unitName + " does not exist.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Affiliation unit " + unitName + " does not exist.\" }")
 		return
 	case checkerr != nil:
 		log.WithFields(QueryFields(r, startTime)).Print("Affiliation unit query error: " + checkerr.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	default:
 		grouperr := DBptr.QueryRow(`select groupid from groups where name=$1`,groupname).Scan(&groupId)
@@ -143,12 +138,12 @@ func addGroupToUnit(w http.ResponseWriter, r *http.Request) {
 		case grouperr == sql.ErrNoRows:
 			log.WithFields(QueryFields(r, startTime)).Print("Group " + groupname + " does not exist.")
 			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprintf(w,"{ \"error\": \"Group " + groupname + " does not exist.\" }")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Group " + groupname + " does not exist.\" }")
 			return
 		case grouperr != nil:
 			log.WithFields(QueryFields(r, startTime)).Print("Group query error: " + checkerr.Error())
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 			return
 		default:
 			// OK, both group and unit exist. Let's get down to business. Check if it's already in affiliation_unit_groups
@@ -157,8 +152,8 @@ func addGroupToUnit(w http.ResponseWriter, r *http.Request) {
 			cKey, err := DBtx.Start(DBptr)
 			if err != nil {
 				log.WithFields(QueryFields(r, startTime)).Print("Error starting DB transaction: " + err.Error())
-				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprintf(w,"{ \"error\": \"Error starting database transaction.\" }")
+				w.WriteHeader(http.StatusNotFound)
+				fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 				return
 			}
 			
@@ -167,8 +162,8 @@ insert into affiliation_unit_group (groupid, unitid, is_primary, last_updated) v
 			stmt, err := DBtx.tx.Prepare(addstr)
 			if err != nil {
 				log.WithFields(QueryFields(r, startTime)).Print("Error preparing DB command: " + err.Error())
-				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprintf(w,"{ \"error\": \"Error preparing database command.\" }")
+				w.WriteHeader(http.StatusNotFound)
+				fmt.Fprintf(w,"{ \"ferry_error\": \"Error preparing database command.\" }")
 //				DBtx.Rollback()
 				return
 			}
@@ -176,13 +171,12 @@ insert into affiliation_unit_group (groupid, unitid, is_primary, last_updated) v
 			_, err = stmt.Exec()
 			if err != nil {
 				if strings.Contains(err.Error(),`Group and unit combination already in DB`) {
-					w.WriteHeader(http.StatusBadRequest)
 					log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
-					fmt.Fprintf(w,"{ \"error\": \"Group already belongs to unit.\" }")
+					fmt.Fprintf(w,"{ \"ferry_error\": \"Group already belongs to unit.\" }")
 				} else {
-					w.WriteHeader(http.StatusInternalServerError)
+					w.WriteHeader(http.StatusNotFound)
 					log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
-					fmt.Fprintf(w,"{ \"error\": \"Error executing DB insert.\" }")		
+					fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB insert.\" }")		
 				}
 //				DBtx.Rollback()
 				return
@@ -214,29 +208,27 @@ func setPrimaryStatusGroup(w http.ResponseWriter, r *http.Request) {
 	unitName := q.Get("unitname")
 	if groupname == "" {	
 		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified.")
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w,"{ \"error\": \"No groupname specified\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified\" }")
 		return
 	}
 	if unitName == "" {	
 		log.WithFields(QueryFields(r, startTime)).Print("No unitname specified.")
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w,"{ \"error\": \"No unitname specified\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No unitname specified\" }")
 		return
 	}
 
 	authorized,authout := authorize(r,AuthorizedDNs)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"error\": \"" + authout + "not authorized.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
 		return
 	}
 	
 	cKey, err := DBtx.Start(DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Print("Error starting DB transaction: " + err.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w,"{ \"error\": \"Error starting database transaction.\" }")
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 		return
 	}
 	
@@ -248,25 +240,23 @@ update affiliation_unit_group set is_primary=1, last_updated=NOW() where groupid
 	stmt, err := DBtx.tx.Prepare(setstr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Print("Error preparing DB command: " + err.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w,"{ \"error\": \"Error preparing database command.\" }")
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error preparing database command.\" }")
 		return
 	}
 	//run said statement and check errors
 	_, err = stmt.Exec()
 	if err != nil {
 		if strings.Contains(err.Error(),`Group does not exist`) {
-			w.WriteHeader(http.StatusBadRequest)
 			log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
-			fmt.Fprintf(w,"{ \"error\": \"Group does not exist.\" }")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Group does not exist.\" }")
 		} else if strings.Contains(err.Error(),`Unit does not exist`) {
-			w.WriteHeader(http.StatusBadRequest)
 			log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
-			fmt.Fprintf(w,"{ \"error\": \"Unit does not exist.\" }")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Unit does not exist.\" }")
 		} else {
-			w.WriteHeader(http.StatusInternalServerError)
+			w.WriteHeader(http.StatusNotFound)
 			log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
-			fmt.Fprintf(w,"{ \"error\": \"Error executing DB insert.\" }")		
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB insert.\" }")		
 		}
 		return
 	} else {
@@ -299,9 +289,8 @@ func getGroupMembers(w http.ResponseWriter, r *http.Request) {
 	if gl != "" {
 		getl,glerr := strconv.ParseBool(gl)	
 		if glerr != nil {
-			w.WriteHeader(http.StatusBadRequest)
 			log.WithFields(QueryFields(r, startTime)).Print("Invalid value of return_leaders: " + gl + ". Must be true or false.")
-			fmt.Fprintf(w,"{ \"error\": \"Invalid value for return_leaders. Must be true or false\" }")		
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid value for return_leaders. Must be true or false\" }")		
 			return
 		} else {
 			getLeaders = getl
@@ -324,21 +313,21 @@ func getGroupMembers(w http.ResponseWriter, r *http.Request) {
 	case err == sql.ErrNoRows:
 		log.WithFields(QueryFields(r, startTime)).Print("Group " + groupname + " does not exist.")
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"error\": \"Group " + groupname + " does not exist.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Group " + groupname + " does not exist.\" }")
 		return	
 		
 	case err != nil:
 		log.WithFields(QueryFields(r, startTime)).Print("Group ID query error: " + err.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 		
 	default:
 		rows, err := DBptr.Query(`select users.uname, users.uid, user_group.is_leader from user_group join users on users.uid=user_group.uid where user_group.groupid=$1`,grpid)
 		if err != nil {	
 			log.WithFields(QueryFields(r, startTime)).Print("Database query error: " + err.Error())
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")		
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")		
 			return
 		}
 		
@@ -356,7 +345,7 @@ func getGroupMembers(w http.ResponseWriter, r *http.Request) {
 		var output interface{}
 		if len(Out) == 0 {
 			type jsonerror struct {
-				Error string `json:"error"`
+				Error string `json:"ferry_error"`
 			}
 			var queryErr []jsonerror
 			queryErr = append(queryErr, jsonerror{"This group has no members."})
@@ -383,14 +372,12 @@ func IsUserLeaderOf(w http.ResponseWriter, r *http.Request) {
 	
 	if groupname == "" {	
 		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified.")
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w,"{ \"error\": \"No groupname specified\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified\" }")
 		return
 	}
 	if uName == "" {	
 		log.WithFields(QueryFields(r, startTime)).Print("No username specified.")
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w,"{ \"error\": \"No username specified\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No username specified\" }")
 		return
 	}
 	var groupId, uId int
@@ -398,13 +385,12 @@ func IsUserLeaderOf(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case grouperr == sql.ErrNoRows:
 		log.WithFields(QueryFields(r, startTime)).Print("Group " + groupname + " does not exist.")
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w,"{ \"error\": \"Group " + groupname + " does not exist.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Group " + groupname + " does not exist.\" }")
 		return
 	case grouperr != nil:
 		log.WithFields(QueryFields(r, startTime)).Print("Group ID query error: " + grouperr.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	default:
 		// group is good, now make sure the user exists
@@ -412,13 +398,12 @@ func IsUserLeaderOf(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case usererr == sql.ErrNoRows:
 			log.WithFields(QueryFields(r, startTime)).Print("User " + uName + " does not exist.")
-			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprintf(w,"{ \"error\": \"User " + uName + " does not exist.\" }")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"User " + uName + " does not exist.\" }")
 			return
 		case usererr != nil:
 			log.WithFields(QueryFields(r, startTime)).Print("User ID query error: " + usererr.Error())
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 			return
 		default:
 			var isLeader bool
@@ -428,12 +413,12 @@ func IsUserLeaderOf(w http.ResponseWriter, r *http.Request) {
 			case checkerr == sql.ErrNoRows:
 				log.WithFields(QueryFields(r, startTime)).Print("User " + uName + " not a member of "+ groupname)
 				w.WriteHeader(http.StatusNotFound)
-				fmt.Fprintf(w,"{ \"error\": \"User is not a member of this group.\" }")
+				fmt.Fprintf(w,"{ \"ferry_error\": \"User is not a member of this group.\" }")
 				return
 			case checkerr != nil:
 				log.WithFields(QueryFields(r, startTime)).Print("Group leader query error: " + checkerr.Error())
-				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+				w.WriteHeader(http.StatusNotFound)
+				fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 				return	
 			default:
 				w.WriteHeader(http.StatusOK)
@@ -453,14 +438,12 @@ func setGroupLeader(w http.ResponseWriter, r *http.Request) {
 	
 	if groupname == "" {	
 		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified.")
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w,"{ \"error\": \"No groupname specified\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified\" }")
 		return
 	}
 	if uName == "" {	
 		log.WithFields(QueryFields(r, startTime)).Print("No username specified.")
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w,"{ \"error\": \"No username specified\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No username specified\" }")
 		return
 	}
 
@@ -468,15 +451,15 @@ func setGroupLeader(w http.ResponseWriter, r *http.Request) {
 	authorized,authout := authorize(r,AuthorizedDNs)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"error\": \"" + authout + "not authorized.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
 		return
 	}
 	
 	cKey, err := DBtx.Start(DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Print("Error starting DB transaction: " + err.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w,"{ \"error\": \"Error starting database transaction.\" }")
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 		return
 	}
 	
@@ -485,13 +468,12 @@ func setGroupLeader(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case grouperr == sql.ErrNoRows:
 		log.WithFields(QueryFields(r, startTime)).Print("Group " + groupname + " does not exist.")
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w,"{ \"error\": \"Group " + groupname + " does not exist.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Group " + groupname + " does not exist.\" }")
 		return
 	case grouperr != nil:
 		log.WithFields(QueryFields(r, startTime)).Print("Group ID query error: " + grouperr.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	default:
 		// group is good, now make sure the user exists
@@ -499,34 +481,32 @@ func setGroupLeader(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case usererr == sql.ErrNoRows:
 			log.WithFields(QueryFields(r, startTime)).Print("User " + uName + " does not exist.")
-			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprintf(w,"{ \"error\": \"User " + uName + " does not exist.\" }")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"User " + uName + " does not exist.\" }")
 			return
 		case usererr != nil:
 			log.WithFields(QueryFields(r, startTime)).Print("User ID query error: " + usererr.Error())
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 			return
 		default:
 			setstr := fmt.Sprintf(`do $$ begin if exists (select uid,groupid from user_group where groupid=%d and uid=%d) then update user_group set is_leader=true, last_updated=NOW() where groupid=%d and uid=%d; else raise 'User is not a member of this group.'; end if ; end $$;`, groupId, uId, groupId, uId)
 			stmt, err := DBtx.tx.Prepare(setstr)
 			if err != nil {
 				log.WithFields(QueryFields(r, startTime)).Print("Error preparing DB command: " + err.Error())
-				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprintf(w,"{ \"error\": \"Error preparing database command.\" }")
+				w.WriteHeader(http.StatusNotFound)
+				fmt.Fprintf(w,"{ \"ferry_error\": \"Error preparing database command.\" }")
 				return
 			}
 			//run said statement and check errors
 			_, err = stmt.Exec()
 			if err != nil {
 				if strings.Contains(err.Error(),`User is not a member of this group`) {
-					w.WriteHeader(http.StatusBadRequest)
 					log.WithFields(QueryFields(r, startTime)).Print("User " + uName + " is not a member of " + groupname + ".")
-					fmt.Fprintf(w,"{ \"error\": \"User not a member of group.\" }")
+					fmt.Fprintf(w,"{ \"ferry_error\": \"User not a member of group.\" }")
 				} else {
-					w.WriteHeader(http.StatusInternalServerError)
+					w.WriteHeader(http.StatusNotFound)
 					log.WithFields(QueryFields(r, startTime)).Print("Error setting " + uName + " leader of " + groupname + ": " + err.Error())
-					fmt.Fprintf(w,"{ \"error\": \"Error executing DB update.\" }")		
+					fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB update.\" }")		
 				}
 				return
 			} else {
@@ -555,7 +535,7 @@ func getGroupUnits(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
 	type jsonerror struct {
-		Error string `json:"error"`
+		Error string `json:"ferry_error"`
 	}
 	var inputErr []jsonerror
 
@@ -563,14 +543,12 @@ func getGroupUnits(w http.ResponseWriter, r *http.Request) {
 	expOnly := false
 
 	if group == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No group name specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No group name specified."})
 	}
 	if q.Get("experimentsonly") != "" {
 		var err error
 		if expOnly, err = strconv.ParseBool(q.Get("experimentsonly")); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
 			log.WithFields(QueryFields(r, startTime)).Error("Invalid experimentsonly specified in http query.")
 			inputErr = append(inputErr, jsonerror{"Invalid experimentsonly specified."})
 		}
@@ -579,7 +557,7 @@ func getGroupUnits(w http.ResponseWriter, r *http.Request) {
 	if len(inputErr) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Fatal(err)
+			log.WithFields(QueryFields(r, startTime)).Error(err)
 		}
 		fmt.Fprintf(w, string(jsonout))
 		return
@@ -595,9 +573,9 @@ func getGroupUnits(w http.ResponseWriter, r *http.Request) {
 								select 1 as key, $1 in (select name from groups) as group_exists
 							) as c on t.key = c.key;`, group, expOnly)
 	if err != nil {	
-		defer log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}	
 	defer rows.Close()
@@ -644,7 +622,7 @@ func getGroupUnits(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
@@ -657,23 +635,21 @@ func getGroupBatchPriorities(w http.ResponseWriter, r *http.Request) {
 	rName := strings.TrimSpace(q.Get("resourcename"))
 //	expName := strings.TrimSpace(q.Get("experimentname"))
 	if groupname == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No groupname specified.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified.\" }")
 		return
 	}
 	if rName == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No resource name specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No resourcename specified.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No resourcename specified.\" }")
 		return
 	}	
 	
 	rows, err := DBptr.Query(`select groups.name, cb.value, cb.valid_until from compute_batch as cb join compute_resources as cr on cb.compid=cr.compid join groups on groups.groupid=cb.groupid where cb.type='priority' and cr.name=$1 `,rName)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusNotFound)
 		log.WithFields(QueryFields(r, startTime)).Error("No resource name specified in DB query: " + err.Error())
-		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
 	defer rows.Close()
@@ -700,7 +676,7 @@ func getGroupBatchPriorities(w http.ResponseWriter, r *http.Request) {
 	var output interface{}	
 	if len(Out) == 0 {
 		type jsonerror struct {
-			Error string `json:"error"`
+			Error string `json:"ferry_error"`
 		}
 		var queryErr []jsonerror
 		queryErr = append(queryErr, jsonerror{"Query returned no groups."})
@@ -749,26 +725,23 @@ func setGroupCondorQuota(w http.ResponseWriter, r *http.Request) {
 	authorized,authout := authorize(r,AuthorizedDNs)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"error\": \"" + authout + "not authorized.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
 		return
 	}
 
 	if group == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No groupname specified.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified.\" }")
 		return
 	}
 	if comp == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No resourcename specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No resourcename specified.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No resourcename specified.\" }")
 		return
 	}
 	if quota == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No quota specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No quota specified.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No quota specified.\" }")
 		return
 	}
 	if until == "" {
@@ -788,7 +761,7 @@ func setGroupCondorQuota(w http.ResponseWriter, r *http.Request) {
 
 	cKey, err := DBtx.Start(DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 
 	_, err = DBtx.Exec(fmt.Sprintf(`do $$
@@ -821,20 +794,19 @@ func setGroupCondorQuota(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w,"{ \"status\": \"success\" }")
 	} else {
-		w.WriteHeader(http.StatusInternalServerError)
 		if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
 			log.WithFields(QueryFields(r, startTime)).Error("This quota already exists.")
-			fmt.Fprintf(w,"{ \"error\": \"This quota already exists.\" }")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"This quota already exists.\" }")
 		} else if strings.Contains(err.Error(), `null value in column "compid"`) {
 			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
-			fmt.Fprintf(w,"{ \"error\": \"Resource does not exist.\" }")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Resource does not exist.\" }")
 		} else if strings.Contains(err.Error(), `invalid input syntax for type date`) ||
 				  strings.Contains(err.Error(), `date/time field value out of range`) {
 			log.WithFields(QueryFields(r, startTime)).Error("Invalid expiration date.")
-			fmt.Fprintf(w,"{ \"error\": \"Invalid expiration date.\" }")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid expiration date.\" }")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			fmt.Fprintf(w,"{ \"error\": \"Something went wrong.\" }")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Something went wrong.\" }")
 		}
 	}
 
@@ -848,21 +820,18 @@ func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 	resource := q.Get("resourcename")
 	exptname := q.Get("experimentname")
 	if groupname == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No group name specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No group name specified.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No group name specified.\" }")
 		return
 	}
 	if resource == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No storage resource specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No storage resource specified.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No storage resource specified.\" }")
 		return
 	}
 	if exptname == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No experiment specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No experiment name specified.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No experiment name specified.\" }")
 		return
 	}
 
@@ -870,7 +839,7 @@ func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 	if err != nil {	
 		defer log.WithFields(QueryFields(r, startTime)).Print("Error in DB query: " + err.Error())
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		
 		return
 	}
@@ -894,7 +863,7 @@ func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 			Out.Value, Out.Unit, Out.ValidUntil = tmpValue.String, tmpUnit.String, tmpValid.String
 			outline, jsonerr := json.Marshal(Out)
 			if jsonerr != nil {
-				log.WithFields(QueryFields(r, startTime)).Fatal(jsonerr)
+				log.WithFields(QueryFields(r, startTime)).Error(jsonerr)
 			}
 			output += string(outline)
 			idx ++
@@ -902,7 +871,7 @@ func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 		}
 	if idx == 0 {
 		w.WriteHeader(http.StatusNotFound)
-		output += `"error": "Group has no quotas registered."`
+		output += `"ferry_error": "Group has no quotas registered."`
 		log.WithFields(QueryFields(r, startTime)).Error("Group has no quotas registered.")
 	} else {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
@@ -917,7 +886,7 @@ func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
 	authorized,authout := authorize(r,AuthorizedDNs)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"error\": \"" + authout + "not authorized.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
 		return
 	}
 
@@ -930,27 +899,23 @@ func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
 	unit := q.Get("unit")
 
 	if gName == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No group name specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No group name specified.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No group name specified.\" }")
 		return
 	}
 	if rName == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No storage resource specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No storage resource specified.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No storage resource specified.\" }")
 		return
 	}
 	if unitName == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No experiment specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No experiment name specified.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No experiment name specified.\" }")
 		return
 	}	
 	if groupquota == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No quota value specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No quota specified.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No quota specified.\" }")
 		return
 	}
 	if validtime == "" {
@@ -959,14 +924,13 @@ func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
 		validtime = "valid_until = " + validtime + ", "
 	}
 	if unit == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No quita unit specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No unit specified.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No unit specified.\" }")
 		return
 	}
 	cKey, err := DBtx.Start(DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Fatal(err)
+		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 
 
@@ -990,16 +954,15 @@ func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w,"{ \"status\": \"success\" }")
 	} else {
-		w.WriteHeader(http.StatusInternalServerError)
 		if strings.Contains(err.Error(), `Group does not exist.`) {
 			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
-			fmt.Fprintf(w,"{ \"error\": \"Group does not exist.\" }")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Group does not exist.\" }")
 		} else if strings.Contains(err.Error(), `Resource does not exist.`) {
 			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
-			fmt.Fprintf(w,"{ \"error\": \"Resource does not exist.\" }")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Resource does not exist.\" }")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			fmt.Fprintf(w,"{ \"error\": \"Something went wrong.\" }")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Something went wrong.\" }")
 		}
 	}
 
@@ -1023,15 +986,13 @@ func setGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
 	rName := q.Get("resourcename")
 	gName := q.Get("groupname")
 	if gName == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No value for groupname specified.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No value for groupname specified.\" }")
 		return
 	}
 	if rName == "" {
-		w.WriteHeader(http.StatusBadRequest)
 		log.WithFields(QueryFields(r, startTime)).Error("No compute resource specified in http query.")
-		fmt.Fprintf(w,"{ \"error\": \"No value for resourcename specified.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No value for resourcename specified.\" }")
 		return
 	}
 	shell := q.Get("default_shell")
@@ -1043,7 +1004,7 @@ func setGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
 	authorized,authout := authorize(r,AuthorizedDNs)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"error\": \"" + authout + "not authorized.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
 		return
 	}
 	
@@ -1061,12 +1022,11 @@ func setGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
 	case err == sql.ErrNoRows:
 		log.WithFields(QueryFields(r, startTime)).Print("Compute resource " + rName + " does not exist.")
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"error\": \"Compute resource " + rName + " does not exist.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Compute resource " + rName + " does not exist.\" }")
 		return
 	case err != nil:
 		log.WithFields(QueryFields(r, startTime)).Print("Error in compute resource DB query: "+err.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w,"{ \"error\": \"Compute resource DB query error.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Compute resource DB query error.\" }")
 		return
 		
 	default:
@@ -1095,16 +1055,15 @@ func setGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
 		cKey, terr := DBtx.Start(DBptr)
 		if terr != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + terr.Error())
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w,"{ \"error\": \"Error starting database transaction.\" }")
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 			return
 		}
 		
 		_, inserr := DBtx.Exec(`insert into compute_access (compid, groupid, last_updated, shell, home_dir) values ($1,$2,NOW(),$3,$4)`, compid, gid, nullshell, nullhomedir)
 		if inserr != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error in database insert: " + inserr.Error())
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w,"{ \"error\": \"Error in database insertion.\" }")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in database insertion.\" }")
 			return
 		} else {
 			err = DBtx.Commit(cKey)
@@ -1115,8 +1074,8 @@ func setGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
 		}
 	case err != nil:
 		log.WithFields(QueryFields(r, startTime)).Error("Error checking database: " + err.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w,"{ \"error\": \"Error querying database.\" }")
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error querying database.\" }")
 		return
 		
 	default:
@@ -1127,8 +1086,8 @@ func setGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
 		cKey, err := DBtx.Start(DBptr)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w,"{ \"error\": \"Error starting database transaction.\" }")
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 			return
 		}
 		
@@ -1136,8 +1095,8 @@ func setGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
 		_, moderr := DBtx.Exec(execstmt,nullshell, nullhomedir, compid, gid)
 		if moderr != nil {
 			log.WithFields(QueryFields(r, startTime)).Print("Error from Update: " + moderr.Error())
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w,"{ \"error\": \"Error in database transaction.\" }")
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in database transaction.\" }")
 			return	
 			
 		} else {
@@ -1161,9 +1120,9 @@ func getAllGroups(w http.ResponseWriter, r *http.Request) {
 	
 	rows, err := DBptr.Query(`select name, groupid from groups`)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusNotFound)
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
-		fmt.Fprintf(w,"{ \"error\": \"Error in DB query.\" }")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
 	defer rows.Close()
@@ -1184,7 +1143,7 @@ func getAllGroups(w http.ResponseWriter, r *http.Request) {
 	var output interface{}	
 	if len(Out) == 0 {
 		type jsonerror struct {
-			Error string `json:"error"`
+			Error string `json:"ferry_error"`
 		}
 		var queryErr []jsonerror
 		queryErr = append(queryErr, jsonerror{"Query returned no groups."})
