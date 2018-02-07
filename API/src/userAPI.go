@@ -523,7 +523,6 @@ func getUserInfo(w http.ResponseWriter, r *http.Request) {
 			idx += 1
 		}
 		if idx == 0 {
-			w.WriteHeader(http.StatusNotFound)
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 			fmt.Fprintf(w, `{ "ferry_error": "User does not exist." }`)
 		} else {
