@@ -58,7 +58,7 @@ def read_gid(fname):
             groupids[tmp[1].strip().lower()] = tmp[0].strip()
 
         except:
-            print("Faoiled reading group.lis (%s) file. Failed: " % (fname, line), file=sys.stderr)
+            print("Failed reading group.lis (%s) file. Failed: %s" % (fname, line), file=sys.stderr)
     return groupids
 
 
@@ -254,7 +254,7 @@ def assign_vos(config, vn, vurl, rls, usrs, gums_map, collaborations):
                 else:
                     role = None
 
-                for key, umap in gums_map.items():
+                for _, umap in gums_map.items():
 
                     if "/%s" % (subgroup,) == umap.group and role == umap.role:
                         if not umap.uname:
@@ -432,7 +432,7 @@ def read_vulcan_certificates(config, users, vomss):
             CA = ca.matchCA(CAs, row["auth_string"])
             if CA:
                 users[row["uname"]].add_cert(Certificate(len(vomss), row["auth_string"], CA["subjectdn"]))
-                cernUser = re.findall("/DC=ch/DC=cern/OU=Organic Units/OU=Users/CN=(\w*)/CN=\d+/CN=[A-z\s]+", row["auth_string"])
+                cernUser = re.findall(r"/DC=ch/DC=cern/OU=Organic Units/OU=Users/CN=(\w*)/CN=\d+/CN=[A-z\s]+", row["auth_string"])
                 if len(cernUser) > 0:
                     users[row["uname"]].add_external_affiliation("cern", cernUser[0])
 
@@ -570,7 +570,7 @@ def read_nis(dir_path, exclude_list, altnames, users, groups):
 
             user_list = tmp[3].split(",")
             if gid not in groups.values():
-                print("Domain: %s group %s from group filedoesn\'t exist  in userdb!" % \
+                print("Domain: %s group %s from group file doesn\'t exist  in userdb!" % \
                                      (dir,gid,), file=sys.stderr)
                 continue
             if gname not in groups.keys():
@@ -578,7 +578,7 @@ def read_nis(dir_path, exclude_list, altnames, users, groups):
                                      (dir,gname,gid), file=sys.stderr)
                 continue
             if gid != groups[gname]:
-                print("Domain: %s group %s from group file %s have different gid in userdb!" % \
+                print("Domain: %s group %s, %s from group file have different gid (%s) in userdb!" % \
                                      (dir,gname,gid,groups[gname]), file=sys.stderr)
                 continue
             for uname in user_list:
@@ -724,7 +724,7 @@ def read_vulcan_storage_resources(config, users, groups, cms_groups):
                 uquota = True
                 for row in rows:
                     # matches lines like: "user_or_group         0   100G   120G  00 [------]"
-                    if re.match("[a-z\d_]+(\s+(0|\d+(\.\d+)?[BKMGTE])){3}\s+\d{2}\s+(\[(-+|\d\sdays?|-none-)\]|\d{1,2}(:\d{1,2}){2})", row):
+                    if re.match(r"[a-z\d_]+(\s+(0|\d+(\.\d+)?[BKMGTE])){3}\s+\d{2}\s+(\[(-+|\d\sdays?|-none-)\]|\d{1,2}(:\d{1,2}){2})", row):
                         row = row.split()
                         if row[2] != '0':
                             quota = row[2][0:-1]
@@ -770,9 +770,9 @@ def read_nas_storage(config):
     nas_structure = []
     for server in servers:
         for line in open(servers[server], "r").readlines():
-            if re.match("#+\sExport\sname:\s(.+)", line):
-                volume = re.findall("#+\sExport\sname:\s(.+)", line)[0]
-            host_access = re.findall("(.+)\((.+)\)", line)
+            if re.match(r"#+\sExport\sname:\s(.+)", line):
+                volume = re.findall(r"#+\sExport\sname:\s(.+)", line)[0]
+            host_access = re.findall(r"(.+)\((.+)\)", line)
             if host_access:
                 nas_structure.append(NasStorage(server, volume, host_access[0][1], host_access[0][0]))
     
@@ -792,16 +792,16 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
     Returns:
 
     """
-    mysql_client_cfg = MySQLUtils.createClientConfig("main_db", config)
-    connect_str = MySQLUtils.getDbConnection("main_db", mysql_client_cfg, config)
+    #mysql_client_cfg = MySQLUtils.createClientConfig("main_db", config)
+    #connect_str = MySQLUtils.getDbConnection("main_db", mysql_client_cfg, config)
 
     # rebuild database and schema
     fd = open(config._sections["path"]["output"], "w")
-    fd.write("\connect ferry_test\n")
+    fd.write("\\connect ferry_test\n")
     fd.write("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'ferry';\n")
     fd.write("DROP DATABASE ferry;\n")
     fd.write("CREATE DATABASE ferry OWNER ferry;\n")
-    fd.write("\connect ferry\n")
+    fd.write("\\connect ferry\n")
     fd.write("GRANT ALL ON SCHEMA public TO ferry;\n")
     fd.write("GRANT ALL ON SCHEMA public TO public;\n")
     for line in open(config._sections["main_db"]["schemadump"]):
@@ -809,7 +809,7 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
     fd.flush()
 
     # populate users table
-    command = ""
+    #command = ""
     for user in users.values():
         #if user.uname!='kherner':
         #    continue
@@ -886,7 +886,7 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
                  " values (\'%s\',\'%s\',\'%s\',\'%s\',\'%s\',%s,NOW());\n" % (nis_counter, nis_info.cresource,
                                                                          nis_info.cshell,nis_info.chome,nis_info.ctype,cu.unitid))
 
-        for uname, user in nis_info.users.items():
+        for _, user in nis_info.users.items():
             comp = user.compute_access[nis_info.cresource]
             groupid = gid_map[comp.gid]
             fd.write("insert into compute_access (compid, uid, groupid,shell,home_dir,last_updated)" + \
@@ -917,7 +917,7 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
     # GUMS darksidepro {'group': '/fermilab/darkside', 'server': 'fermilab', 'uname': 'darksidepro', 'gid': '9985', 'role': 'Production', 'user_group': 'darksidepro', 'account_mappers': 'darksidepro'}
     # experiment_fqan(fqanid, fqan, mapped_user,mapped_group);
     fqan_counter = 0
-    for key, gmap in gums.items():
+    for _, gmap in gums.items():
         fqan_counter += 1
         gname = list(gids.keys())[list(gids.values()).index(gmap.gid)]
         #and gmap.uname in users.keys()
@@ -936,7 +936,7 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
         if not isinstance(cu,VOMS):
             continue
 
-        for uname, user in users.items():
+        for _, user in users.items():
             #if uname!='kherner':
             #    continue
             if user.vo_membership.__contains__((cu.name, cu.url)):
@@ -950,7 +950,7 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
                              (int(user.uid),cu.unitid, fqanid ))
 
                 fd.flush()
-    for uname, user in users.items():
+    for _, user in users.items():
         #if uname!='kherner':
         #    continue
         for gid in user.groups:
@@ -967,7 +967,7 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
                          "values (%d,\'%s\',NOW());\n" % (experiment, dn))
 
     # populating external_affiliation_attribute
-    for uname, user in users.items():
+    for _, user in users.items():
         for external_affiliation in user.external_affiliations:
             fd.write("insert into external_affiliation_attribute (uid,attribute,value,last_updated) values (%d,\'%s\',"
                      "\'%s\',NOW());\n" % (int(user.uid), external_affiliation[0], external_affiliation[1]))
