@@ -680,6 +680,8 @@ func getAffiliationMembersRoles(w http.ResponseWriter, r *http.Request) {
 	}
 	if role == "" {
 		role = "%"
+	} else {
+		role = "%" + role + "%"
 	}
 
 	rows, err := DBptr.Query(`select t.name, t.fqan, t.uname, t.full_name, unit_exists, fqan_exists from (
@@ -724,18 +726,18 @@ func getAffiliationMembersRoles(w http.ResponseWriter, r *http.Request) {
 
 	var output interface{}
 	if len(Out) == 0 {
-		type jsonerror struct {Error string `json:"ferry_error"`}
-		var Err []jsonerror
+		type jsonerror struct {Error []string `json:"ferry_error"`}
+		var Err jsonerror
 		if !unitExists {
-			Err = append(Err, jsonerror{"Experiment does not exist."})
+			Err.Error = append(Err.Error, "Experiment does not exist.")
 			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
 		}
 		if !roleExists {
-			Err = append(Err, jsonerror{"Role does not exist."})
+			Err.Error = append(Err.Error, "Role does not exist.")
 			log.WithFields(QueryFields(r, startTime)).Error("Role does not exist.")
 		}
-		if len(Err) == 0 {
-			Err = append(Err, jsonerror{"No roles were found"})
+		if len(Err.Error) == 0 {
+			Err.Error = append(Err.Error, "No roles were found")
 			log.WithFields(QueryFields(r, startTime)).Error("No roles were found")
 		}
 		output = Err
