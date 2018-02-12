@@ -24,8 +24,8 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 	unit := q.Get("unitname")
 	comp := q.Get("resourcename")
 
-	rows, err := DBptr.Query(`select aname, rname, uname, uid, gid, full_name, home_dir, shell, unit_exists, comp_exists from (
-								select 1 as key, au.name as aname, u.uname, u.uid, g.gid, u.full_name, ca.home_dir, ca.shell, cr.name as rname
+	rows, err := DBptr.Query(`select aname, rname, uname, uid, gid, full_name, home_dir, shell, unit_exists, comp_exists, last_updated from (
+								select 1 as key, au.name as aname, u.uname, u.uid, g.gid, u.full_name, ca.home_dir, ca.shell, cr.name as rname, ca.last_updated as last_updated
 								from users as u 
 								left join compute_access as ca on u.uid = ca.uid
 								left join groups as g on ca.groupid = g.groupid
@@ -64,16 +64,17 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 	type jsonunit struct {
 		Aname string `json:"unitname"`
 		Resources []jsonresource `json:"resources"`
+		Lasttime int64 `json:"last_updated"`
 	}
 	var Out []jsonunit
 
 	for rows.Next() {
-		var tmpAname, tmpRname, tmpUname, tmpUid, tmpGid, tmpGecos, tmpHdir, tmpShell sql.NullString
-		rows.Scan(&tmpAname, &tmpRname, &tmpUname, &tmpUid, &tmpGid, &tmpGecos, &tmpHdir, &tmpShell, &unitExists, &compExists)
+		var tmpAname, tmpRname, tmpUname, tmpUid, tmpGid, tmpGecos, tmpHdir, tmpShell,tmpTime sql.NullString
+		rows.Scan(&tmpAname, &tmpRname, &tmpUname, &tmpUid, &tmpGid, &tmpGecos, &tmpHdir, &tmpShell, &unitExists, &compExists, &tmpTime)
 
 		if tmpRname.Valid {
 			if len(Out) == 0 || Out[len(Out) - 1].Aname != tmpAname.String {
-				Out = append(Out, jsonunit{tmpAname.String, make([]jsonresource, 0)})
+				Out = append(Out, jsonunit{tmpAname.String, make([]jsonresource, 0), 0})
 			}
 			Res := &Out[len(Out) - 1].Resources
 			if len(*Res) == 0 || (*Res)[len(*Res) - 1].Rname != tmpRname.String {
@@ -81,9 +82,25 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 			}
 			Usr := &(*Res)[len(*Res) - 1].Users
 			*Usr = append(*Usr, jsonuser{tmpUname.String, tmpUid.String, tmpGid.String, tmpGecos.String, tmpHdir.String, tmpShell.String})
+
+			if tmpTime.Valid {
+				log.WithFields(QueryFields(r, startTime)).Println("tmpTime is valid" + tmpTime.String)
+				
+				parseTime,parserr := time.Parse(time.RFC3339,tmpTime.String)
+				lasttime := &Out[len(Out) - 1].Lasttime
+				if parserr != nil {
+					log.WithFields(QueryFields(r, startTime)).Error("Error parsing last updated time of " + tmpTime.String)
+				} else {
+					if *lasttime == 0  || ( parseTime.Unix() > *lasttime) {
+						*lasttime = parseTime.Unix()
+					}
+				}
+			} else {
+				log.WithFields(QueryFields(r, startTime)).Println("tmpTime is not valid")
+			}
 		}
 	}
-
+	
 	var output interface{}
 	if len(Out) == 0 {
 		type jsonerror struct {Error string `json:"ferry_error"`}
@@ -128,8 +145,8 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 		comp = "%"
 	}
 
-	rows, err := DBptr.Query(`select gname, groupid, uname, unit_exists, comp_exists from (
-								select 1 as key, g.name as gname, ca.groupid, u.uname
+	rows, err := DBptr.Query(`select gname, groupid, uname, unit_exists, comp_exists, last_updated from (
+								select 1 as key, g.name as gname, ca.groupid, u.uname, ca.last_updated
 								from compute_access as ca
 								left join groups as g on ca.groupid = g.groupid
 								left join users as u on ca.uid = u.uid
@@ -156,6 +173,7 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 	type jsonentry struct {
 		Gname string `json:"groupname"`
 		Gid string `json:"gid"`
+		Lasttime int64 `json:"last_updated"`
 		Unames []string `json:"unames"`
 	}
 	var Entry jsonentry
@@ -163,8 +181,8 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 
 	prevGname := ""
 	for rows.Next() {
-		var tmpGname, tmpGid, tmpUname sql.NullString
-		rows.Scan(&tmpGname, &tmpGid, &tmpUname, &unitExists, &compExists)
+		var tmpGname, tmpGid, tmpUname, tmpTime sql.NullString
+		rows.Scan(&tmpGname, &tmpGid, &tmpUname, &unitExists, &compExists, &tmpTime)
 
 		if tmpGname.Valid {
 			if prevGname == "" {
@@ -181,10 +199,25 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 				Entry.Unames = append(Entry.Unames, tmpUname.String)
 			}
 			prevGname = tmpGname.String
+			if tmpTime.Valid {
+				log.WithFields(QueryFields(r, startTime)).Println("tmpTime is valid" + tmpTime.String)
+				
+				parseTime,parserr := time.Parse(time.RFC3339,tmpTime.String)
+				lasttime := &Entry.Lasttime
+				if parserr != nil {
+					log.WithFields(QueryFields(r, startTime)).Error("Error parsing last updated time of " + tmpTime.String)
+				} else {
+					if *lasttime == 0  || ( parseTime.Unix() > *lasttime) {
+						*lasttime = parseTime.Unix()
+					}
+				}
+			} else {
+				log.WithFields(QueryFields(r, startTime)).Println("tmpTime is not valid")
+			}
 		}
 	}
 	Out = append(Out, Entry)
-
+	
 	var output interface{}
 	if prevGname == "" {
 		type jsonerror struct {Error string `json:"ferry_error"`}
