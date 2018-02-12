@@ -644,7 +644,7 @@ func getStorageAuthzDBFile(w http.ResponseWriter, r *http.Request) {
 		Gid []string `json:"gid"`
 		Home string `json:"home"`
 		Root string `json:"root"`
-		LastPath string `json:"last_path"`
+		FsPath string `json:"fs_path"`
 	}
 	var Entry jsonentry
 	var Out []jsonentry
@@ -662,8 +662,8 @@ func getStorageAuthzDBFile(w http.ResponseWriter, r *http.Request) {
 				Entry.Uid = tmpUid.String
 				Entry.Gid = append(Entry.Gid, tmpGid.String)
 				Entry.Home = "/"
-				Entry.Root = "pnfs/fnal.gov/usr"
-				Entry.LastPath = "/"
+				Entry.Root = "/pnfs/fnal.gov/usr"
+				Entry.FsPath = "/"
 			} else if prevUser != tmpUser.String {
 				Out = append(Out, Entry)
 				Entry.Decision = "authorize"
@@ -673,8 +673,8 @@ func getStorageAuthzDBFile(w http.ResponseWriter, r *http.Request) {
 				Entry.Gid = nil
 				Entry.Gid = append(Entry.Gid, tmpGid.String)
 				Entry.Home = "/"
-				Entry.Root = "pnfs/fnal.gov/usr"
-				Entry.LastPath = "/"
+				Entry.Root = "/pnfs/fnal.gov/usr"
+				Entry.FsPath = "/"
 			} else {
 				Entry.Gid = append(Entry.Gid, tmpGid.String)
 			}
