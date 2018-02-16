@@ -563,12 +563,13 @@ func getGroupUnits(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := DBptr.Query(`select name, type, voms_url, alternative_name, group_exists from (
-								select 1 as key, au.* from
+	rows, err := DBptr.Query(`select name, type, url, alternative_name, group_exists from (
+								select 1 as key, au.*, vu.url from
 									affiliation_unit_group as ag left join
 									groups as g on ag.groupid = g.groupid left join
-									affiliation_units as au on ag.unitid = au.unitid
-								where g.name = $1 and ((voms_url is not null = $2) or not $2)
+									affiliation_units as au on ag.unitid = au.unitid left join
+									voms_url as vu on au.unitid = vu.unitid
+								where g.name = $1 and ((url is not null = $2) or not $2)
 							) as t right join (
 								select 1 as key, $1 in (select name from groups) as group_exists
 							) as c on t.key = c.key;`, group, expOnly)

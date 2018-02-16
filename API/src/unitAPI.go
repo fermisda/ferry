@@ -21,9 +21,11 @@ func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 	unitType := q.Get("type") 
 //only the unit name is actually required; the others can be empty
 	if unitName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No experiment specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No experiment name specified.\" }")
 		return
+	} else {
+		unitName = "'" + unitName + "'"
 	}
 	if voms_url == "" {
 		voms_url = "NULL"
@@ -65,7 +67,18 @@ func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 		}
 		
 		// string for the insert statement
-		createstr := fmt.Sprintf("insert into affiliation_units (voms_url, alternative_name, last_updated, name ) values (%s, %s, NOW(), '%s')", voms_url, altName,unitName)
+		createstr := fmt.Sprintf(`do $$
+									declare c_uname text = %s;
+									declare c_aname text = %s;
+									declare c_type text = %s;
+									declare c_url text = %s;
+								  begin
+									insert into affiliation_units (name, alternative_name, type) values (c_uname, c_aname, c_type);
+									if c_url is not null then
+										insert into voms_url (unitid, url) values ((select unitid from affiliation_units where name = c_uname), c_url);
+									end if;
+								  end $$;`,
+								  unitName, altName, unitType, voms_url)
 		//create prepared statement
 		stmt, err := DBtx.tx.Prepare(createstr)
 		if err != nil {
@@ -182,8 +195,8 @@ func setAffiliationUnitInfo(w http.ResponseWriter, r *http.Request) {
 //	unitId := q.Get("unitid")
 //only unitName is required
 	if unitName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No experiment specified in http query.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No experiment name specified.\" }")
+		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No unitname name specified.\" }")
 		return
 	}
 	if unitType == "" && voms_url == "" && altName == "" {
@@ -207,7 +220,9 @@ func setAffiliationUnitInfo(w http.ResponseWriter, r *http.Request) {
 		tmpvoms sql.NullString
 		tmpType sql.NullString
 	)
-	checkerr := DBptr.QueryRow(`select unitid, voms_url, alternative_name, type from affiliation_units where name=$1`,unitName).Scan(&tmpId, &tmpvoms, &tmpaltName, &tmpType)
+	checkerr := DBptr.QueryRow(`select au.unitid, vu.url, au.alternative_name, au.type from affiliation_units as au
+								left join voms_url as vu on au.unitid = vu.unitid where name=$1`,
+								unitName).Scan(&tmpId, &tmpvoms, &tmpaltName, &tmpType)
 	log.WithFields(QueryFields(r, startTime)).Info("unitID = " + strconv.Itoa(tmpId))
 	switch {
 	case checkerr == sql.ErrNoRows:
@@ -224,11 +239,9 @@ func setAffiliationUnitInfo(w http.ResponseWriter, r *http.Request) {
 	default:
 		// It exists, start updating
 
-		//start making our prepared statement string
-		modstr := "update affiliation_units (voms_url, alternative_name, type, last_updated) values "
-
 		// parse the values and get the quotes right. 
 		// Keep the existing values for those fields that were not explicitly set by the API call.
+		unitName = "'" + unitName + "'"
 		if voms_url == "" {
 			if tmpvoms.Valid == false {
 				voms_url = "NULL"
@@ -256,12 +269,29 @@ func setAffiliationUnitInfo(w http.ResponseWriter, r *http.Request) {
 		} else if unitType != "NULL" {
 			unitType = "'" + unitType + "'"
 		}
-	
-		valstr := fmt.Sprintf("(%s, %s, %s, NOW()) where name='%s'", voms_url, altName, unitType, unitName)
-		log.WithFields(QueryFields(r, startTime)).Info("Full string is " + modstr + valstr)
-		return
+
+		modstr := fmt.Sprintf(`do $$
+									declare v_unitid int;
+
+									declare c_uname text = %s;
+									declare c_aname text = %s;
+									declare c_type text = %s;
+									declare c_url text = %s;
+							   begin
+							   		select unitid into v_unitid from affiliation_units where name = c_uname;
+
+									update affiliation_units set alternative_name = c_aname, type = c_type, last_updated = NOW()
+									where unitid = v_unitid;
+
+									if c_url is not null and ((v_unitid, c_url) not in (select unitid, url from voms_url)) then
+										insert into voms_url (unitid, url) values (v_unitid, c_url);
+									end if;
+							   end $$;`,
+							unitName, altName, unitType, voms_url)
+
+		log.WithFields(QueryFields(r, startTime)).Info("Full string is " + modstr)
+
 		// start DB transaction
-		
 		cKey, err := DBtx.Start(DBptr)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
@@ -271,7 +301,7 @@ func setAffiliationUnitInfo(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		
-		stmt, err := DBtx.tx.Prepare(modstr + valstr)
+		stmt, err := DBtx.tx.Prepare(modstr)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error preparing DB command: " + err.Error())
 			w.WriteHeader(http.StatusNotFound)
@@ -692,7 +722,8 @@ func getAllAffiliationUnits(w http.ResponseWriter, r *http.Request) {
 //		querystr := `select name, voms_url from affiliation_units where voms_url is not null and voms_url like %$1%`
 //	}
 	
-	rows, err := DBptr.Query(`select name, voms_url from affiliation_units where voms_url is not null and voms_url like $1`,"%" + voname + "%")
+	rows, err := DBptr.Query(`select name, url from affiliation_units as au left join voms_url as vu on au.unitid = vu.unitid
+							  where url is not null and url like $1`,"%" + voname + "%")
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())

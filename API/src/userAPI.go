@@ -39,7 +39,7 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := DBptr.Query(`select name, dn, issuer_ca, user_exists, unit_exists from (
 								select 1 as key, name, uc.dn, issuer_ca from affiliation_unit_user_certificate as ac
-								left join user_certificates as uc on ac.dn = uc.dn
+								left join user_certificates as uc on ac.dnid = uc.dnid
 								left join users as u on uc.uid = u.uid
 								left join affiliation_units as au on ac.unitid = au.unitid
 								where uname = $1 and name = $2
@@ -151,7 +151,7 @@ func getAllUsersCertificateDNs(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := DBptr.Query(`select uname, name, dn, issuer_ca, unit_exists from (
 								select 1 as key, uname, name, uc.dn, issuer_ca from affiliation_unit_user_certificate as ac
-								left join user_certificates as uc on ac.dn = uc.dn
+								left join user_certificates as uc on ac.dnid = uc.dnid
 								left join users as u on uc.uid = u.uid
 								left join affiliation_units as au on ac.unitid = au.unitid
 								where name like $1 and (status = $2 or not $2) order by uname
@@ -1261,6 +1261,7 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 	_, err = DBtx.Exec(fmt.Sprintf(`do $$ 	
 										declare u_uid int;
 										declare au_unitid int;
+										declare uc_dnid int;
 										declare new_dn bool;
 										u_dn constant text := '%s';
 										u_issuer constant text := '%s';
@@ -1275,7 +1276,8 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 										end if;
 										if au_name != '' then
 											select unitid into au_unitid from affiliation_units where name = au_name;
-											insert into affiliation_unit_user_certificate (unitid, dn, last_updated) values (au_unitid, u_dn, NOW());
+											select dnid into uc_dnid from user_certificates where dn = u_dn;
+											insert into affiliation_unit_user_certificate (unitid, dnid, last_updated) values (au_unitid, uc_dnid, NOW());
 										else
 											if not new_dn then
 												raise 'duplicated dn';
@@ -1341,6 +1343,7 @@ func removeUserCertificateDN(w http.ResponseWriter, r *http.Request) {
 
 	_, err = DBtx.Exec(fmt.Sprintf(`do $$ 	
 										declare  u_uid int;
+										declare  u_dnid int;
 										u_dn constant text := '%s';
 										u_uname constant text := '%s';
 
@@ -1349,15 +1352,16 @@ func removeUserCertificateDN(w http.ResponseWriter, r *http.Request) {
 										if u_uid is null then
 											raise 'uname does not exist';
 										end if;
-										if u_dn not in (select dn from user_certificates) then
+										select dnid into u_dnid from user_certificates where dn=u_dn;
+										if u_dnid is null then
 											raise 'dn does not exist';
 										end if;
-										if (u_dn, u_uid) not in (select dn, uid from user_certificates) then
-											raise 'dn uid association does not exist';
+										if (u_dnid, u_uid) not in (select dnid, uid from user_certificates) then
+											raise 'dnid uid association does not exist';
 										end if;
 
-										delete from affiliation_unit_user_certificate where dn=u_dn;
-										delete from user_certificates where dn=u_dn and uid=u_uid;
+										delete from affiliation_unit_user_certificate where dnid=u_dnid;
+										delete from user_certificates where dnid=u_dnid and uid=u_uid;
 									end $$;`, subjDN, uName))
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
@@ -1369,9 +1373,9 @@ func removeUserCertificateDN(w http.ResponseWriter, r *http.Request) {
 		} else if strings.Contains(err.Error(), `dn does not exist`) {
 			log.WithFields(QueryFields(r, startTime)).Error("Certificate DN does not exist.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Certificate DN does not exist.\" }")
-		} else if strings.Contains(err.Error(), `dn uid association does not exist`) {
-			log.WithFields(QueryFields(r, startTime)).Error("DN UID association does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"DN UID association does not exist.\" }")
+		} else if strings.Contains(err.Error(), `dnid uid association does not exist`) {
+			log.WithFields(QueryFields(r, startTime)).Error("USER DN association does not exist.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"USER DN association does not exist.\" }")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
@@ -1595,17 +1599,17 @@ func getMemberAffiliations(w http.ResponseWriter, r *http.Request) {
 									select 1 as key, * from (
 										select distinct * from (select au.name, au.alternative_name from affiliation_units as au
 																right join grid_access as ga on au.unitid = ga.unitid left join users as u on ga.uid = u.uid
-																where u.uname = $1 and ((voms_url is not null = $2) or not $2)) as u
+																where u.uname = $1 and (((au.unitid in (select unitid from voms_url)) = $2) or not $2)) as u
 
 										union                  (select au.name, au.alternative_name from affiliation_units as au
 																right join affiliation_unit_user_certificate as ac on au.unitid = ac.unitid
-																left join user_certificates as uc on ac.dn = uc.dn left join users as u on uc.uid = u.uid
-																where u.uname = $1 and ((voms_url is not null = $2) or not $2))
+																left join user_certificates as uc on ac.dnid = uc.dnid left join users as u on uc.uid = u.uid
+																where u.uname = $1 and (((au.unitid in (select unitid from voms_url)) = $2) or not $2))
 
 										union                  (select au.name, au.alternative_name from affiliation_units as au
 																right join affiliation_unit_group as ag on au.unitid = ag.unitid join user_group as ug on ag.groupid = ug.groupid
 																left join users as u on ug.uid = u.uid
-																where u.uname = $1 and ((voms_url is not null = $2) or not $2))
+																where u.uname = $1 and (((au.unitid in (select unitid from voms_url)) = $2) or not $2))
 									) as t
 									right join (select 1 as key, $1 in (select uname from users) as user_exists) as c on key = c.key
 							 ) as r;`, user, expOnly)
