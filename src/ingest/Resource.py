@@ -24,7 +24,7 @@ class VOMS(CollaborationUnit):
     """
     def __init__(self, vurl, vo_name, experiment):
         CollaborationUnit.__init__(self,experiment)
-        self.url = vurl
+        self.url = [vurl]
         if experiment != vo_name:
             self.url = "%s/%s" % (vurl, experiment)
         self.roles = []
@@ -36,6 +36,9 @@ class VOMS(CollaborationUnit):
 
     def add_roles(self, rnames):
         self.roles = rnames
+
+    def add_voms_url(self, vurl):
+        self.url.append(vurl)
 
 class VOUserGroup:
     """

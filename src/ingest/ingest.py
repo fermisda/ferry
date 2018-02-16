@@ -87,7 +87,7 @@ def read_services_users(fname, users):
             print("csv Failed ", line, file=sys.stderr)
 
 
-def get_vos(config, vn, vurl, gids):
+def get_vos(config, vn, vurl, gids, vomss):
     """
     Read data from VOMS databases
     Args:
@@ -96,18 +96,15 @@ def get_vos(config, vn, vurl, gids):
         vname:
         vurl:
         gids:
-
-    Returns: {voname:VOMS,}
+    Returns:
 
     """
     mysql_client_cfg = MySQLUtils.createClientConfig("voms_db_%s" % (vn,), config)
     connect_str = MySQLUtils.getDbConnection("voms_db_%s" % (vn,), mysql_client_cfg, config)
     command = "select dn from groups"
     groups, return_code = MySQLUtils.RunQuery(command, connect_str, False)
-    volist = {}
     if return_code:
         print("Failed to select dn from table group from voms_db_%s %s" % (vn, groups), file=sys.stderr)
-        return volist
     for g in groups:
         exp = g[1:].strip().split('/')
         if exp[0] == 'fermilab':
@@ -118,13 +115,15 @@ def get_vos(config, vn, vurl, gids):
         else:
             name = exp[0]
         try:
-            if not volist.__contains__(name):
-                volist[name] = VOMS(vurl, vn, name)
-            if gids.__contains__(name):
-                volist[name].add_voms_unix_group(name,gids[name])
+            if not vomss.__contains__(name):
+                vomss[name] = VOMS(vurl, vn, name)
+                if gids.__contains__(name):
+                    vomss[name].add_voms_unix_group(name,gids[name])
+            else:
+                if vurl not in vomss[name].url:
+                    vomss[name].add_voms_url(vurl)
         except:
             print("group is not defined ", name, file=sys.stderr)
-    return volist
 
 
 def assign_vos(config, vn, vurl, rls, usrs, gums_map, collaborations):
@@ -159,7 +158,7 @@ def assign_vos(config, vn, vurl, rls, usrs, gums_map, collaborations):
         return
     else:
         for line in table:
-            uname = re.findall("UID:([A-z]*)", line)
+            uname = re.findall("UID:([A-z0-9]*)", line)
             if len(uname) > 0:
                 if uname[0] not in members_list:
                     members_list[uname[0]] = []
@@ -415,7 +414,7 @@ def read_vulcan_certificates(config, users, vomss):
     CAs = ca.fetchCAs(CADir)
 
     # add cms voms information
-    vomss.append({'cms': VOMS(url, vo, vo)})
+    vomss['cms'] = VOMS(url, vo, vo)
 
     # fetch certificates from vulcan
     cursor.execute("select u.auth_string as uname, c.* from auth_tokens_t1 as c left join auth_tokens_t1 as u on c.userid = u.userid \
@@ -450,36 +449,33 @@ def build_collaborations(vomss, nis, groups):
     collaborations = []
     # There are VOs that are collaboration units that have NIS domain
     # Let's find them
-    for vos in vomss:
-        for vo in vos.values():
-            # We should ignore VO (des, dune) that are subgroups in fermilab VOMS
-            #  they don't have NIS domain
-            #  We also should ignore top level fermilab vo - it doesn't have NIS domain
+    for vo in vomss.values():
+        #  We should ignore top level fermilab vo - it doesn't have NIS domain
 
-            if (vo.name in ["des","dune"] and vo.url.find("fermilab") >= 0) or vo.name == "fermilab":
+        if vo.name == "fermilab":
+            collaborations.append(vo)
+            vo.set_id(len(collaborations))
+            # now we need to figure out the group for this collaborative unit
+            # and hope that the name is the gname
+            if vo.name in groups.keys():
+                collaborations[-1].groups = {vo.name:groups[vo.name]}
+            continue
+        found = False
+        for domain,nis in nis_structure.items():
+            if domain == vo.name or nis.alternative_name == vo.name:
+                # build a collaboration unit from all the VO
+                if nis.alternative_name:
+                    vo.set_alt_name(domain)
                 collaborations.append(vo)
                 vo.set_id(len(collaborations))
-                # now we need to figure out the group for this collaborative unit
-                # and hope that the name is the gname
-                if vo.name in groups.keys():
-                    collaborations[-1].groups = {vo.name:groups[vo.name]}
-                continue
-            found = False
-            for domain,nis in nis_structure.items():
-                if domain == vo.name or nis.alternative_name == vo.name:
-                    # build a collaboration unit from all the VO
-                    if nis.alternative_name:
-                        vo.set_alt_name(domain)
-                    collaborations.append(vo)
-                    vo.set_id(len(collaborations))
-                    collaborations[-1].groups = nis.groups
-                    found = True
-                    break
-            if not found:
-                collaborations.append(vo)
-                vo.set_id(len(collaborations))
-                if vo.name in groups.keys():
-                    collaborations[-1].groups = {vo.name:groups[vo.name]}
+                collaborations[-1].groups = nis.groups
+                found = True
+                break
+        if not found:
+            collaborations.append(vo)
+            vo.set_id(len(collaborations))
+            if vo.name in groups.keys():
+                collaborations[-1].groups = {vo.name:groups[vo.name]}
 
     # we need to include in collaborations all NIS domains that don't have a corresponding VO
     for domain,nis in nis_structure.items():
@@ -848,18 +844,24 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
 
     # populate collaborative_unit
     for cu in collaborations:
-        if isinstance(cu,VOMS):
-            link = "\'%s\'" % (cu.url)
-        else:
-            link = "NULL"
         if cu.alt_name:
             alt_name = "\'%s\'" % (cu.alt_name)
         else:
             alt_name = "NULL"
-        fd.write("insert into affiliation_units (name, voms_url, alternative_name, last_updated) " +\
-            "values (\'%s\',%s,%s,NOW());\n" % (cu.name, link,alt_name))
-        # populate collaboration unit groups
+        fd.write("insert into affiliation_units (name, alternative_name, last_updated) " +\
+            "values (\'%s\',%s,NOW());\n" % (cu.name, alt_name))
 
+        # populate voms_url
+        if isinstance(cu,VOMS):
+            if type(cu.url) is list:
+                urls = cu.url
+            else:
+                urls = [cu.url]
+            for link in urls:
+                fd.write("insert into voms_url (unitid, url, last_updated) values (%d,\'%s\',NOW());\n"
+                % (cu.unitid, link))
+
+        # populate collaboration unit groups
         for gid in cu.groups.values():
             index = gid_map[gid]
             is_primary = 0
@@ -939,17 +941,22 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
         for _, user in users.items():
             #if uname!='kherner':
             #    continue
-            if user.vo_membership.__contains__((cu.name, cu.url)):
-                for umap in user.vo_membership[(cu.name, cu.url)]:
-                    fqanid = 0
-                    for gmap in gums.values():
-                        if  umap.group == gmap.group and umap.role == gmap.role:
-                            fqanid = gmap.fqanid
-                            break
-                    fd.write("insert into grid_access values  (%d,%d,%d,False,False,NOW());\n" % \
-                             (int(user.uid),cu.unitid, fqanid ))
+            if type(cu.url) is list:
+                urls = cu.url
+            else:
+                urls = [cu.url]
+            for url in urls:
+                if user.vo_membership.__contains__((cu.name, url)):
+                    for umap in user.vo_membership[(cu.name, url)]:
+                        fqanid = 0
+                        for gmap in gums.values():
+                            if  umap.group == gmap.group and umap.role == gmap.role:
+                                fqanid = gmap.fqanid
+                                break
+                        fd.write("insert into grid_access values  (%d,%d,%d,False,False,NOW());\n" % \
+                                (int(user.uid),cu.unitid, fqanid ))
 
-                fd.flush()
+                    fd.flush()
     for _, user in users.items():
         #if uname!='kherner':
         #    continue
@@ -963,8 +970,8 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
             fd.write("insert into user_certificates (dn,uid,issuer_ca,last_updated) "
                      "values (\'%s\',%d,\'%s\',NOW());\n" % (dn, int(user.uid), details['ca']))
             for experiment in details['experiments']:
-                fd.write("insert into affiliation_unit_user_certificate (unitid,dn,last_updated) "
-                         "values (%d,\'%s\',NOW());\n" % (experiment, dn))
+                fd.write("insert into affiliation_unit_user_certificate (unitid,dnid,last_updated) "
+                         "values (%d,(select dnid from user_certificates where dn = \'%s\'),NOW());\n" % (experiment, dn))
 
     # populating external_affiliation_attribute
     for _, user in users.items():
@@ -1032,7 +1039,7 @@ if __name__ == "__main__":
     voms_instances = config.config.get("voms_instances", "list")
     voms_list = voms_instances.split(",")
     voms_list.sort()
-    vomss = [] # list of VOs from VOMS instances
+    vomss = {} # dictionary of VOs from VOMS instances
     roles = []
     gums = read_gums_config(config, users, gids) # List of GUMS group mapping
 
@@ -1050,8 +1057,7 @@ if __name__ == "__main__":
     for vn in voms_list:
         url = config.config.get("voms_db_%s" % (vn,), "url")
         # reads vo related information from VOMS
-        vos = get_vos(config.config, vn, url, gids)
-        vomss.append(vos)
+        get_vos(config.config, vn, url, gids, vomss)
 
     # define collaboration unit
     # in case where there are fermilab subgroup and a separate VO (des, dune) the nis_structure will be set for a
@@ -1060,17 +1066,16 @@ if __name__ == "__main__":
     collaborations = build_collaborations(vomss, nis_structure, gids)
 
     # add VOMS info for collaboration_unit if relevant
-    for vos in vomss:
-        for vo in vos.values():
-            found = False
-            for cu in collaborations:
-                if cu.name == vo.name or cu.alt_name == vo.name:
-                    found = True
-                    break
-            if not found:
-                print("NIS domain doesn't exist for %s" % (vo.name), file=sys.stderr)
-                collaborations.append(vo)
-                vo.set_id(len(collaborations))
+    for vo in vomss.values():
+        found = False
+        for cu in collaborations:
+            if cu.name == vo.name or cu.alt_name == vo.name:
+                found = True
+                break
+        if not found:
+            print("NIS domain doesn't exist for %s" % (vo.name), file=sys.stderr)
+            collaborations.append(vo)
+            vo.set_id(len(collaborations))
 
 
     for vn in voms_list:
