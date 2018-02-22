@@ -87,10 +87,21 @@ func ParseDN(names []pkix.AttributeTypeAndValue, sep string) string {
 
 func authorize( req *http.Request, authDNs []string ) (bool, string) {
 	thetime := time.Now()
+	ip := req.RemoteAddr
+	authIPs := viper.GetStringSlice("whitelist")
+
 	// authorization should fail by default
 	authorized := false
 
-	//string to build the full DN
+	// ignore DN if host matches authorized an ip
+	for _, authIP := range authIPs {
+		if authIP == strings.Split(ip, ":")[0] {
+			log.WithFields(QueryFields(req, thetime)).Print("Ignoring DN of authorized IP.")
+			return true, "Ignoring DN of authorized IP."
+		}
+	}
+
+	// string to build the full DN
 	certDN := ""
 	for _, presCert := range req.TLS.PeerCertificates {
 		certDN = ParseDN(presCert.Subject.Names, "/")

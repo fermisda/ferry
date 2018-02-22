@@ -271,44 +271,47 @@ func getGridMapFile(w http.ResponseWriter, r *http.Request) {
 
 	var unitExists bool
 
-	type jsonout struct {
+	type jsonentry struct {
 		DN string `json:"userdn"`
 		Uname string `json:"mapped_uname"`
 	}
-	var Out jsonout
+	/*type jsondnmap struct {
+		DNmap []jsonentry `json:"gridmap"`
+	}*/
+	var dnmap jsonentry
+	var Out []jsonentry
 
-	idx := 0
-	output := "[ "
 	for rows.Next() {
-		if idx != 0 {
-			output += ","
-		}
-
 		var tmpDN, tmpUname sql.NullString
 		rows.Scan(&tmpDN, &tmpUname, &unitExists)
 		if tmpDN.Valid {
-			Out.DN, Out.Uname = tmpDN.String, tmpUname.String
-			outline, jsonerr := json.Marshal(Out)
-			if jsonerr != nil {
-				log.WithFields(QueryFields(r, startTime)).Error(jsonerr)
-			}
-			output += string(outline)
-			idx ++
+			dnmap.DN, dnmap.Uname = tmpDN.String, tmpUname.String
+			Out = append(Out, dnmap)
 		}
-	}
-	if idx == 0 {
-		if !unitExists {
-			output += `"ferry_error": "Experiment does not exist.",`
-			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
-		}
-		output += `"ferry_error": "No DNs found."`
-		log.WithFields(QueryFields(r, startTime)).Error("No DNs found.")
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 	}
 
-	output += " ]"
-	fmt.Fprintf(w,output)
+	var output interface{}
+	if len(Out) == 0 {
+		type jsonerror struct {Error []string `json:"ferry_error"`}
+		var Err jsonerror
+
+		if !unitExists {
+			Err.Error = append(Err.Error, "Experiment does not exist.")
+			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
+		}
+		Err.Error = append(Err.Error, "No DNs found.")
+		log.WithFields(QueryFields(r, startTime)).Error("No DNs found.")
+
+		output = Err
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonout, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	fmt.Fprintf(w, string(jsonout))
 }
 func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
