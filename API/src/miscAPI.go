@@ -57,48 +57,60 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 		Hdir string `json:"homedir"`
 		Shell string `json:"shell"`
 	}
-	type jsonresource struct {
-		Rname string `json:"resourcename"`
-		Users []jsonuser `json:"users"`
-	}
 	type jsonunit struct {
-		Aname string `json:"unitname"`
-		Resources []jsonresource `json:"resources"`
+		Resources map[string][]jsonuser `json:"resources"`
 		Lasttime int64 `json:"last_updated"`
 	}
-	var Out []jsonunit
+	Out := make(map[string]jsonunit)
 
+	lasttime := int64(0)
+	prevAname := ""
+	prevRname := ""
+	tmpResources := make(map[string][]jsonuser, 0)
+	tmpUsers := make([]jsonuser, 0)
 	for rows.Next() {
 		var tmpAname, tmpRname, tmpUname, tmpUid, tmpGid, tmpGecos, tmpHdir, tmpShell,tmpTime sql.NullString
 		rows.Scan(&tmpAname, &tmpRname, &tmpUname, &tmpUid, &tmpGid, &tmpGecos, &tmpHdir, &tmpShell, &unitExists, &compExists, &tmpTime)
 
-		if tmpRname.Valid {
-			if len(Out) == 0 || Out[len(Out) - 1].Aname != tmpAname.String {
-				Out = append(Out, jsonunit{tmpAname.String, make([]jsonresource, 0), 0})
-			}
-			Res := &Out[len(Out) - 1].Resources
-			if len(*Res) == 0 || (*Res)[len(*Res) - 1].Rname != tmpRname.String {
-				*Res = append(*Res, jsonresource{tmpRname.String, make([]jsonuser, 0)})
-			}
-			Usr := &(*Res)[len(*Res) - 1].Users
-			*Usr = append(*Usr, jsonuser{tmpUname.String, tmpUid.String, tmpGid.String, tmpGecos.String, tmpHdir.String, tmpShell.String})
+		if prevRname == "" {
+			prevRname = tmpRname.String
+		}
+		if prevAname == "" {
+			prevAname = tmpAname.String
+		}
 
+		if tmpRname.Valid {
+			if prevRname != tmpRname.String {
+				tmpResources[prevRname] = tmpUsers
+				tmpUsers = make([]jsonuser, 0)
+				prevRname = tmpRname.String
+			}
+			if prevAname != tmpAname.String {
+				Out[prevAname] = jsonunit{tmpResources, lasttime}
+				tmpResources = make(map[string][]jsonuser, 0)
+				lasttime = 0
+				prevAname = tmpAname.String
+			}
 			if tmpTime.Valid {
 				log.WithFields(QueryFields(r, startTime)).Println("tmpTime is valid" + tmpTime.String)
 				
 				parseTime,parserr := time.Parse(time.RFC3339,tmpTime.String)
-				lasttime := &Out[len(Out) - 1].Lasttime
 				if parserr != nil {
 					log.WithFields(QueryFields(r, startTime)).Error("Error parsing last updated time of " + tmpTime.String)
 				} else {
-					if *lasttime == 0  || ( parseTime.Unix() > *lasttime) {
-						*lasttime = parseTime.Unix()
+					if lasttime == 0  || ( parseTime.Unix() > lasttime) {
+						lasttime = parseTime.Unix()
 					}
 				}
 			} else {
 				log.WithFields(QueryFields(r, startTime)).Println("tmpTime is not valid")
 			}
+			tmpUsers = append(tmpUsers, jsonuser{tmpUname.String, tmpUid.String, tmpGid.String, tmpGecos.String, tmpHdir.String, tmpShell.String})
 		}
+	}
+	if prevAname != "" {
+		tmpResources[prevRname] = tmpUsers
+		Out[prevAname] = jsonunit{tmpResources, 0}
 	}
 	
 	var output interface{}
@@ -254,8 +266,8 @@ func getGridMapFile(w http.ResponseWriter, r *http.Request) {
 		unit = "%"
 	}
 
-	rows, err := DBptr.Query(`select dn, uname, unit_exists from 
-							 (select distinct 1 as key, uc.dn, us.uname from  affiliation_unit_user_certificate as ac
+	rows, err := DBptr.Query(`select name, dn, uname, unit_exists from 
+							 (select 1 as key, au.name, uc.dn, us.uname from  affiliation_unit_user_certificate as ac
 								left join user_certificates as uc on ac.dnid = uc.dnid
 								left join users as us on uc.uid = us.uid
 								left join affiliation_units as au on ac.unitid = au.unitid
@@ -275,18 +287,15 @@ func getGridMapFile(w http.ResponseWriter, r *http.Request) {
 		DN string `json:"userdn"`
 		Uname string `json:"mapped_uname"`
 	}
-	/*type jsondnmap struct {
-		DNmap []jsonentry `json:"gridmap"`
-	}*/
 	var dnmap jsonentry
-	var Out []jsonentry
+	Out := make(map[string][]jsonentry)
 
 	for rows.Next() {
-		var tmpDN, tmpUname sql.NullString
-		rows.Scan(&tmpDN, &tmpUname, &unitExists)
+		var tmpAname, tmpDN, tmpUname sql.NullString
+		rows.Scan(&tmpAname, &tmpDN, &tmpUname, &unitExists)
 		if tmpDN.Valid {
 			dnmap.DN, dnmap.Uname = tmpDN.String, tmpUname.String
-			Out = append(Out, dnmap)
+			Out[tmpAname.String] = append(Out[tmpAname.String], dnmap)
 		}
 	}
 
