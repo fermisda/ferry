@@ -704,11 +704,98 @@ func removeFQAN(w http.ResponseWriter, r *http.Request) {
 func setFQANMappings(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query()
-//	fqan := q.Get("fqan")
-//	mapuser := q.Get("mapped_user")
-//	mapgroup := q.Get("mapped_group")
-	NotDoneYet(w, r, startTime)
+	q := r.URL.Query()
+
+	fqan := q.Get("fqan")
+	mUser := q.Get("mapped_user")
+	mGroup := q.Get("mapped_group")
+
+	var values []string
+
+	type jsonerror struct {
+		Error []string `json:"ferry_error"`
+	}
+	var inputErr jsonerror
+
+	if fqan == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No fqan specified in http query.")
+		inputErr.Error = append(inputErr.Error, "No fqan specified.")
+	}
+	if mUser != "" {
+		if strings.ToLower(mUser) != "null" {
+			values = append(values, fmt.Sprintf("mapped_user = '%s'", mUser))
+		} else {
+			values = append(values, "mapped_user = NULL")
+		}
+	}
+	if mGroup != "" {
+		if strings.ToLower(mGroup) != "null" {
+			values = append(values, fmt.Sprintf("mapped_group = '%s'", mGroup))
+		} else {
+			values = append(values, "mapped_group = NULL")
+		}
+	}
+	if len(values) == 0 {
+		log.WithFields(QueryFields(r, startTime)).Error("No mapped_user or mapped_group specified in http query.")
+		inputErr.Error = append(inputErr.Error, "No mapped_user or mapped_group specified.")
+	}
+
+	if len(inputErr.Error) > 0 {
+		out, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		}
+		fmt.Fprintf(w, string(out))
+		return
+	}
+
+	cKey, err := DBtx.Start(DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+
+	var res sql.Result
+	var rowsErr error
+	var rows int64
+	res, err = DBtx.Exec(fmt.Sprintf("update grid_fqan set %s where fqan = '%s'", strings.Join(values, ", "), fqan))
+	if err == nil {
+		rows, rowsErr = res.RowsAffected()
+		if rowsErr != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		}
+	} else {
+		rows = 0
+	}
+
+	if rows == 1 {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		fmt.Fprintf(w,"{ \"status\": \"success\" }")
+	} else {
+		var queryErr jsonerror
+		if rows == 0 && err == nil {
+			log.WithFields(QueryFields(r, startTime)).Error("FQAN doesn't exist.")
+			queryErr.Error = append(queryErr.Error, "FQAN doesn't exist.")
+		} else if strings.Contains(err.Error(), `violates foreign key constraint "fk_experiment_fqan_users"`) {
+			log.WithFields(QueryFields(r, startTime)).Error("User doesn't exist.")
+			queryErr.Error = append(queryErr.Error, "User doesn't exist.")
+		} else if strings.Contains(err.Error(), `violates foreign key constraint "fk_experiment_fqan_groups"`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Group doesn't exist.")
+			queryErr.Error = append(queryErr.Error, "Group doesn't exist.")
+		} else if strings.Contains(err.Error(), `null value in column "mapped_group" violates not-null constraint`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Attribute mapped_group can not be NULL.")
+			queryErr.Error = append(queryErr.Error, "Attribute mapped_group can not be NULL.")
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			queryErr.Error = append(queryErr.Error, err.Error())
+		}
+		out, err := json.Marshal(queryErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		}
+		fmt.Fprintf(w, string(out))
+	}
+
+	DBtx.Commit(cKey)
 }
 
 func getAllAffiliationUnits(w http.ResponseWriter, r *http.Request) {
