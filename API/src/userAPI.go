@@ -402,7 +402,7 @@ func setSuperUser(w http.ResponseWriter, r *http.Request) {
 									end $$;`, uName, unitName))
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w, "{ \"status\": \"success\" }")
+		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 	} else {
 		if strings.Contains(err.Error(), `User does not exist`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
@@ -588,7 +588,7 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w, "{ \"status\": \"success\" }")
+		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 	} else {
 		if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User already belongs to this group.")
@@ -659,7 +659,7 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 									end $$;`, eName, uName, fqan))
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w, "{ \"status\": \"success\" }")
+		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 	} else {
 		if strings.Contains(err.Error(), `null value in column "uid" violates not-null constraint`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
@@ -740,7 +740,7 @@ func setUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
 									end $$;`, rName, uName, shell, hDir))
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w, "{ \"status\": \"success\" }")
+		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 	} else {
 		if strings.Contains(err.Error(), `User does not exist.`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
@@ -988,7 +988,7 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 							end $$;`, rName, uName, unitName, quota, unit, validtime))
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w, "{ \"status\": \"success\" }")
+		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 	} else {
 		if strings.Contains(err.Error(), `User does not exist.`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
@@ -1067,7 +1067,7 @@ func setUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Request)
 
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w, "{ \"status\": \"success\" }")
+		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 	} else {
 		if strings.Contains(err.Error(), `uname does not exist`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
@@ -1132,7 +1132,7 @@ func removeUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Reque
 
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w, "{ \"status\": \"success\" }")
+		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 	} else {
 		if strings.Contains(err.Error(), `uname does not exist`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
@@ -1286,21 +1286,21 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 									end $$;`, subjDN, issuer, uName, unitName))
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w, "{ \"status\": \"success\" }")
+		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 	} else {
 		log.Print(err.Error())
 		if strings.Contains(err.Error(), `pk_affiliation_unit_user_certificate_dn`) {
 			log.WithFields(QueryFields(r, startTime)).Error("DN already exists and is assigned to this affiliation unit.")
-			fmt.Fprintf(w, "{ \"status\": \"DN already exists and is assigned to this affiliation unit.\" }")
+			fmt.Fprintf(w, "{ \"ferry_status\": \"DN already exists and is assigned to this affiliation unit.\" }")
 		} else if strings.Contains(err.Error(), `duplicated dn`) {
 			log.WithFields(QueryFields(r, startTime)).Error("DN already exists.")
-			fmt.Fprintf(w, "{ \"status\": \"DN already exists.\" }")
+			fmt.Fprintf(w, "{ \"ferry_status\": \"DN already exists.\" }")
 		} else if strings.Contains(err.Error(), `"uid" violates not-null constraint`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-			fmt.Fprintf(w, "{ \"status\": \"User does not exist.\" }")
+			fmt.Fprintf(w, "{ \"ferry_status\": \"User does not exist.\" }")
 		} else if strings.Contains(err.Error(), `"unitid" violates not-null constraint`) {
 			log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
-			fmt.Fprintf(w, "{ \"status\": \"Affiliation unit does not exist.\" }")
+			fmt.Fprintf(w, "{ \"ferry_status\": \"Affiliation unit does not exist.\" }")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
@@ -1365,7 +1365,7 @@ func removeUserCertificateDN(w http.ResponseWriter, r *http.Request) {
 									end $$;`, subjDN, uName))
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w, "{ \"status\": \"success\" }")
+		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 	} else {
 		if strings.Contains(err.Error(), `uname does not exist`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
@@ -1459,7 +1459,7 @@ func setUserInfo(w http.ResponseWriter, r *http.Request) {
 
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w, "{ \"status\": \"success\" }")
+		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 		DBtx.Commit(cKey)
 	} else {
 		if strings.Contains(err.Error(), `uid does not exist`) {
@@ -1544,7 +1544,7 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 
 		if err == nil {
 			log.WithFields(QueryFields(r, startTime)).Info("Success!")
-			fmt.Fprintf(w, "{ \"status\": \"success\" }")
+			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 			DBtx.Commit(cKey)
 			return
 		} else {
@@ -1762,7 +1762,7 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 	case checkerr == sql.ErrNoRows: 
 		// set the header for success since we are already at the desired result
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, "{ \"status\": \"Nothing to delete; user does not exist.\" }")
+		fmt.Fprintf(w, "{ \"ferry_status\": \"Nothing to delete; user does not exist.\" }")
 		log.WithFields(QueryFields(r, startTime)).Info("user ID " + uName + " not found in DB.")
 		return	
 	case checkerr != nil:
@@ -1781,7 +1781,7 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 		}
 		_, err = myStmt.Exec() 
 		if err == nil {	
-			fmt.Fprintf(w, "{ \"status\": \"success\" }")
+			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 			log.WithFields(QueryFields(r, startTime)).Info("Success!")
 			DBtx.Commit(cKey)
 			myStmt.Close()
@@ -2072,7 +2072,7 @@ func setUserAccessToResource(w http.ResponseWriter, r *http.Request) {
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully inserted (%s,%s,%s,%s,%s) into compute_access.",rName, uname, gName, defShell, defhome))
 			w.WriteHeader(http.StatusOK)
-			fmt.Fprintf(w, "{ \"status\": \"success\" }")
+			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 			return			
 		}
 		
@@ -2088,7 +2088,7 @@ func setUserAccessToResource(w http.ResponseWriter, r *http.Request) {
 			// everything in the DB is already the same as the request, so don't do anything
 			log.WithFields(QueryFields(r, startTime)).Print("The request already exists in the database. Nothing to do.")
 			w.WriteHeader(http.StatusOK)
-			fmt.Fprintf(w, "{ \"status\": \"success\" }")
+			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 			return	
 		} else {
 			_, moderr := DBptr.Exec(`update compute_access set shell=$1,home_dir=$2,last_updated=NOW() where groupid=$3 and uid=$4 and compid=$5`,defShell,defhome,grpid,uid,compid)
@@ -2101,7 +2101,7 @@ func setUserAccessToResource(w http.ResponseWriter, r *http.Request) {
 				
 				log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully updated (%s,%s,%s,%s,%s) in compute_access.",rName, uname, gName, defShell, defhome))
 				w.WriteHeader(http.StatusOK)
-				fmt.Fprintf(w, "{ \"status\": \"success\" }")
+				fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 				return		
 			}	
 		}

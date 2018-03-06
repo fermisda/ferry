@@ -50,7 +50,7 @@ func createGroup(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		DBtx.Commit(cKey)
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w,"{ \"status\": \"success\" }")
+		fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 	} else {
 		if strings.Contains(err.Error(), `invalid input value for enum groups_group_type`) {
 			log.WithFields(QueryFields(r, startTime)).Error("Invalid grouptype specified in http query.")
@@ -185,7 +185,7 @@ insert into affiliation_unit_group (groupid, unitid, is_primary, last_updated) v
 				DBtx.Commit(cKey)
 				w.WriteHeader(http.StatusOK)
 				log.WithFields(QueryFields(r, startTime)).Print("Successfully added " + groupname + " to affiliation_unit_groups.")
-				fmt.Fprintf(w,"{ \"status\": \"success.\" }")
+				fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
 			}
 			return	
 		}
@@ -264,7 +264,7 @@ update affiliation_unit_group set is_primary=1, last_updated=NOW() where groupid
 		DBtx.Commit(cKey)
 		w.WriteHeader(http.StatusOK)
 		log.WithFields(QueryFields(r, startTime)).Print("Successfully added " + groupname + " to affiliation_unit_groups.")
-		fmt.Fprintf(w,"{ \"status\": \"success.\" }")
+		fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
 	}
 	return
 }
@@ -514,7 +514,7 @@ func setGroupLeader(w http.ResponseWriter, r *http.Request) {
 				DBtx.Commit(cKey)
 				w.WriteHeader(http.StatusOK)
 				log.WithFields(QueryFields(r, startTime)).Print("Successfully set " + uName + " as leader of " + groupname + ".")
-				fmt.Fprintf(w,"{ \"status\": \"success.\" }")
+				fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
 			}
 			return
 		}
@@ -793,7 +793,7 @@ func setGroupCondorQuota(w http.ResponseWriter, r *http.Request) {
 
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w,"{ \"status\": \"success\" }")
+		fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 	} else {
 		if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
 			log.WithFields(QueryFields(r, startTime)).Error("This quota already exists.")
@@ -953,7 +953,7 @@ func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
 							end $$;`, rName, gName, unitName, groupquota, unit, validtime))
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w,"{ \"status\": \"success\" }")
+		fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 	} else {
 		if strings.Contains(err.Error(), `Group does not exist.`) {
 			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")

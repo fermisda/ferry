@@ -97,7 +97,7 @@ func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 			// error is nil, so it's a success. Commit the transaction and return success.
 			DBtx.Commit(cKey)
 			log.WithFields(QueryFields(r, startTime)).Info("Successfully added " + unitName + " to affiliation_units.")
-			fmt.Fprintf(w,"{ \"status\": \"success.\" }")
+			fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
 		}
 		stmt.Close()
 		return
@@ -176,7 +176,7 @@ func removeAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 			// error is nil, so it's a success. Commit the transaction and return success.
 			DBtx.Commit(cKey)
 			log.WithFields(QueryFields(r, startTime)).Info("Successfully added " + unitName + " to affiliation_units.")
-			fmt.Fprintf(w,"{ \"status\": \"success.\" }")
+			fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
 		}
 		stmt.Close()
 		return	
@@ -322,7 +322,7 @@ func setAffiliationUnitInfo(w http.ResponseWriter, r *http.Request) {
 			// error is nil, so it's a success. Commit the transaction and return success.
 			DBtx.Commit(cKey)
 			log.WithFields(QueryFields(r, startTime)).Info("Successfully set values for " + unitName + " in affiliation_units.")
-			fmt.Fprintf(w,"{ \"status\": \"success.\" }")
+			fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
 		}
 		stmt.Close()
 		return
@@ -674,7 +674,7 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 	_, err = DBtx.Exec("insert into grid_fqan (fqan, mapped_user, mapped_group, last_updated) values ($1, $2, $3, NOW())", fqan, mUser, mGroup)
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w,"{ \"status\": \"success\" }")
+		fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 	} else {
 		if strings.Contains(err.Error(), `violates foreign key constraint "fk_experiment_fqan_users"`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User doesn't exist.")
@@ -769,7 +769,7 @@ func setFQANMappings(w http.ResponseWriter, r *http.Request) {
 
 	if rows == 1 {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w,"{ \"status\": \"success\" }")
+		fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 	} else {
 		var queryErr jsonerror
 		if rows == 0 && err == nil {

@@ -1105,7 +1105,7 @@ func setComputeResourceInfo(w http.ResponseWriter, r *http.Request) {
 			// if no error, commit and all that
 			DBtx.Commit(cKey)
 			log.WithFields(QueryFields(r, startTime)).Info("Successfully updated " + unitName + ".")
-			fmt.Fprintf(w,"{ \"status\": \"success.\" }")
+			fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
 		}
 	} //end switch
 }
@@ -1321,7 +1321,7 @@ func setStorageResourceInfo(w http.ResponseWriter, r *http.Request) {
 			// if no error, commit and all that
 			DBtx.Commit(cKey)
 			log.WithFields(QueryFields(r, startTime)).Info("Successfully updated " + rName + ".")
-			fmt.Fprintf(w,"{ \"status\": \"success.\" }")
+			fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
 		}
 	} //end switch
 
