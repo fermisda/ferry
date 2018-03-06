@@ -757,6 +757,77 @@ func setUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
 	DBtx.Commit(cKey)
 }
 
+func setUserShell(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	rName := q.Get("resourcename")
+	uName := q.Get("username")
+	shell := q.Get("shell")
+
+	if rName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No resourcename specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No resourcename specified.\" }")
+		return
+	}
+	if uName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
+		return
+	}
+	if shell == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No shell specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No shell specified.\" }")
+		return
+	}
+
+	authorized, authout := authorize(r, AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
+		return
+	}
+
+	cKey, err := DBtx.Start(DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+
+	_, err = DBtx.Exec(fmt.Sprintf(`do $$
+										declare vCompid int;
+										declare vUid int;
+
+									begin
+										select compid into vCompid from compute_resources where name = '%s';
+										select uid into vUid from users where uname = '%s';
+
+
+										if vCompid is null then raise 'Resource does not exist.'; end if;
+										if vUid is null then raise 'User does not exist.'; end if;
+										
+										update compute_access set shell = '%s', last_updated = NOW()
+										where compid = vCompid and uid = vUid;
+									end $$;`, rName, uName, shell))
+	if err == nil {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+	} else {
+		if strings.Contains(err.Error(), `User does not exist.`) {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+		} else if strings.Contains(err.Error(), `Resource does not exist.`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
+		}
+	}
+
+	DBtx.Commit(cKey)
+}
+
 func getUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")

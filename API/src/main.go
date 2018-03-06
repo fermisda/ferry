@@ -134,6 +134,7 @@ func main() {
 	grouter.HandleFunc("/setUserExperimentFQAN", setUserExperimentFQAN)
 	grouter.HandleFunc("/setUserShellAndHomeDir", setUserShellAndHomeDir)
 	grouter.HandleFunc("/getUserShellAndHomeDir", getUserShellAndHomeDir)
+	grouter.HandleFunc("/setUserShell", setUserShell)
 	grouter.HandleFunc("/setUserAccessToResource", setUserAccessToResource)
 	grouter.HandleFunc("/removeUserAccessFromResource", removeUserAccessFromResource)
 	grouter.HandleFunc("/getUserStorageQuota", 	    getUserStorageQuota)
