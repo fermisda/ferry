@@ -110,7 +110,7 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 	}
 	if prevAname != "" {
 		tmpResources[prevRname] = tmpUsers
-		Out[prevAname] = jsonunit{tmpResources, 0}
+		Out[prevAname] = jsonunit{tmpResources, lasttime}
 	}
 	
 	var output interface{}
