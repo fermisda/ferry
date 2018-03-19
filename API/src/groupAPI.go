@@ -921,8 +921,9 @@ func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
 	}
 	if validtime == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No expire time given; assuming it is indefinite.")
+		validtime = "NULL"
 	} else {
-		validtime = "valid_until = " + validtime + ", "
+		validtime = "'" + validtime + "'"
 	}
 	if unit == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No quita unit specified in http query.")
@@ -936,20 +937,33 @@ func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
 
 
 	_, err = DBtx.Exec(fmt.Sprintf(`do $$
-							declare vSid int;
-							declare vGid int;
-                                                        declare vUnitid int; 
+							declare 
+								vSid int;
+								vGid int;
+								vUnitid int;
+
+								cSname constant text := '%s';
+								cGname constant text := '%s';
+								cUname constant text := '%s';
+								cValue constant text := '%s';
+								cUnit constant text := '%s';
+								cVuntil constant date := %s;
 							begin
-								select storageid into vSid from storage_resources where name = '%s';
-								select gid into vGid from groups where name = '%s';
-								select unitid into vUnitid from affiliation_units where name = '%s';
+								select storageid into vSid from storage_resources where name = cSname;
+								select groupid into vGid from groups where name = cGname;
+								select unitid into vUnitid from affiliation_units where name = cUname;
 
 								if vSid is null then raise 'Resource does not exist.'; end if;
 								if vGid is null then raise 'Group does not exist.'; end if;
 								if vUnitid is null then raise 'Unit does not exist.'; end if;
-										
-								update storage_quota set value = '%s', unit = '%s', %s last_updated = NOW()
-								where storageid = vSid and groupid = vGid and unitid = vUnitid;
+								
+								if (vSid, vGid, vUnitid) in (select storageid, groupid, unitid from storage_quota) and cVuntil is NULL then
+									update storage_quota set value = cValue, unit = cUnit, valid_until = cVuntil, last_updated = NOW()
+									where storageid = vSid and groupid = vGid and unitid = vUnitid and valid_until is NULL;
+								else
+									insert into storage_quota (storageid, groupid, unitid, value, unit, valid_until)
+									values (vSid, vGid, vUnitid, cValue, cUnit, cVuntil);
+								end if;
 							end $$;`, rName, gName, unitName, groupquota, unit, validtime))
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
