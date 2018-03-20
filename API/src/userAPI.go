@@ -1013,8 +1013,10 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No quota specified.\" }")
 		return
 	}
-	if validtime != "" {
-		validtime = "valid_until = " + validtime + ","
+	if validtime == "" {
+		validtime = "NULL"
+	} else {
+		validtime = "'" + validtime + "'"
 	}
 	if uName == "" && isGroup == false {
 		log.WithFields(QueryFields(r, startTime)).Error("No user name given and isGroup was set to false.")
@@ -1042,20 +1044,33 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = DBtx.Exec(fmt.Sprintf(`do $$
-							declare vSid int;
-							declare vUid int;
-                                                        declare vUnitid int; 
+							declare
+								vSid int;
+								vUid int;
+								vUnitid int;
+								
+								cSname constant text := '%s';
+								cUname constant text := '%s';
+								cEname constant text := '%s';
+								cValue constant text := '%s';
+								cUnit constant text := '%s';
+								cVuntil constant date := %s;
 							begin
-								select storageid into vSid from storage_resources where name = '%s';
-								select uid into vUid from users where uname = '%s';
-								select unitid into vUnitid from affiliation_units where name = '%s';
+								select storageid into vSid from storage_resources where name = cSname;
+								select uid into vUid from users where uname = cUname;
+								select unitid into vUnitid from affiliation_units where name = cEname;
 
 								if vSid is null then raise 'Resource does not exist.'; end if;
 								if vUid is null then raise 'User does not exist.'; end if;
 								if vUnitid is null then raise 'Unit does not exist.'; end if;
 										
-								update storage_quota set value = '%s', unit = '%s', %s last_updated = NOW()
-								where storageid = vSid and uid = vUid and unitid = vUnitid;
+								if (vSid, vUid, vUnitid) in (select storageid, uid, unitid from storage_quota) and cVuntil is NULL then
+									update storage_quota set value = cValue, unit = cUnit, valid_until = cVuntil, last_updated = NOW()
+									where storageid = vSid and uid = vUid and unitid = vUnitid and valid_until is NULL;
+								else
+									insert into storage_quota (storageid, uid, unitid, value, unit, valid_until)
+									values (vSid, vUid, vUnitid, cValue, cUnit, cVuntil);
+								end if;
 							end $$;`, rName, uName, unitName, quota, unit, validtime))
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
