@@ -2105,7 +2105,7 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 	
 	// see if the user/group/resource combination is already there. If so, then we might just be doing an update.
 	
-	err := DBptr.QueryRow(`select ca.uid, ca.groupid, ca.compid, ca.shell, ca.home_dir from compute_access as ca join groups on ca.groupid=groups.groupid join users as u on u.uid=ca.uid join compute_resources as cr on cr.compid=ca.compid where cr.name=$1 and users.uname=$2 and groups.name=$3`,rName,uname,gName).Scan(&uid,&grpid,&compid,&defShell,defhome)
+	err := DBptr.QueryRow(`select ca.uid, ca.groupid, ca.compid, ca.shell, ca.home_dir from compute_access as ca join groups as g on ca.groupid=g.groupid join users as u on u.uid=ca.uid join compute_resources as cr on cr.compid=ca.compid where cr.name=$1 and u.uname=$2 and g.name=$3`,rName,uname,gName).Scan(&uid,&grpid,&compid,&defShell,defhome)
 	switch {
 	case err == sql.ErrNoRows:
 		
@@ -2133,7 +2133,7 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 
 		// now, do the actual insert
 
-		_, inserr := DBptr.Exec(`insert into compute_access (compid, uid, groupid, last_updated, shell, home_dir) values ( (select compid from crompute_resources where compid.name=$1), (select uid from users where uname=$2), (select groupid from groups where groups.name=$3), NOW(), $4,$5)`, rName, uname, gName, defShell, defhome)
+		_, inserr := DBptr.Exec(`insert into compute_access (compid, uid, groupid, last_updated, shell, home_dir) values ( (select compid from compute_resources where name=$1), (select uid from users where uname=$2), (select groupid from groups where groups.name=$3), NOW(), $4,$5)`, rName, uname, gName, defShell, defhome)
 		if inserr != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + inserr.Error())
 			// now we also need to do a bunch of other checks here

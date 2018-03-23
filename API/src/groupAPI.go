@@ -747,6 +747,8 @@ func setGroupCondorQuota(w http.ResponseWriter, r *http.Request) {
 	}
 	if until == "" {
 		until = "null"
+	} else {
+		until = "'" + until + "'"
 	}
 
 	gName := strings.Split(group, ".")[0]
@@ -775,7 +777,7 @@ func setGroupCondorQuota(w http.ResponseWriter, r *http.Request) {
 										c_qname constant text := '%s';
 										c_qvalue constant numeric := %s;
 										c_qtype constant text := '%s';
-										c_valid constant date := '%s';
+										c_valid constant date := %s;
 									begin
 										select groupid into v_groupid from groups where name = c_gname;
 										select compid into v_compid from compute_resources where name = c_compres;
