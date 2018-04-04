@@ -43,6 +43,7 @@ func (t *Transaction) Commit(key int64) error {
 // Rollback aborts the transaction.
 func (t *Transaction) Rollback() error {
 	if t.commitKey != 0 {
+		t.commitKey = 0
 		return t.tx.Rollback()
 	}
 	err := errors.New("transaction has not been started")

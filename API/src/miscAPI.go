@@ -261,10 +261,15 @@ func getGridMapFile(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
-	unit := q.Get("unitname")
+	unit := strings.TrimSpace(q.Get("unitname"))
 	if unit == "" {
 		unit = "%"
 	}
+	
+	
+
+
+	var unitExists bool
 
 	rows, err := DBptr.Query(`select name, dn, uname, unit_exists from 
 							 (select 1 as key, au.name, uc.dn, us.uname from  affiliation_unit_user_certificate as ac
@@ -280,8 +285,6 @@ func getGridMapFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer rows.Close()
-
-	var unitExists bool
 
 	type jsonentry struct {
 		DN string `json:"userdn"`

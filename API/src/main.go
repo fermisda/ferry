@@ -176,6 +176,7 @@ func main() {
 	grouter.HandleFunc("/getGroupStorageQuotas", getGroupStorageQuotas)
 	grouter.HandleFunc("/setGroupStorageQuota", setGroupStorageQuota)
 	grouter.HandleFunc("/getAllGroups",  getAllGroups)
+	grouter.HandleFunc("/addLPCCollaborationGroup", addLPCCollaborationGroup)
 
 	// misc API cals
 	grouter.HandleFunc("/getPasswdFile", getPasswdFile)
