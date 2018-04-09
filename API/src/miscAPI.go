@@ -948,7 +948,7 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case checkerr == sql.ErrNoRows:
 		// OK, it does not already exist, so we start a transaction
-		cKey, err := DBtx.Start(DBptr)
+		DBtx, cKey, err := LoadTransaction(r, DBptr)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
 			w.WriteHeader(http.StatusNotFound)
@@ -1090,7 +1090,7 @@ func setComputeResourceInfo(w http.ResponseWriter, r *http.Request) {
 		} // end if unitName != ""
 		
 		//transaction start, and update command
-		cKey, err := DBtx.Start(DBptr)
+		DBtx, cKey, err := LoadTransaction(r, DBptr)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
 			w.WriteHeader(http.StatusNotFound)
@@ -1173,7 +1173,7 @@ func createStorageResource(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case checkerr == sql.ErrNoRows:
 			// OK, it does not already exist, so we start a transaction
-		cKey, err := DBtx.Start(DBptr)
+		DBtx, cKey, err := LoadTransaction(r, DBptr)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
 			w.WriteHeader(http.StatusNotFound)
@@ -1306,7 +1306,7 @@ func setStorageResourceInfo(w http.ResponseWriter, r *http.Request) {
 		} // end if unitName != ""
 		
 		//transaction start, and update command
-		cKey, err := DBtx.Start(DBptr)
+		DBtx, cKey, err := LoadTransaction(r, DBptr)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
 			w.WriteHeader(http.StatusNotFound)
@@ -1369,4 +1369,33 @@ func getAllCAs(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 	}
 	fmt.Fprintf(w, string(jsonoutput))
+}
+func testWrapper(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+
+	var DBtx Transaction
+	R := WithTransaction(r, &DBtx)
+	
+	key, err := DBtx.Start(DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error starting database transaction: " + err.Error())
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
+		return
+	}
+
+	createUser(w, R)
+	if !DBtx.Complete() {
+		log.WithFields(QueryFields(r, startTime)).Error("createUser failed.")
+		DBtx.Rollback()
+		return
+	}
+	addUserToGroup(w, R)
+	if !DBtx.Complete() {
+		log.WithFields(QueryFields(r, startTime)).Error("addUserToGroup failed")
+		DBtx.Rollback()
+		return
+	}
+
+	DBtx.Commit(key)
 }

@@ -382,7 +382,7 @@ func setSuperUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cKey, err := DBtx.Start(DBptr)
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
@@ -570,7 +570,7 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cKey, err := DBtx.Start(DBptr)
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
@@ -640,7 +640,7 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cKey, err := DBtx.Start(DBptr)
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
@@ -720,7 +720,7 @@ func setUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cKey, err := DBtx.Start(DBptr)
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
@@ -789,7 +789,7 @@ func setUserShell(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cKey, err := DBtx.Start(DBptr)
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
@@ -1038,7 +1038,7 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 		unit = "B"
 	}
 
-	cKey, err := DBtx.Start(DBptr)
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
@@ -1122,7 +1122,7 @@ func setUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	cKey, err := DBtx.Start(DBptr)
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
@@ -1192,7 +1192,7 @@ func removeUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	cKey, err := DBtx.Start(DBptr)
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
@@ -1339,7 +1339,7 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cKey, err := DBtx.Start(DBptr)
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
@@ -1422,7 +1422,7 @@ func removeUserCertificateDN(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cKey, err := DBtx.Start(DBptr)
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
@@ -1521,7 +1521,7 @@ func setUserInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cKey, err := DBtx.Start(DBptr)
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
@@ -1616,7 +1616,7 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 	checkerr := DBptr.QueryRow(`select uname from users where uname=$1 and uid=$2 and full_name=$3`, uName, uid, fullname).Scan(&checkExist)
 	switch {
 	case checkerr == sql.ErrNoRows:
-		cKey, err := DBtx.Start(DBptr)
+		DBtx, cKey, err := LoadTransaction(r, DBptr)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error(err)
 		}
@@ -1857,7 +1857,7 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 		return	
 	default:
 		// actually do the deletion now
-		cKey, err := DBtx.Start(DBptr)
+		DBtx, cKey, err := LoadTransaction(r, DBptr)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error(err)
 		}

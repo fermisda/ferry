@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"net/http"
 	"errors"
 	"time"
 	"database/sql"
@@ -10,11 +12,13 @@ import (
 type Transaction struct {
 	tx *sql.Tx
 	commitKey int64
+	complete bool
 }
 
 // Start starts a transaction with default isolation level.
 // It returns a unique key required to commit the transaction. Returns 0 if the transaction is already started.
 func (t *Transaction) Start(db *sql.DB) (int64, error) {
+	t.complete = false
 	if t.commitKey == 0 {
 		t.commitKey = time.Now().Unix()
 		var err error
@@ -31,8 +35,10 @@ func (t *Transaction) Commit(key int64) error {
 		err := errors.New("transaction has not been started")
 		return err
 	} else if key == 0 {
+		t.complete = true
 		return nil
 	} else if t.commitKey == key {
+		t.complete = true
 		t.commitKey = 0
 		return t.tx.Commit()
 	}
@@ -67,4 +73,27 @@ func (t *Transaction) Exec(query string, args ...interface{}) (sql.Result, error
 	}
 	err := errors.New("transaction has not been started")
 	return nil, err
+}
+
+// Complete returns the state of the Transaction.
+func (t *Transaction) Complete() (bool) {
+	return t.complete
+}
+
+// LoadTransaction loads a Transaction from an http context. Returns a new Transaction if none is found.
+func LoadTransaction(r *http.Request, db *sql.DB) (*Transaction, int64, error) {
+	if r.Context().Value("tx") != nil {
+		tx := r.Context().Value("tx").(*Transaction)
+		return tx, 0, nil
+	}
+	var newTx Transaction
+	key, err := newTx.Start(db)
+	return &newTx, key, err
+}
+
+// WithTransaction starts a new Transaction and add it to an HTTP context
+func WithTransaction(r *http.Request, tx *Transaction) (*http.Request) {
+	var ctx context.Context
+	ctx = context.WithValue(ctx, "tx", tx)
+	return r.WithContext(ctx)
 }

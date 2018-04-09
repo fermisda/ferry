@@ -122,6 +122,7 @@ func main() {
 
 	grouter := mux.NewRouter()
 	grouter.HandleFunc("/", handler)
+	grouter.HandleFunc("/testWrapper", testWrapper)
 
 	//user API calls
 	grouter.HandleFunc("/getUserCertificateDNs", getUserCertificateDNs)

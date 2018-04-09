@@ -42,7 +42,7 @@ func createGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cKey, err := DBtx.Start(DBptr)
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
@@ -153,7 +153,7 @@ func addGroupToUnit(w http.ResponseWriter, r *http.Request) {
 //			// OK, both group and unit exist. Let's get down to business. Check if it's already in affiliation_unit_groups
 //			
 //			// start a transaction
-//			cKey, err := DBtx.Start(DBptr)
+//			DBtx, cKey, err := LoadTransaction(r, DBptr)
 //			if err != nil {
 //				log.WithFields(QueryFields(r, startTime)).Print("Error starting DB transaction: " + err.Error())
 //				fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
@@ -235,7 +235,7 @@ func setPrimaryStatusGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	cKey, err := DBtx.Start(DBptr)
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Print("Error starting DB transaction: " + err.Error())
 		w.WriteHeader(http.StatusNotFound)
@@ -466,7 +466,7 @@ func setGroupLeader(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	cKey, err := DBtx.Start(DBptr)
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Print("Error starting DB transaction: " + err.Error())
 		w.WriteHeader(http.StatusNotFound)
@@ -773,7 +773,7 @@ func setGroupCondorQuota(w http.ResponseWriter, r *http.Request) {
 		qType = "static"
 	}
 
-	cKey, err := DBtx.Start(DBptr)
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
@@ -943,7 +943,7 @@ func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No unit specified.\" }")
 		return
 	}
-	cKey, err := DBtx.Start(DBptr)
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
@@ -1114,7 +1114,7 @@ func setGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
 		
 		//start transaction
 		// start a transaction
-		cKey, err := DBtx.Start(DBptr)
+		DBtx, cKey, err := LoadTransaction(r, DBptr)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
 			w.WriteHeader(http.StatusNotFound)
@@ -1311,7 +1311,7 @@ func addGroupToUnitDB(groupname, unitName string, isPrimary int) (error) {
 			// OK, both group and unit exist. Let's get down to business. Check if it's already in affiliation_unit_groups
 			
 			// start a transaction
-	//		cKey, err := DBtx.Start(DBptr)
+	//		DBtx, cKey, err := LoadTransaction(r, DBptr)
 	//		if err != nil {
 	//			log.WithFields(QueryFields(r, startTime)).Print("Error starting DB transaction: " + err.Error())
 	//			w.WriteHeader(http.StatusNotFound)

@@ -58,7 +58,7 @@ func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 		// OK, it doesn't exist, let's add it now.
 		
 		// start a transaction
-		cKey, err := DBtx.Start(DBptr)
+		DBtx, cKey, err := LoadTransaction(r, DBptr)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
 			w.WriteHeader(http.StatusNotFound)
@@ -150,7 +150,7 @@ func removeAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 		return
 	default:
 
-		cKey, err := DBtx.Start(DBptr)
+		DBtx, cKey, err := LoadTransaction(r, DBptr)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
 			w.WriteHeader(http.StatusNotFound)
@@ -292,7 +292,7 @@ func setAffiliationUnitInfo(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Info("Full string is " + modstr)
 
 		// start DB transaction
-		cKey, err := DBtx.Start(DBptr)
+		DBtx, cKey, err := LoadTransaction(r, DBptr)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
 			w.WriteHeader(http.StatusNotFound)
@@ -666,7 +666,7 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 		mUser.Scan(q.Get("mapped_user"))
 	}
 
-	cKey, err := DBtx.Start(DBptr)
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
@@ -749,7 +749,7 @@ func setFQANMappings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cKey, err := DBtx.Start(DBptr)
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
