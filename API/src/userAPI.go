@@ -2121,7 +2121,7 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 		if checkerr == sql.ErrNoRows {
 			// the given compid does not exist in this case. Exit accordingly.	
 			log.WithFields(QueryFields(r, startTime)).Error("resource " + rName + " does not exist.")
-			w.WriteHeader(http.StatusNoContent)
+			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
 			return	
 		}
@@ -2142,16 +2142,16 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + inserr.Error())
 			// now we also need to do a bunch of other checks here
 			if strings.Contains(inserr.Error(),"null value in column \"compid\"") {
-				w.WriteHeader(http.StatusNoContent)
+				w.WriteHeader(http.StatusNotFound)
 				fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
 				return	
 				
 			} else if strings.Contains(inserr.Error(),"null value in column \"uid\"") {
-				w.WriteHeader(http.StatusNoContent)
+				w.WriteHeader(http.StatusNotFound)
 				fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
 				return	
 			} else if strings.Contains(inserr.Error(),"null value in column \"groupid\"") {
-				w.WriteHeader(http.StatusNoContent)
+				w.WriteHeader(http.StatusNotFound)
 				fmt.Fprintf(w, "{ \"ferry_error\": \"Group does not exist.\" }")
 				return		
 			} else {
