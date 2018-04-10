@@ -601,7 +601,7 @@ ALTER TABLE ONLY affiliation_units
 --
 
 ALTER TABLE ONLY compute_access
-    ADD CONSTRAINT pk_compute_access PRIMARY KEY (compid, uid);
+    ADD CONSTRAINT pk_compute_access PRIMARY KEY (compid, uid, groupid);
 
 
 --
