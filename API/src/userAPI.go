@@ -2105,7 +2105,7 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 	
 	// see if the user/group/resource combination is already there. If so, then we might just be doing an update.
 	
-	err := DBptr.QueryRow(`select ca.uid, ca.groupid, ca.compid, ca.shell, ca.home_dir from compute_access as ca join groups as g on ca.groupid=g.groupid join users as u on u.uid=ca.uid join compute_resources as cr on cr.compid=ca.compid where cr.name=$1 and u.uname=$2 and g.name=$3`,rName,uname,gName).Scan(&uid,&grpid,&compid,&defShell,defhome)
+	err := DBptr.QueryRow(`select ca.uid, ca.groupid, ca.compid, ca.shell, ca.home_dir from compute_access as ca join groups as g on ca.groupid=g.groupid join users as u on u.uid=ca.uid join compute_resources as cr on cr.compid=ca.compid where cr.name=$1 and u.uname=$2 and g.name=$3`,rName,uname,gName).Scan(&uid,&grpid,&compid,&defShell,&defhome)
 	switch {
 	case err == sql.ErrNoRows:
 		
@@ -2124,11 +2124,11 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 		//check if the query specified a shell or directory value
 		if shell != "" {
 			defShell.Valid = true
-			defShell.String = shell
+			defShell.String = strings.TrimSpace(shell)
 		}
 		if homedir != "" {
 			defhome.Valid = true
-			defhome.String = homedir
+			defhome.String = strings.TrimSpace(homedir)
 		}
 
 		// now, do the actual insert
@@ -2168,9 +2168,9 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return		
 		
-	default: // OK, we already have this user/group/resource combo. We just need to check if the shells are the same or whatnot
+	default: // OK, we already have this user/group/resource combo. We just need to check if the call is trying to change the shell or home dir. If neither option was provided, that implies we're just keeping what is already there, so just log that nothing is changing and return success.
 		
-		if defShell.String == shell && defhome.String == homedir {
+		if "" == shell && "" == homedir {
 			// everything in the DB is already the same as the request, so don't do anything
 			log.WithFields(QueryFields(r, startTime)).Print("The request already exists in the database. Nothing to do.")
 			w.WriteHeader(http.StatusOK)
