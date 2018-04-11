@@ -1389,3 +1389,110 @@ func setGroupStorageQuotaDB(gName, unitname, rName, groupquota, quotaunit, valid
 	//move all error handling to the outside calling function and just return the err itself here
 	return err
 }
+
+func getGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	unitName := strings.TrimSpace(q.Get("unitname"))
+	rName := strings.TrimSpace(q.Get("resourcename"))
+
+	type jsonerror struct {
+		Error string `json:"ferry_error"`
+	}
+	var inputErr []jsonerror
+
+	if unitName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No  unit name specified in http query.")
+		inputErr = append(inputErr, jsonerror{"No unitname specified."})
+	}
+	if rName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No resource name specified in http query.")
+		inputErr = append(inputErr, jsonerror{"No resourcename specified."})
+	}	
+	if len(inputErr) > 0 {
+		jsonout, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err)
+		}
+		fmt.Fprintf(w, string(jsonout))
+		return
+	}
+
+	var unitid,compid int
+	checkerr := DBptr.QueryRow(`select unitid from affiliation_units where name=$1`,unitName).Scan(&unitid)
+	switch {
+	case checkerr == sql.ErrNoRows:
+		log.WithFields(QueryFields(r, startTime)).Error("Unit " + unitName + " does not exist.")
+		inputErr = append(inputErr, jsonerror{"Unit " + unitName + " does not exist."})
+	case checkerr != nil :
+		log.WithFields(QueryFields(r, startTime)).Error("Error in affiliation_unit check: " + checkerr.Error())
+		inputErr = append(inputErr, jsonerror{"Error in affiliation_unit check."})	
+	}
+
+	checkerr = DBptr.QueryRow(`select compid from compute_resources where name=$1`,rName).Scan(&compid)
+	switch {
+	case checkerr == sql.ErrNoRows:
+		log.WithFields(QueryFields(r, startTime)).Error("Resource " + rName + " does not exist.")
+		inputErr = append(inputErr, jsonerror{"Resource " + rName + " does not exist."})
+	case checkerr != nil :
+		log.WithFields(QueryFields(r, startTime)).Error("Error in compute_resource check: " + checkerr.Error())
+		inputErr = append(inputErr, jsonerror{"Error in compute_resource check."})	
+	}
+
+	if len(inputErr) > 0 {
+		jsonout, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err)
+		}
+		fmt.Fprintf(w, string(jsonout))
+		return
+	}
+	
+	type jsonout struct {
+		Groupname []string `json:"groups"`
+	}
+	
+	var (
+		grouplist jsonout
+		scanname string
+	)
+	rows, dberr := DBptr.Query(`select groups.name from groups where groups.groupid in (select distinct ca.groupid from compute_access as ca join compute_resources as cr on cr.compid=ca.compid where ca.compid=$1 and cr.unitid=$2) order by groups.name`,compid,unitid)
+	if dberr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + dberr.Error())
+		inputErr = append(inputErr, jsonerror{dberr.Error()})
+		
+		if len(inputErr) > 0 {
+			errjson, err := json.Marshal(inputErr)
+			if err != nil {
+				log.WithFields(QueryFields(r, startTime)).Error(err)
+			}
+			fmt.Fprintf(w, string(errjson))
+			return
+		}
+	}
+	defer rows.Close()
+	for rows.Next() {
+		rows.Scan(&scanname)
+		grouplist.Groupname = append(grouplist.Groupname,scanname)
+	}
+	
+	var output interface{}	
+	
+	if len(grouplist.Groupname) == 0 {
+		var queryErr []jsonerror
+		queryErr = append(queryErr, jsonerror{"No groups for this unit have access to this resource."})
+		log.WithFields(QueryFields(r, startTime)).Error("No groups for " + unitName + " on resource " + rName + ".")
+		output = queryErr
+		
+	} else {
+		output = grouplist
+	}
+	
+	jsonoutput, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+	}
+	fmt.Fprintf(w, string(jsonoutput))
+}
