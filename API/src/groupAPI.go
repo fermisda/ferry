@@ -374,7 +374,7 @@ func getGroupMembers(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func IsUserLeaderOf(w http.ResponseWriter, r *http.Request) {
+func IsUserLeaderOfGroup(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
