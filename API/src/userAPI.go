@@ -2128,11 +2128,11 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 		//check if the query specified a shell or directory value
 		if shell != "" {
 			defShell.Valid = true
-			defShell.String = shell
+			defShell.String = strings.TrimSpace(shell)
 		}
 		if homedir != "" {
 			defhome.Valid = true
-			defhome.String = homedir
+			defhome.String = strings.TrimSpace(homedir)
 		}
 
 		// now, do the actual insert
@@ -2172,9 +2172,9 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return		
 		
-	default: // OK, we already have this user/group/resource combo. We just need to check if the shells are the same or whatnot
+	default: // OK, we already have this user/group/resource combo. We just need to check if the call is trying to change the shell or home dir. If neither option was provided, that implies we're just keeping what is already there, so just log that nothing is changing and return success.
 		
-		if defShell.String == shell && defhome.String == homedir {
+		if "" == shell && "" == homedir {
 			// everything in the DB is already the same as the request, so don't do anything
 			log.WithFields(QueryFields(r, startTime)).Print("The request already exists in the database. Nothing to do.")
 			w.WriteHeader(http.StatusOK)
