@@ -229,10 +229,16 @@ func getUserFQANs(w http.ResponseWriter, r *http.Request) {
 		expt = "%"
 	}
 
-	rows, err := DBptr.Query(`select T2.name, T1.fqan, c.user_exists, c.unit_exists
-				  from       (select 1 as key, fq.fqan, gf.groupid from grid_fqan as fq left join groups as gf on fq.mapped_group=gf.name where mapped_user=$1) as T1 
-				  join       (select au.name, ag.groupid from affiliation_units as au left join affiliation_unit_group as ag on au.unitid=ag.unitid where name like $2) as T2 on T1.groupid=T2.groupid
-				  right join (select 1 as key, $1 in (select uname from users) as user_exists, $2 in (select name from affiliation_units) as unit_exists) as c on c.key = t1.key order by T2.name;`, uname, expt)
+	rows, err := DBptr.Query(`select name, fqan, user_exists, unit_exists from (
+								select 1 as key, name, fqan from grid_access as ga
+								join (select * from users where uname = $1) as us on ga.uid = us.uid
+								join (select * from affiliation_units where name like $2) as au on ga.unitid = au.unitid
+								left join grid_fqan as gf on ga.fqanid = gf.fqanid) as T
+							right join (
+								select 1 as key,
+								$1 in (select uname from users) as user_exists,
+								$2 in (select name from affiliation_units) as unit_exists
+							) as C on T.key = C.key order by T.name;`, uname, expt)
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
