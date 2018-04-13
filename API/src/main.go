@@ -122,7 +122,6 @@ func main() {
 
 	grouter := mux.NewRouter()
 	grouter.HandleFunc("/", handler)
-	grouter.HandleFunc("/testWrapper", testWrapper)
 
 	//user API calls
 	grouter.HandleFunc("/getUserCertificateDNs", getUserCertificateDNs)
@@ -214,6 +213,10 @@ func main() {
 	grouter.HandleFunc("/removeFQAN",			   removeFQAN)                        
 	grouter.HandleFunc("/setFQANMappings",                     setFQANMappings)                    
 	grouter.HandleFunc("/getAllAffiliationUnits",                     getAllAffiliationUnits)
+
+	//wrapper API calls
+	grouter.HandleFunc("/testWrapper", testWrapper)
+	grouter.HandleFunc("/requestExperimentAccount", requestExperimentAccount)
 
 	srvConfig := viper.GetStringMapString("server")
 	Mainsrv = &http.Server{
