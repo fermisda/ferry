@@ -587,8 +587,10 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 									end $$;`, uName, gName, isLeader))
 
 	if err == nil {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+		if cKey != 0 {
+			log.WithFields(QueryFields(r, startTime)).Info("Success!")
+			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+		}
 	} else {
 		if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User already belongs to this group.")
@@ -658,8 +660,10 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 														 values (vUnitid, vUid, vFqanid, false, false, NOW());
 									end $$;`, eName, uName, fqan))
 	if err == nil {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+		if cKey != 0 {
+			log.WithFields(QueryFields(r, startTime)).Info("Success!")
+			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+		}
 	} else {
 		if strings.Contains(err.Error(), `null value in column "uid" violates not-null constraint`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
@@ -677,6 +681,7 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
 		}
+		return
 	}
 
 	DBtx.Commit(cKey)
@@ -1629,8 +1634,10 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 		_, err = DBtx.Exec(fmt.Sprintf("insert into users (uname, uid, full_name, status, expiration_date, last_updated) values ('%s',%s,'%s',%t,'%s', NOW())", uName, uid, fullname, status, expdate))
 
 		if err == nil {
-			log.WithFields(QueryFields(r, startTime)).Info("Success!")
-			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+			if cKey != 0 {
+				log.WithFields(QueryFields(r, startTime)).Info("Success!")
+				fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+			}
 			DBtx.Commit(cKey)
 			return
 		} else {
@@ -2071,25 +2078,37 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
+
 	uname := q.Get("username")
 	gName := q.Get("groupname")
 	rName := q.Get("resourcename")
 	shell := q.Get("shell")
 	homedir := q.Get("home_dir")
+
+	type jsonerror struct {
+		Error string `json:"ferry_error"`
+	}
+	var inputErr []jsonerror
+
 	if uname == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No value for username specified.\" }")
-		return
+		inputErr = append(inputErr, jsonerror{"No value for username specified."})
 	}
 	if rName == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No compute resource specified in http query.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No value for resourcename specified.\" }")
-		return
+		inputErr = append(inputErr, jsonerror{"No value for resourcename specified."})
 	}
-	
 	if gName == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No group name specified in http query.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No value for groupname specified.\" }")
+		inputErr = append(inputErr, jsonerror{"No value for groupname specified."})
+	}
+
+	if len(inputErr) > 0 {
+		jsonout, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err)
+		}
+		fmt.Fprintf(w, string(jsonout))
 		return
 	}
 	
@@ -2099,13 +2118,18 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
 		return
 	}
+
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
 	
 	var defShell,defhome sql.NullString
 	var grpid,compid,uid int
 	
 	// see if the user/group/resource combination is already there. If so, then we might just be doing an update.
 	
-	err := DBptr.QueryRow(`select ca.uid, ca.groupid, ca.compid, ca.shell, ca.home_dir from compute_access as ca
+	err = DBptr.QueryRow(`select ca.uid, ca.groupid, ca.compid, ca.shell, ca.home_dir from compute_access as ca
 						   join groups as g on ca.groupid=g.groupid
 						   join users as u on u.uid=ca.uid
 						   join compute_resources as cr on cr.compid=ca.compid
@@ -2137,7 +2161,7 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 
 		// now, do the actual insert
 
-		_, inserr := DBptr.Exec(`insert into compute_access (compid, uid, groupid, last_updated, shell, home_dir) values ( (select compid from compute_resources where name=$1), (select uid from users where uname=$2), (select groupid from groups where groups.name=$3), NOW(), $4,$5)`, rName, uname, gName, defShell, defhome)
+		_, inserr := DBtx.Exec(`insert into compute_access (compid, uid, groupid, last_updated, shell, home_dir) values ( (select compid from compute_resources where name=$1), (select uid from users where uname=$2), (select groupid from groups where groups.name=$3), NOW(), $4,$5)`, rName, uname, gName, defShell, defhome)
 		if inserr != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + inserr.Error())
 			// now we also need to do a bunch of other checks here
@@ -2161,8 +2185,11 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully inserted (%s,%s,%s,%s,%s) into compute_access.",rName, uname, gName, defShell, defhome))
-			w.WriteHeader(http.StatusOK)
-			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+			if cKey != 0 {
+				w.WriteHeader(http.StatusOK)
+				fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+			}
+			DBtx.Commit(cKey)
 			return			
 		}
 		
