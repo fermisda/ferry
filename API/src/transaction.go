@@ -80,6 +80,11 @@ func (t *Transaction) Complete() (bool) {
 	return t.complete
 }
 
+// Continue the Transaction setting compete as false.
+func (t *Transaction) Continue() {
+	t.complete = false
+}
+
 // LoadTransaction loads a Transaction from an http context. Returns a new Transaction if none is found.
 func LoadTransaction(r *http.Request, db *sql.DB) (*Transaction, int64, error) {
 	if r.Context().Value("tx") != nil {
