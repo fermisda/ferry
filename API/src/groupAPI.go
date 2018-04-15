@@ -308,6 +308,16 @@ func getGroupMembers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	
+	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+                log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+                fmt.Fprintf(w,"{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
+                return
+        }
+	if lastupdate != "" {
+		lastupdate = " and user_group.last_updated>'" + lastupdate + "'"
+	}
+	
 	type jsonout struct {
 		UID int `json:"uid"`
 		Uname string `json:"username"`
@@ -334,7 +344,7 @@ func getGroupMembers(w http.ResponseWriter, r *http.Request) {
 		return
 		
 	default:
-		rows, err := DBptr.Query(`select users.uname, users.uid, user_group.is_leader from user_group join users on users.uid=user_group.uid where user_group.groupid=$1`,grpid)
+		rows, err := DBptr.Query(`select users.uname, users.uid, user_group.is_leader from user_group join users on users.uid=user_group.uid where user_group.groupid=$1`+lastupdate,grpid)
 		if err != nil {	
 			log.WithFields(QueryFields(r, startTime)).Print("Database query error: " + err.Error())
 			w.WriteHeader(http.StatusNotFound)
@@ -1148,8 +1158,17 @@ func setGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
 func getAllGroups(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	
-	rows, err := DBptr.Query(`select name, groupid from groups`)
+	q := r.URL.Query()
+	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+                log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
+                return
+        }
+        if lastupdate != "" {
+		        lastupdate =  " where last_updated>'" + lastupdate + "'"
+        } 
+	rows, err := DBptr.Query(`select name, groupid from groups` + lastupdate)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())

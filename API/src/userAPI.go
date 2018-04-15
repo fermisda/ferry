@@ -2246,10 +2246,49 @@ func getAllUsers(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	querystr := `select uname, uid, full_name from users order by uname`
-	if ao != "" {
-		querystr = "select uname, uid, full_name from users where status='" + strconv.FormatBool(activeonly) + "' order by uname"
+	
+	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
+		return
 	}
+	
+//	if lastupdate != "" {
+//		if unixtime, interr := strconv.ParseInt(lastupdate,10,64) ; interr == nil {
+//			parsedtime, marshalerr := ((time.Unix(unixtime,0)).UTC()).MarshalText()
+//			if marshalerr == nil {
+//				lastupdate = string(parsedtime)	
+//			} else {
+//				log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + marshalerr.Error())
+//				fmt.Fprintf(w,"{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided it should be an integer representing an epoch time.\" }")
+//				return
+//			}
+//		} else {
+//			log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + interr.Error())
+//                        fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid value for last_updated. If provided, it should be an integer representing an epoch time.\" }")
+//                        return
+//		}
+//	}
+//	
+	querystr := `select uname, uid, full_name from users `
+	log.WithFields(QueryFields(r, startTime)).Info("parsed time = " + lastupdate) 
+	
+	switch {
+	case ao != "" && lastupdate != "" : 
+		querystr = querystr + " where status='" +  strconv.FormatBool(activeonly) + "' and last_updated>='" + lastupdate + "' "
+	case ao != "" :
+		querystr = querystr + " where status="+  strconv.FormatBool(activeonly) + "'"
+	case lastupdate != "":
+		querystr = querystr + " where last_updated>='" + lastupdate + "'"
+	}
+	querystr = querystr + " order by uname"
+	//	if ao != "" {
+	//		querystr = "select uname, uid, full_name from users where status='" + strconv.FormatBool(activeonly) + "' order by uname"
+	//	}
+
+	log.WithFields(QueryFields(r, startTime)).Info("query string = " +querystr)
 	rows, err := DBptr.Query(querystr)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)

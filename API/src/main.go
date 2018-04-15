@@ -16,6 +16,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	golog "log"
 	"github.com/spf13/viper"
+	"strconv"
 )
 
 var DBptr *sql.DB
@@ -54,6 +55,28 @@ func gatekeeper(c net.Conn, s http.ConnState) {
 		log.WithFields(fields).Info("New connection started.")
 	} else {
 		log.WithFields(fields).Debug("Connection status changed.")
+	}
+}
+
+func stringToParsedTime( intime string ) (string, error) {
+// convert a string representing a epoch time (so it should possible to parse as an integer) to a string in RFC3339 format. 
+// This is useful for things like gettign DB entries updated only after a certain time. The returned time will always
+// be set to UTC.
+
+//if the string is empty, just return it and a nil error.
+	if intime == "" {
+		return "", nil
+	}
+// if not empty, try to parse ine input string as an integer. Bail out if it fails
+	if unixtime, interr := strconv.ParseInt(intime,10,64) ; interr == nil {
+		parsedtime, marshalerr := ((time.Unix(unixtime,0)).UTC()).MarshalText()
+		if marshalerr == nil {
+			return string(parsedtime), nil	
+		} else {
+			return "", marshalerr
+		}		
+	} else {
+		return "", interr
 	}
 }
 
