@@ -645,7 +645,7 @@ func getGroupBatchPriorities(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	groupname := strings.TrimSpace(q.Get("groupname"))
 	rName := strings.TrimSpace(q.Get("resourcename"))
-//	expName := strings.TrimSpace(q.Get("experimentname"))
+//	expName := strings.TrimSpace(q.Get("unitname"))
 	if groupname == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified.\" }")
@@ -711,7 +711,7 @@ func getGroupCondorQuotas(w http.ResponseWriter, r *http.Request) {
 //	q := r.URL.Query()
 //	groupname := q.Get("groupname")
 //	resource := q.Get("resourcename")
-//	exptname := q.Get("experimentname")
+//	exptname := q.Get("unitname")
 	NotDoneYet(w, r, startTime)
 }
 func setGroupBatchPriority(w http.ResponseWriter, r *http.Request) {
@@ -832,7 +832,7 @@ func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	groupname := q.Get("groupname")
 	resource := q.Get("resourcename")
-	exptname := q.Get("experimentname")
+	exptname := q.Get("unitname")
 	if groupname == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No group name specified in http query.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No group name specified.\" }")

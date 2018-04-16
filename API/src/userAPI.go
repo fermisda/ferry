@@ -18,7 +18,7 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 	uname := q.Get("username")
-	expt := q.Get("experimentname")
+	expt := q.Get("unitname")
 	if uname == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
@@ -26,7 +26,7 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 	}
 	if expt == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No experiment name specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No experimentname specified.\" }")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
 		return
 	}
 
@@ -117,7 +117,7 @@ func getAllUsersCertificateDNs(w http.ResponseWriter, r *http.Request) {
 	}
 	var inputErr []jsonerror
 
-	expt := q.Get("experimentname")
+	expt := q.Get("unitname")
 	if expt == "" {
 		expt = "%"
 	}
@@ -219,7 +219,7 @@ func getUserFQANs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 	uname := q.Get("username")
-	expt := q.Get("experimentname")
+	expt := q.Get("unitname")
 	if uname == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
@@ -299,9 +299,9 @@ func getSuperUserList(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
-	expt := q.Get("experimentname")
+	expt := q.Get("unitname")
 	if expt == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No experimentname specified in http query.")
+		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
 		return
 	}
@@ -623,7 +623,7 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 
 	uName := q.Get("username")
 	fqan := q.Get("fqan")
-	eName := q.Get("experimentname")
+	eName := q.Get("unitname")
 
 	if uName == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
@@ -636,8 +636,8 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if eName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No experimentname specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No experimentname specified.\" }")
+		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
 		return
 	}
 
