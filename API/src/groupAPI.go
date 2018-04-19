@@ -899,7 +899,7 @@ func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 		}
 	if idx == 0 {
 		w.WriteHeader(http.StatusNotFound)
-		output += `"ferry_error": "Group has no quotas registered."`
+		output += `{ "ferry_error": "Group has no quotas registered." }`
 		log.WithFields(QueryFields(r, startTime)).Error("Group has no quotas registered.")
 	} else {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
@@ -964,7 +964,7 @@ func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
 		return	
 	}
 
-	err = setGroupStorageQuotaDB(gName, unitName, rName, groupquota, unit, validtime)
+	err = setGroupStorageQuotaDB(DBtx, gName, unitName, rName, groupquota, unit, validtime)
 //	_, err = DBtx.Exec(fmt.Sprintf(`do $$
 //							declare 
 //								vSid int;
@@ -1289,7 +1289,7 @@ func addLPCCollaborationGroup(w http.ResponseWriter, r *http.Request) {
 		}
 	} 
 	
-	quotaerr := setGroupStorageQuotaDB(gName, "cms", "EOS", quota, "TB", "NULL")
+	quotaerr := setGroupStorageQuotaDB(&DBtx, gName, "cms", "EOS", quota, "TB", "NULL")
 	if quotaerr != nil {
 		//print out the error
 		// roll back transaction
@@ -1374,12 +1374,12 @@ insert into affiliation_unit_group (groupid, unitid, is_primary, last_updated) v
 	
 }
 
-func setGroupStorageQuotaDB(gName, unitname, rName, groupquota, quotaunit, valid_until string) (error) {
+func setGroupStorageQuotaDB(tx *Transaction, gName, unitname, rName, groupquota, quotaunit, valid_until string) (error) {
 
 // since this function is not directly web accessible we don't do as much parameter checking/validation here.
 // We assume that the inputs have already been sanitized by the calling function.
 
-	_, err := DBtx.Exec(fmt.Sprintf(`do $$
+	_, err := tx.Exec(fmt.Sprintf(`do $$
 							declare 
 								vSid int;
 								vGid int;
