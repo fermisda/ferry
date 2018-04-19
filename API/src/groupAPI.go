@@ -849,7 +849,11 @@ func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := DBptr.Query(`select sq.value, sq.unit, sq.valid_until from storage_quota sq INNER JOIN affiliation_units on affiliation_units.unitid = sq.unitid INNER JOIN storage_resources on storage_resources.storageid = sq.storageid INNER JOIN groups on groups.groupid = sq.groupid where affiliation_units.name = $3 AND storage_resources.type = $2 and groups.name = $1`, groupname, resource, exptname)
+	rows, err := DBptr.Query(`select sq.value, sq.unit, sq.valid_until from storage_quota sq
+							  join affiliation_units on affiliation_units.unitid = sq.unitid
+							  join storage_resources on storage_resources.storageid = sq.storageid
+							  join groups on groups.groupid = sq.groupid
+							  where affiliation_units.name = $3 AND storage_resources.name = $2 and groups.name = $1`, groupname, resource, exptname)
 	if err != nil {	
 		defer log.WithFields(QueryFields(r, startTime)).Print("Error in DB query: " + err.Error())
 		w.WriteHeader(http.StatusNotFound)
