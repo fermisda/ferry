@@ -720,7 +720,7 @@ func getAffiliationMembersRoles(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 	
-	unit := q.Get("experimentname")
+	unit := q.Get("unitname")
 	role := q.Get("rolename")
 
 	if unit == "" {
