@@ -925,71 +925,107 @@ func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
+
+	type jsonerror struct {
+		Error string `json:"ferry_error"`
+	}
+	var inputErr []jsonerror
+
 	groupname := q.Get("groupname")
 	resource := q.Get("resourcename")
 	exptname := q.Get("unitname")
+
 	if groupname == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No group name specified in http query.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No group name specified.\" }")
-		return
+		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
+		inputErr = append(inputErr, jsonerror{"No groupname specified."})
 	}
 	if resource == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No storage resource specified in http query.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No storage resource specified.\" }")
-		return
+		log.WithFields(QueryFields(r, startTime)).Error("No resourcename specified in http query.")
+		inputErr = append(inputErr, jsonerror{"No resourcename specified."})
 	}
 	if exptname == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No experiment specified in http query.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No experiment name specified.\" }")
+		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
+		inputErr = append(inputErr, jsonerror{"No unitname name specified."})
+	}
+
+	if len(inputErr) > 0 {
+		jsonout, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err)
+		}
+		fmt.Fprintf(w, string(jsonout))
 		return
 	}
 
-	rows, err := DBptr.Query(`select sq.value, sq.unit, sq.valid_until from storage_quota sq
-							  join affiliation_units on affiliation_units.unitid = sq.unitid
-							  join storage_resources on storage_resources.storageid = sq.storageid
-							  join groups on groups.groupid = sq.groupid
-							  where affiliation_units.name = $3 AND storage_resources.name = $2 and groups.name = $1`, groupname, resource, exptname)
+	rows, err := DBptr.Query(`select value, unit, valid_until, group_exists, resource_exists, unit_exists from (
+								select 1 as key, sq.value, sq.unit, sq.valid_until from storage_quota sq
+							  	join affiliation_units on affiliation_units.unitid = sq.unitid
+							  	join storage_resources on storage_resources.storageid = sq.storageid
+							  	join groups on groups.groupid = sq.groupid
+								where affiliation_units.name = $3 AND storage_resources.name = $2 and groups.name = $1
+							) as t right join (
+								select 1 as key, 
+								$1 in (select name from groups) as group_exists,
+								$2 in (select name from storage_resources) as resource_exists,
+								$3 in (select name from affiliation_units) as unit_exists
+							) as c on t.key = c.key;`, groupname, resource, exptname)
 	if err != nil {	
 		defer log.WithFields(QueryFields(r, startTime)).Print("Error in DB query: " + err.Error())
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		
 		return
-	}
-		
+	}		
 	defer rows.Close()	
-	idx := 0
-	output := ""
-	type jsonout struct {
+	
+	type jsonentry struct {
 		Value string `json:"value"`
 		Unit string `json:"quota_unit"`
 		ValidUntil string `json:"valid_until"`
 	}
-	var Out jsonout
-		for rows.Next() {
-		if idx != 0 {
-			output += ","
-		}
-	var tmpValue,tmpUnit,tmpValid sql.NullString
-		rows.Scan(&tmpValue,&tmpUnit,&tmpValid)
+	var Out []jsonentry
+	var groupExists, resourceExists, unitExists bool
+
+	for rows.Next() {
+		var tmpValue,tmpUnit,tmpValid sql.NullString
+		rows.Scan(&tmpValue, &tmpUnit, &tmpValid, &groupExists, &resourceExists, &unitExists)
 		if tmpValue.Valid {
-			Out.Value, Out.Unit, Out.ValidUntil = tmpValue.String, tmpUnit.String, tmpValid.String
-			outline, jsonerr := json.Marshal(Out)
-			if jsonerr != nil {
-				log.WithFields(QueryFields(r, startTime)).Error(jsonerr)
-			}
-			output += string(outline)
-			idx ++
+			Out = append(Out, jsonentry{tmpValue.String, tmpUnit.String, tmpValid.String})
 		}
+	}
+
+	var output interface{}	
+	if len(Out) == 0 {
+		type jsonerror struct {
+			Error string `json:"ferry_error"`
 		}
-	if idx == 0 {
-		w.WriteHeader(http.StatusNotFound)
-		output += `{ "ferry_error": "Group has no quotas registered." }`
-		log.WithFields(QueryFields(r, startTime)).Error("Group has no quotas registered.")
+		var queryErr []jsonerror
+		if !groupExists {
+			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+			queryErr = append(queryErr, jsonerror{"Group does not exist."})
+		}
+		if !resourceExists {
+			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
+			queryErr = append(queryErr, jsonerror{"Resource does not exist."})
+		}
+		if !unitExists {
+			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
+			queryErr = append(queryErr, jsonerror{"Experiment does not exist."})
+		}
+		if len(queryErr) == 0 {
+			log.WithFields(QueryFields(r, startTime)).Error("Group has no quotas registered.")
+			queryErr = append(queryErr, jsonerror{"Group has no quotas registered."})
+		}
+		output = queryErr
 	} else {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
 	}
-	fmt.Fprintf(w,output)	
+	jsonoutput, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+	}
+	fmt.Fprintf(w, string(jsonoutput))
 }
 
 func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
