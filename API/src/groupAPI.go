@@ -447,7 +447,6 @@ func IsUserMemberOfGroup(w http.ResponseWriter, r *http.Request) {
 
 	var output interface{}
 	if !tmpMember.Valid {
-		w.WriteHeader(http.StatusNotFound)
 		var queryErr []jsonerror
 		if !userExists {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
