@@ -1,6 +1,7 @@
 package main
 
 import (
+	"regexp"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -614,6 +615,108 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	DBtx.Commit(cKey)
+}
+
+func removeUserFromGroup(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	type jsonerror struct {
+		Error []string `json:"ferry_error"`
+	}
+	var inputErr jsonerror
+
+	user := q.Get("username")
+	group := q.Get("groupname")
+
+	if user == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		inputErr.Error = append(inputErr.Error, "No username specified.")
+	}
+	if group == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
+		inputErr.Error = append(inputErr.Error, "No groupname specified.")
+	}
+
+	if len(inputErr.Error) > 0 {
+		jsonout, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err)
+		}
+		fmt.Fprintf(w, string(jsonout))
+		return
+	}
+
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+
+	query := fmt.Sprintf(`do $$
+						  declare
+							cUser constant text := '%s';
+							cGroup constant text := '%s';
+
+							vUid int;
+							vGroupid int;
+							vError text;
+						  begin
+							select uid into vUid from users where uname = cUser;
+							select groupid into vGroupid from groups where name = cGroup;
+
+							if vUid is null then vError = concat(vError, 'users,'); end if;
+							if vGroupid is null then vError = concat(vError, 'groups,'); end if;
+							if (vUid, vGroupid) not in (select uid, groupid from user_group) then vError = concat(vError, 'user_group,'); end if;
+							vError = trim(both ',' from vError);
+
+							if vError is not null then raise '%%', vError; end if;
+							
+							delete from user_group where uid = vUid and groupid = vGroupid;
+						  end $$;`, user, group)
+	_, err = DBtx.Exec(query)
+
+	re := regexp.MustCompile(`[\s\t\n]+`)
+	log.Debug(re.ReplaceAllString(query, " "))
+
+	var output interface{}
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		var queryErr jsonerror
+		if strings.Contains(err.Error(), `users`) {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			queryErr.Error = append(queryErr.Error, "User does not exist.")
+		}
+		if strings.Contains(err.Error(), `groups`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+			queryErr.Error = append(queryErr.Error, "Group does not exist.")
+		}
+		if strings.Contains(err.Error(), `user_group`) {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not belong to this group.")
+			queryErr.Error = append(queryErr.Error, "User does not belong to this group.")
+		}
+		if len(queryErr.Error) == 0 {
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			queryErr.Error = append(queryErr.Error, "Something went wrong.")
+		}
+		output = queryErr
+	} else {
+		type jsonstatus struct {
+			Error string `json:"ferry_status"`
+		}
+		output = jsonstatus{"success"}
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+
+		DBtx.Commit(cKey)
+		if cKey == 0 {
+			return
+		}
+	}
+	jsonout, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	fmt.Fprintf(w, string(jsonout))
 }
 
 func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
