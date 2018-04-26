@@ -875,15 +875,10 @@ func setUserShell(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 
-	rName := q.Get("resourcename")
 	uName := q.Get("username")
 	shell := q.Get("shell")
+	rName := q.Get("resourcename")
 
-	if rName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No resourcename specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No resourcename specified.\" }")
-		return
-	}
 	if uName == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
@@ -908,19 +903,26 @@ func setUserShell(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = DBtx.Exec(fmt.Sprintf(`do $$
+										declare cCompName constant text := '%s';
+										declare cUserName constant text := '%s';
+										declare cShell    constant text := '%s';
+
 										declare vCompid int;
 										declare vUid int;
-
 									begin
-										select compid into vCompid from compute_resources where name = '%s';
-										select uid into vUid from users where uname = '%s';
-
-
-										if vCompid is null then raise 'Resource does not exist.'; end if;
+										select uid into vUid from users where uname = cUserName;
 										if vUid is null then raise 'User does not exist.'; end if;
-										
-										update compute_access set shell = '%s', last_updated = NOW()
-										where compid = vCompid and uid = vUid;
+
+										if cCompName != '' then
+											select compid into vCompid from compute_resources where name = cCompName;
+											if vCompid is null then raise 'Resource does not exist.'; end if;
+
+											update compute_access set shell = cShell, last_updated = NOW()
+											where compid = vCompid and uid = vUid;
+										else
+											update compute_access set shell = cShell, last_updated = NOW()
+											where uid = vUid;
+										end if;
 									end $$;`, rName, uName, shell))
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
