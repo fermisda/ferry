@@ -681,7 +681,6 @@ func removeUserFromGroup(w http.ResponseWriter, r *http.Request) {
 
 	var output interface{}
 	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
 		var queryErr jsonerror
 		if strings.Contains(err.Error(), `users`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
