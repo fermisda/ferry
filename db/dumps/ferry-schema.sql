@@ -48,7 +48,7 @@ SET default_with_oids = false;
 CREATE TABLE affiliation_unit_group (
     unitid integer NOT NULL,
     groupid integer NOT NULL,
-    is_primary smallint,
+    is_primary boolean,
     last_updated timestamp with time zone DEFAULT ('now'::text)::date NOT NULL
 );
 
@@ -601,7 +601,7 @@ ALTER TABLE ONLY affiliation_units
 --
 
 ALTER TABLE ONLY compute_access
-    ADD CONSTRAINT pk_compute_access PRIMARY KEY (compid, uid, groupid);
+    ADD CONSTRAINT pk_compute_access PRIMARY KEY (compid, uid);
 
 
 --
@@ -900,6 +900,13 @@ CREATE INDEX idx_user_group_uid ON user_group USING btree (uid);
 --
 
 CREATE INDEX idx_voms_url_unitid ON voms_url USING btree (unitid);
+
+
+--
+-- Name: unq_affiliation_unit_group_unitid_is_primary; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
+--
+
+CREATE UNIQUE INDEX unq_affiliation_unit_group_unitid_is_primary ON affiliation_unit_group USING btree (unitid, is_primary) WHERE (is_primary IS TRUE);
 
 
 --

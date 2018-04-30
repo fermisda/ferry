@@ -495,7 +495,7 @@ def build_collaborations(vomss, nis, groups):
 
     return collaborations
 
-def read_nis(dir_path, exclude_list, altnames, users, groups):
+def read_nis(primary_groups, dir_path, exclude_list, altnames, users, groups):
     """
     Read NIS domain and build passwd and group
     Args:
@@ -548,7 +548,6 @@ def read_nis(dir_path, exclude_list, altnames, users, groups):
                 continue
             users[uname].compute_access[dir] = ComputeAccess(dir, gid, home_dir, shell)
             nis[dir].users[uname] = users[uname]
-            nis[dir].primary_gid.append(gid)
             nis[dir].groups[list(groups.keys())[list(groups.values()).index(gid)]] = gid
 
             if dir in alt_names.keys():
@@ -586,6 +585,12 @@ def read_nis(dir_path, exclude_list, altnames, users, groups):
                     nis[dir].groups[gname]=gid
                 else:
                     print("Domain: %s User %s in group file but not in passwd!" % (dir,uname,), file=sys.stderr)
+
+    lines = open(primary_groups).read()
+    lines = re.findall(r"nis::def_domain[{\s}]+'([\w-]+)':\n\s+domaingid\s+=>\s+(\d+)", lines)
+    for dir, gid in lines:
+        if dir in nis:
+            nis[dir].primary_gid.append(gid)
 
     return nis
 
@@ -774,7 +779,6 @@ def read_nas_storage(config):
     
     return nas_structure
 
-
 def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, storages, batch_structure, nas_structure):
     """
     create mysql dump for ferry database
@@ -864,12 +868,9 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
         # populate collaboration unit groups
         for gid in cu.groups.values():
             index = gid_map[gid]
-            is_primary = 0
-            if cu.name in nis.keys():
-                if index in nis[cu.name].primary_gid:
-                    is_primary = 1
-            else:
-                    is_primary = 0
+            is_primary = 'false'
+            if cu.name in nis.keys() and gid in nis[cu.name].primary_gid:
+                is_primary = 'true'
             fd.write("insert into affiliation_unit_group values(%d,%d,%s,NOW());\n" % (cu.unitid,index,is_primary))
     fd.flush()
 
@@ -1001,6 +1002,111 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
     fd.flush()
     fd.close()
 
+def update_db(config, users, gids, vomss, gums, roles, collaborations, nis, storages, batch_structure, nas_structure):
+    """
+    create mysql dump for ferry database
+    Args:
+        config:
+        users:
+        gids:
+        vomss:
+        roles:
+
+    Returns:
+
+    """
+    fd = open(config._sections["path"]["output"], "w")
+
+    config = config._sections["main_db"]
+    conn_string = "host='%s' dbname='%s' user='%s' password='%s'" % \
+                  (config["hostname"], config["database"], config["username"], config["password"])
+    conn = pg.connect(conn_string)
+    cursor = conn.cursor()
+
+    append = config["append"].split(",")
+
+    def fetchData(query):
+        cursor.execute(query)
+        lines = cursor.fetchall()
+        data = {}
+        for line in lines:
+            if line[0] not in data:
+                data[line[0]] = []
+            data[line[0]].append(tuple(line[1:]))
+        return data
+
+    def checkData(entry, data):
+        idx = entry[0]
+        value = [tuple(entry[1:])]
+        if idx in data:
+            if value.sort() == data[idx].sort():
+                return "present"
+            else:
+                return "modified"
+        else:
+            return "new"
+    
+    if "affiliation_units" in append:
+        existingUnits = fetchData("select name, alternative_name from affiliation_units")
+        existingVoms = fetchData("select name, url from voms_url as vu \
+                                  left join affiliation_units as au on vu.unitid = au.unitid")
+        existinGroups = fetchData("select au.name, gid, is_primary from affiliation_units as au \
+                                   left join affiliation_unit_group as ag on au.unitid = ag.unitid \
+                                   left join groups as g on ag.groupid = g.groupid")
+
+        # update affiliation_units
+        for cu in collaborations:
+            state = checkData((cu.name, cu.alt_name), existingUnits)
+
+            if state != "present":
+                if cu.alt_name:
+                    alt_name = "\'%s\'" % (cu.alt_name)
+                else:
+                    alt_name = "NULL"
+            
+                if state == "new":
+                    fd.write("insert into affiliation_units (name, alternative_name, last_updated) " +\
+                             "values (\'%s\',%s,NOW());\n" % (cu.name, alt_name))
+                else:
+                    fd.write("update affiliation_units set alternative_name = %s, last_updated = NOW() where name = \'%s\';\n" %
+                            (alt_name, cu.name))
+
+            # update voms_url
+            if "voms_url" in append:
+                if isinstance(cu,VOMS):
+                    if type(cu.url) is list:
+                        urls = cu.url
+                    else:
+                        urls = [cu.url]
+                    for link in urls:
+                        if tuple([link]) not in existingVoms[cu.name]:
+                            fd.write("insert into voms_url (unitid, url, last_updated) " +
+                                     "values ((select unitid from affiliation_units where name = \'%s\'),\'%s\',NOW());\n"
+                            % (cu.name, link))
+
+            # update affiliation_unit_group
+            if "affiliation_unit_group" in append:
+                for gid in cu.groups.values():
+                    is_primary = 0
+                    if cu.name in nis.keys() and gid in nis[cu.name].primary_gid:
+                        is_primary = 1
+                    if (int(gid), is_primary) not in existinGroups[cu.name]:
+                        if (int(gid), not is_primary) not in existinGroups[cu.name]:
+                            fd.write(("insert into affiliation_unit_group values(" + 
+                                      "(select unitid from affiliation_units where name = \'%s\')," +
+                                      "(select groupid from groups where gid = %d)," +
+                                      "%d,NOW());\n") % (cu.name, int(gid), is_primary))
+                        else:
+                            fd.write(("update affiliation_unit_group set " +
+                                      "is_primary = %d, last_updated = NOW() " +
+                                      "where unitid = (select unitid from affiliation_units where name = \'%s\') " +
+                                      "and groupid = (select groupid from groups where gid = %d)" +
+                                      ";\n") % (is_primary, cu.name, int(gid)))
+
+        del existingUnits
+        del existingVoms
+        fd.flush()
+
 
 if __name__ == "__main__":
     import os
@@ -1022,8 +1128,8 @@ if __name__ == "__main__":
     cms_groups=read_vulcan_user_group(config, users)
 
     # read NIS information
-    nis_structure = read_nis(config.config.get("nis", "dir_path"),config.config.get("nis", "exclude_domain"),
-                             config.config.get("nis", "name_mapping"),users, gids)
+    nis_structure = read_nis(config.config.get("nis", "primary_groups"), config.config.get("nis", "dir_path"),
+                             config.config.get("nis", "exclude_domain"), config.config.get("nis", "name_mapping"), users, gids)
 
     # read NAS storages
     nas_structure = read_nas_storage(config)
@@ -1091,5 +1197,8 @@ if __name__ == "__main__":
     #            for k,v in user.vo_membership.items():
     #                for l in v:
     #                    print k, l.__dict__
-    populate_db(config.config, users, gids, vomss, gums, roles,collaborations, nis_structure, storages, batch_structure, nas_structure)
+    if not config.config.has_option("main_db", "append"):
+        populate_db(config.config, users, gids, vomss, gums, roles,collaborations, nis_structure, storages, batch_structure, nas_structure)
+    else:
+        update_db(config.config, users, gids, vomss, gums, roles,collaborations, nis_structure, storages, batch_structure, nas_structure)
     print("Done!")
