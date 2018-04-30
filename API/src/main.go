@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"github.com/fsnotify/fsnotify"
 	"net"
 	"database/sql"
@@ -81,10 +82,14 @@ func stringToParsedTime( intime string ) (string, error) {
 }
 
 func main() {
+	//Read command-line arguments
+	var configDir string
+	flag.StringVar(&configDir, "c", ".", "Specify a configuration directory.")
+	flag.Parse()
 
 	//Setup configutation manager
 	viper.SetConfigName("default")
-	viper.AddConfigPath(".")
+	viper.AddConfigPath(configDir)
 	cfgErr := viper.ReadInConfig()
 	if cfgErr != nil {
 		panic(fmt.Errorf("Fatal error config file: %s \n", cfgErr))
