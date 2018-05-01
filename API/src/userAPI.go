@@ -2387,7 +2387,7 @@ func getAllUsers(w http.ResponseWriter, r *http.Request) {
 	case ao != "" && lastupdate != "" : 
 		querystr = querystr + " where status='" +  strconv.FormatBool(activeonly) + "' and last_updated>='" + lastupdate + "' "
 	case ao != "" :
-		querystr = querystr + " where status="+  strconv.FormatBool(activeonly) + "'"
+		querystr = querystr + " where status="+  strconv.FormatBool(activeonly)
 	case lastupdate != "":
 		querystr = querystr + " where last_updated>='" + lastupdate + "'"
 	}
