@@ -90,13 +90,14 @@ func addGroupToUnit(w http.ResponseWriter, r *http.Request) {
 	groupname := q.Get("groupname")
 	unitName := q.Get("unitname")
 	isPrimarystr := q.Get("is_primary")
-	isPrimary := 0
+	isPrimary := false
 //if is_primary is not set in the query, assume it is false. Otherwise take the value from the query
-	if isPrimarystr != "" {	
-		isPrimary,converr := strconv.Atoi(isPrimarystr)
-		if converr != nil || isPrimary > 1 || isPrimary < 0 {
-			log.WithFields(QueryFields(r, startTime)).Print("Invalid value of is_primary (must be 0 or 1).")
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid value for is_primary (must be 0 or 1).\" }")
+	if isPrimarystr != "" {
+		var converr error
+		isPrimary, converr = strconv.ParseBool(isPrimarystr)	
+		if converr != nil {
+			log.WithFields(QueryFields(r, startTime)).Print("Invalid value of is_primary (Must be true or false).")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid value for is_primary (Must be true or false).\" }")
 			return
 		}
 	}
@@ -162,7 +163,7 @@ func addGroupToUnit(w http.ResponseWriter, r *http.Request) {
 //			
 //			addstr := fmt.Sprintf(`do $$ begin if exists (select groupid, unitid from affiliation_unit_group where groupid=%d and unitid=%d) then raise 'Group and unit combination already in DB.'; else 
 //insert into affiliation_unit_group (groupid, unitid, is_primary, last_updated) values (%d, %d, %d, NOW()); end if ; end $$;`, groupId, unitId, groupId,unitId,isPrimary)
-//			stmt, err := DBtx.tx.Prepare(addstr)
+//			stmt, err := DBtx.Prepare(addstr)
 //			if err != nil {
 //				log.WithFields(QueryFields(r, startTime)).Print("Error preparing DB command: " + err.Error())
 //				w.WriteHeader(http.StatusNotFound)
@@ -178,12 +179,20 @@ func addGroupToUnit(w http.ResponseWriter, r *http.Request) {
 
 // END COMMENTS 2018-04-04
 
-	err := addGroupToUnitDB(groupname, unitName, isPrimary)
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+
+	err = addGroupToUnitDB(DBtx, groupname, unitName, isPrimary)
 	
 	if err != nil {
-		if strings.Contains(err.Error(),`Group and unit combination already in DB`) {
+		if strings.Contains(err.Error(), `Group and unit combination already in DB`) {
 			log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Group already belongs to unit.\" }")
+		} else if strings.Contains(err.Error(), `unq_affiliation_unit_group_unitid_is_primary`) {
+			log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Unit can not have more then one primary group.\" }")
 		} else {
 			w.WriteHeader(http.StatusNotFound)
 			log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
@@ -197,6 +206,8 @@ func addGroupToUnit(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		log.WithFields(QueryFields(r, startTime)).Print("Successfully added " + groupname + " to affiliation_unit_groups.")
 		fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
+
+		DBtx.Commit(cKey)
 	}
 	return	
 	
@@ -243,12 +254,23 @@ func setPrimaryStatusGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	setstr := fmt.Sprintf(`do $$ declare grpid int; declare idunit int; begin select groupid into grpid from groups where name='%s'; 
-select unitid into idunit from affiliation_units where name ='%s'; 
-if grpid is null then raise 'Group does not exist.' ; elseif
-idunit is null then raise 'Unit does not exist.' ; else
-update affiliation_unit_group set is_primary=1, last_updated=NOW() where groupid=grpid and unitid=idunit; end if ; end $$;`, groupname, unitName)
-	stmt, err := DBtx.tx.Prepare(setstr)
+	setstr := fmt.Sprintf(`do $$
+								declare grpid int;
+								declare idunit int;
+						   begin
+								select groupid into grpid from groups where name = '%s';
+								select unitid into idunit from affiliation_units where name = '%s';
+
+								if grpid is null then
+									raise 'Group does not exist.';
+								elseif idunit is null then
+									raise 'Unit does not exist.' ;
+								else
+									update affiliation_unit_group set is_primary = false, last_updated = NOW() where is_primary = true and unitid = idunit;
+									update affiliation_unit_group set is_primary = true, last_updated = NOW() where groupid = grpid and unitid = idunit;
+								end if ;
+						   end $$;`, groupname, unitName)
+	stmt, err := DBtx.Prepare(setstr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Print("Error preparing DB command: " + err.Error())
 		w.WriteHeader(http.StatusNotFound)
@@ -595,7 +617,7 @@ func setGroupLeader(w http.ResponseWriter, r *http.Request) {
 			return
 		default:
 			setstr := fmt.Sprintf(`do $$ begin if exists (select uid,groupid from user_group where groupid=%d and uid=%d) then update user_group set is_leader=true, last_updated=NOW() where groupid=%d and uid=%d; else raise 'User is not a member of this group.'; end if ; end $$;`, groupId, uId, groupId, uId)
-			stmt, err := DBtx.tx.Prepare(setstr)
+			stmt, err := DBtx.Prepare(setstr)
 			if err != nil {
 				log.WithFields(QueryFields(r, startTime)).Print("Error preparing DB command: " + err.Error())
 				w.WriteHeader(http.StatusNotFound)
@@ -1341,7 +1363,7 @@ func addLPCCollaborationGroup(w http.ResponseWriter, r *http.Request) {
 	quota := strings.TrimSpace(q.Get("quota"))
 	gName := strings.TrimSpace(q.Get("groupname"))
 	//We are not going to allow this API call to set a new primary group for CMS
-	is_primary := 0
+	is_primary := false
 
 	if gName == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
@@ -1395,7 +1417,7 @@ func addLPCCollaborationGroup(w http.ResponseWriter, r *http.Request) {
 	r.URL.RawQuery = r.URL.RawQuery + "&" + "unitname=cms"
 	
 //	var w2 http.ResponseWriter
-	adderr := addGroupToUnitDB(gName, "cms", is_primary)
+	adderr := addGroupToUnitDB(&DBtx, gName, "cms", is_primary)
 
 
 	if adderr != nil {
@@ -1425,7 +1447,7 @@ func addLPCCollaborationGroup(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func addGroupToUnitDB(groupname, unitName string, isPrimary int) (error) {
+func addGroupToUnitDB(tx *Transaction, groupname, unitName string, isPrimary bool) (error) {
 
 	var unitId,groupId int
 	checkerr := DBptr.QueryRow(`select unitid from affiliation_units where name=$1`,unitName).Scan(&unitId)
@@ -1463,8 +1485,9 @@ func addGroupToUnitDB(groupname, unitName string, isPrimary int) (error) {
 	//		}
 			
 			addstr := fmt.Sprintf(`do $$ begin if exists (select groupid, unitid from affiliation_unit_group where groupid=%d and unitid=%d) then raise 'Group and unit combination already in DB.'; else 
-insert into affiliation_unit_group (groupid, unitid, is_primary, last_updated) values (%d, %d, %d, NOW()); end if ; end $$;`, groupId, unitId, groupId,unitId,isPrimary)
-			stmt, err := DBtx.tx.Prepare(addstr)
+insert into affiliation_unit_group (groupid, unitid, is_primary, last_updated) values (%d, %d, %t, NOW()); end if ; end $$;`, groupId, unitId, groupId, unitId, isPrimary)
+			log.Print(addstr)
+			stmt, err := tx.Prepare(addstr)
 			if err != nil {
 			//	log.WithFields(QueryFields(r, startTime)).Print("Error preparing DB command: " + err.Error())
 			//	w.WriteHeader(http.StatusNotFound)

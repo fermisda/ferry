@@ -75,6 +75,15 @@ func (t *Transaction) Exec(query string, args ...interface{}) (sql.Result, error
 	return nil, err
 }
 
+// Prepare creates a prepared statement for use within a Transaction.
+func (t *Transaction) Prepare(query string) (*sql.Stmt, error) {
+	if t.commitKey != 0 {
+		return t.tx.Prepare(query)
+	}
+	err := errors.New("transaction has not been started")
+	return nil, err
+}
+
 // Complete returns the state of the Transaction.
 func (t *Transaction) Complete() (bool) {
 	return t.complete
