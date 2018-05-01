@@ -42,12 +42,14 @@ func testWrapper(w http.ResponseWriter, r *http.Request) {
 	DBtx.Commit(key)
 }
 
-func requestExperimentAccount(w http.ResponseWriter, r *http.Request) {
+func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 
 	var compOnly bool
+	var compResource string
+	var compGroup string
 
 	type jsonerror struct {
 		Error string `json:"ferry_error"`
@@ -63,6 +65,12 @@ func requestExperimentAccount(w http.ResponseWriter, r *http.Request) {
 			log.WithFields(QueryFields(r, startTime)).Error("Invalid value for computingonly.")
 			inputErr = append(inputErr, jsonerror{"Invalid value for computingonly. Must be true or false."})
 		}
+	}
+
+	unit := q.Get("unitname")
+	if unit == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
+		inputErr = append(inputErr, jsonerror{"No unitname specified."})
 	}
 
 	if len(inputErr) > 0 {
@@ -85,13 +93,117 @@ func requestExperimentAccount(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !compOnly {
-		setUserExperimentFQAN(w, R)
+		uName := q.Get("username")
+		dnTemplate := "/DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=%s/CN=UID:%s"
+		var fullName string
+		var valid bool
+
+		rows, err := DBtx.Query("select full_name, status from users where uname = $1;", uName)
+		if err != nil {
+			defer log.WithFields(QueryFields(r, startTime)).Error(err)
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+			return
+		}
+
+		if !rows.Next() {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+			return
+		}
+		rows.Scan(&fullName, &valid)
+		rows.Close()
+
+		if !valid {
+			log.WithFields(QueryFields(r, startTime)).Error("User status is not valid.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"User status is not valid.\" }")
+			return
+		}
+
+		q.Set("dn", fmt.Sprintf(dnTemplate, fullName, uName))
+		q.Set("issuer_ca", "&issuer_ca=/DC=org/DC=cilogon/C=US/O=CILogon/CN=CILogon Basic CA 1")
+		R.URL.RawQuery = q.Encode()
+
+		addCertificateDNToUser(w, R)
 		if !DBtx.Complete() {
-			log.WithFields(QueryFields(r, startTime)).Error("createUser failed.")
+			log.WithFields(QueryFields(r, startTime)).Error("addCertificateDNToUser failed.")
 			DBtx.Rollback()
 			return
 		}
+
+		for _, fqan := range []string{"Analysis", "None"} {
+			rows, err := DBtx.Query(`select fqan from grid_fqan
+									where fqan like $1 and fqan like $2;`, "%" + fqan + "%", "%" + unit + "%")
+			if err != nil {
+				defer log.WithFields(QueryFields(r, startTime)).Error(err)
+				w.WriteHeader(http.StatusNotFound)
+				fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+				return
+			}
+			if !rows.Next() {
+				log.WithFields(QueryFields(r, startTime)).Error("FQAN not found.")
+				fmt.Fprintf(w, "{ \"ferry_error\": \"FQAN not found.\" }")
+				return
+			}
+
+			var fullFqan string
+			rows.Scan(&fullFqan)
+			rows.Close()
+
+			q.Set("fqan", fullFqan)
+			R.URL.RawQuery = q.Encode()
+
+			DBtx.Continue()
+			setUserExperimentFQAN(w, R)
+			if !DBtx.Complete() {
+				log.WithFields(QueryFields(r, startTime)).Error("createUser failed.")
+				DBtx.Rollback()
+				return
+			}
+		}
 	}
+
+	rows, err := DBtx.Query(`select cr.name from compute_resources as cr
+							 left join affiliation_units au on cr.unitid = au.unitid
+							 where au.name = $1 and cr.type = 'Interactive';`, unit)
+	if err != nil {
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	}
+
+	if !rows.Next() {
+		log.WithFields(QueryFields(r, startTime)).Error("Compute resource not found.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Compute resource not found.\" }")
+		return
+	}
+	rows.Scan(&compResource)
+	rows.Close()
+
+	rows, err = DBtx.Query(`select gp.name from affiliation_unit_group as ag
+							left join affiliation_units as au on ag.unitid = au.unitid
+							left join groups as gp on ag.groupid = gp.groupid
+							where ag.is_primary and au.name = $1;`, unit)
+	if err != nil {
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	}
+
+	if !rows.Next() {
+		log.WithFields(QueryFields(r, startTime)).Error("Primary group not found.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Primary group not found.\" }")
+		return
+	}
+	rows.Scan(&compGroup)
+	rows.Close()
+
+	q.Set("resourcename", compResource)
+	q.Set("groupname", compGroup)
+	R.URL.RawQuery = q.Encode()
+
 	DBtx.Continue()
 	setUserAccessToComputeResource(w, R)
 	if !DBtx.Complete() {

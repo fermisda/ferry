@@ -1488,11 +1488,13 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 										end if;
 									end $$;`, subjDN, issuer, uName, unitName))
 	if err == nil {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+		if cKey != 0 {
+			log.WithFields(QueryFields(r, startTime)).Info("Success!")
+			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+		}
 	} else {
 		log.Print(err.Error())
-		if strings.Contains(err.Error(), `pk_affiliation_unit_user_certificate_dn`) {
+		if strings.Contains(err.Error(), `pk_affiliation_unit_user_certificate`) {
 			log.WithFields(QueryFields(r, startTime)).Error("DN already exists and is assigned to this affiliation unit.")
 			fmt.Fprintf(w, "{ \"ferry_status\": \"DN already exists and is assigned to this affiliation unit.\" }")
 		} else if strings.Contains(err.Error(), `duplicated dn`) {
@@ -1508,7 +1510,7 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
 		}
-
+		return
 	}
 
 	DBtx.Commit(cKey)

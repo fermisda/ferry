@@ -159,7 +159,6 @@ func main() {
 	grouter.HandleFunc("/getUserInfo", getUserInfo)
 	grouter.HandleFunc("/addUserToGroup", addUserToGroup)
 	grouter.HandleFunc("/removeUserFromGroup", removeUserFromGroup)
-	grouter.HandleFunc("/addUsertoExperiment", setUserExperimentFQAN)
 	grouter.HandleFunc("/setUserExperimentFQAN", setUserExperimentFQAN)
 	grouter.HandleFunc("/setUserShellAndHomeDir", setUserShellAndHomeDir)
 	grouter.HandleFunc("/getUserShellAndHomeDir", getUserShellAndHomeDir)
@@ -247,7 +246,7 @@ func main() {
 
 	//wrapper API calls
 	grouter.HandleFunc("/testWrapper", testWrapper)
-	grouter.HandleFunc("/requestExperimentAccount", requestExperimentAccount)
+	grouter.HandleFunc("/addUsertoExperiment", addUsertoExperiment)
 
 	srvConfig := viper.GetStringMapString("server")
 	Mainsrv = &http.Server{
