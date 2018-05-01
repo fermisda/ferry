@@ -1370,3 +1370,53 @@ func getAllCAs(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, string(jsonoutput))
 }
+
+func getAllComputeResources(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	
+	rows, err := DBptr.Query(`select cr.name, cr.default_shell, cr.default_home_dir, cr.type, au.name as affiliation_unit
+							  from compute_resources as cr left join affiliation_units as au on cr.unitid = au.unitid;`)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	type computeResource struct {
+		Name string `json:"name"`
+		Shell string `json:"default_shell"`
+		Home string `json:"default_home_dir"`
+		Type string `json:"type"`
+		Unit string `json:"affiliation_unit"`
+	}
+	var Out []computeResource
+	var tmpName, tmpShell, tmpHome, tmpType, tmpUnit sql.NullString
+	
+	for rows.Next() {
+		rows.Scan(&tmpName, &tmpShell, &tmpHome, &tmpType, &tmpUnit)
+		Out = append(Out, computeResource{tmpName.String, tmpShell.String, tmpHome.String,
+										  tmpType.String, tmpUnit.String})
+	}
+	
+	var output interface{}	
+	if len(Out) == 0 {
+		type jsonerror struct {
+			Error string `json:"ferry_error"`
+		}
+		var queryErr []jsonerror
+		queryErr = append(queryErr, jsonerror{"Query returned no compute resources."})
+		log.WithFields(QueryFields(r, startTime)).Error("Query returned no compute resources.")
+		output = queryErr
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonoutput, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+	}
+	fmt.Fprintf(w, string(jsonoutput))
+}
