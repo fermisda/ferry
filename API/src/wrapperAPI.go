@@ -121,7 +121,7 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 		}
 
 		q.Set("dn", fmt.Sprintf(dnTemplate, fullName, uName))
-		q.Set("issuer_ca", "&issuer_ca=/DC=org/DC=cilogon/C=US/O=CILogon/CN=CILogon Basic CA 1")
+		q.Set("issuer_ca", "/DC=org/DC=cilogon/C=US/O=CILogon/CN=CILogon Basic CA 1")
 		R.URL.RawQuery = q.Encode()
 
 		addCertificateDNToUser(w, R)
