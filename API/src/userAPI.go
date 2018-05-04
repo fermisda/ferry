@@ -231,10 +231,12 @@ func getUserFQANs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := DBptr.Query(`select name, fqan, user_exists, unit_exists from (
-								select 1 as key, name, fqan from grid_access as ga
-								join (select * from users where uname = $1) as us on ga.uid = us.uid
-								join (select * from affiliation_units where name like $2) as au on ga.unitid = au.unitid
-								left join grid_fqan as gf on ga.fqanid = gf.fqanid) as T
+								select 1 as key, name, fqan from
+								grid_access as ga right join
+								(select * from users where uname = $1) as us on ga.uid = us.uid	left join
+								grid_fqan as gf on ga.fqanid = gf.fqanid left join
+								(select * from affiliation_units where name like $2) as au on gf.unitid = au.unitid
+							) as T
 							right join (
 								select 1 as key,
 								$1 in (select uname from users) as user_exists,
@@ -303,13 +305,15 @@ func getSuperUserList(w http.ResponseWriter, r *http.Request) {
 	expt := q.Get("unitname")
 	if expt == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
 		return
 	}
 
 	rows, err := DBptr.Query(`select t1.uname, c.unit_exists from 
-		                     (select distinct 1 as key, us.uname from users as us right join grid_access as ga on us.uid=ga.uid
-							  left join affiliation_units as au on ga.unitid = au.unitid where ga.is_superuser=true and au.name=$1) as t1
+							 (select distinct 1 as key, us.uname from users as us right join grid_access as ga on us.uid=ga.uid
+							  left join grid_fqan as gf on ga.fqanid = gf.fqanid
+							  left join affiliation_units as au on gf.unitid = au.unitid
+							  where ga.is_superuser=true and au.name=$1) as t1
 							  right join (select 1 as key, $1 in (select name from affiliation_units) as unit_exists) as c on c.key = t1.key`, expt)
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
@@ -397,17 +401,21 @@ func setSuperUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, err = DBtx.Exec(fmt.Sprintf(`do $$
-										declare Userid int;
-										declare Unitid int;
+										declare usid int;
+										declare unid int;
+										declare FqanList int;
 									begin
-										select u.uid into Userid from users as u where uname = '%s';
-										select au.unitid into Unitid from affiliation_units as au where name = '%s';
-										if Userid is null then raise 'User does not exist'; end if;
-										if Unitid is null then raise 'Unit does not exist'; end if;
-										update grid_access set is_superuser=true, last_updated =  NOW())
-                                                                                where uid=Userid and unitid=Unitid;
+										select uid into usid from users where uname = '%s';
+										select unitid into unid from affiliation_units where name = '%s';
+
+										if usid is null then raise 'User does not exist'; end if;
+										if unid is null then raise 'Unit does not exist'; end if;
+
+										update grid_access set is_superuser = true, last_updated = NOW()
+                                        where uid = usid and fqanid in (select fqanid from grid_fqan where unitid = unid);
 									end $$;`, uName, unitName))
 	if err == nil {
+		DBtx.Commit(cKey)
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 	} else {
@@ -422,8 +430,6 @@ func setSuperUser(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
 		}
 	}
-
-	DBtx.Commit(cKey)
 }
 
 func getUserGroups(w http.ResponseWriter, r *http.Request) {
@@ -725,7 +731,6 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 
 	uName := q.Get("username")
 	fqan := q.Get("fqan")
-	eName := q.Get("unitname")
 
 	if uName == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
@@ -735,11 +740,6 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 	if fqan == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No fqan specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No fqan specified.\" }")
-		return
-	}
-	if eName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
 		return
 	}
 
@@ -756,17 +756,15 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = DBtx.Exec(fmt.Sprintf(`do $$
-										declare vUnitid int;
 										declare vUid int;
 										declare vFqanid int;
 									begin
-										select unitid into vUnitid from affiliation_units where name = '%s';
 										select uid into vUid from users where uname = '%s';
 										select fqanid into vFqanid from grid_fqan where fqan = '%s';
 										
-										insert into grid_access (unitid, uid, fqanid, is_superuser, is_banned, last_updated)
-														 values (vUnitid, vUid, vFqanid, false, false, NOW());
-									end $$;`, eName, uName, fqan))
+										insert into grid_access (uid, fqanid, is_superuser, is_banned, last_updated)
+														 values (vUid, vFqanid, false, false, NOW());
+									end $$;`, uName, fqan))
 	if err == nil {
 		if cKey != 0 {
 			log.WithFields(QueryFields(r, startTime)).Info("Success!")
@@ -779,9 +777,6 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 		} else if strings.Contains(err.Error(), `null value in column "fqanid" violates not-null constraint`) {
 			log.WithFields(QueryFields(r, startTime)).Error("FQAN does not exist.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"FQAN does not exist.\" }")
-		} else if strings.Contains(err.Error(), `null value in column "unitid" violates not-null constraint`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Experiment does not exist.\" }")
 		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint "idx_grid_access"`) {
 			log.WithFields(QueryFields(r, startTime)).Error("This association already exists.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"This association already exists.\" }")
@@ -1805,16 +1800,20 @@ func getMemberAffiliations(w http.ResponseWriter, r *http.Request) {
 	rows, err := DBptr.Query(`select name, alternative_name, user_exists from (
 									select 1 as key, * from (
 										select distinct * from (select au.name, au.alternative_name from affiliation_units as au
-																right join grid_access as ga on au.unitid = ga.unitid left join users as u on ga.uid = u.uid
+																right join grid_fqan as gf on au.unitid = gf.unitid
+																right join grid_access as ga on gf.fqanid = ga.fqanid
+																left join users as u on ga.uid = u.uid
 																where u.uname = $1 and (((au.unitid in (select unitid from voms_url)) = $2) or not $2)) as u
 
 										union                  (select au.name, au.alternative_name from affiliation_units as au
 																right join affiliation_unit_user_certificate as ac on au.unitid = ac.unitid
-																left join user_certificates as uc on ac.dnid = uc.dnid left join users as u on uc.uid = u.uid
+																left join user_certificates as uc on ac.dnid = uc.dnid
+																left join users as u on uc.uid = u.uid
 																where u.uname = $1 and (((au.unitid in (select unitid from voms_url)) = $2) or not $2))
 
 										union                  (select au.name, au.alternative_name from affiliation_units as au
-																right join affiliation_unit_group as ag on au.unitid = ag.unitid join user_group as ug on ag.groupid = ug.groupid
+																right join affiliation_unit_group as ag on au.unitid = ag.unitid
+																join user_group as ug on ag.groupid = ug.groupid
 																left join users as u on ug.uid = u.uid
 																where u.uname = $1 and (((au.unitid in (select unitid from voms_url)) = $2) or not $2))
 									) as t

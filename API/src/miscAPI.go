@@ -737,7 +737,7 @@ func getAffiliationMembersRoles(w http.ResponseWriter, r *http.Request) {
 								from grid_access as ga
 								left join grid_fqan as gf on ga.fqanid = gf.fqanid
 								left join users as u on ga.uid = u.uid
-								left join affiliation_units as au on ga.unitid = au.unitid
+								left join affiliation_units as au on gf.unitid = au.unitid
 								where au.name like $1 and gf.fqan like $2
 							) as t right join (
 								select 1 as key,

@@ -202,7 +202,6 @@ ALTER TABLE public.external_affiliation_attribute OWNER TO ferry;
 
 CREATE TABLE grid_access (
     uid bigint NOT NULL,
-    unitid integer NOT NULL,
     fqanid integer NOT NULL,
     is_superuser boolean,
     is_banned boolean,
@@ -235,7 +234,8 @@ CREATE TABLE grid_fqan (
     fqan character varying(300) NOT NULL,
     mapped_user character varying(100),
     mapped_group character varying(100) NOT NULL,
-    last_updated timestamp with time zone DEFAULT ('now'::text)::date NOT NULL
+    last_updated timestamp with time zone DEFAULT ('now'::text)::date NOT NULL,
+    unitid integer
 );
 
 
@@ -565,14 +565,6 @@ ALTER TABLE ONLY grid_fqan
 
 
 --
--- Name: idx_grid_access; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
---
-
-ALTER TABLE ONLY grid_access
-    ADD CONSTRAINT idx_grid_access PRIMARY KEY (unitid, uid, fqanid);
-
-
---
 -- Name: pk_affiliation_unit_group; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
 --
 
@@ -626,6 +618,14 @@ ALTER TABLE ONLY compute_resources
 
 ALTER TABLE ONLY external_affiliation_attribute
     ADD CONSTRAINT pk_external_affiliation_attribute PRIMARY KEY (uid, attribute);
+
+
+--
+-- Name: pk_grid_access; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
+--
+
+ALTER TABLE ONLY grid_access
+    ADD CONSTRAINT pk_grid_access PRIMARY KEY (uid, fqanid);
 
 
 --
@@ -826,13 +826,6 @@ CREATE INDEX idx_grid_access_uid ON grid_access USING btree (uid);
 
 
 --
--- Name: idx_grid_access_unitid; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
---
-
-CREATE INDEX idx_grid_access_unitid ON grid_access USING btree (unitid);
-
-
---
 -- Name: idx_grid_fqan_mapped_group; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
@@ -844,6 +837,13 @@ CREATE INDEX idx_grid_fqan_mapped_group ON grid_fqan USING btree (mapped_group);
 --
 
 CREATE INDEX idx_grid_fqan_mapped_user ON grid_fqan USING btree (mapped_user);
+
+
+--
+-- Name: idx_grid_fqan_unitid; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
+--
+
+CREATE INDEX idx_grid_fqan_unitid ON grid_fqan USING btree (unitid);
 
 
 --
@@ -996,14 +996,6 @@ ALTER TABLE ONLY affiliation_unit_group
 
 
 --
--- Name: fk_grid_access_affiliation_units; Type: FK CONSTRAINT; Schema: public; Owner: ferry
---
-
-ALTER TABLE ONLY grid_access
-    ADD CONSTRAINT fk_grid_access_affiliation_units FOREIGN KEY (unitid) REFERENCES affiliation_units(unitid);
-
-
---
 -- Name: fk_grid_access_grid_fqan; Type: FK CONSTRAINT; Schema: public; Owner: ferry
 --
 
@@ -1017,6 +1009,14 @@ ALTER TABLE ONLY grid_access
 
 ALTER TABLE ONLY grid_access
     ADD CONSTRAINT fk_grid_access_users FOREIGN KEY (uid) REFERENCES users(uid);
+
+
+--
+-- Name: fk_grid_fqan_affiliation_units; Type: FK CONSTRAINT; Schema: public; Owner: ferry
+--
+
+ALTER TABLE ONLY grid_fqan
+    ADD CONSTRAINT fk_grid_fqan_affiliation_units FOREIGN KEY (unitid) REFERENCES affiliation_units(unitid);
 
 
 --

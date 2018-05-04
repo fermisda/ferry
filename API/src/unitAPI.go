@@ -1,5 +1,6 @@
 package main
 import (
+	"regexp"
 	"strings"
 	"database/sql"
 	"fmt"
@@ -650,7 +651,7 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 
 	fqan := q.Get("fqan")
 	mGroup := q.Get("mapped_group")
-	var mUser sql.NullString
+	var mUser, unit string
 
 	if fqan == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No fqan specified in http query.")
@@ -663,7 +664,14 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if q.Get("mapped_user") != "" {
-		mUser.Scan(q.Get("mapped_user"))
+		mUser = `'` + q.Get("mapped_user") + `'`
+	} else {
+		mUser = `null`
+	}
+	if q.Get("unitname") != "" {
+		unit = `'` + q.Get("unitname") + `'`
+	} else {
+		unit = `null`
 	}
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
@@ -671,7 +679,27 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 
-	_, err = DBtx.Exec("insert into grid_fqan (fqan, mapped_user, mapped_group, last_updated) values ($1, $2, $3, NOW())", fqan, mUser, mGroup)
+	query := fmt.Sprintf(`do $$
+						  declare
+								v_unitid int;
+
+								c_fqan  constant text := %s;
+								c_aname constant text := %s;
+								c_uname constant text := %s;
+								c_gname constant text := %s;
+						  begin
+								select unitid into v_unitid from affiliation_units where name = c_aname;
+
+								if v_unitid is null and c_aname is not null then
+									raise 'affiliation unit does not exist';
+								end if;
+
+								insert into grid_fqan (fqan, unitid, mapped_user, mapped_group, last_updated)
+								values (c_fqan, v_unitid, c_uname, c_gname, NOW());
+						  end $$;`, `'` + fqan + `'`, unit, mUser, `'` + mGroup + `'`)
+	re := regexp.MustCompile(`[\s\t\n]+`)
+	log.WithFields(QueryFields(r, startTime)).Debug(re.ReplaceAllString(query, " "))
+	_, err = DBtx.Exec(query)
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")

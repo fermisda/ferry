@@ -929,7 +929,22 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
         else:
             un='NULL'
 
-        fd.write("insert into grid_fqan (fqan,mapped_user,mapped_group) values(\'%s/Role=%s\',%s,\'%s\');\n" % (gmap.group,gmap.role,un,gname))
+        exp = gmap.group[1:].strip().split('/')
+        if exp[0] == 'fermilab':
+            if len(exp) == 1:
+                exp_name = exp[0]
+            else:
+                exp_name = exp[1]
+        else:
+            exp_name = exp[0]
+
+        exp_id = 'NULL'
+        for cu in collaborations:
+            if exp_name.lower() == cu.name.lower():
+                exp_id = str(cu.unitid)
+                break
+
+        fd.write("insert into grid_fqan (unitid,fqan,mapped_user,mapped_group) values(%s,\'%s/Role=%s\',%s,\'%s\');\n" % (exp_id,gmap.group,gmap.role,un,gname))
         gmap.set_id(fqan_counter)
     fd.flush()
 
@@ -954,8 +969,8 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
                             if  umap.group == gmap.group and umap.role == gmap.role:
                                 fqanid = gmap.fqanid
                                 break
-                        fd.write("insert into grid_access values  (%d,%d,%d,False,False,NOW());\n" % \
-                                (int(user.uid),cu.unitid, fqanid ))
+                        fd.write("insert into grid_access values  (%d,%d,False,False,NOW());\n" % \
+                                (int(user.uid), fqanid ))
 
                     fd.flush()
     for _, user in users.items():
