@@ -234,7 +234,7 @@ func getUserFQANs(w http.ResponseWriter, r *http.Request) {
 								select 1 as key, name, fqan from
 								grid_access as ga right join
 								(select * from users where uname = $1) as us on ga.uid = us.uid	left join
-								grid_fqan as gf on ga.fqanid = gf.fqanid left join
+								grid_fqan as gf on ga.fqanid = gf.fqanid join
 								(select * from affiliation_units where name like $2) as au on gf.unitid = au.unitid
 							) as T
 							right join (
