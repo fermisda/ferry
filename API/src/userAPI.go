@@ -1179,7 +1179,7 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 								if vSid is null then raise 'Resource does not exist.'; end if;
 								if vUnitid is null then raise 'Unit does not exist.'; end if;
 
-								if cIsgrp is TRUE then
+								if cIsgrp is FALSE then
 								select uid into vUid from users where uname = cUname;
 								if vUid is null then raise 'User does not exist.'; end if;
 		
