@@ -1106,16 +1106,16 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q := r.URL.Query()
-	quota := q.Get("quota")
-	uName := q.Get("username")
-	unitName := q.Get("unitname")
-	unit := q.Get("unit")
-	rName := strings.ToUpper(q.Get("resourcename"))
-	isgrp := strings.ToLower(q.Get("isGroup"))
-	validtime := q.Get("valid_until")
+	quota := strings.TrimSpace(q.Get("quota"))
+	uName := strings.TrimSpace(q.Get("username"))
+	unitName := strings.TrimSpace(q.Get("unitname"))
+	unit := strings.TrimSpace(q.Get("unit"))
+	rName := strings.TrimSpace(strings.ToUpper(q.Get("resourcename")))
+	isgrp :=strings.TrimSpace( strings.ToLower(q.Get("isGroup")))
+	validtime := strings.TrimSpace(q.Get("valid_until"))
 
 	var isGroup bool
-	if isgrp == "" || isgrp == "false" {
+	if isgrp == "" || strings.ToLower(isgrp) == "false" {
 		isGroup = false
 	} else {
 		isGroup = true
@@ -1130,8 +1130,8 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	} else {
 		validtime = "'" + validtime + "'"
 	}
-	if uName == "" && isGroup == false {
-		log.WithFields(QueryFields(r, startTime)).Error("No user name given and isGroup was set to false.")
+	if uName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No user name given.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username provided.\" }")
 		return
 	}
@@ -1160,22 +1160,29 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 								vSid int;
 								vUid int;
 								vUnitid int;
-								
+                                                                vGroupid int;
+
 								cSname constant text := '%s';
 								cUname constant text := '%s';
 								cEname constant text := '%s';
+								cGname constant text := cUname;
 								cValue constant text := '%s';
 								cUnit constant text := '%s';
 								cVuntil constant date := %s;
-							begin
-								select storageid into vSid from storage_resources where name = cSname;
-								select uid into vUid from users where uname = cUname;
-								select unitid into vUnitid from affiliation_units where name = cEname;
+								cIsgrp constant boolean := %t;
 
+							begin
+                                                                
+								select storageid into vSid from storage_resources where name = cSname;
+								select unitid into vUnitid from affiliation_units where name = cEname;
+                                                                
 								if vSid is null then raise 'Resource does not exist.'; end if;
-								if vUid is null then raise 'User does not exist.'; end if;
 								if vUnitid is null then raise 'Unit does not exist.'; end if;
-										
+
+								if cIsgrp is TRUE then
+								select uid into vUid from users where uname = cUname;
+								if vUid is null then raise 'User does not exist.'; end if;
+		
 								if (vSid, vUid, vUnitid) in (select storageid, uid, unitid from storage_quota) and cVuntil is NULL then
 									update storage_quota set value = cValue, unit = cUnit, valid_until = cVuntil, last_updated = NOW()
 									where storageid = vSid and uid = vUid and unitid = vUnitid and valid_until is NULL;
@@ -1183,7 +1190,19 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 									insert into storage_quota (storageid, uid, unitid, value, unit, valid_until)
 									values (vSid, vUid, vUnitid, cValue, cUnit, cVuntil);
 								end if;
-							end $$;`, rName, uName, unitName, quota, unit, validtime))
+                                                                else
+                                                          	    select groupid into vGroupid from groups where name = cGname;
+								    if vGroupid is null then raise 'Group does not exist.'; end if;
+								    
+								    if (vSid, vGroupid, vUnitid) in (select storageid, groupid, unitid from storage_quota) and cVuntil is NULL then
+								    	update storage_quota set value = cValue, unit = cUnit, valid_until = cVuntil, last_updated = NOW()
+								    	where storageid = vSid and groupid = vGroupid and unitid = vUnitid and valid_until is NULL;
+								    else
+								    	insert into storage_quota (storageid, groupid, unitid, value, unit, valid_until)
+								    	values (vSid, vGroupid, vUnitid, cValue, cUnit, cVuntil);
+								    end if;
+                                                                end if;
+							end $$;`, rName, uName, unitName, quota, unit, validtime, isGroup))
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
