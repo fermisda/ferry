@@ -1014,7 +1014,7 @@ func getUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
 			output += `"ferry_error": "User does not exist.",`
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 		}
-		output += `"ferry_error": "No super users found."`
+		output += `"ferry_error": "User doesn't have access to resource."`
 		log.WithFields(QueryFields(r, startTime)).Error("No super users found.")
 	} else {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
@@ -1185,8 +1185,12 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 								end if;
 							end $$;`, rName, uName, unitName, quota, unit, validtime))
 	if err == nil {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+		DBtx.Commit(cKey)
+
+		if cKey != 0 {
+			log.WithFields(QueryFields(r, startTime)).Info("Success!")
+			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+		}
 	} else {
 		if strings.Contains(err.Error(), `User does not exist.`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
@@ -1199,8 +1203,6 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
 		}
 	}
-
-	DBtx.Commit(cKey)
 }
 func setUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
@@ -1264,8 +1266,12 @@ func setUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Request)
 									end $$;`, uName, attribute, value))
 
 	if err == nil {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+		DBtx.Commit(cKey)
+
+		if cKey != 0 {
+			log.WithFields(QueryFields(r, startTime)).Info("Success!")
+			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+		}
 	} else {
 		if strings.Contains(err.Error(), `uname does not exist`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
@@ -1275,8 +1281,6 @@ func setUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Request)
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
 		}
 	}
-
-	DBtx.Commit(cKey)
 }
 func removeUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()

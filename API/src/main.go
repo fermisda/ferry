@@ -195,9 +195,9 @@ func main() {
 	grouter.HandleFunc("/getGroupMembers", getGroupMembers)
 	grouter.HandleFunc("/IsUserLeaderOfGroup", IsUserLeaderOfGroup)
 	grouter.HandleFunc("/IsUserMemberOfGroup", IsUserMemberOfGroup)
-	grouter.HandleFunc("/setGroupLeader", setGroupLeader)
+	grouter.HandleFunc("/setGroupLeader", setGroupLeader)	//add user to group
 	grouter.HandleFunc("/removeGroupLeader", removeGroupLeader)
-	grouter.HandleFunc("/getGroupUnits", getGroupUnits)
+	grouter.HandleFunc("/getGroupUnits", getGroupUnits)		//don't remove the last leader
 	grouter.HandleFunc("/getGroupBatchPriorities", getGroupBatchPriorities)
 	grouter.HandleFunc("/getGroupCondorQuotas", getGroupCondorQuotas)
 	grouter.HandleFunc("/setGroupBatchPriority", setGroupBatchPriority)
@@ -247,6 +247,7 @@ func main() {
 	//wrapper API calls
 	grouter.HandleFunc("/testWrapper", testWrapper)
 	grouter.HandleFunc("/addUsertoExperiment", addUsertoExperiment)
+	grouter.HandleFunc("/setLPCStorageAccess", setLPCStorageAccess)
 
 	srvConfig := viper.GetStringMapString("server")
 	Mainsrv = &http.Server{

@@ -1,5 +1,7 @@
 package main
+
 import (
+	"strings"
 	"encoding/json"
 	log "github.com/sirupsen/logrus"
 	"fmt"
@@ -193,6 +195,75 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 	setUserAccessToComputeResource(w, R)
 	if !DBtx.Complete() {
 		log.WithFields(QueryFields(r, startTime)).Error("addUserToGroup failed")
+		DBtx.Rollback()
+		return
+	}
+
+	log.WithFields(QueryFields(r, startTime)).Info("Success!")
+	fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+
+	DBtx.Commit(key)
+}
+
+func setLPCStorageAccess(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	var DBtx Transaction
+	R := WithTransaction(r, &DBtx)
+
+	key, err := DBtx.Start(DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error starting database transaction: " + err.Error())
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
+		return
+	}
+
+	q.Set("unitname", "cms")
+	R.URL.RawQuery = q.Encode()
+
+	DBtx.Savepoint("addCertificateDNToUser")
+	addCertificateDNToUser(w, R)
+	if !DBtx.Complete() {
+		if !strings.Contains(DBtx.Error().Error(), `pk_affiliation_unit_user_certificate`) {
+			log.WithFields(QueryFields(r, startTime)).Error("addCertificateDNToUser failed.")
+			DBtx.Rollback()
+			return
+		}
+		DBtx.RollbackToSavepoint("addCertificateDNToUser")
+	}
+
+	cernUname := q.Get("external_username")
+
+	if cernUname != "" {
+		q.Set("attribute", "cern_username")
+		q.Set("value", cernUname)
+		R.URL.RawQuery = q.Encode()
+
+		DBtx.Continue()
+		setUserExternalAffiliationAttribute(w, R)
+		if !DBtx.Complete() {
+			log.WithFields(QueryFields(r, startTime)).Error("setUserExternalAffiliationAttribute failed.")
+			DBtx.Rollback()
+			return
+		}
+	}
+
+	uname := q.Get("username")
+
+	q.Set("resourcename", "EOS")
+	q.Set("groupname", "us_cms")
+	q.Set("unitname", "cms")
+	q.Set("quota", "100")
+	q.Set("unit", "B")
+	q.Set("path", fmt.Sprintf("/eos/uscms/store/user/%s", uname))
+	R.URL.RawQuery = q.Encode()
+
+	DBtx.Continue()
+	setUserStorageQuota(w, R)
+	if !DBtx.Complete() {
+		log.WithFields(QueryFields(r, startTime)).Error("setUserStorageQuota failed.")
 		DBtx.Rollback()
 		return
 	}
