@@ -355,7 +355,6 @@ func getGroupMembers(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case err == sql.ErrNoRows:
 		log.WithFields(QueryFields(r, startTime)).Print("Group " + groupname + " does not exist.")
-		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Group " + groupname + " does not exist.\" }")
 		return	
 		
@@ -539,7 +538,6 @@ func IsUserLeaderOfGroup(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case checkerr == sql.ErrNoRows:
 				log.WithFields(QueryFields(r, startTime)).Print("User " + uName + " not a member of "+ groupname)
-				w.WriteHeader(http.StatusNotFound)
 				fmt.Fprintf(w,"{ \"ferry_error\": \"User is not a member of this group.\" }")
 				return
 			case checkerr != nil:
@@ -734,7 +732,6 @@ func getGroupUnits(w http.ResponseWriter, r *http.Request) {
 
 	var output interface{}
 	if len(Out) == 0 {
-		w.WriteHeader(http.StatusNotFound)
 		var queryErr []jsonerror
 		if !groupExists {
 			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
@@ -1208,7 +1205,6 @@ func setGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case err == sql.ErrNoRows:
 		log.WithFields(QueryFields(r, startTime)).Print("Compute resource " + rName + " does not exist.")
-		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Compute resource " + rName + " does not exist.\" }")
 		return
 	case err != nil:

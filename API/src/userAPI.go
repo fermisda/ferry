@@ -88,8 +88,6 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if idx == 0 {
-		w.WriteHeader(http.StatusNotFound)
-
 		if !userExists {
 			output += `"ferry_error": "User does not exist.",`
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
@@ -278,8 +276,6 @@ func getUserFQANs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if idx == 0 {
-		w.WriteHeader(http.StatusNotFound)
-
 		if !userExists {
 			output += `"ferry_error": "User does not exist.",`
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
@@ -351,8 +347,6 @@ func getSuperUserList(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if idx == 0 {
-		w.WriteHeader(http.StatusNotFound)
-
 		if !exptExists {
 			output += `"ferry_error": "Experiment does not exist.",`
 			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
@@ -478,7 +472,6 @@ func getUserGroups(w http.ResponseWriter, r *http.Request) {
 			idx += 1
 		}
 		if idx == 0 {
-			w.WriteHeader(http.StatusNotFound)
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 			fmt.Fprintf(w, `{ "ferry_error": "User does not exist." }`)
 		} else {
@@ -1004,8 +997,6 @@ func getUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if idx == 0 {
-		w.WriteHeader(http.StatusNotFound)
-
 		if !compExists {
 			output += `"ferry_error": "Resource does not exist.",`
 			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
@@ -1084,7 +1075,6 @@ func getUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if idx == 0 {
-		w.WriteHeader(http.StatusNotFound)
 		output += `{"ferry_error": "User has no quotas registered."}`
 		log.WithFields(QueryFields(r, startTime)).Error("User has no quotas registered.")
 	} else {
@@ -1398,7 +1388,6 @@ func getUserExternalAffiliationAttributes(w http.ResponseWriter, r *http.Request
 
 	var output interface{}
 	if len(Out) == 0 {
-		w.WriteHeader(http.StatusNotFound)
 		type jsonerror struct {
 			Error string `json:"ferry_error"`
 		}
@@ -1854,7 +1843,6 @@ func getMemberAffiliations(w http.ResponseWriter, r *http.Request) {
 
 	var output interface{}
 	if len(Out) == 0 {
-		w.WriteHeader(http.StatusNotFound)
 		var queryErr []jsonerror
 		if !userExists {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
@@ -1889,8 +1877,7 @@ func getUserUID(w http.ResponseWriter, r *http.Request) {
 	checkerr := DBptr.QueryRow(`select uid from users where uname=$1`, uName).Scan(&uid)
 	
 	switch {
-	case checkerr == sql.ErrNoRows: 
-		w.WriteHeader(http.StatusNotFound)
+	case checkerr == sql.ErrNoRows:
 		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
 		log.WithFields(QueryFields(r, startTime)).Error("user " + uName + " not found in DB.")
 		return
@@ -1928,8 +1915,7 @@ func getUserUname(w http.ResponseWriter, r *http.Request) {
 	checkerr := DBptr.QueryRow(`select uname from users where uid=$1`, uid).Scan(&uname)
 	
 	switch {
-	case checkerr == sql.ErrNoRows: 
-		w.WriteHeader(http.StatusNotFound)
+	case checkerr == sql.ErrNoRows:
 		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
 		log.WithFields(QueryFields(r, startTime)).Error("user ID " + uidstr + " not found in DB.")
 		return
@@ -2076,7 +2062,6 @@ func getUserAccessToComputeResources(w http.ResponseWriter, r *http.Request) {
 
 	var output interface{}
 	if len(Out) == 0 {
-		w.WriteHeader(http.StatusNotFound)
 		var queryErr []jsonerror
 		if !userExists {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
@@ -2170,7 +2155,6 @@ func getUserAllStorageQuotas(w http.ResponseWriter, r *http.Request) {
 
 	var output interface{}
 	if len(Out) == 0 {
-		w.WriteHeader(http.StatusNotFound)
 		var queryErr []jsonerror
 		if !userExists {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
@@ -2262,7 +2246,6 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 		if checkerr == sql.ErrNoRows {
 			// the given compid does not exist in this case. Exit accordingly.	
 			log.WithFields(QueryFields(r, startTime)).Error("resource " + rName + " does not exist.")
-			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
 			return	
 		}
@@ -2283,16 +2266,13 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + inserr.Error())
 			// now we also need to do a bunch of other checks here
 			if strings.Contains(inserr.Error(),"null value in column \"compid\"") {
-				w.WriteHeader(http.StatusNotFound)
 				fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
 				return	
 				
 			} else if strings.Contains(inserr.Error(),"null value in column \"uid\"") {
-				w.WriteHeader(http.StatusNotFound)
 				fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
 				return	
 			} else if strings.Contains(inserr.Error(),"null value in column \"groupid\"") {
-				w.WriteHeader(http.StatusNotFound)
 				fmt.Fprintf(w, "{ \"ferry_error\": \"Group does not exist.\" }")
 				return		
 			} else {
