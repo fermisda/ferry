@@ -224,6 +224,7 @@ func setLPCStorageAccess(w http.ResponseWriter, r *http.Request) {
 	R.URL.RawQuery = q.Encode()
 
 	DBtx.Savepoint("addCertificateDNToUser")
+	DBtx.Continue()
 	addCertificateDNToUser(w, R)
 	if !DBtx.Complete() {
 		if !strings.Contains(DBtx.Error().Error(), `pk_affiliation_unit_user_certificate`) {

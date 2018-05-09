@@ -1483,8 +1483,10 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 	} else {
 		log.Print(err.Error())
 		if strings.Contains(err.Error(), `pk_affiliation_unit_user_certificate`) {
-			log.WithFields(QueryFields(r, startTime)).Error("DN already exists and is assigned to this affiliation unit.")
-			fmt.Fprintf(w, "{ \"ferry_status\": \"DN already exists and is assigned to this affiliation unit.\" }")
+			if cKey != 0 {
+				log.WithFields(QueryFields(r, startTime)).Error("DN already exists and is assigned to this affiliation unit.")
+				fmt.Fprintf(w, "{ \"ferry_status\": \"DN already exists and is assigned to this affiliation unit.\" }")
+			}
 		} else if strings.Contains(err.Error(), `duplicated dn`) {
 			log.WithFields(QueryFields(r, startTime)).Error("DN already exists.")
 			fmt.Fprintf(w, "{ \"ferry_status\": \"DN already exists.\" }")
