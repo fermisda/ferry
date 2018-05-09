@@ -614,7 +614,17 @@ func setGroupLeader(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 			return
 		default:
-			setstr := fmt.Sprintf(`do $$ begin if exists (select uid,groupid from user_group where groupid=%d and uid=%d) then update user_group set is_leader=true, last_updated=NOW() where groupid=%d and uid=%d; else raise 'User is not a member of this group.'; end if ; end $$;`, groupId, uId, groupId, uId)
+			setstr := fmt.Sprintf(`do $$
+								   declare
+										c_groupid constant int := '%d';
+										c_uid constant int := '%d';
+								   begin
+										if exists (select uid, groupid from user_group where groupid = c_groupid and uid = c_uid) then
+											update user_group set is_leader = true, last_updated = NOW() where groupid = c_groupid and uid = c_uid;
+										else
+											insert into user_group (uid, groupid, is_leader) values(c_uid, c_groupid, true);
+										end if ;
+								   end $$;`, groupId, uId)
 			stmt, err := DBtx.Prepare(setstr)
 			if err != nil {
 				log.WithFields(QueryFields(r, startTime)).Print("Error preparing DB command: " + err.Error())
@@ -625,14 +635,9 @@ func setGroupLeader(w http.ResponseWriter, r *http.Request) {
 			//run said statement and check errors
 			_, err = stmt.Exec()
 			if err != nil {
-				if strings.Contains(err.Error(),`User is not a member of this group`) {
-					log.WithFields(QueryFields(r, startTime)).Print("User " + uName + " is not a member of " + groupname + ".")
-					fmt.Fprintf(w,"{ \"ferry_error\": \"User not a member of group.\" }")
-				} else {
-					w.WriteHeader(http.StatusNotFound)
-					log.WithFields(QueryFields(r, startTime)).Print("Error setting " + uName + " leader of " + groupname + ": " + err.Error())
-					fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB update.\" }")		
-				}
+				w.WriteHeader(http.StatusNotFound)
+				log.WithFields(QueryFields(r, startTime)).Print("Error setting " + uName + " leader of " + groupname + ": " + err.Error())
+				fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB update.\" }")		
 				return
 			} else {
 				// error is nil, so it's a success. Commit the transaction and return success.
