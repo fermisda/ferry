@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"context"
 	"net/http"
 	"errors"
@@ -12,38 +13,37 @@ import (
 type Transaction struct {
 	tx *sql.Tx
 	commitKey int64
-	complete bool
+	err error
 }
 
 // Start starts a transaction with default isolation level.
 // It returns a unique key required to commit the transaction. Returns 0 if the transaction is already started.
 func (t *Transaction) Start(db *sql.DB) (int64, error) {
-	t.complete = false
+	t.err = errors.New("transaction did not complete properly")
 	if t.commitKey == 0 {
 		t.commitKey = time.Now().Unix()
-		var err error
-		t.tx, err = db.Begin()
-		return t.commitKey, err
+		t.tx, t.err = db.Begin()
+		return t.commitKey, t.err
 	}
-	return 0, nil
+	return 0, t.err
 }
 
 // Commit commits the transaction.
 // It requires the same key generated when the transaction was started. The action is ignored if 0 is provided.
 func (t *Transaction) Commit(key int64) error {
 	if t.commitKey == 0 {
-		err := errors.New("transaction has not been started")
-		return err
+		t.err = errors.New("transaction has not been started")
+		return t.err
 	} else if key == 0 {
-		t.complete = true
+		t.err = nil
 		return nil
 	} else if t.commitKey == key {
-		t.complete = true
+		t.err = nil
 		t.commitKey = 0
 		return t.tx.Commit()
 	}
-	err := errors.New("invalid key")
-	return err
+	t.err = errors.New("invalid key")
+	return t.err
 }
 
 // Rollback aborts the transaction.
@@ -52,27 +52,51 @@ func (t *Transaction) Rollback() error {
 		t.commitKey = 0
 		return t.tx.Rollback()
 	}
-	err := errors.New("transaction has not been started")
-	return err
+	t.err = errors.New("transaction has not been started")
+	return t.err
+}
+
+// Savepoint creates a Transaction savepoint
+func (t *Transaction) Savepoint(savepoint string) error {
+	if t.commitKey != 0 {
+		_, t.err = t.Exec(fmt.Sprintf("SAVEPOINT %s;", savepoint))
+		return t.err
+	}
+	t.err = errors.New("transaction has not been started")
+	return t.err
+}
+
+// RollbackToSavepoint reverts the Trasaction to a savepoint
+func (t *Transaction) RollbackToSavepoint(savepoint string) error {
+	if t.commitKey != 0 {
+		_, t.err = t.Exec(fmt.Sprintf("ROLLBACK TO SAVEPOINT %s;", savepoint))
+		return t.err
+	}
+	t.err = errors.New("transaction has not been started")
+	return t.err
 }
 
 // Query executes a query that returns rows, typically a SELECT.
 func (t *Transaction) Query(query string, args ...interface{}) (*sql.Rows, error) {
 	if t.commitKey != 0 {
-		return t.tx.Query(query, args...)
+		var rows *sql.Rows
+		rows, t.err = t.tx.Query(query, args...)
+		return rows, t.err
 	}
-	err := errors.New("transaction has not been started")
-	return nil, err
+	t.err = errors.New("transaction has not been started")
+	return nil, t.err
 }
 
 // Exec executes a query that doesn't return rows.
 // For example: an INSERT and UPDATE.
 func (t *Transaction) Exec(query string, args ...interface{}) (sql.Result, error) {
 	if t.commitKey != 0 {
-		return t.tx.Exec(query, args...)
+		var result sql.Result
+		result, t.err = t.tx.Exec(query, args...)
+		return result, t.err
 	}
-	err := errors.New("transaction has not been started")
-	return nil, err
+	t.err = errors.New("transaction has not been started")
+	return nil, t.err
 }
 
 // Prepare creates a prepared statement for use within a Transaction.
@@ -80,18 +104,23 @@ func (t *Transaction) Prepare(query string) (*sql.Stmt, error) {
 	if t.commitKey != 0 {
 		return t.tx.Prepare(query)
 	}
-	err := errors.New("transaction has not been started")
-	return nil, err
+	t.err = errors.New("transaction has not been started")
+	return nil, t.err
 }
 
 // Complete returns the state of the Transaction.
 func (t *Transaction) Complete() (bool) {
-	return t.complete
+	return t.err == nil
 }
 
 // Continue the Transaction setting compete as false.
 func (t *Transaction) Continue() {
-	t.complete = false
+	t.err = errors.New("transaction did not complete properly")
+}
+
+// Error returns the latast error in the transaction
+func (t *Transaction) Error() (error) {
+	return t.err
 }
 
 // LoadTransaction loads a Transaction from an http context. Returns a new Transaction if none is found.
