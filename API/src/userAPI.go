@@ -908,6 +908,11 @@ func setUserShell(w http.ResponseWriter, r *http.Request) {
 
 										if vUid is null then raise 'User does not exist.'; end if;
 										if vUnitid is null then raise 'Experiment does not exist.'; end if;
+										
+										if (vUid, vUnitid) not in
+										(select uid, unitid from compute_access as ca left join compute_resources as cr on ca.compid = cr.compid)
+										then raise 'User does not have access to this resource.';
+										end if;
 
 										update compute_access set shell = cShell, last_updated = NOW()
 										where uid = vUid and compid in (
@@ -924,6 +929,9 @@ func setUserShell(w http.ResponseWriter, r *http.Request) {
 		} else if strings.Contains(err.Error(), `Experiment does not exist.`) {
 			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Experiment does not exist.\" }")
+		} else if strings.Contains(err.Error(), `User does not have access to this resource.`) {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not have access to this resource.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not have access to this resource.\" }")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
