@@ -1002,7 +1002,7 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
         query = ("insert into compute_resources (name, default_shell, default_home_dir, type, unitid, last_updated) " + 
                  "values (\'%s\', \'%s\', \'%s\', \'%s\', %s, NOW());\n"
               % (cr_name, cr_data.cshell, cr_data.chome, cr_data.ctype, cr_data.cunit))
-        fd.write(query.replace("'None'", "Null").replace("None", "Null"))
+        fd.write(query.replace("'None'", "default").replace("None", "default"))
         for batch in cr_data.batch:
             query = ("insert into compute_batch (compid, name, value, type, groupid, last_updated) " +
                      "values (%s, \'%s\', %s, \'%s\', %s, NOW());\n"
