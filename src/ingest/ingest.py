@@ -885,9 +885,9 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
             print("Neither %s not %s found in NIS" % (cu.name,cu.alt_name), file=sys.stderr)
             continue
         nis_counter += 1
-        fd.write("insert into compute_resources (compid,name, default_shell,default_home_dir,type, unitid,last_updated)" +\
-                 " values (\'%s\',\'%s\',\'%s\',\'%s\',\'%s\',%s,NOW());\n" % (nis_counter, nis_info.cresource,
-                                                                         nis_info.cshell,nis_info.chome,nis_info.ctype,cu.unitid))
+        fd.write("insert into compute_resources (name, default_shell, default_home_dir, type, unitid, last_updated)" +\
+                 " values (\'%s\', \'%s\', \'%s\', \'%s\', %s, NOW());\n" % (nis_info.cresource, nis_info.cshell,
+                                                                             nis_info.chome,nis_info.ctype,cu.unitid))
 
         for _, user in nis_info.users.items():
             comp = user.compute_access[nis_info.cresource]
@@ -999,9 +999,9 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
     cr_counter = nis_counter
     for cr_name, cr_data in batch_structure.items():
         cr_counter += 1
-        query = ("insert into compute_resources (compid, name, default_shell, default_home_dir, type, unitid, last_updated) " + 
-                 "values (\'%s\', \'%s\', \'%s\', \'%s\', \'%s\', %s, NOW());\n"
-              % (cr_counter, cr_name, cr_data.cshell, cr_data.chome, cr_data.ctype, cr_data.cunit))
+        query = ("insert into compute_resources (name, default_shell, default_home_dir, type, unitid, last_updated) " + 
+                 "values (\'%s\', \'%s\', \'%s\', \'%s\', %s, NOW());\n"
+              % (cr_name, cr_data.cshell, cr_data.chome, cr_data.ctype, cr_data.cunit))
         fd.write(query.replace("'None'", "Null").replace("None", "Null"))
         for batch in cr_data.batch:
             query = ("insert into compute_batch (compid, name, value, type, groupid, last_updated) " +

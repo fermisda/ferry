@@ -877,7 +877,8 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 	rType := q.Get("type")
 	shell := q.Get("default_shell")
 	homedir := q.Get("default_home_dir")
-	var nullshell,nullhomedir sql.NullString
+	var nullshell string
+	var nullhomedir sql.NullString
 	if rName == "" {
 		log.WithFields(QueryFields(r, startTime)).Print("No resource name specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No resourcename specified.\" }")
@@ -896,10 +897,9 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 //		unitName = "NULL"
 	//	}
 	if shell == "" || strings.ToUpper(strings.TrimSpace(shell)) == "NULL" {
-		nullshell.Valid = false
+		nullshell = "default"
 	} else {
-		nullshell.Valid = true
-		nullshell.String = shell 
+		nullshell = "'" + shell + "'"
 	}
 	if homedir == "" ||  strings.ToUpper(strings.TrimSpace(homedir)) == "NULL" {
 		nullhomedir.Valid=false
@@ -917,17 +917,6 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var unitID sql.NullInt64
-
-	var newcompId int
-	// select the highest existing value of compid
-	compiderr := DBptr.QueryRow(`select compid from compute_resources order by compid desc limit 1`).Scan(&newcompId)
-	if compiderr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error selecting compids: " + compiderr.Error())
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Error determining new compid.\" }")
-		return
-	}
-	//add one to the new compid
-	newcompId += 1
 
 	//figure out the unitID if we need it
 	
@@ -957,12 +946,12 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 		}
 		
 		//	addstr := fmt.Sprintf(`do declare cmpid bigint;  begin select compid into cmpid from compute_resources order by compid desc limit 1; if exists (select name from compute_resources where name=$1) then raise 'resource already exists'; else insert into compute_resources (compid, name, default_shell, unitid, last_updated, default_home_dir, type) values (cmpid+1,$1,$2,$3,NOW(),$4,$5); end if ;  end ;`)
-		addstr := fmt.Sprintf(`insert into compute_resources (compid, name, default_shell, unitid, last_updated, default_home_dir, type) values ($1,$2,$3,$4,NOW(),$5,$6)`)
+		addstr := fmt.Sprintf(`insert into compute_resources (name, default_shell, unitid, last_updated, default_home_dir, type) values ($1, %s, $2, NOW(), $3, $4)`, nullshell)
 		
 		
 		//	err = DBtx.tx.QueryRow("do $$ declare cmpid bigint;  begin select compid into cmpid from compute_resources order by compid desc limit 1; if exists (select name from compute_resources where name=$1) then raise 'resource already exists'; else insert into compute_resources (compid, name, default_shell, unitid, last_updated, default_home_dir, type) values (cmpid+1,$1,$2,$3,NOW(),$4,$5) returning cmpid+1; end if ;  end $$ ;",rName,nullshell,unitID,nullhomedir,rType).Scan(&compId)
 		
-		_, err = DBtx.tx.Exec(addstr,newcompId,rName,nullshell,unitID,nullhomedir,rType)
+		_, err = DBtx.tx.Exec(addstr, rName, unitID, nullhomedir, rType)
 		
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())

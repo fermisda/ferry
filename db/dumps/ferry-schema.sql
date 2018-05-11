@@ -151,7 +151,7 @@ ALTER TABLE public.compute_batch OWNER TO ferry;
 CREATE TABLE compute_resources (
     compid integer NOT NULL,
     name character varying(100),
-    default_shell character varying(100),
+    default_shell character varying(100) DEFAULT '/bin/bash'::character varying NOT NULL,
     unitid integer,
     last_updated timestamp with time zone DEFAULT ('now'::text)::date NOT NULL,
     default_home_dir character varying(100),
