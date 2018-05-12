@@ -336,9 +336,6 @@ func getGroupMembers(w http.ResponseWriter, r *http.Request) {
                 fmt.Fprintf(w,"{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
                 return
         }
-	if lastupdate != "" {
-		lastupdate = " and user_group.last_updated>'" + lastupdate + "'"
-	}
 	
 	type jsonout struct {
 		UID int `json:"uid"`
@@ -365,7 +362,7 @@ func getGroupMembers(w http.ResponseWriter, r *http.Request) {
 		return
 		
 	default:
-		rows, err := DBptr.Query(`select users.uname, users.uid, user_group.is_leader from user_group join users on users.uid=user_group.uid where user_group.groupid=$1`+lastupdate,grpid)
+		rows, err := DBptr.Query(`select users.uname, users.uid, user_group.is_leader from user_group join users on users.uid=user_group.uid where user_group.groupid=$1 and (user_group.last_updated>=$2 or $2 is null)`, grpid, lastupdate)
 		if err != nil {	
 			log.WithFields(QueryFields(r, startTime)).Print("Database query error: " + err.Error())
 			w.WriteHeader(http.StatusNotFound)
@@ -1405,10 +1402,8 @@ func getAllGroups(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
                 return
         }
-        if lastupdate != "" {
-		        lastupdate =  " where last_updated>'" + lastupdate + "'"
-        } 
-	rows, err := DBptr.Query(`select name, groupid from groups` + lastupdate)
+
+	rows, err := DBptr.Query(`select name, groupid from groups where groups.last_updated>=$1 or $1 is null`, lastupdate)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())

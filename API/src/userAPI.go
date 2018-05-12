@@ -132,6 +132,12 @@ func getAllUsersCertificateDNs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		inputErr = append(inputErr, jsonerror{"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time."})
+	}
+	
 	if len(inputErr) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
@@ -140,7 +146,7 @@ func getAllUsersCertificateDNs(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, string(jsonout))
 		return
 	}
-
+	
 	authorized, authout := authorize(r, AuthorizedDNs)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -153,11 +159,11 @@ func getAllUsersCertificateDNs(w http.ResponseWriter, r *http.Request) {
 								left join user_certificates as uc on ac.dnid = uc.dnid
 								left join users as u on uc.uid = u.uid
 								left join affiliation_units as au on ac.unitid = au.unitid
-								where name like $1 and (status = $2 or not $2) order by uname
+								where name like $1 and (status = $2 or not $2) and (ac.last_updated>=$3 or $3 is null) order by uname
 							) as t right join (
 								select 1 as key,
 								$1 in (select name from affiliation_units) as unit_exists
-							) as c on t.key = c.key;`, expt, activeonly)
+							) as c on t.key = c.key;`, expt, activeonly, lastupdate)
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
@@ -228,6 +234,13 @@ func getUserFQANs(w http.ResponseWriter, r *http.Request) {
 		expt = "%"
 	}
 
+	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
+		return
+	}
+
 	rows, err := DBptr.Query(`select name, fqan, user_exists, unit_exists from (
 								select 1 as key, name, fqan from
 								grid_access as ga right join
@@ -239,7 +252,7 @@ func getUserFQANs(w http.ResponseWriter, r *http.Request) {
 								select 1 as key,
 								$1 in (select uname from users) as user_exists,
 								$2 in (select name from affiliation_units) as unit_exists
-							) as C on T.key = C.key order by T.name;`, uname, expt)
+							) as C on T.key = C.key where ga.last_updated>=$3 or $3 is null order by T.name;`, uname, expt, lastupdate)
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
@@ -440,7 +453,15 @@ func getUserGroups(w http.ResponseWriter, r *http.Request) {
 	if pingerr != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(pingerr)
 	}
-	rows, err := DBptr.Query(`select groups.gid, groups.name from groups INNER JOIN user_group on (groups.groupid = user_group.groupid) INNER JOIN users on (user_group.uid = users.uid) where users.uname=$1`, uname)
+	
+	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
+		return
+	}
+
+	rows, err := DBptr.Query(`select groups.gid, groups.name from groups INNER JOIN user_group on (groups.groupid = user_group.groupid) INNER JOIN users on (user_group.uid = users.uid) where users.uname=$1 and (user_group.last_updated>=$3 or $3 is null)`, uname, lastupdate)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
@@ -947,6 +968,7 @@ func getUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	comp := q.Get("resourcename")
 	user := q.Get("username")
+
 	if comp == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No resourcename specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No resourcename specified.\" }")
@@ -958,14 +980,21 @@ func getUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
+		return
+	}
+
 	rows, err := DBptr.Query(`select t1.shell, t1.home_dir, c.resource_exists, c.user_exists from
 							 (select 1 as key, ca.shell, ca.home_dir from compute_access as ca
 							  left join compute_resources as cr on ca.compid = cr.compid
 							  left join users as us on ca.uid = us.uid 
-							  where cr.name=$1 and us.uname=$2) as t1
+							  where cr.name=$1 and us.uname=$2 and (ca.last_updated>=$3 or $3 is null)) as t1
 							  right join (select 1 as key, $1 in (select name from compute_resources) as resource_exists,
 														   $2 in (select uname from users) as user_exists)
-							  as c on c.key = t1.key`, comp, user)
+							  as c on c.key = t1.key`, comp, user, lastupdate)
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
@@ -1429,11 +1458,17 @@ func getUserExternalAffiliationAttributes(w http.ResponseWriter, r *http.Request
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
 		return
 	}
+	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
+		return
+	}
 
 	rows, err := DBptr.Query(`select attribute, value, user_exists from
-							 (select 1 as key, a.attribute, a.value, u.uname from external_affiliation_attribute as a 
+							 (select 1 as key, a.attribute, a.value, u.uname, a.last_updated from external_affiliation_attribute as a 
 							  left join users as u on a.uid = u.uid where uname = $1) as t right join
-							 (select 1 as key, $1 in (select uname from users) as user_exists) as c on t.key = c.key;`, user)
+							 (select 1 as key, $1 in (select uname from users) as user_exists) as c on t.key = c.key where a.last_updated>=$3 or $3 is null;`, user, lastupdate)
 
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
@@ -1859,7 +1894,11 @@ func getMemberAffiliations(w http.ResponseWriter, r *http.Request) {
 			inputErr = append(inputErr, jsonerror{"Invalid experimentsonly specified."})
 		}
 	}
-
+	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		inputErr = append(inputErr, jsonerror{"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time."})
+	}
 	if len(inputErr) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
@@ -1890,7 +1929,7 @@ func getMemberAffiliations(w http.ResponseWriter, r *http.Request) {
 																where u.uname = $1 and (((au.unitid in (select unitid from voms_url)) = $2) or not $2))
 									) as t
 									right join (select 1 as key, $1 in (select uname from users) as user_exists) as c on key = c.key
-							 ) as r;`, user, expOnly)
+							 ) as r;`, user, expOnly, lastupdate)
 
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
@@ -2086,7 +2125,12 @@ func getUserAccessToComputeResources(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No username specified."})
 	}
-
+	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		inputErr = append(inputErr, jsonerror{"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time."})
+	}
+	
 	if len(inputErr) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
@@ -2101,11 +2145,11 @@ func getUserAccessToComputeResources(w http.ResponseWriter, r *http.Request) {
 								compute_access as ca left join
 								users as u on ca.uid = u.uid left join
 								compute_resources as cr on ca.compid = cr.compid
-								where u.uname = $1
+								where u.uname = $1 and (ca.last_updated>=$2 or $2 is null)
 							) as t 
 							right join (
 								select 1 as key, $1 in (select uname from users) as user_exists
-							) as c on t.key = c.key;`, user)
+							) as c on t.key = c.key;`, user, lastupdate)
 
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
@@ -2177,7 +2221,13 @@ func getUserAllStorageQuotas(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No username specified."})
 	}
-
+	
+	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		inputErr = append(inputErr, jsonerror{"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time."})
+	}
+	
 	if len(inputErr) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
@@ -2192,11 +2242,11 @@ func getUserAllStorageQuotas(w http.ResponseWriter, r *http.Request) {
 								storage_quota as sq left join
 								users as u on sq.uid = u.uid left join
 								storage_resources as sr on sq.storageid = sr.storageid
-								where u.uname = $1
+								where u.uname = $1 and (sq.last_updated >= $2 or $2 is null)
 							) as t 
 							right join (
 								select 1 as key, $1 in (select uname from users) as user_exists
-							) as c on t.key = c.key;`, user)
+							) as c on t.key = c.key;`, user, lastupdate)
 
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
@@ -2424,42 +2474,8 @@ func getAllUsers(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
 		return
 	}
-	
-//	if lastupdate != "" {
-//		if unixtime, interr := strconv.ParseInt(lastupdate,10,64) ; interr == nil {
-//			parsedtime, marshalerr := ((time.Unix(unixtime,0)).UTC()).MarshalText()
-//			if marshalerr == nil {
-//				lastupdate = string(parsedtime)	
-//			} else {
-//				log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + marshalerr.Error())
-//				fmt.Fprintf(w,"{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided it should be an integer representing an epoch time.\" }")
-//				return
-//			}
-//		} else {
-//			log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + interr.Error())
-//                        fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid value for last_updated. If provided, it should be an integer representing an epoch time.\" }")
-//                        return
-//		}
-//	}
-//	
-	querystr := `select uname, uid, full_name from users `
-	log.WithFields(QueryFields(r, startTime)).Info("parsed time = " + lastupdate) 
-	
-	switch {
-	case ao != "" && lastupdate != "" : 
-		querystr = querystr + " where status='" +  strconv.FormatBool(activeonly) + "' and last_updated>='" + lastupdate + "' "
-	case ao != "" :
-		querystr = querystr + " where status="+  strconv.FormatBool(activeonly)
-	case lastupdate != "":
-		querystr = querystr + " where last_updated>='" + lastupdate + "'"
-	}
-	querystr = querystr + " order by uname"
-	//	if ao != "" {
-	//		querystr = "select uname, uid, full_name from users where status='" + strconv.FormatBool(activeonly) + "' order by uname"
-	//	}
 
-	log.WithFields(QueryFields(r, startTime)).Info("query string = " +querystr)
-	rows, err := DBptr.Query(querystr)
+	rows, err := DBptr.Query(`select uname, uid, full_name from users where (status=$1 or not $1) and (last_updated>=$2 or $2 is null) order by uname`,strconv.FormatBool(activeonly),lastupdate)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
