@@ -1603,17 +1603,17 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(err.Error(), `pk_affiliation_unit_user_certificate`) {
 			if cKey != 0 {
 				log.WithFields(QueryFields(r, startTime)).Error("DN already exists and is assigned to this affiliation unit.")
-				fmt.Fprintf(w, "{ \"ferry_status\": \"DN already exists and is assigned to this affiliation unit.\" }")
+				fmt.Fprintf(w, "{ \"ferry_error\": \"DN already exists and is assigned to this affiliation unit.\" }")
 			}
 		} else if strings.Contains(err.Error(), `duplicated dn`) {
 			log.WithFields(QueryFields(r, startTime)).Error("DN already exists.")
-			fmt.Fprintf(w, "{ \"ferry_status\": \"DN already exists.\" }")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"DN already exists.\" }")
 		} else if strings.Contains(err.Error(), `"uid" violates not-null constraint`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_status\": \"User does not exist.\" }")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
 		} else if strings.Contains(err.Error(), `"unitid" violates not-null constraint`) {
 			log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_status\": \"Affiliation unit does not exist.\" }")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Affiliation unit does not exist.\" }")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
@@ -2082,7 +2082,7 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 	case checkerr == sql.ErrNoRows: 
 		// set the header for success since we are already at the desired result
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, "{ \"ferry_status\": \"Nothing to delete; user does not exist.\" }")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Nothing to delete; user does not exist.\" }")
 		log.WithFields(QueryFields(r, startTime)).Info("user ID " + uName + " not found in DB.")
 		return	
 	case checkerr != nil:
