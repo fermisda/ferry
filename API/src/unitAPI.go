@@ -341,7 +341,13 @@ func getAffiliationUnitMembers(w http.ResponseWriter, r *http.Request) {
                 fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
                 return
         }
-	
+	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
+		return
+	}
+
         var unitId int
         checkerr := DBptr.QueryRow(`select unitid from affiliation_units where name=$1`,unitName).Scan(&unitId)
         switch {
@@ -358,7 +364,7 @@ func getAffiliationUnitMembers(w http.ResponseWriter, r *http.Request) {
         default:
 		log.WithFields(QueryFields(r, startTime)).Info("Fetching members of unit " + unitName)
 	}
-	rows, err := DBptr.Query(`select ca.uid, users.uname from compute_access as ca join users on ca.uid = users.uid join compute_resources as cr on cr.compid = ca.compid where cr.unitid=$1 order by ca.uid`, unitId)
+	rows, err := DBptr.Query(`select ca.uid, users.uname from compute_access as ca join users on ca.uid = users.uid join compute_resources as cr on cr.compid = ca.compid where cr.unitid=$1 and (ca.last_updated>=$2 or $2 is null) order by ca.uid`, unitId, lastupdate)
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 		w.WriteHeader(http.StatusNotFound)
@@ -381,7 +387,7 @@ func getAffiliationUnitMembers(w http.ResponseWriter, r *http.Request) {
 		namemap[tmpUID] = tmpUname
 	}
 	
-	rowsug, err := DBptr.Query(`select DISTINCT ug.uid, users.uname from user_group as ug join affiliation_unit_group as aug on aug.groupid = ug.groupid join users on ug.uid = users.uid where aug.unitid=$1 order by ug.uid`,unitId)
+	rowsug, err := DBptr.Query(`select DISTINCT ug.uid, users.uname from user_group as ug join affiliation_unit_group as aug on aug.groupid = ug.groupid join users on ug.uid = users.uid where aug.unitid=$1 and (ug.last_updated>=$2 or $2 is null) order by ug.uid`, unitId, lastupdate)
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 		w.WriteHeader(http.StatusNotFound)
@@ -430,7 +436,13 @@ func getGroupsInAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
 		return	
 	}
-	
+	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
+		return
+	}
+
 	var unitId int
 	checkerr := DBptr.QueryRow(`select unitid from affiliation_units where name=$1`,unitName).Scan(&unitId)
 	switch {
@@ -446,7 +458,7 @@ func getGroupsInAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 		return	
 	default:
 		
-		rows, err := DBptr.Query(`select gid, groups.name from affiliation_unit_group as aug join groups on aug.groupid = groups.groupid where aug.unitid=$1`, unitId)
+		rows, err := DBptr.Query(`select gid, groups.name from affiliation_unit_group as aug join groups on aug.groupid = groups.groupid where aug.unitid=$1 and (aug.last_updated>=$2 or $2 is null)`, unitId, lastupdate)
 		if err != nil {
 			defer log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 			w.WriteHeader(http.StatusNotFound)
@@ -585,8 +597,14 @@ func getAffiliationUnitComputeResources(w http.ResponseWriter, r *http.Request) 
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
 		return	
 	}
+	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
+		return
+	}
 	
-	rows, err := DBptr.Query(`select cr.name, cr.type, cr.default_shell, cr.default_home_dir from compute_resources as cr join affiliation_units as au on au.unitid = cr.unitid where au.name=$1 order by name`, unitName)  
+	rows, err := DBptr.Query(`select cr.name, cr.type, cr.default_shell, cr.default_home_dir from compute_resources as cr join affiliation_units as au on au.unitid = cr.unitid where au.name=$1 and (cr.last_updated>=$2 or $2 is null) order by name`, unitName, lastupdate)  
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Print(err.Error())
 		w.WriteHeader(http.StatusNotFound)
@@ -836,9 +854,15 @@ func getAllAffiliationUnits(w http.ResponseWriter, r *http.Request) {
 //	if voname != "" {
 //		querystr := `select name, voms_url from affiliation_units where voms_url is not null and voms_url like %$1%`
 //	}
-	
+		lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
+		return
+	}
+
 	rows, err := DBptr.Query(`select name, url from affiliation_units as au left join voms_url as vu on au.unitid = vu.unitid
-							  where url is not null and url like $1`,"%" + voname + "%")
+							  where url is not null and url like $1 and (au.last_updated>=2 or $2 is null)`,"%" + voname + "%", lastupdate)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())

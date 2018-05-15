@@ -461,7 +461,7 @@ func getUserGroups(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := DBptr.Query(`select groups.gid, groups.name from groups INNER JOIN user_group on (groups.groupid = user_group.groupid) INNER JOIN users on (user_group.uid = users.uid) where users.uname=$1 and (user_group.last_updated>=$3 or $3 is null)`, uname, lastupdate)
+	rows, err := DBptr.Query(`select groups.gid, groups.name from groups INNER JOIN user_group on (groups.groupid = user_group.groupid) INNER JOIN users on (user_group.uid = users.uid) where users.uname=$1 and (user_group.last_updated>=$2 or $2 is null)`, uname, lastupdate)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
@@ -1164,6 +1164,12 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	if validtime == "" || strings.ToUpper(validtime) == "NULL" {
 		validtime = "NULL"
 	} else {
+		_, errtime := time.Parse(time.RFC3339,validtime)
+		if errtime != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid format for valid_until. Please use RFC3339 if you are providing this option.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid format detected in valid_until option.\" }")
+			return	
+		}
 		validtime = "'" + validtime + "'"
 	}
 	if uName == "" {

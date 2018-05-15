@@ -23,7 +23,14 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 	
 	unit := q.Get("unitname")
 	comp := q.Get("resourcename")
-
+	
+	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
+		return
+	}
+	
 	rows, err := DBptr.Query(`select aname, rname, uname, uid, gid, full_name, home_dir, shell, unit_exists, comp_exists, last_updated from (
 								select 1 as key, au.name as aname, u.uname, u.uid, g.gid, u.full_name, ca.home_dir, ca.shell, cr.name as rname, ca.last_updated as last_updated
 								from users as u 
@@ -31,12 +38,12 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 								left join groups as g on ca.groupid = g.groupid
 								left join compute_resources as cr on ca.compid = cr.compid
 								left join affiliation_units as au on cr.unitid = au.unitid
-								where (au.name = $1 or $3) and (cr.name = $2 or $4) order by au.name, cr.name
+								where (au.name = $1 or $3) and (cr.name = $2 or $4) and (ca.last_updated>=$5 or u.last_updated>=$5 or au.last_updated>=$5 or cr.last_updated>=$5 or g.last_updated>=$5 or $5 is null) order by au.name, cr.name
 							) as t
 								right join (select 1 as key,
 								$1 in (select name from affiliation_units) as unit_exists,
 								$2 in (select name from compute_resources) as comp_exists
-							) as c on t.key = c.key;`, unit, comp, unit == "", comp == "")
+							) as c on t.key = c.key;`, unit, comp, unit == "", comp == "", lastupdate)
 
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
@@ -156,7 +163,13 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 	if comp == "" {
 		comp = "%"
 	}
-
+	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
+		return
+	}
+	
 	rows, err := DBptr.Query(`select gname, groupid, uname, unit_exists, comp_exists, last_updated from (
 								select 1 as key, g.name as gname, ca.groupid, u.uname, ca.last_updated
 								from compute_access as ca
@@ -164,12 +177,13 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 								left join users as u on ca.uid = u.uid
 								left join compute_resources as cr on ca.compid = cr.compid
 								left join affiliation_units as au on cr.unitid = au.unitid
-								where au.name = $1 and cr.name like $2 order by ca.groupid
+								where au.name = $1 and cr.name like $2 and (g.last_updated>=$3 or u.last_updated>=$3 or cr.last_updated>=$3 or ca.last_updated>=$3 or au.last_updated>=$3 or $3 is null)
+                                                                order by ca.groupid
 							) as t
 								right join (select 1 as key,
 								$1 in (select name from affiliation_units) as unit_exists,
 								$2 in (select name from compute_resources) as comp_exists
-							) as c on t.key = c.key;`, unit, comp)
+							) as c on t.key = c.key;`, unit, comp, lastupdate)
 
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
@@ -266,8 +280,12 @@ func getGridMapFile(w http.ResponseWriter, r *http.Request) {
 		unit = "%"
 	}
 	
-	
-
+	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
+		return
+	}
 
 	var unitExists bool
 
@@ -276,8 +294,8 @@ func getGridMapFile(w http.ResponseWriter, r *http.Request) {
 								left join user_certificates as uc on ac.dnid = uc.dnid
 								left join users as us on uc.uid = us.uid
 								left join affiliation_units as au on ac.unitid = au.unitid
-								where au.name like $1) as t
-	 						  right join (select 1 as key, $1 in (select name from affiliation_units) as unit_exists) as c on t.key = c.key`, unit)
+								where au.name like $1 and ($2 is null or ac.last_updated>=$2 or uc.last_updated>=$2 or us.last_updated>=$2 or au.last_updated>=$2)) as t
+	 						  right join (select 1 as key, $1 in (select name from affiliation_units) as unit_exists) as c on t.key = c.key`, unit, lastupdate)
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
@@ -333,14 +351,20 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 	if unit == "" {
 		unit = "%"
 	}
+	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
+		return
+	}
 
 	rows, err := DBptr.Query(`select t.fqan, t.mapped_user, c.unit_exists from
 							 (select 1 as key, gf.fqan, gf.mapped_user, au.name from grid_fqan as gf
 							  left join groups as g on gf.mapped_group = g.name
 							  left join affiliation_unit_group as ag on g.groupid = ag.groupid
 							  left join affiliation_units as au on ag.unitid = au.unitid
-							  where au.name like $1) as t
-							  right join (select 1 as key, $1 in (select name from affiliation_units) as unit_exists) as c on t.key = c.key`, unit)
+							  where au.name like $1 and (gf.last_updated>=$2 or g.last_updated>=$2 or ag.last_updated>=$2 or au.last_updated>=$2 or $2 is null)) as t
+							  right join (select 1 as key, $1 in (select name from affiliation_units) as unit_exists) as c on t.key = c.key`, unit, lastupdate)
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
@@ -588,7 +612,7 @@ func lookupCertificateDN(w http.ResponseWriter, r *http.Request) {
 func getMappedGidFile(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-
+	
 	rows, err := DBptr.Query(`select fqan, mapped_user, gid from grid_fqan as gf left join groups as g on g.name = gf.mapped_group`)
 
 	if err != nil {
@@ -637,11 +661,18 @@ func getMappedGidFile(w http.ResponseWriter, r *http.Request) {
 func getStorageAuthzDBFile(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-
+	q := r.URL.Query()
+	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
+		return
+	}
 	rows, err := DBptr.Query(`select u.uname, u.uid, g.gid from users as u
 							  right join user_group as ug on u.uid = ug.uid
 							  left join groups as g on ug.groupid = g.groupid
-							  order by u.uname;`)
+                                                          where ug.last_updated>=$1 or $1 is null
+							  order by u.uname;`, lastupdate)
 
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
@@ -1363,9 +1394,17 @@ func getAllCAs(w http.ResponseWriter, r *http.Request) {
 func getAllComputeResources(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
+		return
+	}
 	
 	rows, err := DBptr.Query(`select cr.name, cr.default_shell, cr.default_home_dir, cr.type, au.name as affiliation_unit
-							  from compute_resources as cr left join affiliation_units as au on cr.unitid = au.unitid;`)
+							  from compute_resources as cr left join affiliation_units as au on cr.unitid = au.unitid where (cr.last_updated>=$1 or $1 is null);`, lastupdate)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())

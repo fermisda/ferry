@@ -773,7 +773,13 @@ func getGroupUnits(w http.ResponseWriter, r *http.Request) {
 			inputErr = append(inputErr, jsonerror{"Invalid experimentsonly specified."})
 		}
 	}
-
+	
+	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+                log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+          	inputErr = append(inputErr, jsonerror{"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time."})
+        }
+	
 	if len(inputErr) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
@@ -789,10 +795,10 @@ func getGroupUnits(w http.ResponseWriter, r *http.Request) {
 									groups as g on ag.groupid = g.groupid left join
 									affiliation_units as au on ag.unitid = au.unitid left join
 									voms_url as vu on au.unitid = vu.unitid
-								where g.name = $1 and ((url is not null = $2) or not $2)
+								where g.name = $1 and ((url is not null = $2) or not $2) and (vu.last_updated>=$3 or ag.last_updated>=$3 or $3 is null)
 							) as t right join (
 								select 1 as key, $1 in (select name from groups) as group_exists
-							) as c on t.key = c.key;`, group, expOnly)
+							) as c on t.key = c.key;`, group, expOnly, lastupdate)
 	if err != nil {	
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
@@ -864,8 +870,14 @@ func getGroupBatchPriorities(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No resourcename specified.\" }")
 		return
 	}	
-	
-	rows, err := DBptr.Query(`select groups.name, cb.value, cb.valid_until from compute_batch as cb join compute_resources as cr on cb.compid=cr.compid join groups on groups.groupid=cb.groupid where cb.type='priority' and cr.name=$1 `,rName)
+	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
+		return
+	}
+
+	rows, err := DBptr.Query(`select groups.name, cb.value, cb.valid_until from compute_batch as cb join compute_resources as cr on cb.compid=cr.compid join groups on groups.groupid=cb.groupid where cb.type='priority' and cr.name=$1 and (cr.last_updated>=$2 or $2 is null)`,rName, lastupdate)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		log.WithFields(QueryFields(r, startTime)).Error("No resource name specified in DB query: " + err.Error())
@@ -1061,6 +1073,12 @@ func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 		inputErr = append(inputErr, jsonerror{"No unitname name specified."})
 	}
 
+	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		inputErr = append(inputErr, jsonerror{"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time."})
+	}
+
 	if len(inputErr) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
@@ -1075,13 +1093,13 @@ func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 							  	join affiliation_units on affiliation_units.unitid = sq.unitid
 							  	join storage_resources on storage_resources.storageid = sq.storageid
 							  	join groups on groups.groupid = sq.groupid
-								where affiliation_units.name = $3 AND storage_resources.name = $2 and groups.name = $1
+								where affiliation_units.name = $3 AND storage_resources.name = $2 and groups.name = $1 and (sq.last_updated>=$4 or $4 is null)
 							) as t right join (
 								select 1 as key, 
 								$1 in (select name from groups) as group_exists,
 								$2 in (select name from storage_resources) as resource_exists,
 								$3 in (select name from affiliation_units) as unit_exists
-							) as c on t.key = c.key;`, groupname, resource, exptname)
+							) as c on t.key = c.key;`, groupname, resource, exptname, lastupdate)
 	if err != nil {	
 		defer log.WithFields(QueryFields(r, startTime)).Print("Error in DB query: " + err.Error())
 		w.WriteHeader(http.StatusNotFound)
@@ -1666,6 +1684,12 @@ func getGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error("No resource name specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No resourcename specified."})
 	}	
+	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		inputErr = append(inputErr, jsonerror{"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time."})
+	}
+
 	if len(inputErr) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
@@ -1713,7 +1737,7 @@ func getGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
 		grouplist jsonout
 		scanname string
 	)
-	rows, dberr := DBptr.Query(`select groups.name from groups where groups.groupid in (select distinct ca.groupid from compute_access as ca join compute_resources as cr on cr.compid=ca.compid where ca.compid=$1 and cr.unitid=$2) order by groups.name`,compid,unitid)
+	rows, dberr := DBptr.Query(`select groups.name from groups where groups.groupid in (select distinct ca.groupid from compute_access as ca join compute_resources as cr on cr.compid=ca.compid where ca.compid=$1 and cr.unitid=$2 and (ca.last_updated>=$3 or $3 is null)) order by groups.name`, compid, unitid, lastupdate)
 	if dberr != nil {
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + dberr.Error())
 		inputErr = append(inputErr, jsonerror{dberr.Error()})
