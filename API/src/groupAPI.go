@@ -534,11 +534,7 @@ func IsUserLeaderOfGroup(w http.ResponseWriter, r *http.Request) {
 			checkerr := DBptr.QueryRow(`select is_leader from user_group as ug join users on users.uid=ug.uid join groups on groups.groupid=ug.groupid where users.uname=$1 and groups.name=$2`,uName,groupname).Scan(&isLeader)
 			leaderstr := strconv.FormatBool(isLeader)
 			switch {
-			case checkerr == sql.ErrNoRows:
-				log.WithFields(QueryFields(r, startTime)).Print("User " + uName + " not a member of "+ groupname)
-				fmt.Fprintf(w,"{ \"ferry_error\": \"User is not a member of this group.\" }")
-				return
-			case checkerr != nil:
+			case checkerr != nil && checkerr != sql.ErrNoRows:
 				log.WithFields(QueryFields(r, startTime)).Print("Group leader query error: " + checkerr.Error())
 				w.WriteHeader(http.StatusNotFound)
 				fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
