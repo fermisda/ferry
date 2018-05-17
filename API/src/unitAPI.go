@@ -742,9 +742,67 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 func removeFQAN(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query()
-//	fqan := q.Get("fqan")
-	NotDoneYet(w, r, startTime)
+
+	type jsonstatus struct {
+		Status string `json:"ferry_status,omitempty"`
+		Error string `json:"ferry_error,omitempty"`
+	}
+	var inputErr []jsonstatus
+
+	q := r.URL.Query()
+	fqan := q.Get("fqan")
+
+	if fqan == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No fqan specified in http query.")
+		inputErr = append(inputErr, jsonstatus{"", "No fqan specified."})
+	}
+	if len(inputErr) > 0 {
+		jsonout, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err)
+		}
+		fmt.Fprintf(w, string(jsonout))
+		return
+	}
+
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+
+	var aRows int64
+	var res sql.Result
+	res, err = DBtx.Exec("delete from grid_fqan where fqan = $1", fqan)
+	if err == nil {
+		aRows, _ = res.RowsAffected()
+	} else {
+		aRows = 0
+	}
+
+	var output interface{}
+	if aRows == 1 {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = jsonstatus{"success", ""}
+		if cKey != 0 {
+			DBtx.Commit(cKey)
+		} else {
+			return
+		}
+	} else {
+		if aRows == 0 && err == nil {
+			log.WithFields(QueryFields(r, startTime)).Error("FQAN doesn't exist.")
+			output = jsonstatus{"", "FQAN doesn't exist."}
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			output = jsonstatus{"", err.Error()}
+		}
+	}
+
+	out, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+	}
+	fmt.Fprintf(w, string(out))
 }
 
 func setFQANMappings(w http.ResponseWriter, r *http.Request) {
