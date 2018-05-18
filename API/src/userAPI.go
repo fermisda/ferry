@@ -1164,12 +1164,6 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	if validtime == "" || strings.ToUpper(validtime) == "NULL" {
 		validtime = "NULL"
 	} else {
-		_, errtime := time.Parse(time.RFC3339,validtime)
-		if errtime != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid format for valid_until. Please use RFC3339 if you are providing this option.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid format detected in valid_until option.\" }")
-			return	
-		}
 		validtime = "'" + validtime + "'"
 	}
 	if uName == "" {
