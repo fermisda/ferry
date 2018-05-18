@@ -242,7 +242,7 @@ func getUserFQANs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := DBptr.Query(`select name, fqan, user_exists, unit_exists from (
-								select 1 as key, name, fqan from
+								select 1 as key, name, fqan, ga.last_updated from
 								grid_access as ga right join
 								(select * from users where uname = $1) as us on ga.uid = us.uid	left join
 								grid_fqan as gf on ga.fqanid = gf.fqanid join
@@ -252,7 +252,7 @@ func getUserFQANs(w http.ResponseWriter, r *http.Request) {
 								select 1 as key,
 								$1 in (select uname from users) as user_exists,
 								$2 in (select name from affiliation_units) as unit_exists
-							) as C on T.key = C.key where ga.last_updated>=$3 or $3 is null order by T.name;`, uname, expt, lastupdate)
+							) as C on T.key = C.key where T.last_updated >= $3 or $3 is null order by T.name;`, uname, expt, lastupdate)
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
