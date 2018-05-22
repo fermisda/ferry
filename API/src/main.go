@@ -216,6 +216,7 @@ func main() {
 	grouter.HandleFunc("/getPasswdFile", getPasswdFile)
 	grouter.HandleFunc("/getGroupFile", getGroupFile)
 	grouter.HandleFunc("/getGridMapFile", getGridMapFile)
+	grouter.HandleFunc("/getGridMapFileByVO", getGridMapFileByVO)
 	grouter.HandleFunc("/getVORoleMapFile", getVORoleMapFile)
 	grouter.HandleFunc("/getUserUID", getUserUID)
 	grouter.HandleFunc("/getUserUname", getUserUname)

@@ -289,12 +289,85 @@ func getGridMapFile(w http.ResponseWriter, r *http.Request) {
 
 	var unitExists bool
 
+	rows, err := DBptr.Query(`select distinct dn, uname, unit_exists from 
+							 (select 1 as key, au.name, uc.dn, us.uname from  affiliation_unit_user_certificate as ac
+								left join user_certificates as uc on ac.dnid = uc.dnid
+								left join users as us on uc.uid = us.uid
+								left join affiliation_units as au on ac.unitid = au.unitid
+								where au.name like $1 and ( ac.last_updated>=$2 or uc.last_updated>=$2 or us.last_updated>=$2 or au.last_updated>=$2 or $2 is null)) as t
+	 						  right join (select 1 as key, $1 in (select name from affiliation_units) as unit_exists) as c on t.key = c.key`, unit, lastupdate)
+	if err != nil {
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	type jsonentry struct {
+		DN string `json:"userdn"`
+		Uname string `json:"mapped_uname"`
+	}
+	var dnmap jsonentry
+	var Out[] jsonentry
+
+	for rows.Next() {
+		var tmpDN, tmpUname sql.NullString
+		rows.Scan(&tmpDN, &tmpUname, &unitExists)
+		if tmpDN.Valid {
+			dnmap.DN, dnmap.Uname = tmpDN.String, tmpUname.String
+			Out = append(Out, dnmap)
+		}
+	}
+
+	var output interface{}
+	if len(Out) == 0 {
+		type jsonerror struct {Error []string `json:"ferry_error"`}
+		var Err jsonerror
+
+		if !unitExists {
+			Err.Error = append(Err.Error, "Experiment does not exist.")
+			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
+		}
+		Err.Error = append(Err.Error, "No DNs found.")
+		log.WithFields(QueryFields(r, startTime)).Error("No DNs found.")
+
+		output = Err
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonout, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	fmt.Fprintf(w, string(jsonout))
+}
+
+func getGridMapFileByVO(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	unit := strings.TrimSpace(q.Get("unitname"))
+	if unit == "" {
+		unit = "%"
+	}
+	
+	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
+		return
+	}
+
+	var unitExists bool
+
 	rows, err := DBptr.Query(`select name, dn, uname, unit_exists from 
 							 (select 1 as key, au.name, uc.dn, us.uname from  affiliation_unit_user_certificate as ac
 								left join user_certificates as uc on ac.dnid = uc.dnid
 								left join users as us on uc.uid = us.uid
 								left join affiliation_units as au on ac.unitid = au.unitid
-								where au.name like $1 and ($2 is null or ac.last_updated>=$2 or uc.last_updated>=$2 or us.last_updated>=$2 or au.last_updated>=$2)) as t
+								where au.name like $1 and ( ac.last_updated>=$2 or uc.last_updated>=$2 or us.last_updated>=$2 or au.last_updated>=$2 or $2 is null)) as t
 	 						  right join (select 1 as key, $1 in (select name from affiliation_units) as unit_exists) as c on t.key = c.key`, unit, lastupdate)
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
@@ -343,6 +416,7 @@ func getGridMapFile(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
+
 func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
