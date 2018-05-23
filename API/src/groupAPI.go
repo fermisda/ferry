@@ -218,10 +218,95 @@ func addGroupToUnit(w http.ResponseWriter, r *http.Request) {
 func removeGroupFromUnit(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query()
-//	groupname := q.Get("groupname")
-//	unitname := q.Get("unitname")
-	NotDoneYet(w, r, startTime)
+
+	type jsonstatus struct {
+		Status string `json:"ferry_status,omitempty"`
+		Error []string `json:"ferry_error,omitempty"`
+	}
+	var inputErr jsonstatus
+
+	q := r.URL.Query()
+	gName := q.Get("groupname")
+	uName := q.Get("unitname")
+
+	if gName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
+		inputErr.Error = append(inputErr.Error, "No groupname specified.")
+	}
+	if uName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
+		inputErr.Error = append(inputErr.Error, "No unitname specified.")
+	}
+	if len(inputErr.Error) > 0 {
+		jsonout, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err)
+		}
+		fmt.Fprintf(w, string(jsonout))
+		return
+	}
+
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+
+	rows, err := DBtx.Query(`select $1 in (select name from groups),
+					   $2 in (select name from affiliation_units);`, gName, uName)
+	if err != nil {	
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	}
+
+	var groupExists, unitExists bool
+	if rows.Next() {
+		rows.Scan(&groupExists, &unitExists)
+	}
+	rows.Close()
+
+	var aRows int64
+	res, err := DBtx.Exec(`delete from affiliation_unit_group
+						  where groupid = (select groupid from groups where name = $1)
+						  and   unitid = (select unitid from affiliation_units where name = $2);`, gName, uName);
+	if err == nil {
+		aRows, _ = res.RowsAffected()
+	} else {
+		aRows = 0
+	}
+
+	var output interface{}
+	if aRows == 1 {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = jsonstatus{"success", nil}
+		if cKey != 0 {
+			DBtx.Commit(cKey)
+		} else {
+			return
+		}
+	} else {
+		var out jsonstatus
+		if !groupExists {
+			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+			out.Error = append(out.Error, "Group does not exist.")
+		}
+		if !unitExists {
+			log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
+			out.Error = append(out.Error, "Affiliation unit does not exist.")
+		}
+		if groupExists && unitExists {
+			log.WithFields(QueryFields(r, startTime)).Error("Group does not belong to affiliation unit.")
+			out.Error = append(out.Error, "Group does not belong to affiliation unit.")
+		}
+		output = out
+	}
+
+	out, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+	}
+	fmt.Fprintf(w, string(out))
 }
 func setPrimaryStatusGroup(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
