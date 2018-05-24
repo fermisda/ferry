@@ -11,36 +11,23 @@ import (
 )
 
 func testWrapper(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	cas, _ := FetchCAs(`C:\Users\coimb\Documents\Ferry\Certificates`)
+	rows, _ := DBptr.Query("select dn, issuer_ca from user_certificates;")
 
-	var DBtx Transaction
-	R := WithTransaction(r, &DBtx)
-	
-	key, err := DBtx.Start(DBptr)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error starting database transaction: " + err.Error())
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
-		return
+	var dn, issuer string
+	for rows.Next() {
+		rows.Scan(&dn, &issuer)
+		ca, err := cas.MatchCA(dn)
+		if err != nil {
+			print(err.Error())
+		} else {
+			if ca["subjectdn"] != issuer {
+				print(ca["subjectdn"] + " != " + issuer)
+			} else {
+				print("Match!")
+			}
+		}
 	}
-
-	createUser(w, R)
-	if !DBtx.Complete() {
-		log.WithFields(QueryFields(r, startTime)).Error("createUser failed.")
-		DBtx.Rollback()
-		return
-	}
-	addUserToGroup(w, R)
-	if !DBtx.Complete() {
-		log.WithFields(QueryFields(r, startTime)).Error("addUserToGroup failed")
-		DBtx.Rollback()
-		return
-	}
-
-	log.WithFields(QueryFields(r, startTime)).Info("Success!")
-	fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
-
-	DBtx.Commit(key)
 }
 
 func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
