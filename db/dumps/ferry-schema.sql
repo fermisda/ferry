@@ -135,7 +135,7 @@ CREATE TABLE compute_batch (
     compid integer DEFAULT (0)::bigint NOT NULL,
     groupid integer,
     name character varying(300) NOT NULL,
-    value real,
+    value numeric,
     type character varying(255),
     last_updated timestamp with time zone DEFAULT ('now'::text)::date NOT NULL,
     valid_until date
