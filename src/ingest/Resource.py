@@ -75,11 +75,11 @@ class ComputeResource:
         self.batch = []
 
 class ComputeBatch:
-    def __init__(self, name, value = None, type = None, groupid = None):
+    def __init__(self, name, value = None, type = None, experiment = None):
         self.name = name
         self.value = value
         self.type = type
-        self.groupid = groupid
+        self.experiment = experiment
 
 
 class StorageResource:

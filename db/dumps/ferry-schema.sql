@@ -133,12 +133,12 @@ ALTER TABLE public.compute_access OWNER TO ferry;
 
 CREATE TABLE compute_batch (
     compid integer DEFAULT (0)::bigint NOT NULL,
-    groupid integer,
     name character varying(300) NOT NULL,
     value numeric,
     type character varying(255),
     last_updated timestamp with time zone DEFAULT ('now'::text)::date NOT NULL,
-    valid_until date
+    valid_until date,
+    unitid integer
 );
 
 
@@ -798,10 +798,10 @@ CREATE INDEX idx_compute_batch_compid ON compute_batch USING btree (compid);
 
 
 --
--- Name: idx_compute_batch_groupid; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
+-- Name: idx_compute_batch_unitid; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
-CREATE INDEX idx_compute_batch_groupid ON compute_batch USING btree (groupid);
+CREATE INDEX idx_compute_batch_unitid ON compute_batch USING btree (unitid);
 
 
 --
@@ -940,27 +940,27 @@ ALTER TABLE ONLY affiliation_unit_user_certificate
 
 
 --
+-- Name: fk_compute_batch_affiliation_units; Type: FK CONSTRAINT; Schema: public; Owner: ferry
+--
+
+ALTER TABLE ONLY compute_batch
+    ADD CONSTRAINT fk_compute_batch_affiliation_units FOREIGN KEY (unitid) REFERENCES affiliation_units(unitid);
+
+
+--
+-- Name: fk_compute_batch_compute_resource; Type: FK CONSTRAINT; Schema: public; Owner: ferry
+--
+
+ALTER TABLE ONLY compute_batch
+    ADD CONSTRAINT fk_compute_batch_compute_resource FOREIGN KEY (compid) REFERENCES compute_resources(compid);
+
+
+--
 -- Name: fk_compute_resource_affiliation_units; Type: FK CONSTRAINT; Schema: public; Owner: ferry
 --
 
 ALTER TABLE ONLY compute_resources
     ADD CONSTRAINT fk_compute_resource_affiliation_units FOREIGN KEY (unitid) REFERENCES affiliation_units(unitid);
-
-
---
--- Name: fk_compute_resource_compute_resource; Type: FK CONSTRAINT; Schema: public; Owner: ferry
---
-
-ALTER TABLE ONLY compute_batch
-    ADD CONSTRAINT fk_compute_resource_compute_resource FOREIGN KEY (compid) REFERENCES compute_resources(compid);
-
-
---
--- Name: fk_compute_resource_groups; Type: FK CONSTRAINT; Schema: public; Owner: ferry
---
-
-ALTER TABLE ONLY compute_batch
-    ADD CONSTRAINT fk_compute_resource_groups FOREIGN KEY (groupid) REFERENCES groups(groupid);
 
 
 --

@@ -612,7 +612,12 @@ def read_compute_batch(config):
 
     for quota in quotas:
         name, value = quota.strip().split(" = ")
-        batch_structure["fermigrid"].batch.append(ComputeBatch(name, value, "quota"))
+        experiment = re.findall(r"GROUP_QUOTA_(group|DYNAMIC_group)_(\w+)\.?(\w+)?", name)[0][1]
+        if name.__contains__("DYNAMIC"):
+            quotaType = "dynamic"
+        else:
+            quotaType = "static"
+        batch_structure["fermigrid"].batch.append(ComputeBatch(name, value, quotaType, experiment))
 
     return batch_structure
 
@@ -1004,9 +1009,9 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
               % (cr_name, cr_data.cshell, cr_data.chome, cr_data.ctype, cr_data.cunit))
         fd.write(query.replace("'None'", "default").replace("None", "default"))
         for batch in cr_data.batch:
-            query = ("insert into compute_batch (compid, name, value, type, groupid, last_updated) " +
-                     "values (%s, \'%s\', %s, \'%s\', %s, NOW());\n"
-                  % (cr_counter, batch.name, batch.value, batch.type, batch.groupid))
+            query = ("insert into compute_batch (compid, name, value, type, unitid, last_updated) " +
+                     "values (%s, \'%s\', %s, \'%s\', (select unitid from affiliation_units where name = '%s'), NOW());\n"
+                  % (cr_counter, batch.name, batch.value, batch.type, batch.experiment))
             fd.write(query.replace("'None'", "Null").replace("None", "Null"))
 
     # populating nas_storage

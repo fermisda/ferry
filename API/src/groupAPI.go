@@ -935,22 +935,18 @@ func getGroupUnits(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, string(jsonout))
 }
 
-func getGroupBatchPriorities(w http.ResponseWriter, r *http.Request) {
+func getBatchPriorities(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
-	groupname := strings.TrimSpace(q.Get("groupname"))
+	uName := strings.TrimSpace(q.Get("unitname"))
 	rName := strings.TrimSpace(q.Get("resourcename"))
 //	expName := strings.TrimSpace(q.Get("unitname"))
-	if groupname == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified.\" }")
-		return
+	if uName == "" {
+		uName = "%"
 	}
 	if rName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No resource name specified in http query.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No resourcename specified.\" }")
-		return
+		rName = "%"
 	}	
 	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
@@ -959,7 +955,12 @@ func getGroupBatchPriorities(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := DBptr.Query(`select groups.name, cb.value, cb.valid_until from compute_batch as cb join compute_resources as cr on cb.compid=cr.compid join groups on groups.groupid=cb.groupid where cb.type='priority' and cr.name=$1 and (cr.last_updated>=$2 or $2 is null)`,rName, lastupdate)
+	rows, err := DBptr.Query(`select cb.name, cb.value, cb.valid_until
+								from compute_batch as cb
+								join compute_resources as cr on cb.compid = cr.compid
+								join affiliation_units as au on cb.unitid = au.unitid
+							  where cb.type = 'priority' and cr.name like $1 and au.name like $2
+							  and (cr.last_updated >= $3 or $3 is null)`,rName, uName, lastupdate)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		log.WithFields(QueryFields(r, startTime)).Error("No resource name specified in DB query: " + err.Error())
@@ -972,7 +973,7 @@ func getGroupBatchPriorities(w http.ResponseWriter, r *http.Request) {
 	var tmpTime sql.NullString
 	var tmpVal float64
 	type jsonout struct {
-		Grpname string `json:"groupname"`
+		Name string `json:"name"`
 		Value float64 `json:"priority"`
 		Validtime string `json:"valid_until,omitempty"`
 	}
@@ -980,7 +981,7 @@ func getGroupBatchPriorities(w http.ResponseWriter, r *http.Request) {
 	var Out []jsonout
 	for rows.Next() {
 		rows.Scan(&tmpName,&tmpVal,&tmpTime)
-		tmpout.Grpname = tmpName
+		tmpout.Name = tmpName
 		tmpout.Value = tmpVal
 		if tmpTime.Valid {
 			tmpout.Validtime = tmpTime.String 
@@ -993,8 +994,8 @@ func getGroupBatchPriorities(w http.ResponseWriter, r *http.Request) {
 			Error string `json:"ferry_error"`
 		}
 		var queryErr []jsonerror
-		queryErr = append(queryErr, jsonerror{"Query returned no groups."})
-		log.WithFields(QueryFields(r, startTime)).Error("Query returned no groups.")
+		queryErr = append(queryErr, jsonerror{"Query returned no priorities."})
+		log.WithFields(QueryFields(r, startTime)).Error("Query returned no priorities.")
 		output = queryErr
 	} else {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
@@ -1026,12 +1027,12 @@ func setGroupBatchPriority(w http.ResponseWriter, r *http.Request) {
 //	prio := q.Get("priority")
 	NotDoneYet(w, r, startTime)
 }
-func setGroupCondorQuota(w http.ResponseWriter, r *http.Request) {
+func setCondorQuota(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 
-	group := q.Get("groupname")
+	group := q.Get("condorgroup")
 	comp  := q.Get("resourcename")
 	quota := q.Get("quota")
 	until := q.Get("validuntil")
@@ -1044,8 +1045,8 @@ func setGroupCondorQuota(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if group == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified.\" }")
+		log.WithFields(QueryFields(r, startTime)).Error("No condorgroup specified in http query.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No condorgroup specified.\" }")
 		return
 	}
 	if comp == "" {
@@ -1064,7 +1065,7 @@ func setGroupCondorQuota(w http.ResponseWriter, r *http.Request) {
 		until = "'" + until + "'"
 	}
 
-	gName := strings.Split(group, ".")[0]
+	uName := strings.Split(group, ".")[0]
 
 	var name, qType string
 	if strings.Contains(quota, ".") {
@@ -1082,29 +1083,29 @@ func setGroupCondorQuota(w http.ResponseWriter, r *http.Request) {
 
 	_, err = DBtx.Exec(fmt.Sprintf(`do $$
 									declare 
-									    v_groupid int;
+									    v_unitid int;
 										v_compid int;
 											
-										c_gname constant text := '%s';
+										c_uname constant text := '%s';
 										c_compres constant text := '%s';
 										c_qname constant text := '%s';
 										c_qvalue constant numeric := %s;
 										c_qtype constant text := '%s';
 										c_valid constant date := %s;
 									begin
-										select groupid into v_groupid from groups where name = c_gname;
+										select unitid into v_unitid from affiliation_units where name = c_uname;
 										select compid into v_compid from compute_resources where name = c_compres;
 
 										if v_compid is null then raise 'null value in column "compid"'; end if;
 										
 										if (v_compid, c_qname) not in (select compid, name from compute_batch) then
-										    insert into compute_batch (compid, name, value, type, groupid, valid_until, last_updated)
-															   values (v_compid, c_qname, c_qvalue, c_qtype, v_groupid, c_valid, NOW());
+										    insert into compute_batch (compid, name, value, type, unitid, valid_until, last_updated)
+															   values (v_compid, c_qname, c_qvalue, c_qtype, v_unitid, c_valid, NOW());
 										else
 											update compute_batch set value = c_qvalue, valid_until = c_valid, last_updated = NOW()
 											where compid = v_compid and name = c_qname;
 										end if;
-									end $$;`, gName, comp, name, quota, qType, until))
+									end $$;`, uName, comp, name, quota, qType, until))
 
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
