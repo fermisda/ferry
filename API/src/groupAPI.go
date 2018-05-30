@@ -1008,14 +1008,96 @@ func getBatchPriorities(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, string(jsonoutput))
 }
 
-func getGroupCondorQuotas(w http.ResponseWriter, r *http.Request) {
+func getCondorQuotas(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query()
-//	groupname := q.Get("groupname")
-//	resource := q.Get("resourcename")
-//	exptname := q.Get("unitname")
-	NotDoneYet(w, r, startTime)
+
+	type jsonstatus struct {
+		Status string `json:"ferry_status,omitempty"`
+		Error string `json:"ferry_error,omitempty"`
+	}
+
+	q := r.URL.Query()
+	uName := q.Get("unitname")
+	rName := q.Get("resourcename")
+
+	if uName == "" {
+		uName = "%"
+	}
+	if rName == "" {
+		rName = "%"
+	}
+
+	query := `select resourcename, unitname, condorgroup, value, type, unit_exists, resource_exists from (
+				select 1 as key, cr.name as resourcename, au.name as unitname, cb.name as condorgroup, cb.value, cb.type
+				from compute_batch as cb
+				left join affiliation_units as au on cb.unitid = au.unitid
+				join compute_resources as cr on cb.compid = cr.compid
+				where cb.type in ('static', 'dynamic') and (au.name like $1 or $1 = '%' and au.name is null) and cr.name like $2
+			  ) as T right join (
+				select 1 as key,
+				$1 in (select name from affiliation_units) as unit_exists,
+				$2 in (select name from compute_resources) as resource_exists
+			  ) as C on T.key = C.key;`
+	re := regexp.MustCompile(`[\s\t\n]+`)
+	log.Debug(re.ReplaceAllString(query, " "))
+
+	rows, err := DBptr.Query(query, uName, rName)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		log.WithFields(QueryFields(r, startTime)).Error("No resource name specified in DB query: " + err.Error())
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	type jsonquota struct {
+		Group string `json:"condorgroup"`
+		Value int64 `json:"value"`
+		Qtype string `json:"type"`
+		Unit  string `json:"unitname"`
+	}
+	out := make(map[string][]jsonquota)
+
+	var tmpRname, tmpUname, tmpGroup, tmpType sql.NullString
+	var tmpValue sql.NullInt64
+	var unitExists, resourceExists bool
+
+	for rows.Next() {
+		rows.Scan(&tmpRname, &tmpUname, &tmpGroup, &tmpValue, &tmpType, &unitExists, &resourceExists)
+		if tmpGroup.Valid {
+			out[tmpRname.String] = append(out[tmpRname.String], jsonquota{tmpGroup.String, tmpValue.Int64, tmpType.String, tmpUname.String})
+		}
+	}
+
+	var output interface{}
+	if len(out) == 0 {
+		type jsonerror struct {
+			Error []string `json:"ferry_error"`
+		}
+		var queryErr jsonerror
+		if !unitExists && uName != "%" {
+			log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
+			queryErr.Error = append(queryErr.Error, "Affiliation unit does not exist.")
+		}
+		if !resourceExists && rName != "%" {
+			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
+			queryErr.Error = append(queryErr.Error, "Resource does not exist.")
+		}
+		if len(queryErr.Error) == 0 {
+			log.WithFields(QueryFields(r, startTime)).Error("Query returned no quotas.")
+			queryErr.Error = append(queryErr.Error, "Query returned no quotas.")
+		}
+		output = queryErr
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = out
+	}
+	jsonoutput, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+	}
+	fmt.Fprintf(w, string(jsonoutput))
 }
 func setGroupBatchPriority(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
@@ -1208,7 +1290,7 @@ func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var output interface{}	
+	var output interface{}
 	if len(Out) == 0 {
 		type jsonerror struct {
 			Error string `json:"ferry_error"`
