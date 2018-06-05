@@ -232,8 +232,8 @@ ALTER TABLE public.grid_fqan_fqanid_seq OWNER TO ferry;
 CREATE TABLE grid_fqan (
     fqanid integer DEFAULT nextval('grid_fqan_fqanid_seq'::regclass) NOT NULL,
     fqan character varying(300) NOT NULL,
-    mapped_user character varying(100),
-    mapped_group character varying(100) NOT NULL,
+    mapped_user bigint,
+    mapped_group integer NOT NULL,
     last_updated timestamp with time zone DEFAULT ('now'::text)::date NOT NULL,
     unitid integer
 );
@@ -717,11 +717,11 @@ ALTER TABLE ONLY groups
 
 
 --
--- Name: unq_groups_group_name; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
+-- Name: unq_groups_name_type; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
 --
 
 ALTER TABLE ONLY groups
-    ADD CONSTRAINT unq_groups_group_name UNIQUE (name);
+    ADD CONSTRAINT unq_groups_name_type UNIQUE (name, type);
 
 
 --
@@ -964,22 +964,6 @@ ALTER TABLE ONLY compute_resources
 
 
 --
--- Name: fk_experiment_fqan_groups; Type: FK CONSTRAINT; Schema: public; Owner: ferry
---
-
-ALTER TABLE ONLY grid_fqan
-    ADD CONSTRAINT fk_experiment_fqan_groups FOREIGN KEY (mapped_group) REFERENCES groups(name);
-
-
---
--- Name: fk_experiment_fqan_users; Type: FK CONSTRAINT; Schema: public; Owner: ferry
---
-
-ALTER TABLE ONLY grid_fqan
-    ADD CONSTRAINT fk_experiment_fqan_users FOREIGN KEY (mapped_user) REFERENCES users(uname);
-
-
---
 -- Name: fk_experiment_group_affiliation_units; Type: FK CONSTRAINT; Schema: public; Owner: ferry
 --
 
@@ -1017,6 +1001,22 @@ ALTER TABLE ONLY grid_access
 
 ALTER TABLE ONLY grid_fqan
     ADD CONSTRAINT fk_grid_fqan_affiliation_units FOREIGN KEY (unitid) REFERENCES affiliation_units(unitid);
+
+
+--
+-- Name: fk_grid_fqan_groups; Type: FK CONSTRAINT; Schema: public; Owner: ferry
+--
+
+ALTER TABLE ONLY grid_fqan
+    ADD CONSTRAINT fk_grid_fqan_groups FOREIGN KEY (mapped_group) REFERENCES groups(groupid);
+
+
+--
+-- Name: fk_grid_fqan_users; Type: FK CONSTRAINT; Schema: public; Owner: ferry
+--
+
+ALTER TABLE ONLY grid_fqan
+    ADD CONSTRAINT fk_grid_fqan_users FOREIGN KEY (mapped_user) REFERENCES users(uid);
 
 
 --

@@ -461,7 +461,7 @@ func getUserGroups(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := DBptr.Query(`select groups.gid, groups.name from groups INNER JOIN user_group on (groups.groupid = user_group.groupid) INNER JOIN users on (user_group.uid = users.uid) where users.uname=$1 and (user_group.last_updated>=$2 or $2 is null)`, uname, lastupdate)
+	rows, err := DBptr.Query(`select groups.gid, groups.name, groups.type from groups INNER JOIN user_group on (groups.groupid = user_group.groupid) INNER JOIN users on (user_group.uid = users.uid) where users.uname=$1 and (user_group.last_updated>=$2 or $2 is null)`, uname, lastupdate)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
@@ -474,6 +474,7 @@ func getUserGroups(w http.ResponseWriter, r *http.Request) {
 		type jsonout struct {
 			Gid       int    `json:"gid"`
 			Groupname string `json:"groupname"`
+			Grouptype string `json:"grouptype"`
 		}
 
 		var Out jsonout
@@ -484,7 +485,7 @@ func getUserGroups(w http.ResponseWriter, r *http.Request) {
 			} else {
 				fmt.Fprintf(w, ",")
 			}
-			rows.Scan(&Out.Gid, &Out.Groupname)
+			rows.Scan(&Out.Gid, &Out.Groupname, &Out.Grouptype)
 			outline, jsonerr := json.Marshal(Out)
 			if jsonerr != nil {
 				log.WithFields(QueryFields(r, startTime)).Error(jsonerr)
@@ -567,6 +568,7 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 
 	uName := q.Get("username")
 	gName := q.Get("groupname")
+	gType := q.Get("grouptype")
 	isLeader := q.Get("is_leader")
 
 	if uName == "" {
@@ -577,6 +579,11 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 	if gName == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No groupname specified.\" }")
+		return
+	}
+	if gType == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No grouptype specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No grouptype specified.\" }")
 		return
 	}
 	if isLeader == "" {
@@ -607,11 +614,11 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 										declare groupid int;
 									begin
 										select u.uid into uid from users as u where uname = '%s';
-										select g.groupid into groupid from groups as g where name = '%s';
+										select g.groupid into groupid from groups as g where name = '%s' and type = '%s';
 										
 										insert into user_group (uid, groupid, is_leader, last_updated)
 														values (uid, groupid, %s, NOW());
-									end $$;`, uName, gName, isLeader))
+									end $$;`, uName, gName, gType, isLeader))
 
 	if err == nil {
 		if cKey != 0 {
@@ -628,6 +635,9 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 		} else if strings.Contains(err.Error(), `null value in column "groupid" violates not-null constraint`) {
 			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Group does not exist.\" }")
+		} else if strings.Contains(err.Error(), `invalid input value for enum`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid group type.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid group type.\" }")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
@@ -649,6 +659,7 @@ func removeUserFromGroup(w http.ResponseWriter, r *http.Request) {
 
 	user := q.Get("username")
 	group := q.Get("groupname")
+	gtype := q.Get("grouptype")
 
 	if user == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
@@ -657,6 +668,11 @@ func removeUserFromGroup(w http.ResponseWriter, r *http.Request) {
 	if group == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
 		inputErr.Error = append(inputErr.Error, "No groupname specified.")
+	}
+	if gtype == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No grouptype specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No grouptype specified.\" }")
+		return
 	}
 
 	if len(inputErr.Error) > 0 {
@@ -677,23 +693,24 @@ func removeUserFromGroup(w http.ResponseWriter, r *http.Request) {
 						  declare
 							cUser constant text := '%s';
 							cGroup constant text := '%s';
+							cGtype constant groups_group_type := '%s';
 
 							vUid int;
 							vGroupid int;
 							vError text;
 						  begin
 							select uid into vUid from users where uname = cUser;
-							select groupid into vGroupid from groups where name = cGroup;
+							select groupid into vGroupid from groups where name = cGroup and type = cGtype;
 
-							if vUid is null then vError = concat(vError, 'users,'); end if;
-							if vGroupid is null then vError = concat(vError, 'groups,'); end if;
+							if vUid is null then vError = concat(vError, 'noUser,'); end if;
+							if vGroupid is null then vError = concat(vError, 'noGroup,'); end if;
 							if (vUid, vGroupid) not in (select uid, groupid from user_group) then vError = concat(vError, 'user_group,'); end if;
 							vError = trim(both ',' from vError);
 
 							if vError is not null then raise '%%', vError; end if;
 							
 							delete from user_group where uid = vUid and groupid = vGroupid;
-						  end $$;`, user, group)
+						  end $$;`, user, group, gtype)
 	_, err = DBtx.Exec(query)
 
 	re := regexp.MustCompile(`[\s\t\n]+`)
@@ -702,17 +719,21 @@ func removeUserFromGroup(w http.ResponseWriter, r *http.Request) {
 	var output interface{}
 	if err != nil {
 		var queryErr jsonerror
-		if strings.Contains(err.Error(), `users`) {
+		if strings.Contains(err.Error(), `noUser`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 			queryErr.Error = append(queryErr.Error, "User does not exist.")
 		}
-		if strings.Contains(err.Error(), `groups`) {
+		if strings.Contains(err.Error(), `noGroup`) {
 			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
 			queryErr.Error = append(queryErr.Error, "Group does not exist.")
 		}
 		if strings.Contains(err.Error(), `user_group`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not belong to this group.")
 			queryErr.Error = append(queryErr.Error, "User does not belong to this group.")
+		}
+		if strings.Contains(err.Error(), `invalid input value for enum`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid group type.")
+			queryErr.Error = append(queryErr.Error, "Invalid group type.")
 		}
 		if len(queryErr.Error) == 0 {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
@@ -1213,10 +1234,10 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 								vSid int;
 								vUid int;
 								vUnitid int;
-                                                                vGroupid int;
-                                                                vQuotaid int;
-                                                                vPath text;
-                                                                vUntil date;
+								vGroupid int;
+								vQuotaid int;
+								vPath text;
+								vUntil date;
          
 								cSname constant text := '%s';
 								cUname constant text := '%s';
@@ -1226,7 +1247,7 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 								cUnit constant text := '%s';
 								cVuntil constant date := %s;
 								cIsgrp constant boolean := %t;
-                                                                cPath constant text := '%s';
+								cPath constant text := '%s';
 
 							begin
                                                                 
@@ -1235,46 +1256,32 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
                                                                 
 								if vSid is null then raise 'Resource does not exist.'; end if;
 								if vUnitid is null then raise 'Unit does not exist.'; end if;
-                                                                if cVuntil is null then vUntil = null ; else vUntil = cVuntil ; end if;
+								if cVuntil is null then vUntil = null ; else vUntil = cVuntil ; end if;
 								if cIsgrp is FALSE then
 								    select uid into vUid from users where uname = cUname;
 								    if vUid is null then raise 'User does not exist.'; end if;
-                                                                    
-                                                                    select quotaid,path into vQuotaid,vPath from storage_quota where storageid = vSid and uid = vUid and unitid = vUnitid and ( ( valid_until is NULL and vUntil is NULL ) or (valid_until is not null and vUntil is not null and valid_until = vUntil ));
-                                                                    
-                                                                        if cPath = 'NULL' then vPath = null ; elsif cPath is not null and cPath != '' then vPath = cPath ; end if;
-                                                                    
-
-                                                                    if vQuotaid is not null then 
-
-                                                                	        update storage_quota set value = cValue, unit = cUnit, valid_until = vUntil, last_updated = NOW(), path = vPath
-									        where quotaid = vQuotaid; 
-								    else
-
-									insert into storage_quota (storageid, uid, unitid, value, unit, valid_until, path, last_updated)
-									values (vSid, vUid, vUnitid, cValue, cUnit, cVuntil, cPath, NOW());
-								    end if;
-
-                                                                else
-                                                          	    select groupid into vGroupid from groups where name = cGname;
-								    if vGroupid is null then raise 'Group does not exist.'; end if;
-							
-
-                                                                    select quotaid,path into vQuotaid,vPath from storage_quota where storageid = vSid and groupid = vGroupid and unitid = vUnitid and ( ( valid_until is NULL and vUntil is NULL ) or (valid_until is not null and vUntil is not null and valid_until = vUntil ));
-                                                                    
-                                                                        if cPath = 'NULL' then vPath = null ; elsif cPath is not null and cPath != '' then vPath = cPath ; end if;
-                                                                    
-
-                                                                    if vQuotaid is not null then 
-
-                                                                	        update storage_quota set value = cValue, unit = cUnit, valid_until = vUntil, last_updated = NOW(), path = vPath
-									        where quotaid = vQuotaid; 
-								    else
-
-									insert into storage_quota (storageid, groupid, unitid, value, unit, valid_until, path, last_updated)
-									values (vSid, vGroupid, vUnitid, cValue, cUnit, cVuntil, cPath, NOW());
-								    end if;
-                                                                end if;
+                                	select quotaid, path into vQuotaid, vPath from storage_quota where storageid = vSid and uid = vUid and unitid = vUnitid and ((valid_until is NULL and vUntil is NULL) or (valid_until is not null and vUntil is not null and valid_until = vUntil));
+                                    if cPath = 'NULL' then vPath = null; elsif cPath is not null and cPath != '' then vPath = cPath; end if;
+									if vQuotaid is not null then
+										update storage_quota set value = cValue, unit = cUnit, valid_until = vUntil, last_updated = NOW(), path = vPath
+										where quotaid = vQuotaid; 
+									else
+										insert into storage_quota (storageid, uid, unitid, value, unit, valid_until, path, last_updated)
+										values (vSid, vUid, vUnitid, cValue, cUnit, cVuntil, cPath, NOW());
+									end if;
+                                else
+									select groupid into vGroupid from groups where name = cGname and type = 'UnixGroup';
+									if vGroupid is null then raise 'Group does not exist.'; end if;
+									select quotaid,path into vQuotaid,vPath from storage_quota where storageid = vSid and groupid = vGroupid and unitid = vUnitid and ((valid_until is NULL and vUntil is NULL) or (valid_until is not null and vUntil is not null and valid_until = vUntil));
+									if cPath = 'NULL' then vPath = null ; elsif cPath is not null and cPath != '' then vPath = cPath ; end if;
+									if vQuotaid is not null then
+										update storage_quota set value = cValue, unit = cUnit, valid_until = vUntil, last_updated = NOW(), path = vPath
+										where quotaid = vQuotaid; 
+									else
+										insert into storage_quota (storageid, groupid, unitid, value, unit, valid_until, path, last_updated)
+										values (vSid, vGroupid, vUnitid, cValue, cUnit, cVuntil, cPath, NOW());
+									end if;
+                            	end if;
 							end $$;`, rName, uName, unitName, quota, unit, validtime, isGroup, spath.String))
 	if err == nil {
 		DBtx.Commit(cKey)
@@ -2390,7 +2397,7 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 
 		// now, do the actual insert
 
-		_, inserr := DBtx.Exec(`insert into compute_access (compid, uid, groupid, last_updated, shell, home_dir) values ( (select compid from compute_resources where name=$1), (select uid from users where uname=$2), (select groupid from groups where groups.name=$3), NOW(), $4,$5)`, rName, uname, gName, defShell, defhome)
+		_, inserr := DBtx.Exec(`insert into compute_access (compid, uid, groupid, last_updated, shell, home_dir) values ( (select compid from compute_resources where name=$1), (select uid from users where uname=$2), (select groupid from groups where groups.name=$3 and groups.type = 'UnixGroup'), NOW(), $4,$5)`, rName, uname, gName, defShell, defhome)
 		if inserr != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + inserr.Error())
 			// now we also need to do a bunch of other checks here

@@ -458,7 +458,7 @@ func getGroupsInAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 		return	
 	default:
 		
-		rows, err := DBptr.Query(`select gid, groups.name from affiliation_unit_group as aug join groups on aug.groupid = groups.groupid where aug.unitid=$1 and (aug.last_updated>=$2 or $2 is null)`, unitId, lastupdate)
+		rows, err := DBptr.Query(`select gid, groups.name, groups.type from affiliation_unit_group as aug join groups on aug.groupid = groups.groupid where aug.unitid=$1 and (aug.last_updated>=$2 or $2 is null)`, unitId, lastupdate)
 		if err != nil {
 			defer log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 			w.WriteHeader(http.StatusNotFound)
@@ -470,16 +470,18 @@ func getGroupsInAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 		type jsonout struct {
 			GId int  `json:"gid"`
 			GName string `json:"name"`
+			GType string `json:"type"`
 		}
 		var Entry jsonout
 		var Out []jsonout
 		
 		for rows.Next() {
 			var tmpGID int
-			var tmpGname string
-			rows.Scan(&tmpGID,&tmpGname)
+			var tmpGname, tmpGtype string
+			rows.Scan(&tmpGID, &tmpGname, &tmpGtype)
 			Entry.GId = tmpGID
 			Entry.GName = tmpGname
+			Entry.GType = tmpGtype
 			Out = append(Out, Entry)
 		}
 		var output interface{}
@@ -515,7 +517,7 @@ func getGroupLeadersinAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 		return	
 	}
 	
-	rows, err := DBptr.Query(`select DISTINCT groups.name, user_group.uid, users.uname  from user_group join users on users.uid = user_group.uid join groups on groups.groupid = user_group.groupid where is_leader=TRUE and user_group.groupid in (select groupid from affiliation_unit_group left outer join affiliation_units as au on affiliation_unit_group.unitid= au.unitid where au.name=$1) order by groups.name`,unitName)
+	rows, err := DBptr.Query(`select DISTINCT groups.name, groups.type, user_group.uid, users.uname  from user_group join users on users.uid = user_group.uid join groups on groups.groupid = user_group.groupid where is_leader=TRUE and user_group.groupid in (select groupid from affiliation_unit_group left outer join affiliation_units as au on affiliation_unit_group.unitid= au.unitid where au.name=$1) order by groups.name, groups.type`,unitName)
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 		w.WriteHeader(http.StatusNotFound)
@@ -525,6 +527,7 @@ func getGroupLeadersinAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()	
 	type jsonout struct {
 		GName string `json:"groupname"`
+		GType string `json:"grouptype"`
 		UID []int  `json:"uid"`
 		UName []string `json:"username"`
 	}
@@ -532,13 +535,14 @@ func getGroupLeadersinAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 	var Out []jsonout
 	var (
 		tmpUID int
-		tmpUname,tmpGname string
+		tmpUname, tmpGname, tmpGtype string
 	)		
 	for rows.Next() {
 		
-		rows.Scan(&tmpGname,&tmpUID,&tmpUname)
-		if (Entry.GName == tmpGname) {
+		rows.Scan(&tmpGname,&tmpGtype,&tmpUID,&tmpUname)
+		if (Entry.GName == tmpGname && Entry.GType == tmpGtype) {
 			Entry.GName = tmpGname
+			Entry.GType = tmpGtype
 			Entry.UID = append(Entry.UID,tmpUID)
 			Entry.UName = append(Entry.UName,tmpUname)
 		} else {
@@ -546,6 +550,7 @@ func getGroupLeadersinAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 				Out  = append(Out,Entry)
 			}
 			Entry.GName = tmpGname
+			Entry.GType = tmpGtype
 			Entry.UID = make([]int, 0)
 			Entry.UID = append(Entry.UID,tmpUID)
 			Entry.UName = make([]string, 0)
@@ -700,6 +705,8 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 	query := fmt.Sprintf(`do $$
 						  declare
 								v_unitid int;
+								v_uid bigint;
+								v_groupid int;
 
 								c_fqan  constant text := %s;
 								c_aname constant text := %s;
@@ -707,13 +714,21 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 								c_gname constant text := %s;
 						  begin
 								select unitid into v_unitid from affiliation_units where name = c_aname;
+								select groupid into v_groupid from groups where name = c_gname and type = 'UnixGroup';
+								select uid into v_uid from users where uname = c_uname;
 
 								if v_unitid is null and c_aname is not null then
 									raise 'affiliation unit does not exist';
 								end if;
+								if v_groupid is null and c_aname is not null then
+									raise 'group does not exist';
+								end if;
+								if v_uid is null and c_aname is not null then
+									raise 'user does not exist';
+								end if;
 
 								insert into grid_fqan (fqan, unitid, mapped_user, mapped_group, last_updated)
-								values (c_fqan, v_unitid, c_uname, c_gname, NOW());
+								values (c_fqan, v_unitid, v_uid, v_groupid, NOW());
 						  end $$;`, `'` + fqan + `'`, unit, mUser, `'` + mGroup + `'`)
 	re := regexp.MustCompile(`[\s\t\n]+`)
 	log.WithFields(QueryFields(r, startTime)).Debug(re.ReplaceAllString(query, " "))
@@ -722,10 +737,10 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 	} else {
-		if strings.Contains(err.Error(), `violates foreign key constraint "fk_experiment_fqan_users"`) {
+		if strings.Contains(err.Error(), `user does not exist`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User doesn't exist.")
 			fmt.Fprintf(w,"{ \"ferry_error\": \"User doesn't exist.\" }")
-		} else if strings.Contains(err.Error(), `violates foreign key constraint "fk_experiment_fqan_groups"`) {
+		} else if strings.Contains(err.Error(), `group does not exist`) {
 			log.WithFields(QueryFields(r, startTime)).Error("Group doesn't exist.")
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Group doesn't exist.\" }")
 		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
@@ -815,6 +830,7 @@ func setFQANMappings(w http.ResponseWriter, r *http.Request) {
 	mGroup := q.Get("mapped_group")
 
 	var values []string
+	var uid, groupid sql.NullInt64
 
 	type jsonerror struct {
 		Error []string `json:"ferry_error"`
@@ -827,19 +843,31 @@ func setFQANMappings(w http.ResponseWriter, r *http.Request) {
 	}
 	if mUser != "" {
 		if strings.ToLower(mUser) != "null" {
-			values = append(values, fmt.Sprintf("mapped_user = '%s'", mUser))
+			DBptr.QueryRow("select uid from users where uname = $1", mUser).Scan(&uid)
+			if uid.Valid {
+				values = append(values, fmt.Sprintf("mapped_user = %d", uid.Int64))
+			} else {
+				log.WithFields(QueryFields(r, startTime)).Error("User doesn't exist.")
+				inputErr.Error = append(inputErr.Error, "User doesn't exist.")
+			}
 		} else {
 			values = append(values, "mapped_user = NULL")
 		}
 	}
 	if mGroup != "" {
 		if strings.ToLower(mGroup) != "null" {
-			values = append(values, fmt.Sprintf("mapped_group = '%s'", mGroup))
+			DBptr.QueryRow("select groupid from groups where name = $1 and type = 'UnixGroup'", mGroup).Scan(&groupid)
+			if groupid.Valid {
+				values = append(values, fmt.Sprintf("mapped_group = %d", groupid.Int64))
+			} else {
+				log.WithFields(QueryFields(r, startTime)).Error("Group doesn't exist.")
+				inputErr.Error = append(inputErr.Error, "Group doesn't exist.")
+			}
 		} else {
 			values = append(values, "mapped_group = NULL")
 		}
-	}
-	if len(values) == 0 {
+	} 
+	if mUser == "" && mGroup == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No mapped_user or mapped_group specified in http query.")
 		inputErr.Error = append(inputErr.Error, "No mapped_user or mapped_group specified.")
 	}
@@ -879,12 +907,6 @@ func setFQANMappings(w http.ResponseWriter, r *http.Request) {
 		if rows == 0 && err == nil {
 			log.WithFields(QueryFields(r, startTime)).Error("FQAN doesn't exist.")
 			queryErr.Error = append(queryErr.Error, "FQAN doesn't exist.")
-		} else if strings.Contains(err.Error(), `violates foreign key constraint "fk_experiment_fqan_users"`) {
-			log.WithFields(QueryFields(r, startTime)).Error("User doesn't exist.")
-			queryErr.Error = append(queryErr.Error, "User doesn't exist.")
-		} else if strings.Contains(err.Error(), `violates foreign key constraint "fk_experiment_fqan_groups"`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Group doesn't exist.")
-			queryErr.Error = append(queryErr.Error, "Group doesn't exist.")
 		} else if strings.Contains(err.Error(), `null value in column "mapped_group" violates not-null constraint`) {
 			log.WithFields(QueryFields(r, startTime)).Error("Attribute mapped_group can not be NULL.")
 			queryErr.Error = append(queryErr.Error, "Attribute mapped_group can not be NULL.")

@@ -177,7 +177,7 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 								left join users as u on ca.uid = u.uid
 								left join compute_resources as cr on ca.compid = cr.compid
 								left join affiliation_units as au on cr.unitid = au.unitid
-								where au.name = $1 and cr.name like $2 and (g.last_updated>=$3 or u.last_updated>=$3 or cr.last_updated>=$3 or ca.last_updated>=$3 or au.last_updated>=$3 or $3 is null)
+								where au.name = $1 and cr.name like $2 and g.type = 'UnixGroup' and (g.last_updated>=$3 or u.last_updated>=$3 or cr.last_updated>=$3 or ca.last_updated>=$3 or au.last_updated>=$3 or $3 is null)
                                                                 order by ca.groupid
 							) as t
 								right join (select 1 as key,
@@ -432,12 +432,12 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := DBptr.Query(`select t.fqan, t.mapped_user, c.unit_exists from
-							 (select 1 as key, gf.fqan, gf.mapped_user, au.name from grid_fqan as gf
-							  left join groups as g on gf.mapped_group = g.name
-							  left join affiliation_unit_group as ag on g.groupid = ag.groupid
+	rows, err := DBptr.Query(`select t.fqan, t.uname, c.unit_exists from
+							 (select 1 as key, gf.fqan, u.uname, au.name from grid_fqan as gf
+							  left join users as u on gf.mapped_user = u.uid
+							  left join affiliation_unit_group as ag on gf.mapped_group = ag.groupid
 							  left join affiliation_units as au on ag.unitid = au.unitid
-							  where au.name like $1 and (gf.last_updated>=$2 or g.last_updated>=$2 or ag.last_updated>=$2 or au.last_updated>=$2 or $2 is null)) as t
+							  where au.name like $1 and (gf.last_updated>=$2 or ag.last_updated>=$2 or au.last_updated>=$2 or $2 is null)) as t
 							  right join (select 1 as key, $1 in (select name from affiliation_units) as unit_exists) as c on t.key = c.key`, unit, lastupdate)
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
@@ -515,7 +515,7 @@ func getGroupGID(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error(pingerr)
 	}
 	
-	rows, err := DBptr.Query(`select groupid, gid from groups where name=$1`, gName)
+	rows, err := DBptr.Query(`select groupid, gid from groups where name=$1 and type = 'UnixGroup'`, gName)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
@@ -687,7 +687,9 @@ func getMappedGidFile(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	
-	rows, err := DBptr.Query(`select fqan, mapped_user, gid from grid_fqan as gf left join groups as g on g.name = gf.mapped_group`)
+	rows, err := DBptr.Query(`select fqan, uname, gid from grid_fqan as gf
+							  left join groups as g on g.groupid = gf.mapped_group
+							  left join users as u on u.uid = gf.mapped_user;`)
 
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
@@ -745,7 +747,7 @@ func getStorageAuthzDBFile(w http.ResponseWriter, r *http.Request) {
 	rows, err := DBptr.Query(`select u.uname, u.uid, g.gid from users as u
 							  right join user_group as ug on u.uid = ug.uid
 							  left join groups as g on ug.groupid = g.groupid
-                                                          where ug.last_updated>=$1 or $1 is null
+                                                          where g.type = 'UnixGroup' and ug.last_updated>=$1 or $1 is null
 							  order by u.uname;`, lastupdate)
 
 	if err != nil {

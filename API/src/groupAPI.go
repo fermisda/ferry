@@ -89,6 +89,7 @@ func addGroupToUnit(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 	groupname := q.Get("groupname")
+	grouptype := q.Get("grouptype")
 	unitName := q.Get("unitname")
 	isPrimarystr := q.Get("is_primary")
 	isPrimary := false
@@ -105,6 +106,11 @@ func addGroupToUnit(w http.ResponseWriter, r *http.Request) {
 	if groupname == "" {	
 		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified\" }")
+		return
+	}
+	if grouptype == "" {	
+		log.WithFields(QueryFields(r, startTime)).Print("No grouptype specified.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No grouptype specified\" }")
 		return
 	}
 	if unitName == "" {	
@@ -185,7 +191,7 @@ func addGroupToUnit(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 
-	err = addGroupToUnitDB(DBtx, groupname, unitName, isPrimary)
+	err = addGroupToUnitDB(DBtx, groupname, grouptype, unitName, isPrimary)
 	
 	if err != nil {
 		if strings.Contains(err.Error(), `Group and unit combination already in DB`) {
@@ -194,6 +200,9 @@ func addGroupToUnit(w http.ResponseWriter, r *http.Request) {
 		} else if strings.Contains(err.Error(), `unq_affiliation_unit_group_unitid_is_primary`) {
 			log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Unit can not have more then one primary group.\" }")
+		} else if strings.Contains(err.Error(), `invalid input value for enum`) {
+			log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid group type.\" }")
 		} else {
 			w.WriteHeader(http.StatusNotFound)
 			log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
@@ -227,11 +236,16 @@ func removeGroupFromUnit(w http.ResponseWriter, r *http.Request) {
 
 	q := r.URL.Query()
 	gName := q.Get("groupname")
+	gType := q.Get("grouptype")
 	uName := q.Get("unitname")
 
 	if gName == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
 		inputErr.Error = append(inputErr.Error, "No groupname specified.")
+	}
+	if gType == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No grouptype specified in http query.")
+		inputErr.Error = append(inputErr.Error, "No grouptype specified.")
 	}
 	if uName == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
@@ -251,29 +265,34 @@ func removeGroupFromUnit(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 
-	rows, err := DBtx.Query(`select $1 in (select name from groups),
-					   $2 in (select name from affiliation_units);`, gName, uName)
-	if err != nil {	
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
-		return
-	}
-
+	typeExists := true
 	var groupExists, unitExists bool
-	if rows.Next() {
-		rows.Scan(&groupExists, &unitExists)
-	}
-	rows.Close()
-
-	var aRows int64
-	res, err := DBtx.Exec(`delete from affiliation_unit_group
-						  where groupid = (select groupid from groups where name = $1)
-						  and   unitid = (select unitid from affiliation_units where name = $2);`, gName, uName);
-	if err == nil {
-		aRows, _ = res.RowsAffected()
+	rows, err := DBtx.Query(`select ($1, $2) in (select name, type from groups),
+					   $3 in (select name from affiliation_units);`, gName, gType, uName)
+	if err != nil {	
+		if strings.Contains(err.Error(), "invalid input value for enum") {
+			typeExists = false
+		} else {
+			defer log.WithFields(QueryFields(r, startTime)).Error(err)
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+			return
+		}
 	} else {
-		aRows = 0
+		if rows.Next() {
+			rows.Scan(&groupExists, &unitExists)
+		}
+		rows.Close()
+	}
+
+	aRows := int64(0)
+	if typeExists {
+		res, err := DBtx.Exec(`delete from affiliation_unit_group
+							where groupid = (select groupid from groups where (name, type) = ($1, $2))
+							and   unitid = (select unitid from affiliation_units where name = $3);`, gName, gType, uName);
+		if err == nil {
+			aRows, _ = res.RowsAffected()
+		}
 	}
 
 	var output interface{}
@@ -287,17 +306,22 @@ func removeGroupFromUnit(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		var out jsonstatus
-		if !groupExists {
-			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
-			out.Error = append(out.Error, "Group does not exist.")
-		}
-		if !unitExists {
-			log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
-			out.Error = append(out.Error, "Affiliation unit does not exist.")
-		}
-		if groupExists && unitExists {
-			log.WithFields(QueryFields(r, startTime)).Error("Group does not belong to affiliation unit.")
-			out.Error = append(out.Error, "Group does not belong to affiliation unit.")
+		if !typeExists {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid group type.")
+			out.Error = append(out.Error, "Invalid group type.")
+		} else {
+			if !groupExists {
+				log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+				out.Error = append(out.Error, "Group does not exist.")
+			}
+			if !unitExists {
+				log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
+				out.Error = append(out.Error, "Affiliation unit does not exist.")
+			}
+			if groupExists && unitExists {
+				log.WithFields(QueryFields(r, startTime)).Error("Group does not belong to affiliation unit.")
+				out.Error = append(out.Error, "Group does not belong to affiliation unit.")
+			}
 		}
 		output = out
 	}
@@ -344,7 +368,7 @@ func setPrimaryStatusGroup(w http.ResponseWriter, r *http.Request) {
 								declare grpid int;
 								declare idunit int;
 						   begin
-								select groupid into grpid from groups where name = '%s';
+								select groupid into grpid from groups where name = '%s' and type = 'UnixGroup';
 								select unitid into idunit from affiliation_units where name = '%s';
 
 								if grpid is null then
@@ -401,7 +425,17 @@ func getGroupMembers(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query() 
 	groupname := q.Get("groupname")
+	grouptype := q.Get("grouptype")
 	//	//should be a bool
+
+	if groupname == "" {	
+		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified\" }")
+		return
+	}
+	if grouptype == "" {	
+		grouptype = "UnixGroup"
+	}
 	
 	getLeaders := false
 	gl := q.Get("return_leaders")
@@ -421,7 +455,7 @@ func getGroupMembers(w http.ResponseWriter, r *http.Request) {
                 log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
                 fmt.Fprintf(w,"{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
                 return
-        }
+    }
 	
 	type jsonout struct {
 		UID int `json:"uid"`
@@ -434,12 +468,17 @@ func getGroupMembers(w http.ResponseWriter, r *http.Request) {
 	var tmpout jsonout
 	var Out []jsonout
 
-	err := DBptr.QueryRow(`select groupid from groups where name=$1`,groupname).Scan(&grpid)
+	err := DBptr.QueryRow(`select groupid from groups where (name, type) = ($1, $2)`, groupname, grouptype).Scan(&grpid)
 	switch {
 	case err == sql.ErrNoRows:
-		log.WithFields(QueryFields(r, startTime)).Print("Group " + groupname + " does not exist.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Group " + groupname + " does not exist.\" }")
-		return	
+		log.WithFields(QueryFields(r, startTime)).Print("Group does not exist.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Group does not exist.\" }")
+		return
+
+	case err != nil && strings.Contains(err.Error(), `invalid input value for enum`):
+		log.WithFields(QueryFields(r, startTime)).Print("Invalid group type.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid group type.\" }")
+		return
 		
 	case err != nil:
 		log.WithFields(QueryFields(r, startTime)).Print("Group ID query error: " + err.Error())
@@ -474,7 +513,7 @@ func getGroupMembers(w http.ResponseWriter, r *http.Request) {
 			}
 			var queryErr []jsonerror
 			queryErr = append(queryErr, jsonerror{"This group has no members."})
-			log.WithFields(QueryFields(r, startTime)).Error("Group " + groupname + " has no members")
+			log.WithFields(QueryFields(r, startTime)).Error("Group has no members")
 			output = queryErr
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Info("Success!")
@@ -500,6 +539,7 @@ func IsUserMemberOfGroup(w http.ResponseWriter, r *http.Request) {
 
 	user := q.Get("username")
 	group := q.Get("groupname")
+	gtype := q.Get("grouptype")
 
 	if user == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
@@ -508,6 +548,9 @@ func IsUserMemberOfGroup(w http.ResponseWriter, r *http.Request) {
 	if group == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No groupname specified."})
+	}
+	if gtype == "" {	
+		gtype = "UnixGroup"
 	}
 
 	if len(inputErr) > 0 {
@@ -519,22 +562,28 @@ func IsUserMemberOfGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	typeExists := true
 	rows, err := DBptr.Query(`select member, user_exists, group_exists from (
 								select 1 as key, (
 									(select uid from users where uname = $1),
-									(select groupid from groups where name = $2)
+									(select groupid from groups where (name, type) = ($2, $3))
 								) in (select uid, groupid from user_group) as member
 							) as t right join (
 								select 1 as key, $1 in (select uname from users) as user_exists,
 												 $2 in (select name from groups) as group_exists
-							) as c on t.key = c.key;`, user, group)
-	if err != nil {	
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
-		return
-	}	
-	defer rows.Close()
+							) as c on t.key = c.key;`, user, group, gtype)
+	if err != nil {
+		if strings.Contains(err.Error(), `invalid input value for enum`){
+			typeExists = false
+		} else {
+			defer log.WithFields(QueryFields(r, startTime)).Error(err)
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+			return
+		}
+	} else {
+		defer rows.Close()
+	}
 
 	var userExists, groupExists bool
 
@@ -544,21 +593,28 @@ func IsUserMemberOfGroup(w http.ResponseWriter, r *http.Request) {
 	var Out jsonentry
 
 	var tmpMember sql.NullBool
-	for rows.Next() {
-		rows.Scan(&tmpMember, &userExists, &groupExists)
-		Out.Member = tmpMember.Bool
+	if rows != nil {
+		for rows.Next() {
+			rows.Scan(&tmpMember, &userExists, &groupExists)
+			Out.Member = tmpMember.Bool
+		}
 	}
 
 	var output interface{}
 	if !tmpMember.Valid {
 		var queryErr []jsonerror
-		if !userExists {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-			queryErr = append(queryErr, jsonerror{"User does not exist"})
-		}
-		if !groupExists {
-			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
-			queryErr = append(queryErr, jsonerror{"Group does not exist."})
+		if !typeExists {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid group type.")
+			queryErr = append(queryErr, jsonerror{"Invalid group type."})
+		} else {
+			if !userExists {
+				log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+				queryErr = append(queryErr, jsonerror{"User does not exist."})
+			}
+			if !groupExists {
+				log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+				queryErr = append(queryErr, jsonerror{"Group does not exist."})
+			}
 		}
 		output = queryErr
 	} else {
@@ -578,6 +634,7 @@ func IsUserLeaderOfGroup(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	uName := q.Get("username")
 	groupname := q.Get("groupname")
+	grouptype := q.Get("grouptype")
 	
 	if groupname == "" {	
 		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified.")
@@ -589,12 +646,19 @@ func IsUserLeaderOfGroup(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No username specified\" }")
 		return
 	}
+	if grouptype == "" {
+		grouptype = "UnixGroup"
+	}
 	var groupId, uId int
-	grouperr := DBptr.QueryRow(`select groupid from groups where name=$1`,groupname).Scan(&groupId)
+	grouperr := DBptr.QueryRow(`select groupid from groups where (name, type) = ($1, $2)`, groupname, grouptype).Scan(&groupId)
 	switch {
 	case grouperr == sql.ErrNoRows:
 		log.WithFields(QueryFields(r, startTime)).Print("Group " + groupname + " does not exist.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Group " + groupname + " does not exist.\" }")
+		return
+	case grouperr != nil && strings.Contains(grouperr.Error(), "invalid input value for enum"):
+		log.WithFields(QueryFields(r, startTime)).Print("Invalid group type.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid group type.\" }")
 		return
 	case grouperr != nil:
 		log.WithFields(QueryFields(r, startTime)).Print("Group ID query error: " + grouperr.Error())
@@ -639,10 +703,16 @@ func setGroupLeader(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	uName := q.Get("username")
 	groupname := q.Get("groupname")
+	grouptype := q.Get("grouptype")
 	
 	if groupname == "" {	
 		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified\" }")
+		return
+	}
+	if grouptype == "" {	
+		log.WithFields(QueryFields(r, startTime)).Print("No grouptype specified.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No grouptype specified\" }")
 		return
 	}
 	if uName == "" {	
@@ -668,11 +738,15 @@ func setGroupLeader(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	var groupId, uId int
-	grouperr := DBptr.QueryRow(`select groupid from groups where name=$1`,groupname).Scan(&groupId)
+	grouperr := DBptr.QueryRow(`select groupid from groups where (name, type) = ($1, $2)`, groupname, grouptype).Scan(&groupId)
 	switch {
 	case grouperr == sql.ErrNoRows:
 		log.WithFields(QueryFields(r, startTime)).Print("Group " + groupname + " does not exist.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Group " + groupname + " does not exist.\" }")
+		return
+	case grouperr != nil && strings.Contains(grouperr.Error(), "invalid input value for enum"):
+		log.WithFields(QueryFields(r, startTime)).Print("Invalid group type.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid group type.\" }")
 		return
 	case grouperr != nil:
 		log.WithFields(QueryFields(r, startTime)).Print("Group ID query error: " + grouperr.Error())
@@ -736,10 +810,16 @@ func removeGroupLeader(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	uName := q.Get("username")
 	groupname := q.Get("groupname")
+	grouptype := q.Get("grouptype")
 	
 	if groupname == "" {	
 		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified\" }")
+		return
+	}
+	if grouptype == "" {	
+		log.WithFields(QueryFields(r, startTime)).Print("No grouptype specified.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No grouptype specified\" }")
 		return
 	}
 	if uName == "" {	
@@ -765,11 +845,15 @@ func removeGroupLeader(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	var groupId, uId int
-	grouperr := DBptr.QueryRow(`select groupid from groups where name=$1`,groupname).Scan(&groupId)
+	grouperr := DBptr.QueryRow(`select groupid from groups where (name, type) = ($1, $2)`, groupname, grouptype).Scan(&groupId)
 	switch {
 	case grouperr == sql.ErrNoRows:
 		log.WithFields(QueryFields(r, startTime)).Print("Group " + groupname + " does not exist.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Group " + groupname + " does not exist.\" }")
+		return
+	case grouperr != nil && strings.Contains(grouperr.Error(), "invalid input value for enum"):
+		log.WithFields(QueryFields(r, startTime)).Print("Invalid group type.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid group type.\" }")
 		return
 	case grouperr != nil:
 		log.WithFields(QueryFields(r, startTime)).Print("Group ID query error: " + grouperr.Error())
@@ -842,11 +926,15 @@ func getGroupUnits(w http.ResponseWriter, r *http.Request) {
 	var inputErr []jsonerror
 
 	group := q.Get("groupname")
+	gtype := q.Get("grouptype")
 	expOnly := false
 
 	if group == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No group name specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No group name specified."})
+	}
+	if gtype == "" {
+		gtype = "UnixGroup"
 	}
 	if q.Get("experimentsonly") != "" {
 		var err error
@@ -877,16 +965,21 @@ func getGroupUnits(w http.ResponseWriter, r *http.Request) {
 									groups as g on ag.groupid = g.groupid left join
 									affiliation_units as au on ag.unitid = au.unitid left join
 									voms_url as vu on au.unitid = vu.unitid
-								where g.name = $1 and ((url is not null = $2) or not $2) and (vu.last_updated>=$3 or ag.last_updated>=$3 or $3 is null)
+								where (g.name, g.type) = ($1, $2) and ((url is not null = $3) or not $3) and (vu.last_updated>=$4 or ag.last_updated>=$4 or $4 is null)
 							) as t right join (
-								select 1 as key, $1 in (select name from groups) as group_exists
-							) as c on t.key = c.key;`, group, expOnly, lastupdate)
-	if err != nil {	
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+								select 1 as key, ($1, $2) in (select name, type from groups) as group_exists
+							) as c on t.key = c.key;`, group, gtype, expOnly, lastupdate)
+	if err != nil {
+		if strings.Contains(err.Error(), "invalid input value for enum") {
+			defer log.WithFields(QueryFields(r, startTime)).Error("Invalid group type.")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid group type.\" }")
+		} else {
+			defer log.WithFields(QueryFields(r, startTime)).Error(err)
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+		}
 		return
-	}	
+	}
 	defer rows.Close()
 
 	var groupExists bool
@@ -1258,18 +1351,18 @@ func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 							  	join affiliation_units on affiliation_units.unitid = sq.unitid
 							  	join storage_resources on storage_resources.storageid = sq.storageid
 							  	join groups on groups.groupid = sq.groupid
-								where affiliation_units.name = $3 AND storage_resources.name = $2 and groups.name = $1 and (sq.last_updated>=$4 or $4 is null)
+								where affiliation_units.name = $4 AND storage_resources.name = $3 and (groups.name, groups.type) = ($1, $2) and (sq.last_updated>=$5 or $5 is null)
 							) as t right join (
 								select 1 as key, 
-								$1 in (select name from groups) as group_exists,
-								$2 in (select name from storage_resources) as resource_exists,
-								$3 in (select name from affiliation_units) as unit_exists
-							) as c on t.key = c.key;`, groupname, resource, exptname, lastupdate)
-	if err != nil {	
+								($1, $2) in (select name, type from groups) as group_exists,
+								$3 in (select name from storage_resources) as resource_exists,
+								$4 in (select name from affiliation_units) as unit_exists
+							) as c on t.key = c.key;`, groupname, "UnixGroup", resource, exptname, lastupdate)
+	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Print("Error in DB query: " + err.Error())
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
-		
+
 		return
 	}		
 	defer rows.Close()	
@@ -1505,7 +1598,7 @@ func removeUserAccessFromResource(w http.ResponseWriter, r *http.Request) {
 
 	query = `delete from compute_access where
 				uid = (select uid from users where uname = $1) and
-				groupid = (select groupid from groups where name = $2) and
+				groupid = (select groupid from groups where name = $2 and type = 'UnixGroup') and
 				compid = (select compid from compute_resources where name = $3);`
 	log.Debug(re.ReplaceAllString(query, " "))
 
@@ -1697,7 +1790,7 @@ func getAllGroups(w http.ResponseWriter, r *http.Request) {
                 return
         }
 
-	rows, err := DBptr.Query(`select name, groupid from groups where groups.last_updated>=$1 or $1 is null`, lastupdate)
+	rows, err := DBptr.Query(`select name, type, groupid from groups where groups.last_updated>=$1 or $1 is null`, lastupdate)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
@@ -1708,14 +1801,14 @@ func getAllGroups(w http.ResponseWriter, r *http.Request) {
 	
 	type jsonout struct {
 		Groupname string `json:"name"`
+		Grouptype string `json:"type"`
 		Grpid int `json:"groupid"`
-		
 	} 
 	var tmpout jsonout
 	var Out []jsonout
 	
 	for rows.Next() {
-		rows.Scan(&tmpout.Groupname,&tmpout.Grpid)
+		rows.Scan(&tmpout.Groupname,&tmpout.Grouptype,&tmpout.Grpid)
 		Out = append(Out, tmpout)
 	}
 
@@ -1772,7 +1865,7 @@ func addLPCCollaborationGroup(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	var grpid int
-	err := DBptr.QueryRow(`select distinct aug.groupid from affiliation_unit_group as aug join groups as g on g.groupid=aug.groupid join affiliation_units as au on au.unitid=aug.unitid where au.name='cms' and g.name=$1`,gName).Scan(&grpid)
+	err := DBptr.QueryRow(`select distinct aug.groupid from affiliation_unit_group as aug join groups as g on g.groupid=aug.groupid join affiliation_units as au on au.unitid=aug.unitid where au.name='cms' and g.name=$1 and g.type='UnixGroup'`,gName).Scan(&grpid)
 	switch {
 	case err == sql.ErrNoRows:
 		log.WithFields(QueryFields(r, startTime)).Print("Adding " + gName + " to affiliation_unit_groups.")
@@ -1800,7 +1893,7 @@ func addLPCCollaborationGroup(w http.ResponseWriter, r *http.Request) {
 	r.URL.RawQuery = r.URL.RawQuery + "&" + "unitname=cms"
 	
 //	var w2 http.ResponseWriter
-	adderr := addGroupToUnitDB(&DBtx, gName, "cms", is_primary)
+	adderr := addGroupToUnitDB(&DBtx, gName, "UnixGroup", "cms", is_primary)
 
 
 	if adderr != nil {
@@ -1830,7 +1923,7 @@ func addLPCCollaborationGroup(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func addGroupToUnitDB(tx *Transaction, groupname, unitName string, isPrimary bool) (error) {
+func addGroupToUnitDB(tx *Transaction, groupname, grouptype, unitName string, isPrimary bool) (error) {
 
 	var unitId,groupId int
 	checkerr := DBptr.QueryRow(`select unitid from affiliation_units where name=$1`,unitName).Scan(&unitId)
@@ -1845,7 +1938,7 @@ func addGroupToUnitDB(tx *Transaction, groupname, unitName string, isPrimary boo
 
 		return checkerr
 	default:
-		grouperr := DBptr.QueryRow(`select groupid from groups where name=$1`,groupname).Scan(&groupId)
+		grouperr := DBptr.QueryRow(`select groupid from groups where name=$1 and type=$2`,groupname,grouptype).Scan(&groupId)
 //		log.WithFields(QueryFields(r, startTime)).Print(" group ID = " + strconv.Itoa(groupId))
 		switch {
 		case grouperr == sql.ErrNoRows:
@@ -1913,13 +2006,14 @@ func setGroupStorageQuotaDB(tx *Transaction, gName, unitname, rName, groupquota,
 
 								cSname constant text := '%s';
 								cGname constant text := '%s';
+								cGtype constant groups_group_type := '%s';
 								cUname constant text := '%s';
 								cValue constant text := '%s';
 								cUnit constant text := '%s';
 								cVuntil constant date := %s;
 							begin
 								select storageid into vSid from storage_resources where name = cSname;
-								select groupid into vGid from groups where name = cGname;
+								select groupid into vGid from groups where (name, type) = (cGname, cGtype);
 								select unitid into vUnitid from affiliation_units where name = cUname;
 
 								if vSid is null then raise 'Resource does not exist.'; end if;
@@ -1933,7 +2027,7 @@ func setGroupStorageQuotaDB(tx *Transaction, gName, unitname, rName, groupquota,
 									insert into storage_quota (storageid, groupid, unitid, value, unit, valid_until)
 									values (vSid, vGid, vUnitid, cValue, cUnit, cVuntil);
 								end if;
-							end $$;`, rName, gName, unitname, groupquota, quotaunit, valid_until))
+							end $$;`, rName, gName, "UnixGroup", unitname, groupquota, quotaunit, valid_until))
 	
 	//move all error handling to the outside calling function and just return the err itself here
 	return err
