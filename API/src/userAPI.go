@@ -1921,19 +1921,19 @@ func getMemberAffiliations(w http.ResponseWriter, r *http.Request) {
 																right join grid_fqan as gf on au.unitid = gf.unitid
 																right join grid_access as ga on gf.fqanid = ga.fqanid
 																left join users as u on ga.uid = u.uid
-																where u.uname = $1 and (((au.unitid in (select unitid from voms_url)) = $2) or not $2)) as u
+																where u.uname = $1 and (((au.unitid in (select unitid from voms_url)) = $2) or not $2) and (ga.last_updated>=$3 or $3 is null)) as u
 
 										union                  (select au.name, au.alternative_name from affiliation_units as au
 																right join affiliation_unit_user_certificate as ac on au.unitid = ac.unitid
 																left join user_certificates as uc on ac.dnid = uc.dnid
 																left join users as u on uc.uid = u.uid
-																where u.uname = $1 and (((au.unitid in (select unitid from voms_url)) = $2) or not $2))
+																where u.uname = $1 and (((au.unitid in (select unitid from voms_url)) = $2) or not $2) and (ac.last_updated>=$3 or $3 is null))
 
 										union                  (select au.name, au.alternative_name from affiliation_units as au
 																right join affiliation_unit_group as ag on au.unitid = ag.unitid
 																join user_group as ug on ag.groupid = ug.groupid
 																left join users as u on ug.uid = u.uid
-																where u.uname = $1 and (((au.unitid in (select unitid from voms_url)) = $2) or not $2))
+																where u.uname = $1 and (((au.unitid in (select unitid from voms_url)) = $2) or not $2) and (ag.last_updated>=$3 or $3 is null))
 									) as t
 									right join (select 1 as key, $1 in (select uname from users) as user_exists) as c on key = c.key
 							 ) as r;`, user, expOnly, lastupdate)

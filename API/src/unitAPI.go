@@ -942,7 +942,7 @@ func getAllAffiliationUnits(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := DBptr.Query(`select name, url from affiliation_units as au left join voms_url as vu on au.unitid = vu.unitid
-							  where url is not null and url like $1 and (au.last_updated>=2 or $2 is null)`,"%" + voname + "%", lastupdate)
+							  where url is not null and url like $1 and (au.last_updated>=$2 or $2 is null)`,"%" + voname + "%", lastupdate)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
