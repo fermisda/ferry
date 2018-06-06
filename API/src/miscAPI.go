@@ -152,8 +152,8 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 	
-	unit := q.Get("unitname")
-	comp := q.Get("resourcename")
+	unit := strings.TrimSpace(q.Get("unitname"))
+	comp := strings.TrimSpace(q.Get("resourcename"))
 	
 	if unit == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
@@ -169,6 +169,22 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
 		return
 	}
+
+	var priGID int
+	var priGroup string
+	rowerr := DBptr.QueryRow(`select groups.gid, groups.name from groups inner join affiliation_unit_group as aug on groups.groupid=aug.groupid inner join affiliation_units as au on au.unitid=aug.unitid where au.name=$1 and aug.is_primary = true`,unit).Scan(&priGID,&priGroup)
+	if rowerr != nil {
+		if rowerr == sql.ErrNoRows {
+			log.WithFields(QueryFields(r, startTime)).Error("Error: unit does not exist or has no primary group assigned.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"unit does not exist or has no primary group assigned.\"}")
+			return
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Error("Error in query: " + rowerr.Error())
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\"}")
+			return
+		}
+		
+	}
 	
 	rows, err := DBptr.Query(`select gname, groupid, uname, unit_exists, comp_exists, last_updated from (
 								select 1 as key, g.name as gname, ca.groupid, u.uname, ca.last_updated
@@ -177,17 +193,16 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 								left join users as u on ca.uid = u.uid
 								left join compute_resources as cr on ca.compid = cr.compid
 								left join affiliation_units as au on cr.unitid = au.unitid
-								where au.name = $1 and cr.name like $2 and g.type = 'UnixGroup' and (g.last_updated>=$3 or u.last_updated>=$3 or cr.last_updated>=$3 or ca.last_updated>=$3 or au.last_updated>=$3 or $3 is null)
+								where au.name = $1 and cr.name like $2 and g.type = 'UnixGroup' and (g.last_updated>=$3 or u.last_updated>=$3 or cr.last_updated>=$3 or ca.last_updated>=$3 or au.last_updated>=$3 or $3 is null) and g.gid not in ($4)
                                                                 order by ca.groupid
 							) as t
 								right join (select 1 as key,
 								$1 in (select name from affiliation_units) as unit_exists,
 								$2 in (select name from compute_resources) as comp_exists
-							) as c on t.key = c.key;`, unit, comp, lastupdate)
-
+ 							) as c on t.key = c.key;`, unit, comp, lastupdate, priGID)
+//(select aug.groupid from affiliation_unit_group as aug join affiliation_units as au on au.unitid=aug.unitid where au.name = $1 and aug.is_primary = true)
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
@@ -204,27 +219,28 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 	}
 	var Entry jsonentry
 	var Out []jsonentry
-
+	
 	prevGname := ""
 	for rows.Next() {
 		var tmpGname, tmpGid, tmpUname, tmpTime sql.NullString
 		rows.Scan(&tmpGname, &tmpGid, &tmpUname, &unitExists, &compExists, &tmpTime)
-
+		tmpGname.String = priGroup
 		if tmpGname.Valid {
 			if prevGname == "" {
-				Entry.Gname = tmpGname.String
-				Entry.Gid = tmpGid.String
+				Entry.Gname = priGroup
+				Entry.Gid = strconv.Itoa(priGID)
 				Entry.Unames = append(Entry.Unames, tmpUname.String)
 			} else if prevGname != tmpGname.String {
 				Out = append(Out, Entry)
-				Entry.Gname = tmpGname.String
-				Entry.Gid = tmpGid.String
+				Entry.Gname = priGroup
+				Entry.Gid = strconv.Itoa(priGID)
 				Entry.Unames = nil
 				Entry.Unames = append(Entry.Unames, tmpUname.String)
 			} else {
 				Entry.Unames = append(Entry.Unames, tmpUname.String)
 			}
-			prevGname = tmpGname.String
+//			prevGname = tmpGname.String
+			prevGname = priGroup
 			if tmpTime.Valid {
 				log.WithFields(QueryFields(r, startTime)).Println("tmpTime is valid" + tmpTime.String)
 				
@@ -243,7 +259,7 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	Out = append(Out, Entry)
-	
+	log.WithFields(QueryFields(r, startTime)).Println("Length: " + fmt.Sprintf("%d",len(Out)))	
 	var output interface{}
 	if prevGname == "" {
 		type jsonerror struct {Error string `json:"ferry_error"`}
@@ -255,6 +271,10 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 		if !compExists && comp != "%" {
 			Err = append(Err, jsonerror{"Resource does not exist."})
 			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
+		}
+		if len(Out) == 1 && Out[0].Gname == "" {
+			Err = append(Err, jsonerror{"No users in compute_access with the non-primary GID. Nothing to do."})
+			log.WithFields(QueryFields(r, startTime)).Error("No users in compute_access with the non-primary GID.")
 		}
 		if len(Err) == 0 {
 			Err = append(Err, jsonerror{"Something went wrong."})
