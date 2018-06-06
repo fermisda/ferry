@@ -1146,20 +1146,20 @@ func getCondorQuotas(w http.ResponseWriter, r *http.Request) {
 
 	type jsonquota struct {
 		Group string `json:"condorgroup"`
-		Value int64 `json:"value"`
+		Value float64 `json:"value"`
 		Qtype string `json:"type"`
 		Unit  string `json:"unitname"`
 	}
 	out := make(map[string][]jsonquota)
 
 	var tmpRname, tmpUname, tmpGroup, tmpType sql.NullString
-	var tmpValue sql.NullInt64
+	var tmpValue sql.NullFloat64
 	var unitExists, resourceExists bool
 
 	for rows.Next() {
 		rows.Scan(&tmpRname, &tmpUname, &tmpGroup, &tmpValue, &tmpType, &unitExists, &resourceExists)
 		if tmpGroup.Valid {
-			out[tmpRname.String] = append(out[tmpRname.String], jsonquota{tmpGroup.String, tmpValue.Int64, tmpType.String, tmpUname.String})
+			out[tmpRname.String] = append(out[tmpRname.String], jsonquota{tmpGroup.String, tmpValue.Float64, tmpType.String, tmpUname.String})
 		}
 	}
 
