@@ -812,7 +812,7 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 		} else if strings.Contains(err.Error(), `null value in column "fqanid" violates not-null constraint`) {
 			log.WithFields(QueryFields(r, startTime)).Error("FQAN does not exist.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"FQAN does not exist.\" }")
-		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint "idx_grid_access"`) {
+		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
 			log.WithFields(QueryFields(r, startTime)).Error("This association already exists.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"This association already exists.\" }")
 		} else {
