@@ -20,7 +20,7 @@ def fetchCAs(CADir):
     for path in pathList:
         f = open(path)
         fileName = path.split("/")[-1].split(".")[0]
-        if 'policy-igtf' in fileName or 'cilogon-silver' in fileName:
+        if 'policy-igtf' in fileName:
             continue
         CAs[fileName] = {}
         for line in f.readlines():
@@ -32,13 +32,9 @@ def fetchCAs(CADir):
     return CAs
 
 def matchCA(CAs, subject):
-    bestCA = {"regex": ""}
+    bestCAs = []
     for CA in CAs:
             if re.match(".*" + CAs[CA]["regex"], subject):
-                if len(bestCA["regex"]) < len(CAs[CA]["regex"]):
-                    bestCA = CAs[CA]
+                bestCAs.append(CAs[CA])
 
-    if bestCA["regex"] == "":
-        return None
-    else:
-        return bestCA
+    return bestCAs

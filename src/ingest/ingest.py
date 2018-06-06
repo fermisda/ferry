@@ -430,6 +430,7 @@ def read_vulcan_certificates(config, users, vomss):
         if row["uname"] in users:
             CA = ca.matchCA(CAs, row["auth_string"])
             if CA:
+                CA = CA[0]
                 users[row["uname"]].add_cert(Certificate(len(vomss), row["auth_string"], CA["subjectdn"]))
                 cernUser = re.findall(r"/DC=ch/DC=cern/OU=Organic Units/OU=Users/CN=(\w*)/CN=\d+/CN=[A-z\s]+", row["auth_string"])
                 if len(cernUser) > 0:
