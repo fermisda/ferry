@@ -96,14 +96,17 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q.Set("dn", fmt.Sprintf(dnTemplate, fullName, uName))
-	q.Set("issuer_ca", "/DC=org/DC=cilogon/C=US/O=CILogon/CN=CILogon Basic CA 1")
 	R.URL.RawQuery = q.Encode()
 
+	DBtx.Savepoint("addCertificateDNToUser")
 	addCertificateDNToUser(w, R)
 	if !DBtx.Complete() {
-		log.WithFields(QueryFields(r, startTime)).Error("addCertificateDNToUser failed.")
-		DBtx.Rollback()
-		return
+		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") {
+			log.WithFields(QueryFields(r, startTime)).Error("addCertificateDNToUser failed.")
+			DBtx.Rollback()
+			return
+		}
+		DBtx.RollbackToSavepoint("addCertificateDNToUser")
 	}
 
 	for _, fqan := range []string{"Analysis", "None"} {
@@ -131,7 +134,10 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 		DBtx.Continue()
 		setUserExperimentFQAN(w, R)
 		if !DBtx.Complete() {
-			log.WithFields(QueryFields(r, startTime)).Error("createUser failed.")
+			if strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"User already belongs to the experiment.\" }")
+			}
+			log.WithFields(QueryFields(r, startTime)).Error("Failed to set FQAN to user.")
 			DBtx.Rollback()
 			return
 		}

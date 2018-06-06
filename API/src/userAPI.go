@@ -38,8 +38,8 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := DBptr.Query(`select name, dn, issuer_ca, user_exists, unit_exists from (
-								select 1 as key, name, uc.dn, issuer_ca from affiliation_unit_user_certificate as ac
+	rows, err := DBptr.Query(`select name, dn, user_exists, unit_exists from (
+								select 1 as key, name, uc.dn from affiliation_unit_user_certificate as ac
 								left join user_certificates as uc on ac.dnid = uc.dnid
 								left join users as u on uc.uid = u.uid
 								left join affiliation_units as au on ac.unitid = au.unitid
@@ -65,7 +65,6 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 	type jsonout struct {
 		UnitName string `json:"unit_name"`
 		DN       string `json:"dn"`
-		Issuer   string `json:"issuer_ca"`
 	}
 	var Out jsonout
 
@@ -75,10 +74,10 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 		if idx != 0 {
 			output += ","
 		}
-		var tmpUnitName, tmpDN, tmpIssuer sql.NullString
-		rows.Scan(&tmpUnitName, &tmpDN, &tmpIssuer, &userExists, &exptExists)
+		var tmpUnitName, tmpDN sql.NullString
+		rows.Scan(&tmpUnitName, &tmpDN, &userExists, &exptExists)
 		if tmpDN.Valid {
-			Out.UnitName, Out.DN, Out.Issuer = tmpUnitName.String, tmpDN.String, tmpIssuer.String
+			Out.UnitName, Out.DN = tmpUnitName.String, tmpDN.String
 			outline, jsonerr := json.Marshal(Out)
 			if jsonerr != nil {
 				log.WithFields(QueryFields(r, startTime)).Error(jsonerr)
@@ -154,8 +153,8 @@ func getAllUsersCertificateDNs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := DBptr.Query(`select uname, name, dn, issuer_ca, unit_exists from (
-								select 1 as key, uname, name, uc.dn, issuer_ca from affiliation_unit_user_certificate as ac
+	rows, err := DBptr.Query(`select uname, name, dn, unit_exists from (
+								select 1 as key, uname, name, uc.dn from affiliation_unit_user_certificate as ac
 								left join user_certificates as uc on ac.dnid = uc.dnid
 								left join users as u on uc.uid = u.uid
 								left join affiliation_units as au on ac.unitid = au.unitid
@@ -176,7 +175,6 @@ func getAllUsersCertificateDNs(w http.ResponseWriter, r *http.Request) {
 	type jsoncert struct {
 		UnitName string `json:"unit_name"`
 		DN       string `json:"dn"`
-		Issuer   string `json:"issuer_ca"`
 	}
 	type jsonuser struct {
 		Uname string `json:"username"`
@@ -186,14 +184,14 @@ func getAllUsersCertificateDNs(w http.ResponseWriter, r *http.Request) {
 
 	prevUname := ""
 	for rows.Next() {
-		var tmpUname, tmpUnitName, tmpDN, tmpIssuer sql.NullString
-		rows.Scan(&tmpUname, &tmpUnitName, &tmpDN, &tmpIssuer, &exptExists)
+		var tmpUname, tmpUnitName, tmpDN sql.NullString
+		rows.Scan(&tmpUname, &tmpUnitName, &tmpDN, &exptExists)
 		if tmpUname.Valid {
 			if prevUname != tmpUname.String {
 				Out = append(Out, jsonuser{tmpUname.String, make([]jsoncert, 0)})
 				prevUname = tmpUname.String
 			}
-			Out[len(Out)-1].Certs = append(Out[len(Out)-1].Certs, jsoncert{tmpUnitName.String, tmpDN.String, tmpIssuer.String})
+			Out[len(Out)-1].Certs = append(Out[len(Out)-1].Certs, jsoncert{tmpUnitName.String, tmpDN.String})
 		}
 	}
 
@@ -813,8 +811,10 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 			log.WithFields(QueryFields(r, startTime)).Error("FQAN does not exist.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"FQAN does not exist.\" }")
 		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
-			log.WithFields(QueryFields(r, startTime)).Error("This association already exists.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"This association already exists.\" }")
+			if cKey != 0 {
+				log.WithFields(QueryFields(r, startTime)).Error("This association already exists.")
+				fmt.Fprintf(w, "{ \"ferry_error\": \"This association already exists.\" }")
+			}
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
@@ -1546,7 +1546,6 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 	uName := q.Get("username")
 	unitName := q.Get("unitname")
 	subjDN := q.Get("dn")
-	issuer := q.Get("issuer_ca")
 	if uName == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
@@ -1555,11 +1554,6 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 	if subjDN == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No DN specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No dn specified.\" }")
-		return
-	}
-	if issuer == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No issuer specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No issuer specified.\" }")
 		return
 	}
 
@@ -1574,7 +1568,6 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 										declare uc_dnid int;
 										declare new_dn bool;
 										u_dn constant text := '%s';
-										u_issuer constant text := '%s';
 										u_uname constant text := '%s';
 										au_name constant text := '%s';
 									begin
@@ -1582,7 +1575,7 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 										select uid into u_uid from users where uname=u_uname;
 										if u_dn not in (select dn from user_certificates) then
 											new_dn = true;
-											insert into user_certificates (dn, uid, issuer_ca, last_updated) values (u_dn, u_uid, u_issuer, NOW());
+											insert into user_certificates (dn, uid, last_updated) values (u_dn, u_uid, NOW());
 										end if;
 										if au_name != '' then
 											select unitid into au_unitid from affiliation_units where name = au_name;
@@ -1593,7 +1586,7 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 												raise 'duplicated dn';
 											end if;
 										end if;
-									end $$;`, subjDN, issuer, uName, unitName))
+									end $$;`, subjDN, uName, unitName))
 	if err == nil {
 		if cKey != 0 {
 			log.WithFields(QueryFields(r, startTime)).Info("Success!")
@@ -2441,7 +2434,7 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 			return	
 		} else {
-			_, moderr := DBptr.Exec(`update compute_access set shell=$1,home_dir=$2,last_updated=NOW() where groupid=$3 and uid=$4 and compid=$5`,defShell,defhome,grpid,uid,compid)
+			_, moderr := DBtx.Exec(`update compute_access set shell=$1,home_dir=$2,last_updated=NOW() where groupid=$3 and uid=$4 and compid=$5`,defShell,defhome,grpid,uid,compid)
 			if moderr != nil {
 				log.WithFields(QueryFields(r, startTime)).Error("Error in DB update: " + err.Error()) 
 				w.WriteHeader(http.StatusNotFound)

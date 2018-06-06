@@ -428,7 +428,6 @@ ALTER SEQUENCE storage_resource_storageid_seq OWNED BY storage_resources.storage
 CREATE TABLE user_certificates (
     dn character varying(300) NOT NULL,
     uid bigint NOT NULL,
-    issuer_ca character varying(120) NOT NULL,
     last_updated timestamp with time zone DEFAULT ('now'::text)::date NOT NULL,
     dnid integer NOT NULL
 );
