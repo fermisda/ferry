@@ -989,8 +989,8 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
     # populating user_certificates table
     for user in users.values():
         for dn, details in user.certificates.items():
-            fd.write("insert into user_certificates (dn,uid,issuer_ca,last_updated) "
-                     "values (\'%s\',%d,\'%s\',NOW());\n" % (dn, int(user.uid), details['ca']))
+            fd.write("insert into user_certificates (dn,uid,last_updated) "
+                     "values (\'%s\',%d,NOW());\n" % (dn, int(user.uid)))
             for experiment in details['experiments']:
                 fd.write("insert into affiliation_unit_user_certificate (unitid,dnid,last_updated) "
                          "values (%d,(select dnid from user_certificates where dn = \'%s\'),NOW());\n" % (experiment, dn))
