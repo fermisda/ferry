@@ -35,6 +35,8 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 
+	var duplicateCount int
+
 	var compResource string
 	var compGroup string
 
@@ -107,6 +109,7 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		DBtx.RollbackToSavepoint("addCertificateDNToUser")
+		duplicateCount ++
 	}
 
 	for _, fqan := range []string{"Analysis", "None"} {
@@ -132,14 +135,16 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 		R.URL.RawQuery = q.Encode()
 
 		DBtx.Continue()
+		DBtx.Savepoint("setUserExperimentFQAN")
 		setUserExperimentFQAN(w, R)
 		if !DBtx.Complete() {
-			if strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"User already belongs to the experiment.\" }")
+			if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") {
+				log.WithFields(QueryFields(r, startTime)).Error("Failed to set FQAN to user.")
+				DBtx.Rollback()
+				return	
 			}
-			log.WithFields(QueryFields(r, startTime)).Error("Failed to set FQAN to user.")
-			DBtx.Rollback()
-			return
+			DBtx.RollbackToSavepoint("setUserExperimentFQAN")
+			duplicateCount ++
 		}
 	}
 
@@ -185,17 +190,26 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 	R.URL.RawQuery = q.Encode()
 
 	DBtx.Continue()
+	DBtx.Savepoint("setUserAccessToComputeResource")
 	setUserAccessToComputeResource(w, R)
 	if !DBtx.Complete() {
-		log.WithFields(QueryFields(r, startTime)).Error("addUserToGroup failed")
-		DBtx.Rollback()
-		return
+		if !strings.Contains(DBtx.Error().Error(), "The request already exists in the database.") {
+			log.WithFields(QueryFields(r, startTime)).Error("addUserToGroup failed")
+			DBtx.Rollback()
+			return
+		}
+		DBtx.RollbackToSavepoint("setUserAccessToComputeResource")
+		duplicateCount ++
 	}
 
-	log.WithFields(QueryFields(r, startTime)).Info("Success!")
-	fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+	if duplicateCount == 4 {
+		fmt.Fprintf(w, "{ \"ferry_error\": \"User already belongs to the experiment.\" }")
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 
-	DBtx.Commit(key)
+		DBtx.Commit(key)
+	}
 }
 
 func setLPCStorageAccess(w http.ResponseWriter, r *http.Request) {
