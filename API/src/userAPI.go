@@ -2430,9 +2430,11 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 		if "" == shell && "" == homedir {
 			// everything in the DB is already the same as the request, so don't do anything
 			log.WithFields(QueryFields(r, startTime)).Print("The request already exists in the database. Nothing to do.")
-			w.WriteHeader(http.StatusOK)
-			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
-			return	
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"The request already exists in the database.\" }")
+			}
+			DBtx.Report("The request already exists in the database.")
+			return
 		} else {
 			_, moderr := DBtx.Exec(`update compute_access set shell=$1,home_dir=$2,last_updated=NOW() where groupid=$3 and uid=$4 and compid=$5`,defShell,defhome,grpid,uid,compid)
 			if moderr != nil {

@@ -118,6 +118,11 @@ func (t *Transaction) Continue() {
 	t.err = errors.New("transaction did not complete properly")
 }
 
+// Report an error on the Transaction
+func (t *Transaction) Report(message string) {
+	t.err = errors.New(message)
+}
+
 // Error returns the latast error in the transaction
 func (t *Transaction) Error() (error) {
 	return t.err
