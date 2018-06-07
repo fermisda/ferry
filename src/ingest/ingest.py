@@ -27,7 +27,7 @@ def read_uid(fname):
     usrs = {}
     for line in fd.readlines():
         try:
-            if not len(line[:-1]):
+            if not len(line[:-1])  or line.startswith("<"):
                 continue
             tmp = line[:-1].split("\t\t")
             if not usrs.__contains__(tmp[4].strip().lower()):
@@ -51,7 +51,7 @@ def read_gid(fname):
     fd = open(fname)
     groupids = {}
     for line in fd.readlines():
-        if not len(line[:-1]):
+        if not len(line[:-1]) or line.startswith("<"):
             continue
         try:
             tmp = line[:-1].strip("\t").split("\t")
@@ -312,6 +312,7 @@ def read_gums_config(config, usrs, grps):
     #    if not None in vug:
     #        print key, vug, "needs role None"
     #        # it means that FQAN does not have a None Role, we need to create a new Group
+    keysToRemove = []
     for key, gmap in gums_mapping.items():
         for child in root:
             if child.tag == "groupToAccountMappings":
@@ -325,6 +326,10 @@ def read_gums_config(config, usrs, grps):
             if child.tag == "accountMappers":
                 for element in child.getchildren():
                     if element.attrib.get('name') == gmap.account_mappers:
+                        if element.tag == 'accountPoolMapper':
+                            print("Ignoring voms user group %s as it maps to a pool account" % key)
+                            keysToRemove.append(key)
+                            break
                         #print "found accountMappers", gmap.account_mappers,element.attrib.get('groupName')
                         gid = element.attrib.get('groupName')
                         if gid not in grps.values():
@@ -338,6 +343,9 @@ def read_gums_config(config, usrs, grps):
                         else:
                             gmap.uname = uname
                         break
+    for key in keysToRemove:
+        gums_mapping.__delitem__(key)
+
     return gums_mapping
 
 def read_vulcan_user_group(config, users):
@@ -875,7 +883,7 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
         for gid in cu.groups.values():
             index = gid_map[gid]
             is_primary = 'false'
-            if cu.name in nis.keys() and gid in nis[cu.name].primary_gid:
+            if (cu.name in nis.keys() and gid in nis[cu.name].primary_gid) or (cu.alt_name in nis.keys() and gid in nis[cu.alt_name].primary_gid):
                 is_primary = 'true'
             fd.write("insert into affiliation_unit_group values(%d,%d,%s,NOW());\n" % (cu.unitid,index,is_primary))
     fd.flush()
