@@ -38,17 +38,18 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := DBptr.Query(`select name, dn, user_exists, unit_exists from (
-								select 1 as key, name, uc.dn from affiliation_unit_user_certificate as ac
-								left join user_certificates as uc on ac.dnid = uc.dnid
-								left join users as u on uc.uid = u.uid
-								left join affiliation_units as au on ac.unitid = au.unitid
-								where uname = $1 and name = $2
+	rows, err := DBptr.Query(`select dn, user_exists, unit_exists from (
+								select distinct 1 as key, dn
+								from affiliation_unit_user_certificate as ac
+								join affiliation_units as au on ac.unitid = au.unitid
+								join user_certificates as uc on ac.dnid = uc.dnid
+								join users as u on uc.uid = u.uid 
+								where ac.unitid in (select unitid from grid_fqan where u.uname = $1 and fqan like $3)
 							) as t right join (
 								select 1 as key,
 								$1 in (select uname from users) as user_exists,
 								$2 in (select name from affiliation_units) as unit_exists
-							) as c on t.key = c.key;`, uname, expt)
+							) as c on t.key = c.key;`, uname, expt, "%" + expt + "%")
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
@@ -59,50 +60,46 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 
 	defer rows.Close()
 
-	idx := 0
 	var userExists, exptExists bool
+	var Out []string
 
-	type jsonout struct {
-		UnitName string `json:"unit_name"`
-		DN       string `json:"dn"`
-	}
-	var Out jsonout
-
-	output := "[ "
+	var tmpDN sql.NullString
 
 	for rows.Next() {
-		if idx != 0 {
-			output += ","
-		}
-		var tmpUnitName, tmpDN sql.NullString
-		rows.Scan(&tmpUnitName, &tmpDN, &userExists, &exptExists)
+		rows.Scan(&tmpDN, &userExists, &exptExists)
 		if tmpDN.Valid {
-			Out.UnitName, Out.DN = tmpUnitName.String, tmpDN.String
-			outline, jsonerr := json.Marshal(Out)
-			if jsonerr != nil {
-				log.WithFields(QueryFields(r, startTime)).Error(jsonerr)
-			}
-			output += string(outline)
-			idx++
+			Out = append(Out, tmpDN.String)
 		}
 	}
-	if idx == 0 {
+
+	var output interface{}	
+	if !tmpDN.Valid {
+		type jsonerror struct {
+			Error []string `json:"ferry_error"`
+		}
+		var queryErr jsonerror
 		if !userExists {
-			output += `"ferry_error": "User does not exist.",`
+			queryErr.Error = append(queryErr.Error, "User does not exist.")
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 		}
 		if !exptExists {
-			output += `"ferry_error": "Experiment does not exist.",`
+			queryErr.Error = append(queryErr.Error, "Experiment does not exist.")
 			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
 		}
-		output += `"ferry_error": "User does not have any certifcates registered."`
-		log.WithFields(QueryFields(r, startTime)).Error("User does not have any certifcates registered.")
+		if userExists && exptExists {
+			queryErr.Error = append(queryErr.Error, "User does not have any certifcates registered.")
+			log.WithFields(QueryFields(r, startTime)).Error("User does not have any certifcates registered.")
+		}
+		output = queryErr
 	} else {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
 	}
-
-	output += " ]"
-	fmt.Fprintf(w, output)
+	jsonoutput, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+	}
+	fmt.Fprintf(w, string(jsonoutput))
 }
 
 func getAllUsersCertificateDNs(w http.ResponseWriter, r *http.Request) {
