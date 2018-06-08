@@ -720,10 +720,10 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 								if v_unitid is null and c_aname is not null then
 									raise 'affiliation unit does not exist';
 								end if;
-								if v_groupid is null and c_aname is not null then
+								if v_groupid is null and c_gname is not null then
 									raise 'group does not exist';
 								end if;
-								if v_uid is null and c_aname is not null then
+								if v_uid is null and c_uname is not null then
 									raise 'user does not exist';
 								end if;
 
