@@ -21,14 +21,10 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 	uname := q.Get("username")
 	expt := q.Get("unitname")
 	if uname == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
-		return
+		uname = "%"
 	}
 	if expt == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No experiment name specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
-		return
+		expt = "%"
 	}
 
 	authorized, authout := authorize(r, AuthorizedDNs)
@@ -44,7 +40,7 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 								join affiliation_units as au on ac.unitid = au.unitid
 								join user_certificates as uc on ac.dnid = uc.dnid
 								join users as u on uc.uid = u.uid 
-								where ac.unitid in (select unitid from grid_fqan where u.uname = $1 and fqan like $3)
+								where ac.unitid in (select unitid from grid_fqan where u.uname like $1 and fqan like $3)
 							) as t right join (
 								select 1 as key,
 								$1 in (select uname from users) as user_exists,
@@ -78,11 +74,11 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 			Error []string `json:"ferry_error"`
 		}
 		var queryErr jsonerror
-		if !userExists {
+		if !userExists && uname != "%" {
 			queryErr.Error = append(queryErr.Error, "User does not exist.")
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 		}
-		if !exptExists {
+		if !exptExists && expt != "%" {
 			queryErr.Error = append(queryErr.Error, "Experiment does not exist.")
 			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
 		}
