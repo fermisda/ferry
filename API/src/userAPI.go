@@ -34,13 +34,14 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := DBptr.Query(`select dn, user_exists, unit_exists from (
-								select distinct 1 as key, dn
+	rows, err := DBptr.Query(`select uname, dn, user_exists, unit_exists from (
+								select distinct 1 as key, uname, dn
 								from affiliation_unit_user_certificate as ac
 								join affiliation_units as au on ac.unitid = au.unitid
 								join user_certificates as uc on ac.dnid = uc.dnid
 								join users as u on uc.uid = u.uid 
-								where ac.unitid in (select unitid from grid_fqan where u.uname like $1 and fqan like $3)
+								where u.uname like $1 and ac.unitid in (select unitid from grid_fqan where fqan like $3)
+								order by uname
 							) as t right join (
 								select 1 as key,
 								$1 in (select uname from users) as user_exists,
@@ -57,16 +58,29 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	var userExists, exptExists bool
-	var Out []string
 
-	var tmpDN sql.NullString
+	type jsonEntry struct {
+		Uname string `json:"username"`
+		DNs []string `json:"certificates"`
+	}
+	var Out []jsonEntry
 
+	var tmpUname, tmpDN sql.NullString
+	var tmpEntry jsonEntry
 	for rows.Next() {
-		rows.Scan(&tmpDN, &userExists, &exptExists)
+		rows.Scan(&tmpUname, &tmpDN, &userExists, &exptExists)
 		if tmpDN.Valid {
-			Out = append(Out, tmpDN.String)
+			if tmpEntry.Uname == "" {
+				tmpEntry = jsonEntry{tmpUname.String, make([]string, 0)}
+			}
+			if tmpUname.String != tmpEntry.Uname {
+				Out = append(Out, tmpEntry)
+				tmpEntry = jsonEntry{tmpUname.String, make([]string, 0)}
+			}
+			tmpEntry.DNs = append(tmpEntry.DNs, tmpDN.String)
 		}
 	}
+	Out = append(Out, tmpEntry)
 
 	var output interface{}	
 	if !tmpDN.Valid {
