@@ -163,14 +163,16 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 	if comp == "" {
 		comp = "%"
 	}
-	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
 		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
 		return
 	}
 
-	var priGID int
+// first let's figure out the primary group name and GID 
+
+	var priGID int64
 	var priGroup string
 	rowerr := DBptr.QueryRow(`select groups.gid, groups.name from groups inner join affiliation_unit_group as aug on groups.groupid=aug.groupid inner join affiliation_units as au on au.unitid=aug.unitid where au.name=$1 and aug.is_primary = true`,unit).Scan(&priGID,&priGroup)
 	if rowerr != nil {
@@ -185,22 +187,42 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 		}
 		
 	}
-	
-	rows, err := DBptr.Query(`select gname, groupid, uname, unit_exists, comp_exists, last_updated from (
-								select 1 as key, g.name as gname, ca.groupid, u.uname, ca.last_updated
-								from compute_access as ca
-								left join groups as g on ca.groupid = g.groupid
-								left join users as u on ca.uid = u.uid
-								left join compute_resources as cr on ca.compid = cr.compid
-								left join affiliation_units as au on cr.unitid = au.unitid
-								where au.name = $1 and cr.name like $2 and g.type = 'UnixGroup' and (g.last_updated>=$3 or u.last_updated>=$3 or cr.last_updated>=$3 or ca.last_updated>=$3 or au.last_updated>=$3 or $3 is null) and g.gid not in ($4)
-                                                                order by ca.groupid
+	// now let's do the select for group name, GID, and users for all compute_access entries matching the unit and resource, if given
+//	rows, err := DBptr.Query(`select gname, gid, uname, unit_exists, comp_exists, last_updated from (
+//								select 1 as key, g.name as gname, g.gid as gid, u.uname, ca.last_updated
+//								from compute_access as ca
+//								left join groups as g on ca.groupid = g.groupid
+//								left join users as u on ca.uid = u.uid
+//								left join compute_resources as cr on ca.compid = cr.compid
+//								left join affiliation_units as au on cr.unitid = au.unitid
+//								where au.name = $1 and cr.name like $2 and g.type = 'UnixGroup' and (g.last_updated>=$3 or u.last_updated>=$3 or cr.last_updated>=$3 or ca.last_updated>=$3 or au.last_updated>=$3 or $3 is null)
+//                                                                order by ca.groupid
+//							) as t
+//								right join (select 1 as key,
+//								$1 in (select name from affiliation_units) as unit_exists,
+//								$2 in (select name from compute_resources) as comp_exists
+// 							) as c on t.key = c.key;`, unit, comp, lastupdate)
+//
+
+//alternate query based on grabbing all users from the user_group entries for all groups in affiliation_unit_group associated with the unit.
+// NOTE: this does not do anything with the compute resource. We SHOULD really be using compute access as in the usual query, but it is missing
+// some stuff right now. This seems to reproduce the contents of the group files on the gpvm machines better right now.
+
+	rows, err := DBptr.Query(`select gname, gid, uname, unit_exists, comp_exists, last_updated from (
+								select 1 as key, g.name as gname, g.gid as gid, u.uname as uname, ug.last_updated
+								from user_group as ug
+								join groups as g on ug.groupid = g.groupid
+								join users as u on ug.uid = u.uid
+								inner join affiliation_unit_group as aug on ug.groupid = aug.groupid
+								inner join affiliation_units as au on au.unitid = aug.unitid
+								where au.name = $1 and g.type = 'UnixGroup' and (g.last_updated>=$3 or u.last_updated>=$3 or aug.last_updated>=$3 or ug.last_updated>=$3 or au.last_updated>=$3 or $3 is null)
+                                                                order by ug.groupid
 							) as t
 								right join (select 1 as key,
 								$1 in (select name from affiliation_units) as unit_exists,
-								$2 in (select name from compute_resources) as comp_exists
- 							) as c on t.key = c.key;`, unit, comp, lastupdate, priGID)
-//(select aug.groupid from affiliation_unit_group as aug join affiliation_units as au on au.unitid=aug.unitid where au.name = $1 and aug.is_primary = true)
+                                                   		$2 in (select name from compute_resources) as comp_exists
+ 							) as c on t.key = c.key;`, unit, comp, lastupdate)
+
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
@@ -213,7 +235,7 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 
 	type jsonentry struct {
 		Gname string `json:"groupname"`
-		Gid string `json:"gid"`
+		Gid int64 `json:"gid"`
 		Lasttime int64 `json:"last_updated"`
 		Unames []string `json:"unames"`
 	}
@@ -222,25 +244,30 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 	
 	prevGname := ""
 	for rows.Next() {
-		var tmpGname, tmpGid, tmpUname, tmpTime sql.NullString
+		var tmpGname, tmpUname, tmpTime sql.NullString
+		var tmpGid sql.NullInt64
 		rows.Scan(&tmpGname, &tmpGid, &tmpUname, &unitExists, &compExists, &tmpTime)
-		tmpGname.String = priGroup
 		if tmpGname.Valid {
 			if prevGname == "" {
-				Entry.Gname = priGroup
-				Entry.Gid = strconv.Itoa(priGID)
-				Entry.Unames = append(Entry.Unames, tmpUname.String)
+				Entry.Gname = tmpGname.String
+				Entry.Gid = tmpGid.Int64
+				if tmpGid.Int64 != priGID {
+					Entry.Unames = append(Entry.Unames, tmpUname.String)
+				}
 			} else if prevGname != tmpGname.String {
 				Out = append(Out, Entry)
-				Entry.Gname = priGroup
-				Entry.Gid = strconv.Itoa(priGID)
+				Entry.Gname = tmpGname.String
+				Entry.Gid = tmpGid.Int64
 				Entry.Unames = nil
-				Entry.Unames = append(Entry.Unames, tmpUname.String)
+				if tmpGid.Int64 != priGID {
+					Entry.Unames = append(Entry.Unames, tmpUname.String)
+				}
 			} else {
-				Entry.Unames = append(Entry.Unames, tmpUname.String)
+				if tmpGid.Int64 != priGID {
+					Entry.Unames = append(Entry.Unames, tmpUname.String)
+				}
 			}
-//			prevGname = tmpGname.String
-			prevGname = priGroup
+			prevGname = tmpGname.String
 			if tmpTime.Valid {
 				log.WithFields(QueryFields(r, startTime)).Println("tmpTime is valid" + tmpTime.String)
 				
