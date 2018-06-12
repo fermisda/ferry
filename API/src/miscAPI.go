@@ -1262,7 +1262,7 @@ func createStorageResource(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 	
-	rName := strings.TrimSpace(q.Get("resourcename"))
+	rName := strings.TrimSpace(strings.ToUpper(q.Get("resourcename")))
 	defunit := strings.TrimSpace(strings.ToUpper(q.Get("default_unit")))
 	rType := strings.TrimSpace(strings.ToLower(q.Get("type")))
 	
