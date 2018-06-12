@@ -1083,9 +1083,9 @@ func getUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
-	rName := q.Get("resourcename")
-	uName := q.Get("username")
-	unitName := q.Get("unitname")
+	rName := strings.TrimSpace(strings.ToUpper(q.Get("resourcename")))
+	uName := strings.TrimSpace(q.Get("username"))
+	unitName := strings.TrimSpace(q.Get("unitname"))
 
 	if rName == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No resource name specified in http query.")
