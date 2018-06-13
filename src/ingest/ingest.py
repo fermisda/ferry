@@ -556,6 +556,8 @@ def read_nis(primary_groups, dir_path, exclude_list, altnames, users, groups):
                 print("Domain: %s group %s doesn\'t exist in userdb!" % (dir,gid,), file=sys.stderr)
                 continue
             users[uname].compute_access[dir] = ComputeAccess(dir, gid, home_dir, shell)
+            if gid not in users[uname].groups:
+                users[uname].add_group(list(groups.keys())[list(groups.values()).index(gid)], gid, False)
             nis[dir].users[uname] = users[uname]
             nis[dir].groups[list(groups.keys())[list(groups.values()).index(gid)]] = gid
 
@@ -569,10 +571,11 @@ def read_nis(primary_groups, dir_path, exclude_list, altnames, users, groups):
             tmp = l[:-1].split(":")
             gname = tmp[0]
             gid = tmp[2]
-            if len(tmp) < 4 or len(tmp[3].strip()) == 0:
-                continue
 
-            user_list = tmp[3].split(",")
+            user_list = []
+            if len(tmp) >= 4 and len(tmp[3].strip()) > 0:
+                user_list = tmp[3].split(",")
+
             if gid not in groups.values():
                 print("Domain: %s group %s from group file doesn\'t exist  in userdb!" % \
                                      (dir,gid,), file=sys.stderr)
@@ -591,9 +594,12 @@ def read_nis(primary_groups, dir_path, exclude_list, altnames, users, groups):
                     continue
                 if dir in users[uname].compute_access:
                     users[uname].compute_access[dir].add_secondary_group(gid)
-                    nis[dir].groups[gname]=gid
+                    if gid not in users[uname].groups:
+                        users[uname].add_group(list(groups.keys())[list(groups.values()).index(gid)], gid, False)
                 else:
                     print("Domain: %s User %s in group file but not in passwd!" % (dir,uname,), file=sys.stderr)
+
+            nis[dir].groups[gname]=gid
 
     lines = open(primary_groups).read()
     lines = re.findall(r"nis::def_domain[{\s}]+'([\w-]+)':\n\s+domaingid\s+=>\s+(\d+)", lines)
@@ -679,6 +685,8 @@ def read_vulcan_compute_resources(config, nis, users, groups, cms_groups):
                     gid = list(cms_groups.keys())[list(cms_groups.values()).index(row["gpname"])]
                     users[uname].compute_access[comp[1]] = ComputeAccess(comp[1], gid, row["home_dir"], row["shell"])
                     nis[dir].users[uname] = users[uname]
+                    if gid not in users[uname].groups:
+                        users[uname].add_group(row["gpname"], gid, False)
             nis[dir].primary_gid.append(groups[comp[5]]) ### CHECK IT! ###
 
 def read_vulcan_storage_resources(config, users, groups, cms_groups):
@@ -860,6 +868,14 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
         #    print('Error ', command, file=sys.stderr)
     fd.flush()
 
+    # populate user_group table
+    for _, user in users.items():
+        #if uname!='kherner':
+        #    continue
+        for gid in user.groups:
+            groupid = gid_map[gid]
+            fd.write("insert into user_group values (%d,%d,%s);\n" % (int(user.uid), groupid, user.groups[gid].is_leader))
+
     # populate collaborative_unit
     for cu in collaborations:
         if cu.alt_name:
@@ -906,8 +922,13 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
         for _, user in nis_info.users.items():
             comp = user.compute_access[nis_info.cresource]
             groupid = gid_map[comp.gid]
-            fd.write("insert into compute_access (compid, uid, groupid,shell,home_dir,last_updated)" + \
-                     " values (%s,%s,%s,\'%s\',\'%s\', NOW());\n" % (nis_counter,user.uid,groupid,comp.shell,comp.home_dir))
+            fd.write("insert into compute_access (compid, uid, shell, home_dir, last_updated)" + \
+                     " values (%s, %s, \'%s\', \'%s\', NOW());\n" % (nis_counter, user.uid, comp.shell, comp.home_dir))
+            fd.write("insert into compute_access_group (compid, uid, groupid, is_primary)" + \
+                     " values (%s, %s, %s, true);\n" % (nis_counter, user.uid, groupid))
+            for gid in user.compute_access[nis_info.cresource].secondary_groups:
+                fd.write("insert into compute_access_group (compid, uid, groupid, is_primary)" + \
+                         " values (%s, %s, %s, false);\n" % (nis_counter, user.uid, gid_map[gid]))
     fd.flush()
     
     #populate storage_resource
@@ -988,12 +1009,6 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
                                 (int(user.uid), fqanid ))
 
                     fd.flush()
-    for _, user in users.items():
-        #if uname!='kherner':
-        #    continue
-        for gid in user.groups:
-            groupid = gid_map[gid]
-            fd.write("insert into user_group values (%d,%d,%s);\n" % (int(user.uid), groupid, user.groups[gid].is_leader))
 
     # populating user_certificates table
     for user in users.values():

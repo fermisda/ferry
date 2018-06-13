@@ -48,7 +48,7 @@ SET default_with_oids = false;
 CREATE TABLE affiliation_unit_group (
     unitid integer NOT NULL,
     groupid integer NOT NULL,
-    is_primary boolean,
+    is_primary boolean DEFAULT false NOT NULL,
     last_updated timestamp with time zone DEFAULT ('now'::text)::date NOT NULL
 );
 
@@ -118,7 +118,6 @@ COMMENT ON COLUMN affiliation_units.unitid IS 'Fermilab collaboration unit id ';
 CREATE TABLE compute_access (
     compid integer NOT NULL,
     uid bigint NOT NULL,
-    groupid bigint NOT NULL,
     shell character varying(30) DEFAULT '/bin/bash'::character varying NOT NULL,
     last_updated timestamp with time zone DEFAULT ('now'::text)::date NOT NULL,
     home_dir character varying(100)
@@ -126,6 +125,21 @@ CREATE TABLE compute_access (
 
 
 ALTER TABLE public.compute_access OWNER TO ferry;
+
+--
+-- Name: compute_access_group; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
+--
+
+CREATE TABLE compute_access_group (
+    compid integer NOT NULL,
+    uid bigint NOT NULL,
+    groupid integer NOT NULL,
+    is_primary boolean DEFAULT false NOT NULL,
+    last_updated timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.compute_access_group OWNER TO ferry;
 
 --
 -- Name: compute_batch; Type: TABLE; Schema: public; Owner: ferry; Tablespace: 
@@ -203,8 +217,8 @@ ALTER TABLE public.external_affiliation_attribute OWNER TO ferry;
 CREATE TABLE grid_access (
     uid bigint NOT NULL,
     fqanid integer NOT NULL,
-    is_superuser boolean,
-    is_banned boolean,
+    is_superuser boolean DEFAULT false NOT NULL,
+    is_banned boolean DEFAULT false NOT NULL,
     last_updated timestamp with time zone DEFAULT ('now'::text)::date NOT NULL
 );
 
@@ -463,7 +477,7 @@ ALTER SEQUENCE user_certificates_dnid_seq OWNED BY user_certificates.dnid;
 CREATE TABLE user_group (
     uid bigint NOT NULL,
     groupid integer NOT NULL,
-    is_leader boolean,
+    is_leader boolean DEFAULT false NOT NULL,
     last_updated timestamp with time zone DEFAULT ('now'::text)::date NOT NULL
 );
 
@@ -477,7 +491,7 @@ ALTER TABLE public.user_group OWNER TO ferry;
 CREATE TABLE users (
     uid bigint NOT NULL,
     uname character varying(100) NOT NULL,
-    status boolean,
+    status boolean DEFAULT false NOT NULL,
     expiration_date date,
     last_updated timestamp with time zone DEFAULT ('now'::text)::date NOT NULL,
     full_name character varying(255)
@@ -593,6 +607,14 @@ ALTER TABLE ONLY affiliation_units
 
 ALTER TABLE ONLY compute_access
     ADD CONSTRAINT pk_compute_access PRIMARY KEY (compid, uid);
+
+
+--
+-- Name: pk_compute_access_group; Type: CONSTRAINT; Schema: public; Owner: ferry; Tablespace: 
+--
+
+ALTER TABLE ONLY compute_access_group
+    ADD CONSTRAINT pk_compute_access_group PRIMARY KEY (compid, uid, groupid);
 
 
 --
@@ -776,10 +798,24 @@ CREATE INDEX idx_affiliation_unit_user_certificate_unitid ON affiliation_unit_us
 
 
 --
--- Name: idx_compute_access_groupid; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
+-- Name: idx_compute_access_compid; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
-CREATE INDEX idx_compute_access_groupid ON compute_access USING btree (groupid);
+CREATE INDEX idx_compute_access_compid ON compute_access USING btree (compid);
+
+
+--
+-- Name: idx_compute_access_group_compid; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
+--
+
+CREATE INDEX idx_compute_access_group_compid ON compute_access_group USING btree (compid, uid);
+
+
+--
+-- Name: idx_compute_access_group_uid; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
+--
+
+CREATE INDEX idx_compute_access_group_uid ON compute_access_group USING btree (uid, groupid);
 
 
 --
@@ -909,6 +945,13 @@ CREATE UNIQUE INDEX unq_affiliation_unit_group_unitid_is_primary ON affiliation_
 
 
 --
+-- Name: unq_compute_access_group_compid_uid_is_primary; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
+--
+
+CREATE UNIQUE INDEX unq_compute_access_group_compid_uid_is_primary ON compute_access_group USING btree (compid, uid, is_primary) WHERE (is_primary IS TRUE);
+
+
+--
 -- Name: unq_grid_fqan_fqan_mapped_group; Type: INDEX; Schema: public; Owner: ferry; Tablespace: 
 --
 
@@ -936,6 +979,38 @@ ALTER TABLE ONLY affiliation_unit_user_certificate
 
 ALTER TABLE ONLY affiliation_unit_user_certificate
     ADD CONSTRAINT fk_affiliation_unit_user_certificate_user_certificates FOREIGN KEY (dnid) REFERENCES user_certificates(dnid);
+
+
+--
+-- Name: fk_compute_access_compute_resources; Type: FK CONSTRAINT; Schema: public; Owner: ferry
+--
+
+ALTER TABLE ONLY compute_access
+    ADD CONSTRAINT fk_compute_access_compute_resources FOREIGN KEY (compid) REFERENCES compute_resources(compid);
+
+
+--
+-- Name: fk_compute_access_group_compute_access; Type: FK CONSTRAINT; Schema: public; Owner: ferry
+--
+
+ALTER TABLE ONLY compute_access_group
+    ADD CONSTRAINT fk_compute_access_group_compute_access FOREIGN KEY (compid, uid) REFERENCES compute_access(compid, uid);
+
+
+--
+-- Name: fk_compute_access_group_user_group; Type: FK CONSTRAINT; Schema: public; Owner: ferry
+--
+
+ALTER TABLE ONLY compute_access_group
+    ADD CONSTRAINT fk_compute_access_group_user_group FOREIGN KEY (uid, groupid) REFERENCES user_group(uid, groupid);
+
+
+--
+-- Name: fk_compute_access_users; Type: FK CONSTRAINT; Schema: public; Owner: ferry
+--
+
+ALTER TABLE ONLY compute_access
+    ADD CONSTRAINT fk_compute_access_users FOREIGN KEY (uid) REFERENCES users(uid);
 
 
 --
@@ -1016,30 +1091,6 @@ ALTER TABLE ONLY grid_fqan
 
 ALTER TABLE ONLY grid_fqan
     ADD CONSTRAINT fk_grid_fqan_users FOREIGN KEY (mapped_user) REFERENCES users(uid);
-
-
---
--- Name: fk_interactive_access_compute_resources; Type: FK CONSTRAINT; Schema: public; Owner: ferry
---
-
-ALTER TABLE ONLY compute_access
-    ADD CONSTRAINT fk_interactive_access_compute_resources FOREIGN KEY (compid) REFERENCES compute_resources(compid);
-
-
---
--- Name: fk_interactive_access_groups; Type: FK CONSTRAINT; Schema: public; Owner: ferry
---
-
-ALTER TABLE ONLY compute_access
-    ADD CONSTRAINT fk_interactive_access_groups FOREIGN KEY (groupid) REFERENCES groups(groupid);
-
-
---
--- Name: fk_interactive_access_users; Type: FK CONSTRAINT; Schema: public; Owner: ferry
---
-
-ALTER TABLE ONLY compute_access
-    ADD CONSTRAINT fk_interactive_access_users FOREIGN KEY (uid) REFERENCES users(uid);
 
 
 --
