@@ -46,11 +46,13 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 //							) as c on t.key = c.key;`, unit, comp, unit == "", comp == "", lastupdate)
 //
 	rows, err := DBptr.Query(`select aname, rname, uname, uid, gid, full_name, home_dir, shell, unit_exists, comp_exists, last_updated from (
-
-	select 1 as key, au.name as aname, u.uname, u.uid, g.gid, u.full_name, ca.home_dir, ca.shell, cr.name as rname, ca.last_updated as last_updated
- from compute_access_group as cag left join compute_access as ca using (compid, uid) join groups as g on g.groupid=cag.groupid join compute_resources as cr on cr.compid=cag.compid join affiliation_units as au on au.unitid=cr.unitid join users as u on u.uid=cag.uid
-
-	where  cag.is_primary = true and (au.name = $1 or $3) and (cr.name = $2 or $4) and (ca.last_updated>=$5 or u.last_updated>=$5 or au.last_updated>=$5 or cr.last_updated>=$5 or g.last_updated>=$5 or $5 is null) order by au.name, cr.name
+                                                              select 1 as key, au.name as aname, u.uname, u.uid, g.gid, u.full_name, ca.home_dir, ca.shell, cr.name as rname, cag.last_updated as last_updated
+                                                              from compute_access_group as cag 
+                                                              left join compute_access as ca using (compid, uid) 
+                                                              join groups as g on g.groupid=cag.groupid 
+                                                              join compute_resources as cr on cr.compid=cag.compid 
+                                                              join affiliation_units as au on au.unitid=cr.unitid join users as u on u.uid=cag.uid
+                                                              where  cag.is_primary = true and (au.name = $1 or $3) and (cr.name = $2 or $4) and (ca.last_updated>=$5 or u.last_updated>=$5 or au.last_updated>=$5 or cr.last_updated>=$5 or g.last_updated>=$5 or $5 is null) order by au.name, cr.name
 							) as t
 								right join (select 1 as key,
 								$1 in (select name from affiliation_units) as unit_exists,
@@ -221,14 +223,14 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := DBptr.Query(`select gname, gid, uname, unit_exists, comp_exists, last_updated, is_primary from (
 								select 1 as key, g.name as gname, g.gid as gid, u.uname as uname, cag.last_updated, cag.is_primary
-								from compute_access_group as cag
-								left join compute_access as ca using (compid, uid)
-								join groups as g on cag.groupid = g.groupid
+								from affiliation_unit_group as aug 
+								join affiliation_units as au on au.unitid = aug.unitid
+								join compute_resources as cr on au.unitid = cr.unitid
+								join groups as g on aug.groupid = g.groupid
+                                                                join compute_access_group as cag on aug.groupid = cag.groupid
 								join users as u on cag.uid = u.uid
-								join compute_resources as cr on cag.compid = cr.compid
-								inner join affiliation_units as au on au.unitid = cr.unitid
 								where au.name = $1 and g.type = 'UnixGroup' and (g.last_updated>=$3 or u.last_updated>=$3 or cag.last_updated>=$3 or au.last_updated>=$3 or $3 is null)
-                                                                order by cag.groupid
+                                                                order by aug.groupid,u.uname
 							) as t
 								right join (select 1 as key,
 								$1 in (select name from affiliation_units) as unit_exists,
@@ -264,7 +266,7 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 			if prevGname == "" {
 				Entry.Gname = tmpGname.String
 				Entry.Gid = tmpGid.Int64
-				if tmpPrimary == false {
+				if tmpPrimary == false && tmpUname.Valid {
 					Entry.Unames = append(Entry.Unames, tmpUname.String)
 				}
 			} else if prevGname != tmpGname.String {
@@ -272,11 +274,11 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 				Entry.Gname = tmpGname.String
 				Entry.Gid = tmpGid.Int64
 				Entry.Unames = nil
-				if tmpPrimary == false {
+				if tmpPrimary == false && tmpUname.Valid {
 					Entry.Unames = append(Entry.Unames, tmpUname.String)
 				}
 			} else {
-				if tmpPrimary == false {
+				if tmpPrimary == false && tmpUname.Valid {
 					Entry.Unames = append(Entry.Unames, tmpUname.String)
 				}
 			}
