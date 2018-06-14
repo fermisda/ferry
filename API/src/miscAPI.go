@@ -483,24 +483,39 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
+
+	type jsonerror struct {Error []string `json:"ferry_error"`}
+	var inputErr jsonerror
+	
 	unit := q.Get("unitname")
 	if unit == "" {
 		unit = "%"
 	}
+	
 	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
 		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
+		inputErr.Error = append(inputErr.Error, "Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.")
+		return
+	}
+
+	if len(inputErr.Error) > 0 {
+		jsonout, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err)
+		}
+		fmt.Fprintf(w, string(jsonout))
 		return
 	}
 
 	rows, err := DBptr.Query(`select t.fqan, t.uname, c.unit_exists from
-							 (select 1 as key, gf.fqan, u.uname, au.name from grid_fqan as gf
-							  left join users as u on gf.mapped_user = u.uid
-							  left join affiliation_unit_group as ag on gf.mapped_group = ag.groupid
-							  left join affiliation_units as au on ag.unitid = au.unitid
-							  where au.name like $1 and (gf.last_updated>=$2 or ag.last_updated>=$2 or au.last_updated>=$2 or $2 is null)) as t
-							  right join (select 1 as key, $1 in (select name from affiliation_units) as unit_exists) as c on t.key = c.key`, unit, lastupdate)
+							  (select 1 as key, fqan, uname from grid_fqan as gf
+							   left join users as u on gf.mapped_user = u.uid
+							   where fqan like $3 and (gf.last_updated >= $2 or u.last_updated >= $2 or $2 is null)
+							  ) as t
+							  right join (
+							   select 1 as key, $1 in (select name from affiliation_units) as unit_exists
+							  ) as c on t.key = c.key`, unit, lastupdate, "%" + unit + "%")
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
@@ -511,44 +526,40 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 
 	var unitExists bool
 
-	type jsonout struct {
+	type jsonentry struct {
 		DN string `json:"fqan"`
 		Uname string `json:"mapped_uname"`
 	}
-	var Out jsonout
+	var Out []jsonentry
 
-	idx := 0
-	output := "[ "
 	for rows.Next() {
-		if idx != 0 {
-			output += ","
-		}
-
 		var tmpDN, tmpUname sql.NullString
 		rows.Scan(&tmpDN, &tmpUname, &unitExists)
 		if tmpDN.Valid {
-			Out.DN, Out.Uname = tmpDN.String, tmpUname.String
-			outline, jsonerr := json.Marshal(Out)
-			if jsonerr != nil {
-				log.WithFields(QueryFields(r, startTime)).Error(jsonerr)
-			}
-			output += string(outline)
-			idx ++
+			Out = append(Out, jsonentry{tmpDN.String, tmpUname.String})
 		}
-	}
-	if idx == 0 {
-		if !unitExists {
-			output += `"ferry_error": "Experiment does not exist.",`
-			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
-		}
-		output += `"ferry_error": "No FQANs found."`
-		log.WithFields(QueryFields(r, startTime)).Error("No FQANs found.")
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 	}
 
-	output += " ]"
-	fmt.Fprintf(w,output)
+	var output interface{}
+	if len(Out) == 0 || !unitExists && unit != "%" {
+		var queryErr jsonerror
+		if !unitExists {
+			queryErr.Error = append(queryErr.Error, "Experiment does not exist.")
+			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
+		} else {
+			queryErr.Error = append(queryErr.Error, "No FQANs found.")
+			log.WithFields(QueryFields(r, startTime)).Error("No FQANs found.")
+		}
+		output = queryErr
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonoutput, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+	}
+	fmt.Fprintf(w, string(jsonoutput))
 }
 
 func getGroupGID(w http.ResponseWriter, r *http.Request) {
