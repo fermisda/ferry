@@ -223,14 +223,14 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := DBptr.Query(`select gname, gid, uname, unit_exists, comp_exists, last_updated, is_primary from (
 								select 1 as key, g.name as gname, g.gid as gid, u.uname as uname, cag.last_updated, cag.is_primary
-								from affiliation_unit_group as aug 
-								join affiliation_units as au on au.unitid = aug.unitid
-								join compute_resources as cr on au.unitid = cr.unitid
-								join groups as g on aug.groupid = g.groupid
-                                                                join compute_access_group as cag on aug.groupid = cag.groupid
-								join users as u on cag.uid = u.uid
-								where au.name = $1 and g.type = 'UnixGroup' and (g.last_updated>=$3 or u.last_updated>=$3 or cag.last_updated>=$3 or au.last_updated>=$3 or $3 is null)
-                                                                order by aug.groupid,u.uname
+								from affiliation_unit_group as aug
+								join affiliation_units as au using (unitid)
+								join groups as g using (groupid)
+								left join compute_resources as cr using (unitid)
+                                                                left join compute_access_group as cag using (groupid,compid)
+								left join users as u using (uid)
+								where au.name = $1 and g.type = 'UnixGroup' and (cr.name like $2) and (g.last_updated>=$3 or u.last_updated>=$3 or cag.last_updated>=$3 or au.last_updated>=$3 or $3 is null)
+                                                                order by g.name,u.uname
 							) as t
 								right join (select 1 as key,
 								$1 in (select name from affiliation_units) as unit_exists,
@@ -257,7 +257,7 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 	var Out []jsonentry
 	var tmpGname, tmpUname, tmpTime sql.NullString
 	var tmpGid sql.NullInt64
-	var tmpPrimary bool	
+	var tmpPrimary sql.NullBool
 	prevGname := ""
 	for rows.Next() {
 
@@ -266,7 +266,7 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 			if prevGname == "" {
 				Entry.Gname = tmpGname.String
 				Entry.Gid = tmpGid.Int64
-				if tmpPrimary == false && tmpUname.Valid {
+				if tmpPrimary.Valid && tmpPrimary.Bool == false && tmpUname.Valid {
 					Entry.Unames = append(Entry.Unames, tmpUname.String)
 				}
 			} else if prevGname != tmpGname.String {
@@ -274,11 +274,11 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 				Entry.Gname = tmpGname.String
 				Entry.Gid = tmpGid.Int64
 				Entry.Unames = nil
-				if tmpPrimary == false && tmpUname.Valid {
+				if tmpPrimary.Valid && tmpPrimary.Bool == false && tmpUname.Valid {
 					Entry.Unames = append(Entry.Unames, tmpUname.String)
 				}
 			} else {
-				if tmpPrimary == false && tmpUname.Valid {
+				if tmpPrimary.Valid && tmpPrimary.Bool == false && tmpUname.Valid {
 					Entry.Unames = append(Entry.Unames, tmpUname.String)
 				}
 			}
@@ -315,8 +315,8 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
 		}
 		if len(Out) == 1 && Out[0].Gname == "" {
-			Err = append(Err, jsonerror{"No users in compute_access with the non-primary GID. Nothing to do."})
-			log.WithFields(QueryFields(r, startTime)).Error("No users in compute_access with the non-primary GID.")
+			Err = append(Err, jsonerror{"No users or groups with the non-primary GID for this unit and resource(s). Nothing to do."})
+			log.WithFields(QueryFields(r, startTime)).Error("No users with the non-primary GID for this unit and resource(s).")
 		}
 		if len(Err) == 0 {
 			Err = append(Err, jsonerror{"Something went wrong."})
