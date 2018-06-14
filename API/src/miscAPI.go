@@ -31,19 +31,35 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
+//	rows, err := DBptr.Query(`select aname, rname, uname, uid, gid, full_name, home_dir, shell, unit_exists, comp_exists, last_updated from (
+//								select 1 as key, au.name as aname, u.uname, u.uid, g.gid, u.full_name, ca.home_dir, ca.shell, cr.name as rname, ca.last_updated as last_updated
+//								from users as u 
+//								left join compute_access as ca on u.uid = ca.uid
+//								left join groups as g on ca.groupid = g.groupid
+//								left join compute_resources as cr on ca.compid = cr.compid
+//								left join affiliation_units as au on cr.unitid = au.unitid
+//								where (au.name = $1 or $3) and (cr.name = $2 or $4) and (ca.last_updated>=$5 or u.last_updated>=$5 or au.last_updated>=$5 or cr.last_updated>=$5 or g.last_updated>=$5 or $5 is null) order by au.name, cr.name
+//							) as t
+//								right join (select 1 as key,
+//								$1 in (select name from affiliation_units) as unit_exists,
+//								$2 in (select name from compute_resources) as comp_exists
+//							) as c on t.key = c.key;`, unit, comp, unit == "", comp == "", lastupdate)
+//
 	rows, err := DBptr.Query(`select aname, rname, uname, uid, gid, full_name, home_dir, shell, unit_exists, comp_exists, last_updated from (
-								select 1 as key, au.name as aname, u.uname, u.uid, g.gid, u.full_name, ca.home_dir, ca.shell, cr.name as rname, ca.last_updated as last_updated
-								from users as u 
-								left join compute_access as ca on u.uid = ca.uid
-								left join groups as g on ca.groupid = g.groupid
-								left join compute_resources as cr on ca.compid = cr.compid
-								left join affiliation_units as au on cr.unitid = au.unitid
-								where (au.name = $1 or $3) and (cr.name = $2 or $4) and (ca.last_updated>=$5 or u.last_updated>=$5 or au.last_updated>=$5 or cr.last_updated>=$5 or g.last_updated>=$5 or $5 is null) order by au.name, cr.name
+                                                              select 1 as key, au.name as aname, u.uname, u.uid, g.gid, u.full_name, ca.home_dir, ca.shell, cr.name as rname, cag.last_updated as last_updated
+                                                              from compute_access_group as cag 
+                                                              left join compute_access as ca using (compid, uid) 
+                                                              join groups as g on g.groupid=cag.groupid 
+                                                              join compute_resources as cr on cr.compid=cag.compid 
+                                                              join affiliation_units as au on au.unitid=cr.unitid join users as u on u.uid=cag.uid
+                                                              where  cag.is_primary = true and (au.name = $1 or $3) and (cr.name = $2 or $4) and (ca.last_updated>=$5 or u.last_updated>=$5 or au.last_updated>=$5 or cr.last_updated>=$5 or g.last_updated>=$5 or $5 is null) order by au.name, cr.name
 							) as t
 								right join (select 1 as key,
 								$1 in (select name from affiliation_units) as unit_exists,
 								$2 in (select name from compute_resources) as comp_exists
 							) as c on t.key = c.key;`, unit, comp, unit == "", comp == "", lastupdate)
+
+
 
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
@@ -204,19 +220,17 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 // 							) as c on t.key = c.key;`, unit, comp, lastupdate)
 //
 
-//alternate query based on grabbing all users from the user_group entries for all groups in affiliation_unit_group associated with the unit.
-// NOTE: this does not do anything with the compute resource. We SHOULD really be using compute access as in the usual query, but it is missing
-// some stuff right now. This seems to reproduce the contents of the group files on the gpvm machines better right now.
 
-	rows, err := DBptr.Query(`select gname, gid, uname, unit_exists, comp_exists, last_updated from (
-								select 1 as key, g.name as gname, g.gid as gid, u.uname as uname, ug.last_updated
-								from user_group as ug
-								join groups as g on ug.groupid = g.groupid
-								join users as u on ug.uid = u.uid
-								inner join affiliation_unit_group as aug on ug.groupid = aug.groupid
-								inner join affiliation_units as au on au.unitid = aug.unitid
-								where au.name = $1 and g.type = 'UnixGroup' and (g.last_updated>=$3 or u.last_updated>=$3 or aug.last_updated>=$3 or ug.last_updated>=$3 or au.last_updated>=$3 or $3 is null)
-                                                                order by ug.groupid
+	rows, err := DBptr.Query(`select gname, gid, uname, unit_exists, comp_exists, last_updated, is_primary from (
+								select 1 as key, g.name as gname, g.gid as gid, u.uname as uname, cag.last_updated, cag.is_primary
+								from affiliation_unit_group as aug 
+								join affiliation_units as au on au.unitid = aug.unitid
+								join compute_resources as cr on au.unitid = cr.unitid
+								join groups as g on aug.groupid = g.groupid
+                                                                join compute_access_group as cag on aug.groupid = cag.groupid
+								join users as u on cag.uid = u.uid
+								where au.name = $1 and g.type = 'UnixGroup' and (g.last_updated>=$3 or u.last_updated>=$3 or cag.last_updated>=$3 or au.last_updated>=$3 or $3 is null)
+                                                                order by aug.groupid,u.uname
 							) as t
 								right join (select 1 as key,
 								$1 in (select name from affiliation_units) as unit_exists,
@@ -241,17 +255,18 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 	}
 	var Entry jsonentry
 	var Out []jsonentry
-	
+	var tmpGname, tmpUname, tmpTime sql.NullString
+	var tmpGid sql.NullInt64
+	var tmpPrimary bool	
 	prevGname := ""
 	for rows.Next() {
-		var tmpGname, tmpUname, tmpTime sql.NullString
-		var tmpGid sql.NullInt64
-		rows.Scan(&tmpGname, &tmpGid, &tmpUname, &unitExists, &compExists, &tmpTime)
+
+		rows.Scan(&tmpGname, &tmpGid, &tmpUname, &unitExists, &compExists, &tmpTime, &tmpPrimary)
 		if tmpGname.Valid {
 			if prevGname == "" {
 				Entry.Gname = tmpGname.String
 				Entry.Gid = tmpGid.Int64
-				if tmpGid.Int64 != priGID {
+				if tmpPrimary == false && tmpUname.Valid {
 					Entry.Unames = append(Entry.Unames, tmpUname.String)
 				}
 			} else if prevGname != tmpGname.String {
@@ -259,11 +274,11 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 				Entry.Gname = tmpGname.String
 				Entry.Gid = tmpGid.Int64
 				Entry.Unames = nil
-				if tmpGid.Int64 != priGID {
+				if tmpPrimary == false && tmpUname.Valid {
 					Entry.Unames = append(Entry.Unames, tmpUname.String)
 				}
 			} else {
-				if tmpGid.Int64 != priGID {
+				if tmpPrimary == false && tmpUname.Valid {
 					Entry.Unames = append(Entry.Unames, tmpUname.String)
 				}
 			}
