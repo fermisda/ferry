@@ -541,7 +541,7 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var output interface{}
-	if len(Out) == 0 || !unitExists {
+	if len(Out) == 0 || !unitExists && unit != "%" {
 		var queryErr jsonerror
 		if !unitExists {
 			queryErr.Error = append(queryErr.Error, "Experiment does not exist.")
