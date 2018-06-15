@@ -3,7 +3,9 @@ package main
 import (
 	"database/sql"
 	"time"
+	"strings"
 	"strconv"
+	"errors"
 )
 
 func stringToParsedTime( intime string ) (sql.NullString, error) {
@@ -31,3 +33,67 @@ func stringToParsedTime( intime string ) (sql.NullString, error) {
 		return updatetime, interr
 	}
 }
+
+func convertValue(value int64, inunit string, outunit string) (int64, error) {
+
+	// given a value and input unit, return a value units specified by outunit
+	
+	var infactor, outfactor int64
+	infactor = 1
+	outfactor = 1
+	var myerror error
+	myerror = nil
+
+	switch (strings.ToUpper(inunit)) {
+		
+	case "B":
+		infactor = 1
+	case "KB":
+		infactor = 1000
+	case "KIB":
+		infactor = 1024
+	case "MB":
+		infactor = 1000000
+	case "MIB":
+		infactor = 1048576
+	case"GB":
+		infactor = 1000000000
+	case "GIB":
+		infactor = 1073741824
+	case "TB":
+		infactor = 1000000000000
+	case "TIB":
+		infactor = 1099511627776
+	default:
+		myerror = errors.New("Invalid value for unit. valid values are (case-insensivite) b, kb, kib, mb, mib, gb, gib, tb, tib.")
+		return 0, myerror
+	}
+	
+	switch (strings.ToUpper(outunit)) {
+		
+	case "B":
+		outfactor = 1
+	case "KB":
+		outfactor = 1000
+	case "KIB":
+		outfactor = 1024
+	case "MB":
+		outfactor = 1000000
+	case "MIB":
+		outfactor = 1048576
+	case"GB":
+		outfactor = 1000000000
+	case "GIB":
+		outfactor = 1073741824
+	case "TB":
+		outfactor = 1000000000000
+	case "TIB":
+		outfactor = 1099511627776
+	default:
+		myerror = errors.New("Invalid value for unit. valid values are (case-insensivite) b, kb, kib, mb, mib, gb, gib, tb, tib.")
+		return 0, myerror
+	}
+	outval := int64(float64(value * infactor)/float64(outfactor))
+	return outval, nil
+}
+
