@@ -1083,7 +1083,7 @@ func getUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
-	rName := strings.TrimSpace(strings.ToUpper(q.Get("resourcename")))
+	rName := strings.TrimSpace(strings.ToLower(q.Get("resourcename")))
 	uName := strings.TrimSpace(q.Get("username"))
 	unitName := strings.TrimSpace(q.Get("unitname"))
 
@@ -1118,7 +1118,7 @@ func getUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	output := ""
 	type jsonout struct {
 		Path       string `json:"path"`
-		Value      string `json:"value"`
+		Value      int64 `json:"value"`
 		Unit       string `json:"unit"`
 		ValidUntil string `json:"valid_until"`
 	}
@@ -1127,10 +1127,16 @@ func getUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 		if idx != 0 {
 			output += ","
 		}
-		var tmpPath, tmpValue, tmpUnit, tmpValid sql.NullString
+		var tmpPath, tmpUnit, tmpValid sql.NullString
+		var tmpValue sql.NullInt64
 		rows.Scan(&tmpPath, &tmpValue, &tmpUnit, &tmpValid)
 		if tmpValue.Valid {
-			Out.Path, Out.Value, Out.Unit, Out.ValidUntil = tmpPath.String, tmpValue.String, tmpUnit.String, tmpValid.String
+			Out.Path, Out.Value, Out.Unit, Out.ValidUntil = tmpPath.String, tmpValue.Int64, tmpUnit.String, tmpValid.String
+	//		val, converr := convertValue(tmpValue.Int64, Out.Unit, "MB")
+	//		if converr == nil {
+	//			Out.Value = val
+	//			Out.Unit  = "MB"
+	//		}
 			outline, jsonerr := json.Marshal(Out)
 			if jsonerr != nil {
 				log.WithFields(QueryFields(r, startTime)).Error(jsonerr)
