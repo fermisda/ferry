@@ -17,7 +17,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	golog "log"
 	"github.com/spf13/viper"
-	"strconv"
 )
 
 var DBptr *sql.DB

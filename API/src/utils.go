@@ -1,9 +1,8 @@
 package main
 
 import (
-	"fmt"
+	"database/sql"
 	"time"
-	log "github.com/sirupsen/logrus"
 	"strconv"
 )
 
