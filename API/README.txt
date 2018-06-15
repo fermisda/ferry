@@ -13,7 +13,7 @@ Installation
 
 5) export GOPATH=$PWD # important for building and picking up packages
 
-6) go build -o bin/main src/main.go src/userAPI.go src/groupAPI.go src/miscAPI.go src/unitAPI.go src/transaction.go src/auth.go
+6) go build -o bin/main src/main.go src/userAPI.go src/groupAPI.go src/miscAPI.go src/unitAPI.go src/transaction.go src/auth.go src/fetchcas.go src/utils.go
 
 7) As root run "yum install osg-ca-certs"
 
