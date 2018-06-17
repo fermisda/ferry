@@ -1283,8 +1283,15 @@ func createStorageResource(w http.ResponseWriter, r *http.Request) {
 		nullpath.String = defpath
 	}
 	if defunit != "" && strings.ToUpper(defunit) != "NULL" {
-		nullunit.Valid = true
-		nullunit.String = defunit
+		
+		if checkUnits(defunit) {
+			nullunit.Valid = true
+			nullunit.String = defunit
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid value for default unit. Allowed values are B,KB,KIB,MB,MIB,GB,GIB,TB,TIB.)")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid value for default_unit.\" }")
+			return	
+		}
 	}
 
 	// CHECK IF UNIT already exists; add if not
@@ -1416,9 +1423,15 @@ func setStorageResourceInfo(w http.ResponseWriter, r *http.Request) {
 		
 		// if you specified a new default unit, change it, following the same rule as path.
 		if defunit != "" {
-			if strings.ToUpper(defunit) != "NULL" {
-				nullunit.Valid = true
-				nullunit.String = defunit
+			if strings.ToUpper(defunit) != "NULL" {	
+				if checkUnits(defunit) {
+					nullunit.Valid = true
+					nullunit.String = strings.ToUpper(defunit)
+				} else {
+					log.WithFields(QueryFields(r, startTime)).Error("Invalid value for default unit. Allowed values are B,KB,KIB,MB,MIB,GB,GIB,TB,TIB.)")
+					fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid value for default_unit.\" }")
+					return	
+				}
 			} else {
 				nullunit.Valid = false
 				nullunit.String = ""
