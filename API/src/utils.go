@@ -106,3 +106,17 @@ func convertValue(value interface{}, inunit string, outunit string) (float64, er
 	return outval, nil
 }
 
+func checkUnits(inunit string) bool {
+// check whether a storage unit is one of the acceptable units
+// (B, MB, MiB, GB, GiB, TB, TiB) and return a bool.
+// Convert everything to upper case.
+
+	valid_units := [9]string{"B", "KB", "KIB", "MB", "MIB", "GB", "GIB", "TB", "TIB"}
+	
+	for x := range valid_units {
+		if strings.ToUpper(inunit) == valid_units[x] {
+			return true
+		}
+	}
+	return false
+}
