@@ -34,15 +34,24 @@ func stringToParsedTime( intime string ) (sql.NullString, error) {
 	}
 }
 
-func convertValue(value int64, inunit string, outunit string) (int64, error) {
+func convertValue(value interface{}, inunit string, outunit string) (float64, error) {
 
 	// given a value and input unit, return a value units specified by outunit
-	
-	var infactor, outfactor int64
-	infactor = 1
-	outfactor = 1
+
+	var outval, infactor, outfactor float64
 	var myerror error
 	myerror = nil
+	switch value.(type) {
+	case float64:
+		outval = value.(float64)
+	case int64:
+		outval = float64(value.(int64))
+	case string:
+		outval, myerror = strconv.ParseFloat(value.(string), 64)
+		if myerror != nil {
+			return outval, myerror
+		}
+	}
 
 	switch (strings.ToUpper(inunit)) {
 		
@@ -55,15 +64,15 @@ func convertValue(value int64, inunit string, outunit string) (int64, error) {
 	case "MB":
 		infactor = 1000000
 	case "MIB":
-		infactor = 1048576
+		infactor = 1048576 //1024^2
 	case"GB":
 		infactor = 1000000000
 	case "GIB":
-		infactor = 1073741824
+		infactor = 1073741824 //1024^3
 	case "TB":
 		infactor = 1000000000000
 	case "TIB":
-		infactor = 1099511627776
+		infactor = 1099511627776 //1024^4
 	default:
 		myerror = errors.New("Invalid value for unit. valid values are (case-insensivite) b, kb, kib, mb, mib, gb, gib, tb, tib.")
 		return 0, myerror
@@ -80,20 +89,20 @@ func convertValue(value int64, inunit string, outunit string) (int64, error) {
 	case "MB":
 		outfactor = 1000000
 	case "MIB":
-		outfactor = 1048576
+		outfactor = 1048576 //1024^2
 	case"GB":
 		outfactor = 1000000000
 	case "GIB":
-		outfactor = 1073741824
+		outfactor = 1073741824 // 1024^3
 	case "TB":
 		outfactor = 1000000000000
 	case "TIB":
-		outfactor = 1099511627776
+		outfactor = 1099511627776 //1024^4
 	default:
 		myerror = errors.New("Invalid value for unit. valid values are (case-insensivite) b, kb, kib, mb, mib, gb, gib, tb, tib.")
 		return 0, myerror
 	}
-	outval := int64(float64(value * infactor)/float64(outfactor))
+	outval = outval * infactor / outfactor
 	return outval, nil
 }
 

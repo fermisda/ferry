@@ -1118,7 +1118,7 @@ func getUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	output := ""
 	type jsonout struct {
 		Path       string `json:"path"`
-		Value      int64 `json:"value"`
+		Value      string `json:"value"`
 		Unit       string `json:"unit"`
 		ValidUntil string `json:"valid_until"`
 	}
@@ -1127,16 +1127,10 @@ func getUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 		if idx != 0 {
 			output += ","
 		}
-		var tmpPath, tmpUnit, tmpValid sql.NullString
-		var tmpValue sql.NullInt64
+		var tmpPath, tmpUnit, tmpValue, tmpValid sql.NullString
 		rows.Scan(&tmpPath, &tmpValue, &tmpUnit, &tmpValid)
 		if tmpValue.Valid {
-			Out.Path, Out.Value, Out.Unit, Out.ValidUntil = tmpPath.String, tmpValue.Int64, tmpUnit.String, tmpValid.String
-	//		val, converr := convertValue(tmpValue.Int64, Out.Unit, "MB")
-	//		if converr == nil {
-	//			Out.Value = val
-	//			Out.Unit  = "MB"
-	//		}
+			Out.Path, Out.Value, Out.Unit, Out.ValidUntil = tmpPath.String, tmpValue.String, tmpUnit.String, tmpValid.String
 			outline, jsonerr := json.Marshal(Out)
 			if jsonerr != nil {
 				log.WithFields(QueryFields(r, startTime)).Error(jsonerr)
@@ -1215,10 +1209,18 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname provided.\" }")
 		return
 	}
-	//set a default unit of "B" for bytes
-	if unit == "" {
-		unit = "B"
+
+	// We want to store the value in the DB in bytes, no matter what the input unit is. Convert the value here and then set the unit of "B" for bytes	
+	newquota, converr := convertValue(quota, unit, "B")
+	if converr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(converr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error converting unit value. It must be a number.\" }")
+		return	
 	}
+	// set the quota value to be stored to newquota, which is now in bytes
+	quota = strconv.FormatFloat(newquota, 'f', 0, 64)
+	unit = "B"
+	
 	if path == "" {
 		spath.Valid = false
 		spath.String = ""

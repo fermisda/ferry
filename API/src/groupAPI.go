@@ -126,65 +126,6 @@ func addGroupToUnit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-// COMMENT OUT 2018-04-04, remove once everything is verified
-
-//	//make sure that the requested group and unit exist; bail out if they don't
-//	var unitId,groupId int
-//	checkerr := DBptr.QueryRow(`select unitid from affiliation_units where name=$1`,unitName).Scan(&unitId)
-//	log.WithFields(QueryFields(r, startTime)).Print("unitID = " + strconv.Itoa(unitId))
-//	switch {
-//	case checkerr == sql.ErrNoRows:
-//		log.WithFields(QueryFields(r, startTime)).Print("Affiliation unit " + unitName + " does not exist.")
-//	//	w.WriteHeader(http.StatusNotFound)
-//		fmt.Fprintf(w,"{ \"ferry_error\": \"Affiliation unit " + unitName + " does not exist.\" }")
-//		return
-//	case checkerr != nil:
-//		log.WithFields(QueryFields(r, startTime)).Print("Affiliation unit query error: " + checkerr.Error())
-//		w.WriteHeader(http.StatusNotFound)
-//		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
-//		return
-//	default:
-//		grouperr := DBptr.QueryRow(`select groupid from groups where name=$1`,groupname).Scan(&groupId)
-//		log.WithFields(QueryFields(r, startTime)).Print(" group ID = " + strconv.Itoa(groupId))
-//		switch {
-//		case grouperr == sql.ErrNoRows:
-//			log.WithFields(QueryFields(r, startTime)).Print("Group " + groupname + " does not exist.")
-//			w.WriteHeader(http.StatusNotFound)
-//			fmt.Fprintf(w,"{ \"ferry_error\": \"Group " + groupname + " does not exist.\" }")
-//			return
-//		case grouperr != nil:
-//			log.WithFields(QueryFields(r, startTime)).Print("Group query error: " + checkerr.Error())
-//			w.WriteHeader(http.StatusNotFound)
-//			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
-//			return
-//		default:
-//			// OK, both group and unit exist. Let's get down to business. Check if it's already in affiliation_unit_groups
-//			
-//			// start a transaction
-//			DBtx, cKey, err := LoadTransaction(r, DBptr)
-//			if err != nil {
-//				log.WithFields(QueryFields(r, startTime)).Print("Error starting DB transaction: " + err.Error())
-//				fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
-//				return
-//			}
-//			
-//			addstr := fmt.Sprintf(`do $$ begin if exists (select groupid, unitid from affiliation_unit_group where groupid=%d and unitid=%d) then raise 'Group and unit combination already in DB.'; else 
-//insert into affiliation_unit_group (groupid, unitid, is_primary, last_updated) values (%d, %d, %d, NOW()); end if ; end $$;`, groupId, unitId, groupId,unitId,isPrimary)
-//			stmt, err := DBtx.Prepare(addstr)
-//			if err != nil {
-//				log.WithFields(QueryFields(r, startTime)).Print("Error preparing DB command: " + err.Error())
-//				w.WriteHeader(http.StatusNotFound)
-//				fmt.Fprintf(w,"{ \"ferry_error\": \"Error preparing database command.\" }")
-////				DBtx.Rollback()
-//				return
-//			}
-//			//run said statement and check errors
-//			_, err = stmt.Exec()
-//
-//
-//
-
-// END COMMENTS 2018-04-04
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
@@ -1467,6 +1408,17 @@ func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No quota_unit specified.\" }")
 		return
 	}
+	// We want to store the value in the DB in bytes, no matter what the input unit is. Convert the value here and then set the unit of "B" for bytes	
+	newquota, converr := convertValue(groupquota, unit, "B")
+	if converr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(converr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error converting unit value. It must be a number.\" }")
+		return	
+	}
+	// set the quota value to be stored to newquota, which is now in bytes
+	groupquota = strconv.FormatFloat(newquota, 'f', 0, 64)
+	unit = "B"
+
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
@@ -1475,35 +1427,6 @@ func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = setGroupStorageQuotaDB(DBtx, gName, unitName, rName, groupquota, unit, validtime)
-//	_, err = DBtx.Exec(fmt.Sprintf(`do $$
-//							declare 
-//								vSid int;
-//								vGid int;
-//								vUnitid int;
-//
-//								cSname constant text := '%s';
-//								cGname constant text := '%s';
-//								cUname constant text := '%s';
-//								cValue constant text := '%s';
-//								cUnit constant text := '%s';
-//								cVuntil constant date := %s;
-//							begin
-//								select storageid into vSid from storage_resources where name = cSname;
-//								select groupid into vGid from groups where name = cGname;
-//								select unitid into vUnitid from affiliation_units where name = cUname;
-//
-//								if vSid is null then raise 'Resource does not exist.'; end if;
-//								if vGid is null then raise 'Group does not exist.'; end if;
-//								if vUnitid is null then raise 'Unit does not exist.'; end if;
-//								
-//								if (vSid, vGid, vUnitid) in (select storageid, groupid, unitid from storage_quota) and cVuntil is NULL then
-//									update storage_quota set value = cValue, unit = cUnit, valid_until = cVuntil, last_updated = NOW()
-//									where storageid = vSid and groupid = vGid and unitid = vUnitid and valid_until is NULL;
-//								else
-//									insert into storage_quota (storageid, groupid, unitid, value, unit, valid_until)
-//									values (vSid, vGid, vUnitid, cValue, cUnit, cVuntil);
-//								end if;
-//							end $$;`, rName, gName, unitName, groupquota, unit, validtime))
 
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
@@ -1907,7 +1830,7 @@ func addLPCCollaborationGroup(w http.ResponseWriter, r *http.Request) {
 		}
 	} 
 	
-	quotaerr := setGroupStorageQuotaDB(&DBtx, gName, "cms", "EOS", quota, "TB", "NULL")
+	quotaerr := setGroupStorageQuotaDB(&DBtx, gName, "cms", "EOS", quota, "B", "NULL")
 	if quotaerr != nil {
 		//print out the error
 		// roll back transaction
