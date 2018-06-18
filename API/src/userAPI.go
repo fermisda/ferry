@@ -803,11 +803,11 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 	case queryerr == sql.ErrNoRows:
 		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"User does not exist.\" }")
-		return	
+		return
 	case queryerr != nil:
 		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
-		return		
+		return	
 	}
 	
 	queryerr = DBptr.QueryRow(`select fqanid from grid_fqan as gf join affiliation_units as au on gf.unitid=au.unitid where au.name=$1 and gf.fqan=$2`,unitName, fqan).Scan(&fqanid)
@@ -815,11 +815,11 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 	case queryerr == sql.ErrNoRows:
 		log.WithFields(QueryFields(r, startTime)).Error("FQAN " + fqan + " not assigned to affiliation unit " + unitName + ".")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"FQAN not assigned to specified unit.\" }")
-		return	
+		return
 	case queryerr != nil:
 		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
-		return		
+		return
 	}
 	
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
@@ -1185,7 +1185,7 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 
 	q := r.URL.Query()
 	quota := strings.TrimSpace(q.Get("quota"))
-	uName := strings.TrimSpace(q.Get("username"))
+	uName := strings.TrimSpace(q.Get("accountname"))
 	unitName := strings.TrimSpace(q.Get("unitname"))
 	unit := strings.TrimSpace(q.Get("unit"))
 	rName := strings.TrimSpace(strings.ToUpper(q.Get("resourcename")))
