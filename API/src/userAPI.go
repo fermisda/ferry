@@ -769,8 +769,9 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 
-	uName := q.Get("username")
-	fqan := q.Get("fqan")
+	uName := strings.TrimSpace(q.Get("username"))
+	fqan := strings.TrimSpace(q.Get("fqan"))
+	unitName := strings.TrimSpace(q.Get("unitname"))
 
 	if uName == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
@@ -782,6 +783,11 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No fqan specified.\" }")
 		return
 	}
+	if unitName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
+		return
+	}
 
 	authorized, authout := authorize(r, AuthorizedDNs)
 	if authorized == false {
@@ -790,21 +796,38 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var uid,fqanid int
+	queryerr := DBptr.QueryRow(`select uid from users where uname=$1`,uName).Scan(&uid)
+
+	switch {
+	case queryerr == sql.ErrNoRows:
+		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"User does not exist.\" }")
+		return	
+	case queryerr != nil:
+		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
+		return		
+	}
+	
+	queryerr = DBptr.QueryRow(`select fqanid from grid_fqan as gf join affiliation_units as au on gf.unitid=au.unitid where au.name=$1 and gf.fqan=$2`,unitName, fqan).Scan(&fqanid)
+	switch {
+	case queryerr == sql.ErrNoRows:
+		log.WithFields(QueryFields(r, startTime)).Error("FQAN " + fqan + " not assigned to affiliation unit " + unitName + ".")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"FQAN not assigned to specified unit.\" }")
+		return	
+	case queryerr != nil:
+		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
+		return		
+	}
+	
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 
-	_, err = DBtx.Exec(fmt.Sprintf(`do $$
-										declare vUid int;
-										declare vFqanid int;
-									begin
-										select uid into vUid from users where uname = '%s';
-										select fqanid into vFqanid from grid_fqan where fqan = '%s';
-										
-										insert into grid_access (uid, fqanid, is_superuser, is_banned, last_updated)
-														 values (vUid, vFqanid, false, false, NOW());
-									end $$;`, uName, fqan))
+	_, err = DBtx.Exec(`insert into grid_access (uid, fqanid, is_superuser, is_banned, last_updated) values ($1, $2, false, false, NOW())`, uid, fqanid)
 	if err == nil {
 		if cKey != 0 {
 			log.WithFields(QueryFields(r, startTime)).Info("Success!")
