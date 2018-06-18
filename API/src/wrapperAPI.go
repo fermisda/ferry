@@ -281,3 +281,75 @@ func setLPCStorageAccess(w http.ResponseWriter, r *http.Request) {
 
 	DBtx.Commit(key)
 }
+
+func createExperiment(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	
+	unitName := strings.TrimSpace(q.Get("unitname"))
+
+	type jsonerror struct {
+		Error string `json:"ferry_error"`
+	}
+	var inputErr []jsonerror
+
+	if unitName == "" {
+		
+		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
+		inputErr = append(inputErr, jsonerror{"No unitname specified."})	
+	}
+	var DBtx Transaction
+	R := WithTransaction(r, &DBtx)
+	key, err := DBtx.Start(DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error starting database transaction: " + err.Error())
+		inputErr = append(inputErr, jsonerror{"Error starting database transaction."})
+		return
+	}
+	
+	if len(inputErr) > 0 {
+		jsonout, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err)
+		}
+		fmt.Fprintf(w, string(jsonout))
+		return		
+	}
+	
+	q.Set("resourcename",unitName)
+	q.Set("type", "Interactive")
+	q.Set("default_shell", "/bin/bash")
+	q.Set("default_homedir","/nashome")
+
+	R.URL.RawQuery = q.Encode()
+	DBtx.Savepoint("createComputeResource")
+	createComputeResource(w,R)
+	if !DBtx.Complete() {
+		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") {
+			log.WithFields(QueryFields(r, startTime)).Error("addCertificateDNToUser failed.")
+			DBtx.Rollback()
+			return
+		}
+		DBtx.RollbackToSavepoint("addCertificateDNToUser")
+//		duplicateCount ++
+	}
+	
+	for _, role := range []string{"Analysis", "None"} {
+		//createFQAN
+		// if standalone VO, ghange the string a bit
+		fqan := "/fermilab/" + unitName + "/Role=" + role
+		q.Set("fqan",fqan)
+		R.URL.RawQuery = q.Encode()
+		DBtx.Continue()
+		DBtx.Savepoint("createFQAN")
+		createFQAN(w, R)
+		if !DBtx.Complete() {
+			// do some error handling and rollback 
+		}
+	}
+	
+	
+	// If everything worked
+	DBtx.Commit(key)
+}
