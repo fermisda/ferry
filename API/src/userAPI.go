@@ -2515,7 +2515,7 @@ func getAllUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := DBptr.Query(`select uname, uid, full_name from users where (status=$1 or not $1) and (last_updated>=$2 or $2 is null) order by uname`,strconv.FormatBool(activeonly),lastupdate)
+	rows, err := DBptr.Query(`select uname, uid, full_name, status, expiration_date from users where (status=$1 or not $1) and (last_updated>=$2 or $2 is null) order by uname`,strconv.FormatBool(activeonly),lastupdate)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
@@ -2528,13 +2528,14 @@ func getAllUsers(w http.ResponseWriter, r *http.Request) {
 		Uname string `json:"username"`
 		UID int `json:"uid"`
 		Fullname string `json:"full_name"`
-		
+		Status bool `json:"status"`
+		ExpDate string `json:"expiration_date"`
 	} 
 	var tmpout jsonout
 	var Out []jsonout
 	
 	for rows.Next() {
-		rows.Scan(&tmpout.Uname,&tmpout.UID,&tmpout.Fullname)
+		rows.Scan(&tmpout.Uname, &tmpout.UID, &tmpout.Fullname, &tmpout.Status, &tmpout.ExpDate)
 		Out = append(Out, tmpout)
 	}
 
