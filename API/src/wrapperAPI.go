@@ -344,11 +344,12 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 	R.URL.RawQuery = q.Encode()	
 
 	DBtx.Savepoint("createAffiliationUnit")
+	DBtx.Continue()
 	createAffiliationUnit(w,R)
 	if ! DBtx.Complete() {
 		// ERROR HANDLING AND ROLLBACK		
 		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") {
-			log.WithFields(QueryFields(r, startTime)).Error("createComputeResource failed.")
+			log.WithFields(QueryFields(r, startTime)).Error("Unit already exists.")
 			DBtx.Rollback()
 			return
 		}
@@ -364,15 +365,17 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 	
 	R.URL.RawQuery = q.Encode()
 	DBtx.Savepoint("createComputeResource")
+	DBtx.Continue()
 	createComputeResource(w,R)
 	if !DBtx.Complete() {
 		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") {
 			log.WithFields(QueryFields(r, startTime)).Error("createComputeResource failed.")
 			DBtx.Rollback()
 			return
+		} else {
+			DBtx.RollbackToSavepoint("createComputeResource")
+			duplicateCount++
 		}
-		DBtx.RollbackToSavepoint("createComputeResource")
-		duplicateCount++
 	}
 	
 	for _, role := range []string{"Analysis", "None", "Production"} {
