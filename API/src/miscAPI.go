@@ -459,9 +459,10 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := DBptr.Query(`select t.fqan, t.uname, c.unit_exists from
-							  (select 1 as key, fqan, uname from grid_fqan as gf
-							   left join users as u on gf.mapped_user = u.uid
+	rows, err := DBptr.Query(`select t.fqan, t.uname, t.name, c.unit_exists from
+							  (select 1 as key, fqan, uname, name from grid_fqan as gf
+							   join users as u on gf.mapped_user = u.uid
+							   join affiliation_units as au on gf.unitid = au.unitid
 							   where fqan like $3 and (gf.last_updated >= $2 or u.last_updated >= $2 or $2 is null)
 							  ) as t
 							  right join (
@@ -480,14 +481,15 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 	type jsonentry struct {
 		DN string `json:"fqan"`
 		Uname string `json:"mapped_uname"`
+		Aname string `json:"unitname"`
 	}
 	var Out []jsonentry
 
 	for rows.Next() {
-		var tmpDN, tmpUname sql.NullString
-		rows.Scan(&tmpDN, &tmpUname, &unitExists)
-		if tmpDN.Valid {
-			Out = append(Out, jsonentry{tmpDN.String, tmpUname.String})
+		var tmpFQAN, tmpUname, tmpAname sql.NullString
+		rows.Scan(&tmpFQAN, &tmpUname, &tmpAname, &unitExists)
+		if tmpFQAN.Valid {
+			Out = append(Out, jsonentry{tmpFQAN.String, tmpUname.String, tmpAname.String})
 		}
 	}
 

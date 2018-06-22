@@ -683,7 +683,14 @@ def read_vulcan_compute_resources(config, nis, users, groups, cms_groups):
                 uname = row["home_dir"].rsplit("/", 1)[-1]
                 if row["gpname"] in cms_groups.values() and uname in users:
                     gid = list(cms_groups.keys())[list(cms_groups.values()).index(row["gpname"])]
-                    users[uname].compute_access[comp[1]] = ComputeAccess(comp[1], gid, row["home_dir"], row["shell"])
+                    if comp[1] not in users[uname].compute_access:
+                        users[uname].compute_access[comp[1]] = ComputeAccess(comp[1], gid, row["home_dir"], row["shell"])
+                    else:
+                        if gid == groups[comp[5]]:
+                            users[uname].compute_access[comp[1]].add_secondary_group(users[uname].compute_access[comp[1]].gid)
+                            users[uname].compute_access[comp[1]].gid = gid
+                        else:
+                            users[uname].compute_access[comp[1]].add_secondary_group(gid)
                     nis[dir].users[uname] = users[uname]
                     if gid not in users[uname].groups:
                         users[uname].add_group(row["gpname"], gid, False)
@@ -1043,8 +1050,14 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
     for nas in nas_structure:
         fd.write("insert into nas_storage (server, volume, access_level, host) values ('%s', '%s', '%s', '%s');\n"
               % (nas.server, nas.volume, nas.access_level, nas.host))
-
     fd.flush()
+
+    # add post ingest script
+    fd.write("\n")
+    for line in open(config._sections["path"]["post_ingest"]):
+        fd.write(line)
+    fd.flush()
+
     fd.close()
 
 def update_db(config, users, gids, vomss, gums, roles, collaborations, nis, storages, batch_structure, nas_structure):
