@@ -226,6 +226,7 @@ func main() {
 	grouter.HandleFunc("/testWrapper", testWrapper)
 	grouter.HandleFunc("/addUsertoExperiment", addUsertoExperiment)
 	grouter.HandleFunc("/setLPCStorageAccess", setLPCStorageAccess)
+	grouter.HandleFunc("/createExperiment", createExperiment)
 
 	srvConfig := viper.GetStringMapString("server")
 	Mainsrv = &http.Server{
