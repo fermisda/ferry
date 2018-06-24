@@ -1713,7 +1713,7 @@ func getAllGroups(w http.ResponseWriter, r *http.Request) {
                 return
         }
 
-	rows, err := DBptr.Query(`select name, type, groupid from groups where groups.last_updated>=$1 or $1 is null`, lastupdate)
+	rows, err := DBptr.Query(`select name, type, gid from groups where groups.last_updated>=$1 or $1 is null`, lastupdate)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
@@ -1725,7 +1725,7 @@ func getAllGroups(w http.ResponseWriter, r *http.Request) {
 	type jsonout struct {
 		Groupname string `json:"name"`
 		Grouptype string `json:"type"`
-		Grpid int `json:"groupid"`
+		Grpid int `json:"gid"`
 	} 
 	var tmpout jsonout
 	var Out []jsonout
