@@ -319,7 +319,6 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 		inputErr = append(inputErr, jsonerror{"Error starting database transaction."})
 		return
 	}
-	
 	if len(inputErr) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
@@ -344,7 +343,7 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 	R.URL.RawQuery = q.Encode()	
 
 	DBtx.Savepoint("createAffiliationUnit")
-	DBtx.Continue()
+//	DBtx.Continue()
 	createAffiliationUnit(w,R)
 	if ! DBtx.Complete() {
 		// ERROR HANDLING AND ROLLBACK		
@@ -353,11 +352,14 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 			DBtx.Rollback()
 			return
 		}
-		DBtx.RollbackToSavepoint("addCertificateDNToUser")
+		DBtx.RollbackToSavepoint("createAffiliationUnit")
 		duplicateCount ++	
-	}
+	} else {
+			log.WithFields(QueryFields(r, startTime)).Info("Successfully created affiliation_unit " + unitName + "." )
+		}
 
 	//OK, we made the unit. Now, create the compute resource. By default its name is the same as the unit name.
+	q.Set("unitname",unitName)
 	q.Set("resourcename",unitName)
 	q.Set("type", "Interactive")
 	q.Set("default_shell", "/bin/bash")
@@ -365,7 +367,7 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 	
 	R.URL.RawQuery = q.Encode()
 	DBtx.Savepoint("createComputeResource")
-	DBtx.Continue()
+//	DBtx.Continue()
 	createComputeResource(w,R)
 	if !DBtx.Complete() {
 		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") {
@@ -388,12 +390,15 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 			fqan = "/fermilab/" + unitName + fqan
 		}
 		q.Set("fqan",fqan)
+		q.Set("mapped_group",unitName)
 		R.URL.RawQuery = q.Encode()
 		DBtx.Continue()
 		DBtx.Savepoint("createFQAN_" + role)
 		createFQAN(w, R)
 		if !DBtx.Complete() {
 			// do some error handling and rollback 
+			DBtx.RollbackToSavepoint("crateFQAN+"+role)
+
 		}
 	}
 	
