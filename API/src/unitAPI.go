@@ -25,9 +25,9 @@ func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No experiment name specified.\" }")
 		return
-	} else {
-		unitName = "'" + unitName + "'"
-	}
+	}// else {
+//		unitName = "'" + unitName + "'"
+//	}
 	if voms_url == "" {
 		voms_url = "NULL"
 	} else if voms_url != "NULL" {
@@ -53,7 +53,6 @@ func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 	// check if it already exists
 	var unitId int
 	checkerr := DBptr.QueryRow(`select unitid from affiliation_units where name=$1`,unitName).Scan(&unitId)
-	log.WithFields(QueryFields(r, startTime)).Info("unitID = " + strconv.Itoa(unitId))
 	switch {
 	case checkerr == sql.ErrNoRows:
 		// OK, it doesn't exist, let's add it now.
@@ -62,11 +61,10 @@ func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 		DBtx, cKey, err := LoadTransaction(r, DBptr)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
-			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 			return
 		}
-		
+		log.WithFields(QueryFields(r, startTime)).Info("cKey = " + fmt.Sprintf("%d",cKey))
 		// string for the insert statement
 		createstr := fmt.Sprintf(`do $$
 									declare c_uname text = %s;
@@ -79,9 +77,9 @@ func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 										insert into voms_url (unitid, url) values ((select unitid from affiliation_units where name = c_uname), c_url);
 									end if;
 								  end $$;`,
-								  unitName, altName, unitType, voms_url)
+								  "'" + unitName + "'", altName, unitType, voms_url)
 		//create prepared statement
-		stmt, err := DBtx.tx.Prepare(createstr)
+		stmt, err := DBtx.Prepare(createstr)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error preparing DB command: " + err.Error())
 			w.WriteHeader(http.StatusNotFound)
@@ -93,10 +91,14 @@ func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error adding " + unitName + " to affiliation_units: " + err.Error())
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB insert.\" }")
-			DBtx.Rollback()
+			if cKey != 0 {
+				DBtx.Rollback()
+			}
 		} else {
 			// error is nil, so it's a success. Commit the transaction and return success.
-			DBtx.Commit(cKey)
+			if cKey != 0 {
+				DBtx.Commit(cKey)
+			}
 			log.WithFields(QueryFields(r, startTime)).Info("Successfully added " + unitName + " to affiliation_units.")
 			fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
 		}
@@ -750,8 +752,9 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 		}
 	}
-
-	DBtx.Commit(cKey)
+	if cKey != 0 {
+		DBtx.Commit(cKey)
+	}
 }
 
 func removeFQAN(w http.ResponseWriter, r *http.Request) {

@@ -8,6 +8,7 @@ import (
  	_ "github.com/lib/pq"
 	"net/http"
 	"time"
+	"strconv"
 )
 
 func testWrapper(w http.ResponseWriter, r *http.Request) {
@@ -288,17 +289,28 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	
 	unitName := strings.TrimSpace(q.Get("unitname"))
-
+	voms_url := strings.TrimSpace(q.Get("voms_url"))
+	standalone := strings.TrimSpace(q.Get("standalone")) // it is a standalone VO, i.e. not a subgroup of the Fermilab VO.
+	saVO, parserr := strconv.ParseBool(standalone)
+	if standalone == "" {
+		saVO = false
+	}
 	type jsonerror struct {
 		Error string `json:"ferry_error"`
 	}
 	var inputErr []jsonerror
-
+	
+	if parserr != nil && standalone != "" {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing the standalone option.")
+		inputErr = append(inputErr, jsonerror{"Error parsing the standalone option. If provided it should be true or false."})
+	}
 	if unitName == "" {
 		
 		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No unitname specified."})	
 	}
+
+	duplicateCount := 0
 	var DBtx Transaction
 	R := WithTransaction(r, &DBtx)
 	key, err := DBtx.Start(DBptr)
@@ -307,7 +319,6 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 		inputErr = append(inputErr, jsonerror{"Error starting database transaction."})
 		return
 	}
-	
 	if len(inputErr) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
@@ -317,35 +328,77 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 		return		
 	}
 	
+// first create the affiliation unit
+	if saVO {		
+		if voms_url != "" {
+			q.Set("voms_url",voms_url)
+		} else {
+			q.Set("voms_url","https://voms.fnal.gov:8443/vomses/" + unitName)
+		}
+		
+	} else {
+		q.Set("voms_url","https://voms.fnal.gov:8443/vomses/fermilab/" + unitName)	
+	}
+
+	R.URL.RawQuery = q.Encode()	
+
+	DBtx.Savepoint("createAffiliationUnit")
+//	DBtx.Continue()
+	createAffiliationUnit(w,R)
+	if ! DBtx.Complete() {
+		// ERROR HANDLING AND ROLLBACK		
+		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") {
+			log.WithFields(QueryFields(r, startTime)).Error("Unit already exists.")
+			DBtx.Rollback()
+			return
+		}
+		DBtx.RollbackToSavepoint("createAffiliationUnit")
+		duplicateCount ++	
+	} else {
+			log.WithFields(QueryFields(r, startTime)).Info("Successfully created affiliation_unit " + unitName + "." )
+		}
+
+	//OK, we made the unit. Now, create the compute resource. By default its name is the same as the unit name.
+	q.Set("unitname",unitName)
 	q.Set("resourcename",unitName)
 	q.Set("type", "Interactive")
 	q.Set("default_shell", "/bin/bash")
 	q.Set("default_homedir","/nashome")
-
+	
 	R.URL.RawQuery = q.Encode()
 	DBtx.Savepoint("createComputeResource")
+//	DBtx.Continue()
 	createComputeResource(w,R)
 	if !DBtx.Complete() {
 		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") {
-			log.WithFields(QueryFields(r, startTime)).Error("addCertificateDNToUser failed.")
+			log.WithFields(QueryFields(r, startTime)).Error("createComputeResource failed.")
 			DBtx.Rollback()
 			return
+		} else {
+			DBtx.RollbackToSavepoint("createComputeResource")
+			duplicateCount++
 		}
-		DBtx.RollbackToSavepoint("addCertificateDNToUser")
-//		duplicateCount ++
 	}
 	
-	for _, role := range []string{"Analysis", "None"} {
+	for _, role := range []string{"Analysis", "None", "Production"} {
 		//createFQAN
-		// if standalone VO, ghange the string a bit
-		fqan := "/fermilab/" + unitName + "/Role=" + role
+		// if standalone VO, change the string a bit
+		fqan := "/Role=" + role
+		if saVO {
+			fqan = "/" + unitName + fqan
+		} else {
+			fqan = "/fermilab/" + unitName + fqan
+		}
 		q.Set("fqan",fqan)
+		q.Set("mapped_group",unitName)
 		R.URL.RawQuery = q.Encode()
 		DBtx.Continue()
-		DBtx.Savepoint("createFQAN")
+		DBtx.Savepoint("createFQAN_" + role)
 		createFQAN(w, R)
 		if !DBtx.Complete() {
 			// do some error handling and rollback 
+			DBtx.RollbackToSavepoint("crateFQAN+"+role)
+
 		}
 	}
 	

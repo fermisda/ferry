@@ -1028,11 +1028,9 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 	}
 //	if unitName == "" {
 //		unitName = "NULL"
-	//	}
+//		}
 	if shell == "" || strings.ToUpper(strings.TrimSpace(shell)) == "NULL" {
 		nullshell = "default"
-	} else {
-		nullshell = "'" + shell + "'"
 	}
 	if homedir == "" ||  strings.ToUpper(strings.TrimSpace(homedir)) == "NULL" {
 		nullhomedir.Valid=false
@@ -1048,13 +1046,21 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
 		return
 	}
-
+	
 	var unitID sql.NullInt64
+	
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
+		return
+	}
 
 	//figure out the unitID if we need it
 	
 	if unitName != "" {
-		uniterr := DBptr.QueryRow(`select unitid from affiliation_units where name=$1`,unitName).Scan(&unitID)
+		uniterr := DBtx.tx.QueryRow(`select unitid from affiliation_units where name=$1`,unitName).Scan(&unitID)
 		if uniterr != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error determining unitid for " + unitName + ": " + uniterr.Error())
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error determining unitID for " + unitName + ". You cannot add a unit name that does not already exist in affiliation_units.\" }")
@@ -1065,35 +1071,34 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 	//now, make sure the the resource does not already exist. If it does, bail out. If it does not, do the insertion
 
 	var compId int;	
-	checkerr := DBptr.QueryRow(`select compid from  compute_resources where name=$1`,rName).Scan(&compId)
+	checkerr := DBtx.tx.QueryRow(`select compid from  compute_resources where name=$1`,rName).Scan(&compId)
 	
 	switch {
 	case checkerr == sql.ErrNoRows:
 		// OK, it does not already exist, so we start a transaction
-		DBtx, cKey, err := LoadTransaction(r, DBptr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
-			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
-			return
-		}
+	
 		
 		//	addstr := fmt.Sprintf(`do declare cmpid bigint;  begin select compid into cmpid from compute_resources order by compid desc limit 1; if exists (select name from compute_resources where name=$1) then raise 'resource already exists'; else insert into compute_resources (compid, name, default_shell, unitid, last_updated, default_home_dir, type) values (cmpid+1,$1,$2,$3,NOW(),$4,$5); end if ;  end ;`)
-		addstr := fmt.Sprintf(`insert into compute_resources (name, default_shell, unitid, last_updated, default_home_dir, type) values ($1, %s, $2, NOW(), $3, $4)`, nullshell)
-		
-		
-		//	err = DBtx.tx.QueryRow("do $$ declare cmpid bigint;  begin select compid into cmpid from compute_resources order by compid desc limit 1; if exists (select name from compute_resources where name=$1) then raise 'resource already exists'; else insert into compute_resources (compid, name, default_shell, unitid, last_updated, default_home_dir, type) values (cmpid+1,$1,$2,$3,NOW(),$4,$5) returning cmpid+1; end if ;  end $$ ;",rName,nullshell,unitID,nullhomedir,rType).Scan(&compId)
-		
-		_, err = DBtx.tx.Exec(addstr, rName, unitID, nullhomedir, rType)
-		
+		var addstr string
+		if nullshell == "default" {
+			addstr = fmt.Sprintf(`insert into compute_resources (name, default_shell, unitid, last_updated, default_home_dir, type) values ($1, default, $2, NOW(), $3, $4)`)
+			_, err = DBtx.Exec(addstr, rName, unitID, nullhomedir, rType)
+		} else {
+			addstr = fmt.Sprintf(`insert into compute_resources (name, default_shell, unitid, last_updated, default_home_dir, type) values ($1, $2, $3, NOW(), $4, $5)`)
+			_, err = DBtx.Exec(addstr, rName, nullshell, unitID, nullhomedir, rType)
+		}
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
 			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in database transaction.\" }")
-			//	DBtx.Rollback()
+			if cKey != 0 {	
+				DBtx.Rollback()
+			}
 			return
 		} else {
+			if cKey != 0 {
 			DBtx.Commit(cKey)
+				}
 			log.WithFields(QueryFields(r, startTime)).Error("Added " + rName + " to compute_resources.")
 			fmt.Fprintf(w,"{ \"result\": \"success.\" }")
 			return		
@@ -1151,9 +1156,18 @@ func setComputeResourceInfo(w http.ResponseWriter, r *http.Request) {
 		currentType string
 		compid  int
 	)
+	
+	//transaction start, and update command
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
+		return
+	}
 
 	// check if resource exists and grab existing values of everything if so
-	err := DBptr.QueryRow(`select distinct compid, default_shell, unitid, default_home_dir, type from compute_resources where name=$1`,rName).Scan(&compid,&nullshell,&unitID,&nullhomedir,&currentType)
+	err = DBtx.tx.QueryRow(`select distinct compid, default_shell, unitid, default_home_dir, type from compute_resources where name=$1`,rName).Scan(&compid,&nullshell,&unitID,&nullhomedir,&currentType)
 	switch {
 	case err == sql.ErrNoRows:
 		// nothing returned from the select, so the resource does not exist.
@@ -1198,7 +1212,7 @@ func setComputeResourceInfo(w http.ResponseWriter, r *http.Request) {
 		if unitName != "" {
 			if strings.ToUpper(strings.TrimSpace(unitName)) != "NULL" {
 				var tmpunitid sql.NullInt64
-				iderr := DBptr.QueryRow(`select unitid from affiliation_units where name=$1`,unitName).Scan(&tmpunitid)
+				iderr := DBtx.tx.QueryRow(`select unitid from affiliation_units where name=$1`,unitName).Scan(&tmpunitid)
 				// FIX THIS
 				if iderr != nil && iderr != sql.ErrNoRows {
 					//some error selecting the new unit ID. Keep the old one!
@@ -1211,15 +1225,7 @@ func setComputeResourceInfo(w http.ResponseWriter, r *http.Request) {
 			}
 		} // end if unitName != ""
 		
-		//transaction start, and update command
-		DBtx, cKey, err := LoadTransaction(r, DBptr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
-			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
-			return
-		}
-		
+	
 		_, commerr := DBtx.Exec(`update compute_resources set default_shell=$1, unitid=$2, last_updated=NOW(), default_home_dir=$3, type=$4 where name=$5`, nullshell, unitID, nullhomedir, currentType, rName)
 		if commerr != nil {
 			w.WriteHeader(http.StatusNotFound)
@@ -1227,8 +1233,8 @@ func setComputeResourceInfo(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Database error during update.\" }")
 			return
 		} else {
-			// if no error, commit and all that
-			DBtx.Commit(cKey)
+			// if no error, commit and all that. If this is being called as part of a wrapper, however, cKey will be 0. So only commit if cKey is non-zero
+		if cKey != 0 {	DBtx.Commit(cKey) }
 			log.WithFields(QueryFields(r, startTime)).Info("Successfully updated " + unitName + ".")
 			fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
 		}
