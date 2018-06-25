@@ -1807,10 +1807,10 @@ func getAllGroupsMembers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var tmpgroup, group jsongroup
-	var tmpuser jsonuser
 	var Out []jsongroup
 	
 	for rows.Next() {
+		var tmpuser jsonuser
 		rows.Scan(&tmpgroup.Gname, &tmpgroup.Gtype, &tmpgroup.Gid, &tmpuser.Uname, &tmpuser.Uid)
 		if tmpgroup.Gname != group.Gname {
 			if group.Gname != "" {
