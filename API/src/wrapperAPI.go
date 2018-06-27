@@ -380,6 +380,27 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	
+// now we need to add the default group (which we assume is the same name as the unit) to affiliation_unit_group
+// Set that group to be the primary group
+
+	q.Set("is_primary", "true")
+	q.Set("grouptype","UnixGroup")
+	q.Set("groupname",unitName)
+	R.URL.RawQuery = q.Encode()
+	DBtx.Savepoint("addGroupToUnit")
+//	DBtx.Continue()
+	addGroupToUnit(w,R)
+	if !DBtx.Complete() {
+		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") {
+			log.WithFields(QueryFields(r, startTime)).Error("addGroupToUnit failed.")
+			DBtx.Rollback()
+			return
+		} else {
+			DBtx.RollbackToSavepoint("addGroupToUnit")
+			duplicateCount++
+		}
+	}
+
 	for _, role := range []string{"Analysis", "None", "Production"} {
 		//createFQAN
 		// if standalone VO, change the string a bit
