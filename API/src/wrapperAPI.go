@@ -391,11 +391,13 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 //	DBtx.Continue()
 	addGroupToUnit(w,R)
 	if !DBtx.Complete() {
-		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") {
+		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") && !strings.Contains(DBtx.Error().Error(), "Group and unit combination already in DB") {
 			log.WithFields(QueryFields(r, startTime)).Error("addGroupToUnit failed.")
+			log.WithFields(QueryFields(r, startTime)).Error("actual error: " + DBtx.Error().Error() )
 			DBtx.Rollback()
 			return
 		} else {
+			log.WithFields(QueryFields(r, startTime)).Error("actual error: " + DBtx.Error().Error() )
 			DBtx.RollbackToSavepoint("addGroupToUnit")
 			duplicateCount++
 		}
@@ -418,7 +420,7 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 		createFQAN(w, R)
 		if !DBtx.Complete() {
 			// do some error handling and rollback 
-			DBtx.RollbackToSavepoint("crateFQAN+"+role)
+			DBtx.RollbackToSavepoint("crateFQAN_"+role)
 
 		}
 	}

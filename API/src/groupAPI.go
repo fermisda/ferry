@@ -1941,7 +1941,7 @@ func addLPCCollaborationGroup(w http.ResponseWriter, r *http.Request) {
 func addGroupToUnitDB(tx *Transaction, groupname, grouptype, unitName string, isPrimary bool) (error) {
 
 	var unitId,groupId int
-	checkerr := DBptr.QueryRow(`select unitid from affiliation_units where name=$1`,unitName).Scan(&unitId)
+	checkerr := tx.tx.QueryRow(`select unitid from affiliation_units where name=$1`,unitName).Scan(&unitId)
 	switch {
 	case checkerr == sql.ErrNoRows:
 //		log.WithFields(QueryFields(r, startTime)).Print("Affiliation unit " + unitName + " does not exist.")
@@ -1953,7 +1953,7 @@ func addGroupToUnitDB(tx *Transaction, groupname, grouptype, unitName string, is
 
 		return checkerr
 	default:
-		grouperr := DBptr.QueryRow(`select groupid from groups where name=$1 and type=$2`,groupname,grouptype).Scan(&groupId)
+		grouperr := tx.tx.QueryRow(`select groupid from groups where name=$1 and type=$2`,groupname,grouptype).Scan(&groupId)
 //		log.WithFields(QueryFields(r, startTime)).Print(" group ID = " + strconv.Itoa(groupId))
 		switch {
 		case grouperr == sql.ErrNoRows:

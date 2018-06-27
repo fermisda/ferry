@@ -2460,7 +2460,6 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 		
 	case err != nil:
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error()) 
-		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return		
 		
