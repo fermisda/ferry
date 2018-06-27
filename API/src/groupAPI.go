@@ -88,10 +88,10 @@ func addGroupToUnit(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
-	groupname := q.Get("groupname")
-	grouptype := q.Get("grouptype")
-	unitName := q.Get("unitname")
-	isPrimarystr := q.Get("is_primary")
+	groupname := strings.TrimSpace(q.Get("groupname"))
+	grouptype := strings.TrimSpace(q.Get("grouptype"))
+	unitName := strings.TrimSpace(q.Get("unitname"))
+	isPrimarystr := strings.TrimSpace(q.Get("is_primary"))
 	isPrimary := false
 //if is_primary is not set in the query, assume it is false. Otherwise take the value from the query
 	if isPrimarystr != "" {
@@ -152,13 +152,12 @@ func addGroupToUnit(w http.ResponseWriter, r *http.Request) {
 		//				DBtx.Rollback() // COMMENT 2018-04-04
 		return
 	} else {
-		// error is nil, so it's a success. Commit the transaction and return success.
-		//		DBtx.Commit(cKey) //COMMENT 2018-04-04
 		w.WriteHeader(http.StatusOK)
 		log.WithFields(QueryFields(r, startTime)).Print("Successfully added " + groupname + " to affiliation_unit_groups.")
 		fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
-
-		DBtx.Commit(cKey)
+		if cKey != 0 {
+			DBtx.Commit(cKey)
+		}
 	}
 	return	
 	
@@ -176,9 +175,9 @@ func removeGroupFromUnit(w http.ResponseWriter, r *http.Request) {
 	var inputErr jsonstatus
 
 	q := r.URL.Query()
-	gName := q.Get("groupname")
-	gType := q.Get("grouptype")
-	uName := q.Get("unitname")
+	gName := strings.TrimSpace(q.Get("groupname"))
+	gType := strings.TrimSpace(q.Get("grouptype"))
+	uName := strings.TrimSpace(q.Get("unitname"))
 
 	if gName == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
@@ -342,6 +341,7 @@ func setPrimaryStatusGroup(w http.ResponseWriter, r *http.Request) {
 			log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB insert.\" }")		
 		}
+		stmt.Close()
 		return
 	} else {
 		// error is nil, so it's a success. Commit the transaction and return success.
@@ -350,6 +350,7 @@ func setPrimaryStatusGroup(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Print("Successfully added " + groupname + " to affiliation_unit_groups.")
 		fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
 	}
+	stmt.Close()
 	return
 }
 
@@ -1896,6 +1897,7 @@ insert into affiliation_unit_group (groupid, unitid, is_primary, last_updated) v
 			}
 			//run said statement and check errors
 			_, err = stmt.Exec()
+			defer stmt.Close()
 			if err != nil {
 //				if strings.Contains(err.Error(),`Group and unit combination already in DB`) {
 //					log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
