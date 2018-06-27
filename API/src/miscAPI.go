@@ -1008,8 +1008,8 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 	rName := q.Get("resourcename")
 	unitName := q.Get("unitname")
 	rType := q.Get("type")
-	shell := q.Get("default_shell")
-	homedir := q.Get("default_home_dir")
+	shell := q.Get("defaultshell")
+	homedir := q.Get("defaulthomedir")
 	var nullshell string
 	var nullhomedir sql.NullString
 	if rName == "" {
@@ -1125,11 +1125,11 @@ func setComputeResourceInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 	
-	rName := q.Get("resourcename")
-	unitName := q.Get("unitname")
-	rType := q.Get("type")
-	shell := q.Get("default_shell")
-	homedir := q.Get("default_home_dir")
+	rName := strings.TrimSpace(q.Get("resourcename"))
+	unitName := strings.TrimSpace(q.Get("unitname"))
+	rType := strings.TrimSpace(q.Get("type"))
+	shell := strings.TrimSpace(q.Get("defaultshell"))
+	homedir := strings.TrimSpace(q.Get("defaulthomedir"))
 
 	if rName == "" {
 		log.WithFields(QueryFields(r, startTime)).Print("No resource name specified in http query.")
@@ -1176,7 +1176,7 @@ func setComputeResourceInfo(w http.ResponseWriter, r *http.Request) {
 		return	
 	case err != nil:
 		w.WriteHeader(http.StatusNotFound)
-		log.WithFields(QueryFields(r, startTime)).Print("Error in DQ query: " + err.Error())
+		log.WithFields(QueryFields(r, startTime)).Print("Error in DB query: " + err.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return	
 	default:
