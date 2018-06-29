@@ -2353,6 +2353,8 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 	shell := strings.TrimSpace(q.Get("shell"))
 	homedir := strings.TrimSpace(q.Get("home_dir"))
 
+	var primary bool
+
 	type jsonerror struct {
 		Error string `json:"ferry_error"`
 	}
@@ -2369,6 +2371,16 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 	if gName == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No group name specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No value for groupname specified."})
+	}
+	if q.Get("is_primary") != "" {
+		var err error
+		primary, err = strconv.ParseBool(q.Get("is_primary"))
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid is_primary specified in http query.")
+			inputErr = append(inputErr, jsonerror{"Invalid is_primary specified."})
+		}
+	} else {
+		primary = false
 	}
 
 	if len(inputErr) > 0 {
@@ -2397,8 +2409,9 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 	
 	// see if the user/group/resource combination is already there. If so, then we might just be doing an update.
 	
-	err = DBptr.QueryRow(`select ca.uid, ca.groupid, ca.compid, ca.shell, ca.home_dir from compute_access_group as ca
-						   join groups as g on ca.groupid=g.groupid
+	err = DBptr.QueryRow(`select ca.uid, cg.groupid, ca.compid, ca.shell, ca.home_dir from compute_access as ca
+						   join compute_access_group as cg on (ca.compid, ca.uid) = (cg.compid, cg.uid)
+						   join groups as g on cg.groupid=g.groupid
 						   join users as u on u.uid=ca.uid
 						   join compute_resources as cr on cr.compid=ca.compid
 						   where cr.name=$1 and u.uname=$2 and g.name=$3`,rName,uname,gName).Scan(&uid,&grpid,&compid,&defShell,&defhome)
@@ -2427,8 +2440,18 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// now, do the actual insert
-
-		_, inserr := DBtx.Exec(`insert into compute_access_group (compid, uid, groupid, last_updated, shell, home_dir) values ( (select compid from compute_resources where name=$1), (select uid from users where uname=$2), (select groupid from groups where groups.name=$3 and groups.type = 'UnixGroup'), NOW(), $4,$5)`, rName, uname, gName, defShell, defhome)
+		_, inserr := DBtx.Exec(`insert into compute_access (compid, uid, shell, home_dir)
+								values ((select compid from compute_resources where name = $1),
+										(select uid from users where uname = $2), $3, $4)`,
+								rName, uname, defShell, defhome)
+		if inserr == nil {
+			_, inserr = DBtx.Exec(`insert into compute_access_group (compid, uid, groupid, is_primary)
+								   values ((select compid from compute_resources where name = $1),
+										   (select uid from users where uname = $2),
+										   (select groupid from groups where groups.name = $3 and groups.type = 'UnixGroup'), $4)`,
+								   rName, uname, gName, primary)
+		}
+		
 		if inserr != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + inserr.Error())
 			// now we also need to do a bunch of other checks here
