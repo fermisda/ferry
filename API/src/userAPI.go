@@ -2354,6 +2354,8 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 	homedir := strings.TrimSpace(q.Get("home_dir"))
 	is_primary := strings.TrimSpace(q.Get("is_primary"))
 
+	var primary bool
+
 	type jsonerror struct {
 		Error string `json:"ferry_error"`
 	}
@@ -2371,7 +2373,6 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error("No group name specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No value for groupname specified."})
 	}
-	
 	var cagPrimary sql.NullBool
 	ispri := false
 	if is_primary != "" { 
@@ -2409,10 +2410,10 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 		defShell,defhome sql.NullString
 		grpid,compid,uid int
 	)
-
+	
 	// We need to act on two tables: compute_access and compute_access_group. Let's just work on them independently, but not commit until 
 	// both are done.
-
+	
 	// Begin with compute_access_group
 	// see if the user/group/resource combination is already there. If so, then we might just be doing an update.
 	
@@ -2458,7 +2459,7 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 						DBtx.Rollback()
 					}
 					return
-			}
+				}
 			}
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully inserted (%s,%s,%s) into compute_access_group.",rName, uname, gName))
@@ -2483,7 +2484,7 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 				//change the value stored in cagPrimary.Bool to be that of ispri, which is the new value
 				cagPrimary.Valid = true
 				cagPrimary.Bool = ispri
-
+				
 				_, moderr := DBtx.Exec(`update compute_access_group set is_primary=$1,last_updated=NOW() where groupid=$2 and uid=$3 and compid=$4`,cagPrimary,grpid,uid,compid)
 				if moderr != nil {
 					log.WithFields(QueryFields(r, startTime)).Error("Error in DB update: " + err.Error()) 
@@ -2535,6 +2536,9 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 			// the given compid does not exist in this case. Exit accordingly.	
 			log.WithFields(QueryFields(r, startTime)).Error("resource " + rName + " does not exist.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
+			if cKey != 0 {
+				DBtx.Rollback()
+			}
 			return	
 		}
 		//check if the query specified a shell or directory value
@@ -2547,9 +2551,15 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 			defhome.String = strings.TrimSpace(homedir)
 		}
 		// now, do the actual insert
-	
-		_, inserr := DBtx.Exec(`insert into compute_access (compid, uid, last_updated, shell, home_dir) values ( (select compid from compute_resources where name=$1), (select uid from users where uname=$2), NOW(), $3, $4)`, rName, uname, defShell, defhome)
+		
+		_, inserr := DBtx.Exec(`insert into compute_access (compid, uid, shell, home_dir)
+								values ((select compid from compute_resources where name = $1),
+										(select uid from users where uname = $2), $3, $4)`,
+			rName, uname, defShell, defhome)
 		if inserr != nil {
+			if cKey != 0 {
+				DBtx.Rollback()
+			}
 			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + inserr.Error())
 			// now we also need to do a bunch of other checks here
 			if strings.Contains(inserr.Error(),"null value in column \"compid\"") {
@@ -2567,10 +2577,13 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully inserted (%s,%s,%s,%s) into compute_access.",rName, uname, defShell, defhome))		
 		}
-
+		
 	case err != nil:
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error()) 
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+		if cKey != 0 {
+			DBtx.Rollback()
+		}
 		return		
 		
 	default: // OK, we already have this user/group/resource combo. We just need to check if the call is trying to change the shell or home dir. If neither option was provided, that implies we're just keeping what is already there, so just log that nothing is changing and return success.
@@ -2586,7 +2599,9 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 			_, moderr := DBtx.Exec(`update compute_access set shell=$1,home_dir=$2,last_updated=NOW() where uid=$3 and compid=$4`,defShell,defhome,uid,compid)
 			if moderr != nil {
 				log.WithFields(QueryFields(r, startTime)).Error("Error in DB update: " + err.Error()) 
-				w.WriteHeader(http.StatusNotFound)
+				if cKey != 0 {
+				DBtx.Rollback()	
+				}
 				fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB update.\" }")
 				return		
 			} else {
@@ -2594,10 +2609,10 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 				log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully updated (%s,%s,%s,%s) in compute_access.",rName, uname, defShell, defhome))					
 			}
 		}
-
+		
 	}
-
-// Finally commit the transaction if both parts succeeded and we don't have a transaction key of 0
+	
+	// Finally commit the transaction if both parts succeeded and we don't have a transaction key of 0
 	if cKey != 0 {
 		DBtx.Commit(cKey)
 		w.WriteHeader(http.StatusOK)

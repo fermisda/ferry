@@ -188,6 +188,7 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 
 	q.Set("resourcename", compResource)
 	q.Set("groupname", compGroup)
+	q.Set("is_primary", "true")
 	R.URL.RawQuery = q.Encode()
 
 	DBtx.Continue()
