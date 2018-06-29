@@ -2354,8 +2354,6 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 	homedir := strings.TrimSpace(q.Get("home_dir"))
 	is_primary := strings.TrimSpace(q.Get("is_primary"))
 
-	var primary bool
-
 	type jsonerror struct {
 		Error string `json:"ferry_error"`
 	}
@@ -2373,6 +2371,7 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error("No group name specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No value for groupname specified."})
 	}
+
 	var cagPrimary sql.NullBool
 	ispri := false
 	if is_primary != "" { 
