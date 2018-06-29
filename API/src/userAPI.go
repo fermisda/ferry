@@ -1496,7 +1496,7 @@ func getUserExternalAffiliationAttributes(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 
-	user := q.Get("username")
+	user := strings.TrimSpace(q.Get("username"))
 
 	if user == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
@@ -1833,12 +1833,12 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q := r.URL.Query()
-	uid := q.Get("uid")
-	uName := q.Get("username")
-	firstName := q.Get("firstname")
-	lastName := q.Get("lastname")
-	status, err := strconv.ParseBool(q.Get("status"))
-	expdate := q.Get("expirationdate")
+	uid := strings.TrimSpace(q.Get("uid"))
+	uName := strings.TrimSpace(q.Get("username"))
+	firstName :=strings.TrimSpace( q.Get("firstname"))
+	lastName := strings.TrimSpace(q.Get("lastname"))
+	status, err := strconv.ParseBool(strings.TrimSpace(q.Get("status")))
+	expdate := strings.TrimSpace(q.Get("expirationdate"))
 
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error("Invalid status specified in http query.")
@@ -1880,12 +1880,12 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 			log.WithFields(QueryFields(r, startTime)).Error(err)
 		}
 		//actually insert
-//		_, err = DBtx.Exec(`insert into users (uname, uid, full_name, status, expiration_date, last_updated) values $1,$2,$3,$4,$5,NOW()`, uName, uid, fullname, status, expdate)
+		_, err = DBtx.Exec(`insert into users (uname, uid, full_name, status, expiration_date, last_updated) values $1,$2,$3,$4,$5,NOW()`, uName, uid, fullname, status, expdate)
 
 	//	theStmt := fmt.Sprintf("insert into users (uname, uid, full_name, status, expiration_date, last_updated) values ('%s',%d,'%s','%s','%s',NOW())", uName, uid, fullname, status, expdate)
 	//	fmt.Println(theStmt)
 
-		_, err = DBtx.Exec(fmt.Sprintf("insert into users (uname, uid, full_name, status, expiration_date, last_updated) values ('%s',%s,'%s',%t,'%s', NOW())", uName, uid, fullname, status, expdate))
+	//	_, err = DBtx.Exec(fmt.Sprintf("insert into users (uname, uid, full_name, status, expiration_date, last_updated) values ('%s',%s,'%s',%t,'%s', NOW())", uName, uid, fullname, status, expdate))
 
 		if err == nil {
 			if cKey != 0 {
@@ -2352,6 +2352,7 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 	rName := strings.TrimSpace(q.Get("resourcename"))
 	shell := strings.TrimSpace(q.Get("shell"))
 	homedir := strings.TrimSpace(q.Get("home_dir"))
+	is_primary := strings.TrimSpace(q.Get("is_primary"))
 
 	type jsonerror struct {
 		Error string `json:"ferry_error"`
@@ -2370,7 +2371,19 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error("No group name specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No value for groupname specified."})
 	}
-
+	
+	var cagPrimary sql.NullBool
+	ispri := false
+	if is_primary != "" { 
+		tmppri,prierr := strconv.ParseBool(is_primary)
+		if prierr != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid value of is_primary. If specified it must be true or false.")
+			inputErr = append(inputErr, jsonerror{"Invalid value of is_primary. If specified it must be true or false."})	
+		} else {
+			ispri = tmppri
+		}
+	}
+	
 	if len(inputErr) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
@@ -2392,24 +2405,132 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 	
-	var defShell,defhome sql.NullString
-	var grpid,compid,uid int
-	
+	var (
+		defShell,defhome sql.NullString
+		grpid,compid,uid int
+	)
+
+	// We need to act on two tables: compute_access and compute_access_group. Let's just work on them independently, but not commit until 
+	// both are done.
+
+	// Begin with compute_access_group
 	// see if the user/group/resource combination is already there. If so, then we might just be doing an update.
 	
-	err = DBptr.QueryRow(`select ca.uid, ca.groupid, ca.compid, ca.shell, ca.home_dir from compute_access_group as ca
-						   join groups as g on ca.groupid=g.groupid
-						   join users as u on u.uid=ca.uid
-						   join compute_resources as cr on cr.compid=ca.compid
-						   where cr.name=$1 and u.uname=$2 and g.name=$3`,rName,uname,gName).Scan(&uid,&grpid,&compid,&defShell,&defhome)
+	err = DBtx.tx.QueryRow(`select cag.uid, cag.groupid, cag.compid, cag.is_primary from compute_access_group as cag
+						   join groups as g on cag.groupid=g.groupid
+						   join users as u on u.uid=cag.uid
+						   join compute_resources as cr on cr.compid=cag.compid
+						   where cr.name=$1 and u.uname=$2 and g.name=$3`,rName,uname,gName).Scan(&uid,&grpid,&compid,&cagPrimary)
 	switch {
 	case err == sql.ErrNoRows:
 		
 		// OK, we don't have this combo, so we do an insert now
+		if is_primary != "" {
+			cagPrimary.Valid = true
+			cagPrimary.Bool = ispri
+		}
+		_, inserr := DBtx.Exec(`insert into compute_access_group (compid, uid, groupid, last_updated, is_primary) values ( (select compid from compute_resources where name=$1), (select uid from users where uname=$2), (select groupid from groups where groups.name=$3 and groups.type = 'UnixGroup'), NOW(), $4)`, rName, uname, gName, cagPrimary)
+		if inserr != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + inserr.Error())
+			// now we also need to do a bunch of other checks here
+			if strings.Contains(inserr.Error(),"null value in column \"compid\"") {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
+				return	
+				
+			} else if strings.Contains(inserr.Error(),"null value in column \"uid\"") {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+				return	
+			} else if strings.Contains(inserr.Error(),"null value in column \"groupid\"") {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"Group does not exist.\" }")
+				return		
+			} else {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB insert.\" }")
+				return		
+			}
+			// Now, if the API call said is_primary = true, we need to check for other, existing entries for the same compid and uid, and set their is_primary flag to false. Onyl do this is is_primary was set to true though.
+			if is_primary != "" && cagPrimary.Bool == true {
+				_, uperr := DBtx.Exec(`update compute_acess_group set is_primary=false, last_updated=NOW() where compid=(select compid from compute_resources where name=$1) and uid=(select uid from users where uname=$2) and groupid not in (select groupid from groups where groups.name=$3 and groups.type = 'UnixGroup')`,rName, uname, gName)
+				if uperr != nil {	
+					
+					log.WithFields(QueryFields(r, startTime)).Error("Error update is_primary field in existing DB entries: " + uperr.Error())	
+					fmt.Fprintf(w, "{ \"ferry_error\": \"Error updating is_primary value for pre-existing compute_access_group entries. See ferry log.\" }")
+					if cKey != 0 {
+						DBtx.Rollback()
+					}
+					return
+			}
+			}
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully inserted (%s,%s,%s) into compute_access_group.",rName, uname, gName))
+		}
+		
+	case err != nil:
+		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error()) 
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+		return		
+		
+	default: // OK, we already have this user/group/resource combo. We just need to check if the call is trying to change is_primary from what it is. If is_primary was not provided, that implies we're just keeping what is already there, so just log that nothing is changing and return success.
+		
+		if (cagPrimary.Valid && cagPrimary.Bool == ispri) || is_primary == "" {
+			// everything in the DB is already the same as the request, so don't do anything
+			log.WithFields(QueryFields(r, startTime)).Print("The request already exists in the database. Nothing to do.")
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"The request already exists in the database.\" }")
+			}
+			DBtx.Report("The request already exists in the database.")
+		} else {
+			if is_primary != "" {
+				//change the value stored in cagPrimary.Bool to be that of ispri, which is the new value
+				cagPrimary.Valid = true
+				cagPrimary.Bool = ispri
+
+				_, moderr := DBtx.Exec(`update compute_access_group set is_primary=$1,last_updated=NOW() where groupid=$2 and uid=$3 and compid=$4`,cagPrimary,grpid,uid,compid)
+				if moderr != nil {
+					log.WithFields(QueryFields(r, startTime)).Error("Error in DB update: " + err.Error()) 
+					fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB update.\" }")
+					if cKey != 0 {
+						DBtx.Rollback()
+					}
+					return		
+				} else {
+					
+					log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully updated (%s,%s,%s,%s) in compute_access_group.",rName, uname, gName,is_primary))					
+				}
+				// Now, as before, we should set is_primary for any other entries to false, if we just set this entry to true
+				if cagPrimary.Bool == true {
+					
+					_, moderr = DBtx.Exec(`update compute_access_group set is_primary=false,last_updated=NOW() where groupid != $1 and uid=$2 and compid=$3`,grpid,uid,compid)
+					if moderr != nil {
+						log.WithFields(QueryFields(r, startTime)).Error("Error in DB update: " + err.Error()) 
+						fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB update.\" }")
+						if cKey != 0 {
+							DBtx.Rollback()
+						}
+						return		
+					} else {
+						
+						log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully updated (%s,%s) entries in compute_access_group.",rName, uname))					
+					}	
+				}
+			}	
+		}
+	}
+	
+	// OK, now we deal with compute_access in much the same way.
+	// In this case we have shell and home directory to deal with though instead of is_primary
+	
+	err = DBtx.tx.QueryRow(`select ca.uid, ca.compid, ca.shell, ca.home_dir from compute_access as ca
+						   join groups as g on ca.groupid=g.groupid
+						   join users as u on u.uid=ca.uid
+						   join compute_resources as cr on cr.compid=ca.compid
+						   where cr.name=$1 and u.uname=$2 and g.name=$3`,rName,uname,gName).Scan(&uid,&compid,&defShell,&defhome)
+	
+	switch {
+	case err == sql.ErrNoRows:
 		
 		//grab the default home dir and shell paths for the given compid
 		
-		checkerr := DBptr.QueryRow(`select default_shell, default_home_dir from compute_resources as cr where cr.name=$1`,rName).Scan(&defShell,&defhome)
+		checkerr := DBtx.tx.QueryRow(`select default_shell, default_home_dir from compute_resources as cr where cr.name=$1`,rName).Scan(&defShell,&defhome)
 		if checkerr == sql.ErrNoRows {
 			// the given compid does not exist in this case. Exit accordingly.	
 			log.WithFields(QueryFields(r, startTime)).Error("resource " + rName + " does not exist.")
@@ -2425,10 +2546,9 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 			defhome.Valid = true
 			defhome.String = strings.TrimSpace(homedir)
 		}
-
 		// now, do the actual insert
-
-		_, inserr := DBtx.Exec(`insert into compute_access_group (compid, uid, groupid, last_updated, shell, home_dir) values ( (select compid from compute_resources where name=$1), (select uid from users where uname=$2), (select groupid from groups where groups.name=$3 and groups.type = 'UnixGroup'), NOW(), $4,$5)`, rName, uname, gName, defShell, defhome)
+	
+		_, inserr := DBtx.Exec(`insert into compute_access (compid, uid, last_updated, shell, home_dir) values ( (select compid from compute_resources where name=$1), (select uid from users where uname=$2), NOW(), $3, $4)`, rName, uname, defShell, defhome)
 		if inserr != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + inserr.Error())
 			// now we also need to do a bunch of other checks here
@@ -2439,25 +2559,15 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 			} else if strings.Contains(inserr.Error(),"null value in column \"uid\"") {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
 				return	
-			} else if strings.Contains(inserr.Error(),"null value in column \"groupid\"") {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"Group does not exist.\" }")
-				return		
 			} else {
 				w.WriteHeader(http.StatusNotFound)
 				fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB insert.\" }")
 				return		
 			}
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully inserted (%s,%s,%s,%s,%s) into compute_access.",rName, uname, gName, defShell, defhome))
-			if cKey != 0 {
-				w.WriteHeader(http.StatusOK)
-				fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
-				
-				DBtx.Commit(cKey)
-			}
-			return			
+			log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully inserted (%s,%s,%s,%s) into compute_access.",rName, uname, defShell, defhome))		
 		}
-		
+
 	case err != nil:
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error()) 
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
@@ -2472,9 +2582,8 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"The request already exists in the database.\" }")
 			}
 			DBtx.Report("The request already exists in the database.")
-			return
 		} else {
-			_, moderr := DBtx.Exec(`update compute_access set shell=$1,home_dir=$2,last_updated=NOW() where groupid=$3 and uid=$4 and compid=$5`,defShell,defhome,grpid,uid,compid)
+			_, moderr := DBtx.Exec(`update compute_access set shell=$1,home_dir=$2,last_updated=NOW() where uid=$3 and compid=$4`,defShell,defhome,uid,compid)
 			if moderr != nil {
 				log.WithFields(QueryFields(r, startTime)).Error("Error in DB update: " + err.Error()) 
 				w.WriteHeader(http.StatusNotFound)
@@ -2482,14 +2591,21 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 				return		
 			} else {
 				
-				log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully updated (%s,%s,%s,%s,%s) in compute_access.",rName, uname, gName, defShell, defhome))
-				w.WriteHeader(http.StatusOK)
-				fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
-				return		
-			}	
+				log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully updated (%s,%s,%s,%s) in compute_access.",rName, uname, defShell, defhome))					
+			}
 		}
+
 	}
+
+// Finally commit the transaction if both parts succeeded and we don't have a transaction key of 0
+	if cKey != 0 {
+		DBtx.Commit(cKey)
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+	}
+	return
 }
+
 func getAllUsers(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
