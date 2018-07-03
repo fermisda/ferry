@@ -21,8 +21,8 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 	
-	unit := q.Get("unitname")
-	comp := q.Get("resourcename")
+	unit := strings.TrimSpace(q.Get("unitname"))
+	comp := strings.TrimSpace(q.Get("resourcename"))
 	
 	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
@@ -37,7 +37,8 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
                                                               left join compute_access as ca using (compid, uid) 
                                                               join groups as g on g.groupid=cag.groupid 
                                                               join compute_resources as cr on cr.compid=cag.compid 
-                                                              join affiliation_units as au on au.unitid=cr.unitid join users as u on u.uid=cag.uid
+                                                              left join affiliation_units as au on au.unitid=cr.unitid 
+                                                              join users as u on u.uid=cag.uid
                                                               where  cag.is_primary = true and (au.name = $1 or $3) and (cr.name = $2 or $4) and (ca.last_updated>=$5 or u.last_updated>=$5 or au.last_updated>=$5 or cr.last_updated>=$5 or g.last_updated>=$5 or $5 is null) order by au.name, cr.name
 							) as t
 								right join (select 1 as key,
@@ -80,14 +81,19 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var tmpAname, tmpRname, tmpUname, tmpUid, tmpGid, tmpGecos, tmpHdir, tmpShell,tmpTime sql.NullString
 		rows.Scan(&tmpAname, &tmpRname, &tmpUname, &tmpUid, &tmpGid, &tmpGecos, &tmpHdir, &tmpShell, &unitExists, &compExists, &tmpTime)
-
+		log.WithFields(QueryFields(r, startTime)).Println(tmpAname.String  + " " + tmpRname.String + " " + tmpUname.String)
+		
+		if ! tmpAname.Valid {
+			tmpAname.Valid = true
+			tmpAname.String = "null"
+		}		
 		if prevRname == "" {
 			prevRname = tmpRname.String
 		}
 		if prevAname == "" {
-			prevAname = tmpAname.String
+			prevAname = tmpAname.String 
 		}
-
+		
 		if tmpRname.Valid {
 			if prevRname != tmpRname.String {
 				tmpResources[prevRname] = tmpUsers
@@ -98,7 +104,12 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 				Out[prevAname] = jsonunit{tmpResources, lasttime}
 				tmpResources = make(map[string][]jsonuser, 0)
 				lasttime = 0
-				prevAname = tmpAname.String
+				if tmpAname.Valid { 
+					prevAname = tmpAname.String
+				} else {
+					prevAname = "null"
+				}
+				
 			}
 			if tmpTime.Valid {
 				log.WithFields(QueryFields(r, startTime)).Println("tmpTime is valid" + tmpTime.String)
