@@ -648,8 +648,9 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
 		}
 	}
-
-	DBtx.Commit(cKey)
+	if cKey != 0 {
+		DBtx.Commit(cKey)
+	}
 }
 
 func removeUserFromGroup(w http.ResponseWriter, r *http.Request) {
@@ -2407,13 +2408,33 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 	
 	var (
 		defShell,defhome sql.NullString
+//		grpid,compid,uid sql.NullInt64
 		grpid,compid,uid int
 	)
 	
-	// We need to act on two tables: compute_access and compute_access_group. Let's just work on them independently, but not commit until 
+	// We need to act on two, possibly three, tables: compute_access, compute_access_group and possibly user_group. Let's just work on them independently, but not commit until 
 	// both are done.
-	
+// This is for the future, but not right now due to time constraints.
+//	err = DBtx.tx.QueryRow(`select uid,groupid,compid from ((select 1 as key, uid from users where uname=$1) as myuid full outer join (select 1 as key,groupid from groups where name=$2) as mygroup using(key)) as ugroup right join (select 1 as key, compid from compute_resources where name=$3) as myresource using (key)`,uname,gName,rName).Scan(&uid,&grpid,&compid)
 
+
+	//We need to check whether the user is in the requested group. If not, add now, or the subsequent steps will fail.
+	err = DBtx.tx.QueryRow(`select uid, groupid from user_group join users using(uid) join groups using (groupid) where users.uname=$1 and groups.name=$2`,uname,gName).Scan(&uid,&grpid)
+	if err == sql.ErrNoRows {
+		// do the insertion now
+		_, ugerr := DBtx.Exec(`insert into user_group (uid, groupid) values ((select uid from users where uname=$1),(select groupid from groups where name=$2))`,uname,gName)
+		if ugerr != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error inserting into user_group: " + ugerr.Error())
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Error checking user_group table. Aborting.\" }")	
+			return	
+		}
+	} else if err != nil {
+		
+		log.WithFields(QueryFields(r, startTime)).Error("Error checking user_group: " + err.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")	
+		return
+	}
+	
 	// OK, now we deal with compute_access in much the same way.
 	// In this case we have shell and home directory to deal with though instead of is_primary
 	
