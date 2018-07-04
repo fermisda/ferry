@@ -471,14 +471,14 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := DBptr.Query(`select t.fqan, t.uname, t.name, c.unit_exists from
+	rows, err := DBptr.Query(`select t.fqan, t.uname, t.name, c.unit_exists, c.resource_exists from
 							  (select 1 as key, fqan, uname, name from grid_fqan as gf
 							   join users as u on gf.mapped_user = u.uid
 							   join affiliation_units as au on gf.unitid = au.unitid
 							   where fqan like $3 and (gf.last_updated >= $2 or u.last_updated >= $2 or $2 is null) and ($4 or gf.mapped_user in (select ca.uid from compute_access ca join compute_resources cr using(compid) where cr.name=$5 ))
 							  ) as t
 							  right join (
-							   select 1 as key, $1 in (select name from affiliation_units) as unit_exists
+							   select 1 as key, $1 in (select name from affiliation_units) as unit_exists, $5 in (select name from compute_resources) as resource_exists
 							  ) as c on t.key = c.key`, unit, lastupdate, "%" + unit + "%", rName == "",rName)
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
@@ -488,7 +488,7 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var unitExists bool
+	var unitExists,resourceExists bool
 
 	type jsonentry struct {
 		DN string `json:"fqan"`
@@ -499,18 +499,21 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 
 	for rows.Next() {
 		var tmpFQAN, tmpUname, tmpAname sql.NullString
-		rows.Scan(&tmpFQAN, &tmpUname, &tmpAname, &unitExists)
+		rows.Scan(&tmpFQAN, &tmpUname, &tmpAname, &unitExists,&resourceExists)
 		if tmpFQAN.Valid {
 			Out = append(Out, jsonentry{tmpFQAN.String, tmpUname.String, tmpAname.String})
 		}
 	}
 
 	var output interface{}
-	if len(Out) == 0 || !unitExists && unit != "%" {
+	if len(Out) == 0 || (!unitExists && unit != "%") || (!resourceExists && rName != "" ) {
 		var queryErr jsonerror
-		if !unitExists {
+		if !unitExists && unit != "%" {
 			queryErr.Error = append(queryErr.Error, "Experiment does not exist.")
 			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
+		} else if !resourceExists && rName != "" {
+			queryErr.Error = append(queryErr.Error, "Resource does not exist.")
+			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
 		} else {
 			queryErr.Error = append(queryErr.Error, "No FQANs found.")
 			log.WithFields(QueryFields(r, startTime)).Error("No FQANs found.")
