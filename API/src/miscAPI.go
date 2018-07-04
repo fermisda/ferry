@@ -449,11 +449,12 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 	type jsonerror struct {Error []string `json:"ferry_error"`}
 	var inputErr jsonerror
 	
-	unit := q.Get("unitname")
+	unit := strings.TrimSpace(q.Get("unitname"))
 	if unit == "" {
 		unit = "%"
 	}
-	
+	rName := strings.TrimSpace(q.Get("resourcename"))
+
 	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
 		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
@@ -474,11 +475,11 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 							  (select 1 as key, fqan, uname, name from grid_fqan as gf
 							   join users as u on gf.mapped_user = u.uid
 							   join affiliation_units as au on gf.unitid = au.unitid
-							   where fqan like $3 and (gf.last_updated >= $2 or u.last_updated >= $2 or $2 is null)
+							   where fqan like $3 and (gf.last_updated >= $2 or u.last_updated >= $2 or $2 is null) and ($4 or gf.mapped_user in (select ca.uid from compute_access ca join compute_resources cr using(compid) where cr.name=$5 ))
 							  ) as t
 							  right join (
 							   select 1 as key, $1 in (select name from affiliation_units) as unit_exists
-							  ) as c on t.key = c.key`, unit, lastupdate, "%" + unit + "%")
+							  ) as c on t.key = c.key`, unit, lastupdate, "%" + unit + "%", rName == "",rName)
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
@@ -661,7 +662,7 @@ func lookupCertificateDN(w http.ResponseWriter, r *http.Request) {
 	}
 	var inputErr []jsonerror
 
-	certdn := q.Get("certificatedn")
+	certdn := strings.TrimSpace(q.Get("certificatedn"))
 
 	if certdn == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No certificatedn name specified in http query.")
