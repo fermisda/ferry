@@ -648,9 +648,8 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
 		}
 	}
-	if cKey != 0 {
-		DBtx.Commit(cKey)
-	}
+
+	DBtx.Commit(cKey)
 }
 
 func removeUserFromGroup(w http.ResponseWriter, r *http.Request) {
@@ -2408,127 +2407,12 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 	
 	var (
 		defShell,defhome sql.NullString
-//		grpid,compid,uid sql.NullInt64
 		grpid,compid,uid int
 	)
 	
-	// We need to act on two, possibly three, tables: compute_access, compute_access_group and possibly user_group. Let's just work on them independently, but not commit until 
+	// We need to act on two tables: compute_access and compute_access_group. Let's just work on them independently, but not commit until 
 	// both are done.
-// This is for the future, but not right now due to time constraints.
-//	err = DBtx.tx.QueryRow(`select uid,groupid,compid from ((select 1 as key, uid from users where uname=$1) as myuid full outer join (select 1 as key,groupid from groups where name=$2) as mygroup using(key)) as ugroup right join (select 1 as key, compid from compute_resources where name=$3) as myresource using (key)`,uname,gName,rName).Scan(&uid,&grpid,&compid)
-
-
-	//We need to check whether the user is in the requested group. If not, add now, or the subsequent steps will fail.
-	err = DBtx.tx.QueryRow(`select uid, groupid from user_group join users using(uid) join groups using (groupid) where users.uname=$1 and groups.name=$2`,uname,gName).Scan(&uid,&grpid)
-	if err == sql.ErrNoRows {
-		// do the insertion now
-		_, ugerr := DBtx.Exec(`insert into user_group (uid, groupid) values ((select uid from users where uname=$1),(select groupid from groups where name=$2))`,uname,gName)
-		if ugerr != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error inserting into user_group: " + ugerr.Error())
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Error checking user_group table. Aborting.\" }")	
-			return	
-		}
-	} else if err != nil {
-		
-		log.WithFields(QueryFields(r, startTime)).Error("Error checking user_group: " + err.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")	
-		return
-	}
 	
-	// OK, now we deal with compute_access in much the same way.
-	// In this case we have shell and home directory to deal with though instead of is_primary
-	
-	err = DBtx.tx.QueryRow(`select ca.uid, ca.compid, ca.shell, ca.home_dir from compute_access as ca
-						   join users as u on u.uid=ca.uid
-						   join compute_resources as cr on cr.compid=ca.compid
-						   where cr.name=$1 and u.uname=$2`,rName,uname).Scan(&uid,&compid,&defShell,&defhome)
-	
-	switch {
-	case err == sql.ErrNoRows:
-		
-		//grab the default home dir and shell paths for the given compid
-		
-		checkerr := DBtx.tx.QueryRow(`select default_shell, default_home_dir from compute_resources as cr where cr.name=$1`,rName).Scan(&defShell,&defhome)
-		if checkerr == sql.ErrNoRows {
-			// the given compid does not exist in this case. Exit accordingly.	
-			log.WithFields(QueryFields(r, startTime)).Error("resource " + rName + " does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
-			if cKey != 0 {
-				DBtx.Rollback()
-			}
-			return	
-		}
-		//check if the query specified a shell or directory value
-		if shell != "" {
-			defShell.Valid = true
-			defShell.String = strings.TrimSpace(shell)
-		}
-		if homedir != "" {
-			defhome.Valid = true
-			defhome.String = strings.TrimSpace(homedir)
-		}
-		// now, do the actual insert
-		
-		_, inserr := DBtx.Exec(`insert into compute_access (compid, uid, shell, home_dir)
-								values ((select compid from compute_resources where name = $1),
-										(select uid from users where uname = $2), $3, $4)`,
-			rName, uname, defShell, defhome)
-		if inserr != nil {
-			if cKey != 0 {
-				DBtx.Rollback()
-			}
-			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + inserr.Error())
-			// now we also need to do a bunch of other checks here
-			if strings.Contains(inserr.Error(),"null value in column \"compid\"") {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
-				return	
-				
-			} else if strings.Contains(inserr.Error(),"null value in column \"uid\"") {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-				return	
-			} else {
-				w.WriteHeader(http.StatusNotFound)
-				fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB insert.\" }")
-				return		
-			}
-		} else {
-			log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully inserted (%s,%s,%s,%s) into compute_access.",rName, uname, defShell, defhome))		
-		}
-		
-	case err != nil:
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error()) 
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		if cKey != 0 {
-			DBtx.Rollback()
-		}
-		return		
-		
-	default: // OK, we already have this user/group/resource combo. We just need to check if the call is trying to change the shell or home dir. If neither option was provided, that implies we're just keeping what is already there, so just log that nothing is changing and return success.
-		
-		if "" == shell && "" == homedir {
-			// everything in the DB is already the same as the request, so don't do anything
-			log.WithFields(QueryFields(r, startTime)).Print("The request already exists in the database. Nothing to do.")
-			if cKey != 0 {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"The request already exists in the database.\" }")
-			}
-			DBtx.Report("The request already exists in the database.")
-		} else {
-			_, moderr := DBtx.Exec(`update compute_access set shell=$1,home_dir=$2,last_updated=NOW() where uid=$3 and compid=$4`,defShell,defhome,uid,compid)
-			if moderr != nil {
-				log.WithFields(QueryFields(r, startTime)).Error("Error in DB update: " + err.Error()) 
-				if cKey != 0 {
-				DBtx.Rollback()	
-				}
-				fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB update.\" }")
-				return		
-			} else {
-				
-				log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully updated (%s,%s,%s,%s) in compute_access.",rName, uname, defShell, defhome))					
-			}
-		}
-		
-	}
-
 	// Begin with compute_access_group
 	// see if the user/group/resource combination is already there. If so, then we might just be doing an update.
 	
@@ -2539,11 +2423,10 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 						   where cr.name=$1 and u.uname=$2 and g.name=$3`,rName,uname,gName).Scan(&uid,&grpid,&compid,&cagPrimary)
 	switch {
 	case err == sql.ErrNoRows:
-
+		
 		// OK, we don't have this combo, so we do an insert now
-		cagPrimary.Valid = true
 		if is_primary != "" {
-
+			cagPrimary.Valid = true
 			cagPrimary.Bool = ispri
 		}
 		_, inserr := DBtx.Exec(`insert into compute_access_group (compid, uid, groupid, last_updated, is_primary) values ( (select compid from compute_resources where name=$1), (select uid from users where uname=$2), (select groupid from groups where groups.name=$3 and groups.type = 'UnixGroup'), NOW(), $4)`, rName, uname, gName, cagPrimary)
@@ -2632,7 +2515,102 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 			}	
 		}
 	}
+	
+	// OK, now we deal with compute_access in much the same way.
+	// In this case we have shell and home directory to deal with though instead of is_primary
+	
+	err = DBtx.tx.QueryRow(`select ca.uid, ca.compid, ca.shell, ca.home_dir from compute_access as ca
+						   join groups as g on ca.groupid=g.groupid
+						   join users as u on u.uid=ca.uid
+						   join compute_resources as cr on cr.compid=ca.compid
+						   where cr.name=$1 and u.uname=$2 and g.name=$3`,rName,uname,gName).Scan(&uid,&compid,&defShell,&defhome)
+	
+	switch {
+	case err == sql.ErrNoRows:
 		
+		//grab the default home dir and shell paths for the given compid
+		
+		checkerr := DBtx.tx.QueryRow(`select default_shell, default_home_dir from compute_resources as cr where cr.name=$1`,rName).Scan(&defShell,&defhome)
+		if checkerr == sql.ErrNoRows {
+			// the given compid does not exist in this case. Exit accordingly.	
+			log.WithFields(QueryFields(r, startTime)).Error("resource " + rName + " does not exist.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
+			if cKey != 0 {
+				DBtx.Rollback()
+			}
+			return	
+		}
+		//check if the query specified a shell or directory value
+		if shell != "" {
+			defShell.Valid = true
+			defShell.String = strings.TrimSpace(shell)
+		}
+		if homedir != "" {
+			defhome.Valid = true
+			defhome.String = strings.TrimSpace(homedir)
+		}
+		// now, do the actual insert
+		
+		_, inserr := DBtx.Exec(`insert into compute_access (compid, uid, shell, home_dir)
+								values ((select compid from compute_resources where name = $1),
+										(select uid from users where uname = $2), $3, $4)`,
+			rName, uname, defShell, defhome)
+		if inserr != nil {
+			if cKey != 0 {
+				DBtx.Rollback()
+			}
+			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + inserr.Error())
+			// now we also need to do a bunch of other checks here
+			if strings.Contains(inserr.Error(),"null value in column \"compid\"") {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
+				return	
+				
+			} else if strings.Contains(inserr.Error(),"null value in column \"uid\"") {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+				return	
+			} else {
+				w.WriteHeader(http.StatusNotFound)
+				fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB insert.\" }")
+				return		
+			}
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully inserted (%s,%s,%s,%s) into compute_access.",rName, uname, defShell, defhome))		
+		}
+		
+	case err != nil:
+		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error()) 
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+		if cKey != 0 {
+			DBtx.Rollback()
+		}
+		return		
+		
+	default: // OK, we already have this user/group/resource combo. We just need to check if the call is trying to change the shell or home dir. If neither option was provided, that implies we're just keeping what is already there, so just log that nothing is changing and return success.
+		
+		if "" == shell && "" == homedir {
+			// everything in the DB is already the same as the request, so don't do anything
+			log.WithFields(QueryFields(r, startTime)).Print("The request already exists in the database. Nothing to do.")
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"The request already exists in the database.\" }")
+			}
+			DBtx.Report("The request already exists in the database.")
+		} else {
+			_, moderr := DBtx.Exec(`update compute_access set shell=$1,home_dir=$2,last_updated=NOW() where uid=$3 and compid=$4`,defShell,defhome,uid,compid)
+			if moderr != nil {
+				log.WithFields(QueryFields(r, startTime)).Error("Error in DB update: " + err.Error()) 
+				if cKey != 0 {
+				DBtx.Rollback()	
+				}
+				fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB update.\" }")
+				return		
+			} else {
+				
+				log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully updated (%s,%s,%s,%s) in compute_access.",rName, uname, defShell, defhome))					
+			}
+		}
+		
+	}
+	
 	// Finally commit the transaction if both parts succeeded and we don't have a transaction key of 0
 	if cKey != 0 {
 		DBtx.Commit(cKey)
