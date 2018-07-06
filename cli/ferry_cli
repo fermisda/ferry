@@ -6,14 +6,13 @@ import re
 import requests
 import json
 
-
 class FERRYcli(object):
 
     def __init__(self):
         parser = argparse.ArgumentParser(epilog=self.CommandList())
         parser.add_argument('command',help='Subcommand to run')
         self.cline = parser.parse_args(sys.argv[1:2])
-        self.FerryURL="https://fermicloud044.fnal.gov:8443"
+        self.FerryURL="https://fermicloud033.fnal.gov:8443"
 
         if not hasattr(self, self.cline.command):
             print ('Unrecognized command')
@@ -37,11 +36,12 @@ class FERRYcli(object):
         # return just the Ferry function calls for the epilog
         return "Valid commands are: %s" % ','.join(OnlyFerry)
 
-    def sendRequest(url,paramaters):
-        response = requests.post(url, params=parameters, timeout=(10,10), verify="/fife/local/data/home/boyd/cilogon-osg.pem", cert=('/home/ferry/.cert/hostcert.pem','/home/ferry/.cert/hostkey.pem'))
+    def sendRequest(self,url,parameters):
+        response = requests.post(url, params=parameters, timeout=(10,10), verify="/etc/grid-security/certificates/cilogon-osg.pem", cert=('/tmp/x509up_u500'))
         if not (response.status_code == 200):
             jresponse = json.loads(response.text)
             print ("%s" % (jresponse["error"]))
+        return response
 
     def addCertificateDNToUser(self):
         pass
@@ -66,7 +66,7 @@ class FERRYcli(object):
 
         url = "%s/setUserExperimentFQAN" % self.FerryURL
         parameters = {'fqan': args.fqan,'username':args.username,'experimentname':args.exp}
-        sendRequest(url,paramaters)
+        sendRequest(url,parameters)
 
     def setUserShellAndHomeDir(self):
         pass
@@ -124,7 +124,7 @@ class FERRYcli(object):
 
         url = "%s/setGroupCondorQuota" % self.FerryURL
         parameters = {'groupname': args.exp,'resourcename':args.subgroup,'quota':args.quotaPerc,'validuntil':args.validDays}
-        sendRequest(url,paramaters)
+        sendRequest(url,parameters)
         
     def getGroupStorageQuotas(self):
         pass
@@ -137,7 +137,13 @@ class FERRYcli(object):
     def getGridmapFile(self):
         pass
     def getVORoleMapFile(self):
-        pass
+        url = "%s/getVORoleMapFile" % self.FerryURL
+        parameters = {}
+        response = self.sendRequest(url,parameters)
+        json_obj = json.loads(response.text)
+        for i in json_obj:
+            print ("%s %s" % (i["fqan"],i["mapped_uname"]))
+
     def getUserUID(self):
         pass
     def getUserUname(self):
@@ -179,7 +185,7 @@ class FERRYcli(object):
 
         url = "%s/createFQAN" % self.FerryURL
         parameters = {'fqan': args.fqan,'mapped_group':args.mapped_group,'mapped_user':args.mapped_user}
-        sendRequest(url,paramaters)
+        sendRequest(url,parameters)
 
     def removeRoleFromVO (self):
         parser = argparse.ArgumentParser(usage="%(prog)s removeRoleFromVO [<args>]")
@@ -188,7 +194,7 @@ class FERRYcli(object):
 
         url = "%s/removeFQAN" % self.FerryURL
         parameters = {'fqan': args.fqan}
-        sendRequest(url,paramaters)
+        sendRequest(url,parameters)
 
     def setFQANMappings(self):
         pass
