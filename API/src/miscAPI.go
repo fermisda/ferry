@@ -338,7 +338,7 @@ func getGridMapFile(w http.ResponseWriter, r *http.Request) {
 		type jsonerror struct {Error []string `json:"ferry_error"`}
 		var Err jsonerror
 
-		if !unitExists {
+		if !unitExists && unit != "%" {
 			Err.Error = append(Err.Error, "Experiment does not exist.")
 			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
 		}
@@ -411,7 +411,7 @@ func getGridMapFileByVO(w http.ResponseWriter, r *http.Request) {
 		type jsonerror struct {Error []string `json:"ferry_error"`}
 		var Err jsonerror
 
-		if !unitExists {
+		if !unitExists && unit != "%" {
 			Err.Error = append(Err.Error, "Experiment does not exist.")
 			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
 		}
@@ -496,7 +496,7 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 	var output interface{}
 	if len(Out) == 0 || !unitExists && unit != "%" {
 		var queryErr jsonerror
-		if !unitExists {
+		if !unitExists && unit != "%" {
 			queryErr.Error = append(queryErr.Error, "Experiment does not exist.")
 			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
 		} else {
