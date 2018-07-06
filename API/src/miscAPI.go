@@ -1317,6 +1317,14 @@ func createStorageResource(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	//require auth	
+	authorized,authout := authorize(r,AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
+		return
+	}
+
 	// CHECK IF UNIT already exists; add if not
 	var storageid int
 	checkerr := DBptr.QueryRow(`select storageid from storage_resources where name=$1`,rName).Scan(&storageid)
@@ -1382,7 +1390,7 @@ func setStorageResourceInfo(w http.ResponseWriter, r *http.Request) {
 		return	
 	}
 	
-	//require auth	
+ 	//require auth	
 	authorized,authout := authorize(r,AuthorizedDNs)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)

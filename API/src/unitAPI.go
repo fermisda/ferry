@@ -674,8 +674,8 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 
-	fqan := q.Get("fqan")
-	mGroup := q.Get("mapped_group")
+	fqan := strings.TrimSpace(q.Get("fqan"))
+	mGroup := strings.TrimSpace(q.Get("mapped_group"))
 	var mUser, unit string
 
 	if fqan == "" {
@@ -697,6 +697,13 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 		unit = `'` + q.Get("unitname") + `'`
 	} else {
 		unit = `null`
+	}
+
+	authorized,authout := authorize(r,AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
+		return
 	}
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
@@ -768,7 +775,7 @@ func removeFQAN(w http.ResponseWriter, r *http.Request) {
 	var inputErr []jsonstatus
 
 	q := r.URL.Query()
-	fqan := q.Get("fqan")
+	fqan := strings.TrimSpace(q.Get("fqan"))
 
 	if fqan == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No fqan specified in http query.")
@@ -780,6 +787,13 @@ func removeFQAN(w http.ResponseWriter, r *http.Request) {
 			log.WithFields(QueryFields(r, startTime)).Error(err)
 		}
 		fmt.Fprintf(w, string(jsonout))
+		return
+	}
+
+	authorized,authout := authorize(r,AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
 		return
 	}
 
@@ -828,9 +842,9 @@ func setFQANMappings(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 
-	fqan := q.Get("fqan")
-	mUser := q.Get("mapped_user")
-	mGroup := q.Get("mapped_group")
+	fqan := strings.TrimSpace(q.Get("fqan"))
+	mUser := strings.TrimSpace(q.Get("mapped_user"))
+	mGroup := strings.TrimSpace(q.Get("mapped_group"))
 
 	var values []string
 	var uid, groupid sql.NullInt64
@@ -881,6 +895,13 @@ func setFQANMappings(w http.ResponseWriter, r *http.Request) {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 		}
 		fmt.Fprintf(w, string(out))
+		return
+	}
+
+	authorized,authout := authorize(r,AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
 		return
 	}
 

@@ -690,6 +690,14 @@ func removeUserFromGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	//require auth	
+	authorized,authout := authorize(r,AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
+		return
+	}
+
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
