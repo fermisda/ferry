@@ -156,12 +156,7 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 	
 	unit := strings.TrimSpace(q.Get("unitname"))
 	comp := strings.TrimSpace(q.Get("resourcename"))
-	
-	if unit == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No unitname specified.\" }")
-		return
-	}
+
 	if comp == "" {
 		comp = "%"
 	}
@@ -180,13 +175,13 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 								left join compute_resources as cr using (unitid)
                                                                 left join compute_access_group as cag using (groupid,compid)
 								left join users as u using (uid)
-								where au.name = $1 and g.type = 'UnixGroup' and (cr.name like $2) and (g.last_updated>=$3 or u.last_updated>=$3 or cag.last_updated>=$3 or au.last_updated>=$3 or $3 is null)
+								where (au.name = $1 or $4) and g.type = 'UnixGroup' and (cr.name like $2) and (g.last_updated>=$3 or u.last_updated>=$3 or cag.last_updated>=$3 or au.last_updated>=$3 or $3 is null)
                                                                 order by g.name,u.uname
 							) as t
 								right join (select 1 as key,
 								$1 in (select name from affiliation_units) as unit_exists,
                                                    		$2 in (select name from compute_resources) as comp_exists
- 							) as c on t.key = c.key;`, unit, comp, lastupdate)
+ 							) as c on t.key = c.key;`, unit, comp, lastupdate, unit=="")
 
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
@@ -257,7 +252,7 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 	if prevGname == "" {
 		type jsonerror struct {Error string `json:"ferry_error"`}
 		var Err []jsonerror
-		if !unitExists {
+		if !unitExists && unit != "" {
 			Err = append(Err, jsonerror{"Affiliation unit does not exist."})
 			log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
 		}
