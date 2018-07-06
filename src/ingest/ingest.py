@@ -528,7 +528,7 @@ def read_nis(primary_groups, dir_path, exclude_list, altnames, users, groups):
         if dir in exclude_list:
             # print("Skipping %s" % (dir,), file=sys.stderr)
             continue
-        nis[dir] = ComputeResource( dir, dir)
+        nis[dir] = ComputeResource(dir, dir)
 
         # dcarber:KERBEROS:52790:9467:Daniel Carber: / nashome / d / dcarber: / bin / bash
         lines = open("%s/%s/passwd" % (dir_path,dir)).readlines()
@@ -608,6 +608,23 @@ def read_nis(primary_groups, dir_path, exclude_list, altnames, users, groups):
             nis[dir].primary_gid.append(gid)
 
     return nis
+
+def add_compute_resources(users, groups):
+    computeResources = {}
+
+    # Add fermi_workers resource
+    name = "fermi_workers"
+    defHome = "/home"
+    defShell = "/sbin/nologin"
+    computeResources[name] = ComputeResource(name, None, "Batch", defHome, defShell)
+    for uname in users:
+        if users[uname].is_k5login or uname in gums:
+            computeResources[name].users[uname] = users[uname]
+            if groups["fnalgrid"] not in users[uname].groups:
+                users[uname].add_group("fnalgrid", groups["fnalgrid"], False)
+            users[uname].compute_access[name] = ComputeAccess(name, groups["fnalgrid"], defHome, defShell)
+
+    return computeResources
 
 def read_compute_batch(config):
     """
@@ -920,7 +937,7 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
     fd.flush()
 
     #populate compute_resource
-    nis_counter = 0
+    res_counter = 0
     for cu in collaborations:
         if cu.name in nis.keys():
             nis_info = nis[cu.name]
@@ -929,7 +946,7 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
         else:
             print("Neither %s not %s found in NIS" % (cu.name,cu.alt_name), file=sys.stderr)
             continue
-        nis_counter += 1
+        res_counter += 1
         fd.write("insert into compute_resources (name, default_shell, default_home_dir, type, unitid, last_updated)" +\
                  " values (\'%s\', \'%s\', \'%s\', \'%s\', %s, NOW());\n" % (nis_info.cresource, nis_info.cshell,
                                                                              nis_info.chome,nis_info.ctype,cu.unitid))
@@ -938,12 +955,33 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
             comp = user.compute_access[nis_info.cresource]
             groupid = gid_map[comp.gid]
             fd.write("insert into compute_access (compid, uid, shell, home_dir, last_updated)" + \
-                     " values (%s, %s, \'%s\', \'%s\', NOW());\n" % (nis_counter, user.uid, comp.shell, comp.home_dir))
+                     " values (%s, %s, \'%s\', \'%s\', NOW());\n" % (res_counter, user.uid, comp.shell, comp.home_dir))
             fd.write("insert into compute_access_group (compid, uid, groupid, is_primary)" + \
-                     " values (%s, %s, %s, true);\n" % (nis_counter, user.uid, groupid))
+                     " values (%s, %s, %s, true);\n" % (res_counter, user.uid, groupid))
             for gid in user.compute_access[nis_info.cresource].secondary_groups:
                 fd.write("insert into compute_access_group (compid, uid, groupid, is_primary)" + \
-                         " values (%s, %s, %s, false);\n" % (nis_counter, user.uid, gid_map[gid]))
+                         " values (%s, %s, %s, false);\n" % (res_counter, user.uid, gid_map[gid]))
+
+    for res in compute_resources.values():
+        if res.cunit:
+            unit = res.unitid
+        else:
+            unit = "Null"
+        res_counter += 1
+        fd.write("insert into compute_resources (name, default_shell, default_home_dir, type, unitid, last_updated)" +\
+                 " values (\'%s\', \'%s\', \'%s\', \'%s\', %s, NOW());\n" % (res.cresource, res.cshell,
+                                                                             res.chome,res.ctype,unit))
+        for _, user in res.users.items():
+            comp = user.compute_access[res.cresource]
+            groupid = gid_map[comp.gid]
+            fd.write("insert into compute_access (compid, uid, shell, home_dir, last_updated)" + \
+                     " values (%s, %s, \'%s\', \'%s\', NOW());\n" % (res_counter, user.uid, comp.shell, comp.home_dir))
+            fd.write("insert into compute_access_group (compid, uid, groupid, is_primary)" + \
+                     " values (%s, %s, %s, true);\n" % (res_counter, user.uid, groupid))
+            for gid in user.compute_access[res.cresource].secondary_groups:
+                fd.write("insert into compute_access_group (compid, uid, groupid, is_primary)" + \
+                         " values (%s, %s, %s, false);\n" % (res_counter, user.uid, gid_map[gid]))
+
     fd.flush()
     
     #populate storage_resource
@@ -1041,7 +1079,7 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
                      "\'%s\',NOW());\n" % (int(user.uid), external_affiliation[0], external_affiliation[1]))
 
     # populating compute_batch
-    cr_counter = nis_counter
+    cr_counter = res_counter
     for cr_name, cr_data in batch_structure.items():
         cr_counter += 1
         query = ("insert into compute_resources (name, default_shell, default_home_dir, type, unitid, last_updated) " + 
@@ -1217,6 +1255,9 @@ if __name__ == "__main__":
 
     # read Vulcan X509 certificates and voms and add this information to proper containers
     read_vulcan_certificates(config, users, vomss)
+
+    # add special compute resoruces
+    compute_resources = add_compute_resources(users, gids)
 
     # need to assign incremental ids to all the entities
     # groupid  - use gids index
