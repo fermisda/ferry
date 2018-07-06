@@ -46,7 +46,7 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 	}
 	var inputErr []jsonerror
 
-	unit := q.Get("unitname")
+	unit := strings.TrimSpace(q.Get("unitname"))
 	if unit == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No unitname specified."})
@@ -60,7 +60,14 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, string(jsonout))
 		return
 	}
-
+	
+    	authorized,authout := authorize(r,AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
+		return
+	}    
+        
 	var DBtx Transaction
 	R := WithTransaction(r, &DBtx)
 	
@@ -71,7 +78,7 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	uName := q.Get("username")
+	uName := strings.TrimSpace(q.Get("username"))
 	dnTemplate := "/DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=%s/CN=UID:%s"
 	var fullName string
 	var valid bool
@@ -218,7 +225,14 @@ func setLPCStorageAccess(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
-
+	
+	authorized,authout := authorize(r,AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
+		return
+	}
+	
 	var DBtx Transaction
 	R := WithTransaction(r, &DBtx)
 
@@ -244,7 +258,7 @@ func setLPCStorageAccess(w http.ResponseWriter, r *http.Request) {
 		DBtx.RollbackToSavepoint("addCertificateDNToUser")
 	}
 
-	cernUname := q.Get("external_username")
+	cernUname := strings.TrimSpace(q.Get("external_username"))
 
 	if cernUname != "" {
 		q.Set("attribute", "cern_username")
@@ -309,6 +323,13 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 		
 		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No unitname specified."})	
+	}
+
+	authorized,authout := authorize(r,AuthorizedDNs)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
+		return
 	}
 
 	duplicateCount := 0
