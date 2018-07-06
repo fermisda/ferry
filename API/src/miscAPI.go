@@ -21,8 +21,8 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 	
-	unit := q.Get("unitname")
-	comp := q.Get("resourcename")
+	unit := strings.TrimSpace(q.Get("unitname"))
+	comp := strings.TrimSpace(q.Get("resourcename"))
 	
 	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
@@ -126,7 +126,7 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 	if len(Out) == 0 {
 		type jsonerror struct {Error string `json:"ferry_error"`}
 		var Err []jsonerror
-		if !unitExists {
+		if !unitExists && unit != "" {
 			Err = append(Err, jsonerror{"Affiliation unit does not exist."})
 			log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
 		}
