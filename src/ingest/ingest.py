@@ -662,7 +662,15 @@ def read_vulcan_compute_resources(config, nis, users, groups, cms_groups):
         comp = comp.strip().split(",")
         dir = "cms"
         
-        if comp[0] != "0":
+        if comp[0] == "N":
+            nis[dir].cresource = comp[1]
+            nis[dir].chome = comp[4]
+            nis[dir].cshel = comp[3]
+            for uname in users:
+                if dir in users[uname].compute_access.keys():
+                    users[uname].compute_access[comp[1]] = users[uname].compute_access[dir]
+                    users[uname].compute_access.__delitem__(dir)
+        elif comp[0] != "F":
             nis[dir] = ComputeResource(comp[1], dir, comp[2], comp[4], comp[3])
             cursor.execute("select g.groupid, g.gpname from res_shares_t1 as s left join groups_t1 as g on s.groupid = g.groupid where s.resourceid = %s;" % comp[0])
             resourceGroups = cursor.fetchall()

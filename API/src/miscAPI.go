@@ -21,8 +21,8 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 	
-	unit := strings.TrimSpace(q.Get("unitname"))
-	comp := strings.TrimSpace(q.Get("resourcename"))
+	unit := q.Get("unitname")
+	comp := q.Get("resourcename")
 	
 	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
@@ -37,8 +37,7 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
                                                               left join compute_access as ca using (compid, uid) 
                                                               join groups as g on g.groupid=cag.groupid 
                                                               join compute_resources as cr on cr.compid=cag.compid 
-                                                              left join affiliation_units as au on au.unitid=cr.unitid 
-                                                              join users as u on u.uid=cag.uid
+                                                              join affiliation_units as au on au.unitid=cr.unitid join users as u on u.uid=cag.uid
                                                               where  cag.is_primary = true and (au.name = $1 or $3) and (cr.name = $2 or $4) and (ca.last_updated>=$5 or u.last_updated>=$5 or au.last_updated>=$5 or cr.last_updated>=$5 or g.last_updated>=$5 or $5 is null) order by au.name, cr.name
 							) as t
 								right join (select 1 as key,
@@ -81,19 +80,14 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var tmpAname, tmpRname, tmpUname, tmpUid, tmpGid, tmpGecos, tmpHdir, tmpShell,tmpTime sql.NullString
 		rows.Scan(&tmpAname, &tmpRname, &tmpUname, &tmpUid, &tmpGid, &tmpGecos, &tmpHdir, &tmpShell, &unitExists, &compExists, &tmpTime)
-		log.WithFields(QueryFields(r, startTime)).Println(tmpAname.String  + " " + tmpRname.String + " " + tmpUname.String)
-		
-		if ! tmpAname.Valid {
-			tmpAname.Valid = true
-			tmpAname.String = "null"
-		}		
+
 		if prevRname == "" {
 			prevRname = tmpRname.String
 		}
 		if prevAname == "" {
-			prevAname = tmpAname.String 
+			prevAname = tmpAname.String
 		}
-		
+
 		if tmpRname.Valid {
 			if prevRname != tmpRname.String {
 				tmpResources[prevRname] = tmpUsers
@@ -104,12 +98,7 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 				Out[prevAname] = jsonunit{tmpResources, lasttime}
 				tmpResources = make(map[string][]jsonuser, 0)
 				lasttime = 0
-				if tmpAname.Valid { 
-					prevAname = tmpAname.String
-				} else {
-					prevAname = "null"
-				}
-				
+				prevAname = tmpAname.String
 			}
 			if tmpTime.Valid {
 				log.WithFields(QueryFields(r, startTime)).Println("tmpTime is valid" + tmpTime.String)
@@ -449,12 +438,11 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 	type jsonerror struct {Error []string `json:"ferry_error"`}
 	var inputErr jsonerror
 	
-	unit := strings.TrimSpace(q.Get("unitname"))
+	unit := q.Get("unitname")
 	if unit == "" {
 		unit = "%"
 	}
-	rName := strings.TrimSpace(q.Get("resourcename"))
-
+	
 	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
 		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
@@ -471,15 +459,15 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := DBptr.Query(`select t.fqan, t.uname, t.name, c.unit_exists, c.resource_exists from
+	rows, err := DBptr.Query(`select t.fqan, t.uname, t.name, c.unit_exists from
 							  (select 1 as key, fqan, uname, name from grid_fqan as gf
 							   join users as u on gf.mapped_user = u.uid
 							   join affiliation_units as au on gf.unitid = au.unitid
-							   where fqan like $3 and (gf.last_updated >= $2 or u.last_updated >= $2 or $2 is null) and ($4 or gf.mapped_user in (select ca.uid from compute_access ca join compute_resources cr using(compid) where cr.name=$5 ))
+							   where fqan like $3 and (gf.last_updated >= $2 or u.last_updated >= $2 or $2 is null)
 							  ) as t
 							  right join (
-							   select 1 as key, $1 in (select name from affiliation_units) as unit_exists, $5 in (select name from compute_resources) as resource_exists
-							  ) as c on t.key = c.key`, unit, lastupdate, "%" + unit + "%", rName == "",rName)
+							   select 1 as key, $1 in (select name from affiliation_units) as unit_exists
+							  ) as c on t.key = c.key`, unit, lastupdate, "%" + unit + "%")
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
@@ -488,7 +476,7 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var unitExists,resourceExists bool
+	var unitExists bool
 
 	type jsonentry struct {
 		DN string `json:"fqan"`
@@ -499,21 +487,18 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 
 	for rows.Next() {
 		var tmpFQAN, tmpUname, tmpAname sql.NullString
-		rows.Scan(&tmpFQAN, &tmpUname, &tmpAname, &unitExists,&resourceExists)
+		rows.Scan(&tmpFQAN, &tmpUname, &tmpAname, &unitExists)
 		if tmpFQAN.Valid {
 			Out = append(Out, jsonentry{tmpFQAN.String, tmpUname.String, tmpAname.String})
 		}
 	}
 
 	var output interface{}
-	if len(Out) == 0 || (!unitExists && unit != "%") || (!resourceExists && rName != "" ) {
+	if len(Out) == 0 || !unitExists && unit != "%" {
 		var queryErr jsonerror
-		if !unitExists && unit != "%" {
+		if !unitExists {
 			queryErr.Error = append(queryErr.Error, "Experiment does not exist.")
 			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
-		} else if !resourceExists && rName != "" {
-			queryErr.Error = append(queryErr.Error, "Resource does not exist.")
-			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
 		} else {
 			queryErr.Error = append(queryErr.Error, "No FQANs found.")
 			log.WithFields(QueryFields(r, startTime)).Error("No FQANs found.")
@@ -665,7 +650,7 @@ func lookupCertificateDN(w http.ResponseWriter, r *http.Request) {
 	}
 	var inputErr []jsonerror
 
-	certdn := strings.TrimSpace(q.Get("certificatedn"))
+	certdn := q.Get("certificatedn")
 
 	if certdn == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No certificatedn name specified in http query.")
