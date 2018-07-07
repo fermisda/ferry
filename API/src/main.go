@@ -270,7 +270,6 @@ func main() {
 		//disable TLS1.0 per redmine issue 20291
 		MinVersion:         tls.VersionTLS11,
 		InsecureSkipVerify: false,
-		//allow only certain cipher suites, mostly just TLS 1.2 compliant and a few for TLS 1.1
 		CipherSuites:       Ciphers,    
 	}
 	
