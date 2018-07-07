@@ -267,7 +267,6 @@ func main() {
 		ClientCAs:          Certpool,
 		GetConfigForClient: checkClientIP,
 		Certificates:       nil,
-		//disable TLS1.0 per redmine issue 20291
 		MinVersion:         tls.VersionTLS11,
 		InsecureSkipVerify: false,
 		CipherSuites:       Ciphers,    
