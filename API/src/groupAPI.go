@@ -1170,6 +1170,7 @@ func getCondorQuotas(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, string(jsonoutput))
 }
+
 func setGroupBatchPriority(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
@@ -1290,6 +1291,7 @@ func setCondorQuota(w http.ResponseWriter, r *http.Request) {
 
 	DBtx.Commit(cKey)
 }
+
 func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
