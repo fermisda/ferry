@@ -243,13 +243,30 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	Ciphers := []uint16{
+		tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+		tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+		tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
+		tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+		tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+		tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
+		tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+		tls.TLS_RSA_WITH_AES_128_CBC_SHA,
+		tls.TLS_RSA_WITH_AES_256_CBC_SHA}
+	
 	Mainsrv.TLSConfig = &tls.Config{
 		ClientAuth:         tls.RequireAndVerifyClientCert,
 		ClientCAs:          Certpool,
 		GetConfigForClient: checkClientIP,
 		Certificates:       nil,
+		//disable TLS1.0 per redmine issue 20291
+		MinVersion:         tls.VersionTLS11,
+		InsecureSkipVerify: false,
+		//allow only certain cipher suites, mostly just TLS 1.2 compliant and a few for TLS 1.1
+		CipherSuites:       Ciphers,    
 	}
-
+	
 	dnlist, listerror := createDNlist(srvConfig["dnlist"])
 	if listerror != nil {
 		log.Fatal(listerror)
