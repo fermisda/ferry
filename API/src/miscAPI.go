@@ -321,7 +321,8 @@ func getGridMapFile(w http.ResponseWriter, r *http.Request) {
 	if unit == "" {
 		unit = "%"
 	}
-	
+	rName := strings.TrimSpace(q.Get("resourcename"))
+
 	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
 		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
@@ -329,15 +330,17 @@ func getGridMapFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var unitExists bool
+	var unitExists,resourceExists bool
 
-	rows, err := DBptr.Query(`select distinct dn, uname, unit_exists from 
+	rows, err := DBptr.Query(`select distinct dn, uname, unit_exists, resource_exists from 
 							 (select 1 as key, au.name, uc.dn, us.uname from  affiliation_unit_user_certificate as ac
 								left join user_certificates as uc on ac.dnid = uc.dnid
 								left join users as us on uc.uid = us.uid
+								left join compute_access as ca on us.uid = ca.uid
 								left join affiliation_units as au on ac.unitid = au.unitid
-								where au.name like $1 and ( ac.last_updated>=$2 or uc.last_updated>=$2 or us.last_updated>=$2 or au.last_updated>=$2 or $2 is null)) as t
-	 						  right join (select 1 as key, $1 in (select name from affiliation_units) as unit_exists) as c on t.key = c.key`, unit, lastupdate)
+								left join compute_resources as cr on ca.compid = cr.compid
+								where au.name like $1 and ( ac.last_updated>=$2 or uc.last_updated>=$2 or us.last_updated>=$2 or au.last_updated>=$2 or $2 is null) and (cr.name = $3 or $4)) as t
+	 						  right join (select 1 as key, $1 in (select name from affiliation_units) as unit_exists, ($3 in (select name from compute_resources) or $4) as resource_exists) as c on t.key = c.key`, unit, lastupdate, rName, rName=="")
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
@@ -355,7 +358,7 @@ func getGridMapFile(w http.ResponseWriter, r *http.Request) {
 
 	for rows.Next() {
 		var tmpDN, tmpUname sql.NullString
-		rows.Scan(&tmpDN, &tmpUname, &unitExists)
+		rows.Scan(&tmpDN, &tmpUname, &unitExists, &resourceExists)
 		if tmpDN.Valid {
 			dnmap.DN, dnmap.Uname = tmpDN.String, tmpUname.String
 			Out = append(Out, dnmap)
@@ -370,6 +373,9 @@ func getGridMapFile(w http.ResponseWriter, r *http.Request) {
 		if !unitExists && unit != "%" {
 			Err.Error = append(Err.Error, "Experiment does not exist.")
 			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
+		} else if !resourceExists && rName != "" {
+			Err.Error = append(Err.Error, "Resource " + rName + " does not exist.")
+			log.WithFields(QueryFields(r, startTime)).Error("Resource " +  rName + " does not exist.")
 		}
 		Err.Error = append(Err.Error, "No DNs found.")
 		log.WithFields(QueryFields(r, startTime)).Error("No DNs found.")
