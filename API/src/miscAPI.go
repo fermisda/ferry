@@ -474,9 +474,6 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 	var inputErr jsonerror
 	
 	unit := strings.TrimSpace(q.Get("unitname"))
-	if unit == "" {
-		unit = "%"
-	}
 	rName := strings.TrimSpace(q.Get("resourcename"))
 
 	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
@@ -495,15 +492,18 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := DBptr.Query(`select t.fqan, t.uname, t.name, c.unit_exists, c.resource_exists from
-							  (select 1 as key, fqan, uname, name from grid_fqan as gf
+	rows, err := DBptr.Query(`select distinct t.fqan, t.uname, t.name, c.unit_exists, c.resource_exists from
+							  (select 1 as key, fqan, uname, au.name from grid_fqan as gf
 							   join users as u on gf.mapped_user = u.uid
-							   join affiliation_units as au on gf.unitid = au.unitid
-							   where fqan like $3 and (gf.last_updated >= $2 or u.last_updated >= $2 or $2 is null) and ($4 or gf.mapped_user in (select ca.uid from compute_access ca join compute_resources cr using(compid) where cr.name=$5 ))
+							   join groups as g on gf.mapped_group = g.groupid
+							   join compute_access_group as cag using (groupid)
+							   join compute_resources as cr on cag.compid=cr.compid
+							   left join affiliation_units as au on gf.unitid = au.unitid
+							   where (au.name like $1 or $2 ) and fqan like $3 and (gf.last_updated >= $4 or u.last_updated >= $4 or $4 is null) and ($5 or cr.name=$6)
 							  ) as t
 							  right join (
-							   select 1 as key, $1 in (select name from affiliation_units) as unit_exists, $5 in (select name from compute_resources) as resource_exists
-							  ) as c on t.key = c.key`, unit, lastupdate, "%" + unit + "%", rName == "",rName)
+							   select 1 as key, ($1 in (select name from affiliation_units) or $2) as unit_exists, $6 in (select name from compute_resources) as resource_exists
+							  ) as c on t.key = c.key order by t.fqan`, unit, unit == "",  "%" + unit + "%", lastupdate, rName == "",rName)
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
