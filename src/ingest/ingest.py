@@ -297,6 +297,8 @@ def read_gums_config(config, usrs, grps):
             for element in child.getchildren():
                 voms_user_group = element.attrib.get('name')   # this is an unique name of VOMSUserGroup
                 voms_server = element.attrib.get('vomsServer')
+                if voms_server not in ["fermilab", "dune", "des", "cdf", "dzero"]:
+                    continue
                 vo_group = element.attrib.get('voGroup')
                 if not vo_group:
                     continue
@@ -1032,7 +1034,7 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
                 exp_id = str(cu.unitid)
                 break
 
-        fd.write("insert into grid_fqan (unitid,fqan,mapped_user,mapped_group) values(%s,\'%s/Role=%s\', (select uid from users where uname = %s), (select groupid from groups where name = \'%s\' and type = 'UnixGroup'));\n"
+        fd.write("insert into grid_fqan (unitid,fqan,mapped_user,mapped_group) values(%s,\'%s/Role=%s/Capability=NULL\', (select uid from users where uname = %s), (select groupid from groups where name = \'%s\' and type = 'UnixGroup'));\n"
         % (exp_id,gmap.group,gmap.role,un,gname))
         gmap.set_id(fqan_counter)
     fd.flush()
