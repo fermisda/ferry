@@ -2691,10 +2691,10 @@ func getAllUsers(w http.ResponseWriter, r *http.Request) {
 		Status bool `json:"status"`
 		ExpDate string `json:"expiration_date"`
 	} 
-	var tmpout jsonout
 	var Out []jsonout
 	
 	for rows.Next() {
+		var tmpout jsonout
 		rows.Scan(&tmpout.Uname, &tmpout.UID, &tmpout.Fullname, &tmpout.Status, &tmpout.ExpDate)
 		Out = append(Out, tmpout)
 	}
