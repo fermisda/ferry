@@ -2554,6 +2554,21 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 
 			cagPrimary.Bool = ispri
 		}
+
+		// Now, if the API call said is_primary = true, we need to check for other, existing entries for the same compid and uid, and set their is_primary flag to false. Onyl do this is is_primary was set to true though.
+		if is_primary != "" && cagPrimary.Bool == true {
+			_, uperr := DBtx.Exec(`update compute_acess_group set is_primary=false, last_updated=NOW() where compid=(select compid from compute_resources where name=$1) and uid=(select uid from users where uname=$2) and groupid not in (select groupid from groups where groups.name=$3 and groups.type = 'UnixGroup')`,rName, uname, gName)
+			if uperr != nil {	
+				
+				log.WithFields(QueryFields(r, startTime)).Error("Error update is_primary field in existing DB entries: " + uperr.Error())	
+				fmt.Fprintf(w, "{ \"ferry_error\": \"Error updating is_primary value for pre-existing compute_access_group entries. See ferry log.\" }")
+				if cKey != 0 {
+					DBtx.Rollback()
+				}
+				return
+			}
+		}
+		
 		_, inserr := DBtx.Exec(`insert into compute_access_group (compid, uid, groupid, last_updated, is_primary) values ( (select compid from compute_resources where name=$1), (select uid from users where uname=$2), (select groupid from groups where groups.name=$3 and groups.type = 'UnixGroup'), NOW(), $4)`, rName, uname, gName, cagPrimary)
 		if inserr != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + inserr.Error())
@@ -2572,19 +2587,7 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB insert.\" }")
 				return		
 			}
-			// Now, if the API call said is_primary = true, we need to check for other, existing entries for the same compid and uid, and set their is_primary flag to false. Onyl do this is is_primary was set to true though.
-			if is_primary != "" && cagPrimary.Bool == true {
-				_, uperr := DBtx.Exec(`update compute_acess_group set is_primary=false, last_updated=NOW() where compid=(select compid from compute_resources where name=$1) and uid=(select uid from users where uname=$2) and groupid not in (select groupid from groups where groups.name=$3 and groups.type = 'UnixGroup')`,rName, uname, gName)
-				if uperr != nil {	
-					
-					log.WithFields(QueryFields(r, startTime)).Error("Error update is_primary field in existing DB entries: " + uperr.Error())	
-					fmt.Fprintf(w, "{ \"ferry_error\": \"Error updating is_primary value for pre-existing compute_access_group entries. See ferry log.\" }")
-					if cKey != 0 {
-						DBtx.Rollback()
-					}
-					return
-				}
-			}
+			
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully inserted (%s,%s,%s) into compute_access_group.",rName, uname, gName))
 		}
@@ -2608,23 +2611,10 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 				//change the value stored in cagPrimary.Bool to be that of ispri, which is the new value
 				cagPrimary.Valid = true
 				cagPrimary.Bool = ispri
-				
-				_, moderr := DBtx.Exec(`update compute_access_group set is_primary=$1,last_updated=NOW() where groupid=$2 and uid=$3 and compid=$4`,cagPrimary,grpid,uid,compid)
-				if moderr != nil {
-					log.WithFields(QueryFields(r, startTime)).Error("Error in DB update: " + err.Error()) 
-					fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB update.\" }")
-					if cKey != 0 {
-						DBtx.Rollback()
-					}
-					return		
-				} else {
-					
-					log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully updated (%s,%s,%s,%s) in compute_access_group.",rName, uname, gName,is_primary))					
-				}
-				// Now, as before, we should set is_primary for any other entries to false, if we just set this entry to true
+					// Now, as before, we should set is_primary for any other entries to false, if we just set this entry to true
 				if cagPrimary.Bool == true {
 					
-					_, moderr = DBtx.Exec(`update compute_access_group set is_primary=false,last_updated=NOW() where groupid != $1 and uid=$2 and compid=$3`,grpid,uid,compid)
+					_, moderr := DBtx.Exec(`update compute_access_group set is_primary=false,last_updated=NOW() where groupid != $1 and uid=$2 and compid=$3`,grpid,uid,compid)
 					if moderr != nil {
 						log.WithFields(QueryFields(r, startTime)).Error("Error in DB update: " + err.Error()) 
 						fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB update.\" }")
@@ -2635,7 +2625,20 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 					} else {
 						
 						log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully updated (%s,%s) entries in compute_access_group.",rName, uname))					
-					}	
+					}
+					_, moderr = DBtx.Exec(`update compute_access_group set is_primary=$1,last_updated=NOW() where groupid=$2 and uid=$3 and compid=$4`,cagPrimary,grpid,uid,compid)
+					if moderr != nil {
+						log.WithFields(QueryFields(r, startTime)).Error("Error in DB update: " + err.Error()) 
+						fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB update.\" }")
+						if cKey != 0 {
+							DBtx.Rollback()
+						}
+						return		
+					} else {
+						
+						log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully updated (%s,%s,%s,%s) in compute_access_group.",rName, uname, gName,is_primary))					
+					}
+					
 				}
 			}	
 		}
