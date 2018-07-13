@@ -1889,7 +1889,8 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 			log.WithFields(QueryFields(r, startTime)).Error(err)
 		}
 		//actually insert
-		_, err = DBtx.Exec(`insert into users (uname, uid, full_name, status, expiration_date, last_updated) values $1,$2,$3,$4,$5,NOW()`, uName, uid, fullname, status, expdate)
+		_, err = DBtx.Exec(`insert into users (uname, uid, full_name, status, expiration_date, last_updated)
+							values ($1, $2, $3, $4, $5, NOW())`, uName, uid, fullname, status, expdate)
 
 	//	theStmt := fmt.Sprintf("insert into users (uname, uid, full_name, status, expiration_date, last_updated) values ('%s',%d,'%s','%s','%s',NOW())", uName, uid, fullname, status, expdate)
 	//	fmt.Println(theStmt)
