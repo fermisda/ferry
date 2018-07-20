@@ -109,7 +109,9 @@ def writeToFerry(action, params):
         jOut = json.loads(urllib.request.urlopen(url, context=ferryContext).read().decode())
         logging.debug(jOut)
         if not "ferry_error" in jOut:
+            logging.info("action: %s(%s)" % (action, params))
             return True
+        logging.error(jOut["ferry_error"])
         return False
     else:
         params = ", ".join(["%s=%s" % (x, y) for x, y in params.items()])
@@ -241,8 +243,7 @@ def fetch_ferry():
         logging.debug("Fetching Ferry users access to %s: %s" % (resource, url))
         jPasswd = json.loads(urllib.request.urlopen(url, context=ferryContext).read().decode())
         jPasswd = list(jPasswd.values())[0] # get first affiliation unit
-        jPasswd = list(jPasswd.values())[0] # get resources list
-        jPasswd = jPasswd[resource]
+        jPasswd = jPasswd["resources"][resource]
         for access in jPasswd:
             users[access["uid"]].addComputeAccess(accessString)
 
@@ -377,7 +378,7 @@ if __name__ == "__main__":
                             format="[%(asctime)s][%(levelname)s] %(message)s",
                             datefmt="%m/%d/%Y %H:%M:%S")
 
-    ferryContext = ssl.SSLContext()
+    ferryContext = ssl.SSLContext(protocol=ssl.PROTOCOL_TLSv1_2)
     ferryContext.verify_mode = ssl.CERT_REQUIRED
     ferryContext.load_cert_chain(config.get("ferry", "cert"), config.get("ferry", "key"))
     ferryContext.load_verify_locations(config.get("ferry", "ca"))
