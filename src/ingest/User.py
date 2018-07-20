@@ -42,7 +42,7 @@ class User:
         self.uname = name
         self.full_name = full_name.replace("'", "''")
         self.uid = uid
-        self.status = True
+        self.status = False
         self.expiration_date = None
         self.is_k5login = False
         self.user_affiliation_attributes = {}
@@ -68,6 +68,9 @@ class User:
 
     def set_status(self, status):
         self.status = status
+
+    def set_full_name(self, full_name):
+        self.full_name = full_name
 
     def add_cert(self, cert):
         if cert.dn not in self.certificates.keys():

@@ -31,8 +31,8 @@ def read_uid(fname):
                 continue
             tmp = line[:-1].split("\t\t")
             if not usrs.__contains__(tmp[4].strip().lower()):
-                usrs[tmp[4].strip().lower()] = User(tmp[0].strip(), tmp[3].strip().lower().capitalize() + " " +
-                                                     tmp[2].strip().lower().capitalize(), tmp[4].strip().lower())
+                usrs[tmp[4].strip().lower()] = User(tmp[0].strip(), tmp[3].strip().capitalize() + " " +
+                                                     tmp[2].strip().capitalize(), tmp[4].strip().lower())
                 gname = list(gids.keys())[list(gids.values()).index(tmp[1].strip().lower())]
                 usrs[tmp[4].strip().lower()].add_group(gname, (tmp[1].strip().lower()))
         except:
@@ -78,9 +78,9 @@ def read_services_users(fname, users):
         try:
             tmp = line[:-1].split(",")
             if users.__contains__(tmp[0]):
-                if tmp[2] != "No Expiration date":
-                    if tmp[2] == "EXPIRED":
-                        users[tmp[0]].set_status(0)
+                if tmp[2] != "EXPIRED":
+                    users[tmp[0]].set_status(True)
+                users[tmp[0]].set_full_name(tmp[1].strip('"'))
                 users[tmp[0]].set_expiration_date(tmp[2].strip())
                 users[tmp[0]].is_k5login = True
         except:
@@ -286,7 +286,7 @@ def read_gums_config(config, usrs, grps):
     Returns:
 
     """
-    gums_fn = config.config.get("gums_config", "gums_config")
+    gums_fn = config.config.get("gums", "gums_config")
     tree = ET.parse(gums_fn)
     gums_mapping = {}
     vo_groups={}
@@ -411,6 +411,17 @@ def read_vulcan_certificates(config, users, vomss):
     Returns:
 
     """
+    # reads valid certificates from gums
+    mysql_client_cfg = MySQLUtils.createClientConfig("gums", config.config)
+    connect_str = MySQLUtils.getDbConnection("gums", mysql_client_cfg, config.config)
+    command = "select distinct USERS.DN from USERS, MAPPING \
+               where USERS.DN=MAPPING.DN and USERS.GROUP_NAME like 'cmsuser-null' \
+               and MAPPING.ACCOUNT not like 'uscms%' and MAPPING.MAP='uscmsPool' \
+               order by MAPPING.ACCOUNT"
+    validDNs, return_code = MySQLUtils.RunQuery(command, connect_str, False)
+    if return_code:
+        print("Failed to read valid CMS certificates from GUMS", file=sys.stderr)
+
     cfg = config.config._sections["vulcan"]
     conn_string = "host='%s' dbname='%s' user='%s' password='%s'" % \
                   (cfg["hostname"], cfg["database"], cfg["username"], cfg["password"])
@@ -441,7 +452,8 @@ def read_vulcan_certificates(config, users, vomss):
             CA = ca.matchCA(CAs, row["auth_string"])
             if CA:
                 CA = CA[0]
-                users[row["uname"]].add_cert(Certificate(len(vomss), row["auth_string"], CA["subjectdn"]))
+                if row["auth_string"] in validDNs:
+                    users[row["uname"]].add_cert(Certificate(len(vomss), row["auth_string"], CA["subjectdn"]))
                 cernUser = re.findall(r"/DC=ch/DC=cern/OU=Organic Units/OU=Users/CN=(\w*)/CN=\d+/CN=[A-z\s]+", row["auth_string"])
                 if len(cernUser) > 0:
                     users[row["uname"]].add_external_affiliation("cern", cernUser[0])
@@ -624,7 +636,7 @@ def add_compute_resources(users, groups):
             computeResources[name].users[uname] = users[uname]
             if groups["fnalgrid"] not in users[uname].groups:
                 users[uname].add_group("fnalgrid", groups["fnalgrid"], False)
-            users[uname].compute_access[name] = ComputeAccess(name, groups["fnalgrid"], defHome, defShell)
+            users[uname].compute_access[name] = ComputeAccess(name, groups["fnalgrid"], defHome + "/" + uname, defShell)
 
     return computeResources
 
@@ -881,7 +893,7 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
         if user.status:
             status = "True"
         fd.write("insert into users (uid, uname, full_name, status, expiration_date, last_updated) values (%d,\'%s\',\'%s\',%s,%s, NOW());\n"
-                 % (int(user.uid), user.uname, user.full_name.strip(), status,
+                 % (int(user.uid), user.uname, user.full_name.strip().replace("'", "''"), status,
                     user.expiration_date))
         # for now will just create ferry.sql file
         # results,return_code=MySQLUtils.RunQuery(command,connect_str)

@@ -1,0 +1,21 @@
+admxana:x:53376:8935:ADMX ANA:/home/admxana:/bin/bash
+admxgli:x:53378:8935:ADMX GLI:/home/admxgli:/bin/bash
+admxpro:x:53377:8935:ADMX PRO:/home/admxpro:/bin/bash
+admx:x:53375:8935:ADMX:/home/admx:/bin/bash
+wester:KERBEROS:2250:8935:William Wester:/nashome/w/wester:/bin/bash
+sbhat:KERBEROS:10610:8935:Shreyas Bhat:/nashome/s/sbhat:/bin/bash
+kherner:KERBEROS:11469:8935:Kenneth Herner:/nashome/k/kherner:/bin/bash
+lduffy:KERBEROS:52521:8935:Leanne Duffy:/nashome/l/lduffy:/bin/bash
+dbowring:KERBEROS:45672:8935:Daniel Bowring:/nashome/d/dbowring:/bin/bash
+grybka:KERBEROS:52572:8935:Gray Rybka:/nashome/g/grybka:/bin/bash
+ndu:KERBEROS:53855:8935:Nick Du:/nashome/n/ndu:/bin/bash
+aagrawal:KERBEROS:53264:8935:Ankur Agrawal:/nashome/a/aagrawal:/bin/bash
+achou:KERBEROS:10575:8935:Aaron Chou:/nashome/a/achou:/bin/bash
+crisosto:KERBEROS:54099:8935:Nicole Crisosto:/nashome/c/crisosto:/bin/bash
+dprim7:KERBEROS:54161:8935:Daniel Primosch:/nashome/d/dprim7:/bin/bash
+ypark:KERBEROS:54169:8935:Yujin Park:/nashome/y/ypark:/bin/bash
+gcarosi:KERBEROS:54167:8935:Gianpaolo Carosi:/nashome/g/gcarosi:/bin/bash
+noblath:KERBEROS:54166:8935:Noah Oblath:/nashome/n/noblath:/bin/bash
+blaroque:KERBEROS:54165:8935:Benjamin Laroque:/nashome/b/blaroque:/bin/bash
+ramjois:KERBEROS:54175:8935:Shriram Sadashivajois:/nashome/r/ramjois:/bin/bash
+woollett:KERBEROS:54202:8935:Nathan Woollett:/nashome/w/woollett:/bin/bash

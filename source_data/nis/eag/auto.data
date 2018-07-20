@@ -1,4 +1,3 @@
-des04.a -rw,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768        des04.fnal.gov:/export/data/des04.a
 dp0.a	-rw,vers=3,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768	filesrv-app.fnal.gov:/eag/dp0.a
 dp0.b	-rw,vers=3,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768	filesrv-app.fnal.gov:/eag/dp0.b
 dp15.a	-rw,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768	sdssdp60.fnal.gov:/export/data/dp60.a
@@ -22,17 +21,6 @@ dp61.a  -rw,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsi
 dp61.b  -rw,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768        sdssdp61.fnal.gov:/export/data/dp61.b
 dp62.a  -rw,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768        sdssdp62.fnal.gov:/export/data/dp62.a
 dp62.b  -rw,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768        sdssdp62.fnal.gov:/export/data/dp62.b
-des05.a -rw,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768        des05.fnal.gov:/export/data/des05.a
-des06.a  -rw,vers=3,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768        des06.fnal.gov:/export/data/des06.a
-des07.a  -rw,vers=3,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768        des07.fnal.gov:/export/data/des07.a
-des07.b  -rw,vers=3,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768        des07.fnal.gov:/export/data/des07.b
-des07.c  -rw,vers=3,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768        des07.fnal.gov:/export/data/des07.c
-des08.a  -rw,vers=3,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768        des08.fnal.gov:/export/data/des08.a
-des08.b  -rw,vers=3,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768        des08.fnal.gov:/export/data/des08.b
-des09.a  -rw,vers=3,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768        des09.fnal.gov:/export/data/des09.a
-des09.b  -rw,vers=3,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768        des09.fnal.gov:/export/data/des09.b
-des10.a  -rw,vers=3,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768        des10.fnal.gov:/export/data/des10.a
-des10.b  -rw,vers=3,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768        des10.fnal.gov:/export/data/des10.b
 des20.a  -rw,vers=3,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768        des20.fnal.gov:/export/data/des20.a
 des21.a  -rw,vers=3,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768        des21.fnal.gov:/export/data/des21.a
 des20.b  -rw,vers=3,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768        des20.fnal.gov:/export/data/des20.b
@@ -53,3 +41,9 @@ des60.a  -rw,vers=3,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=3
 des60.b  -rw,vers=3,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768        des60.fnal.gov:/export/data/des60.b
 des61.a  -rw,vers=3,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768        des61.fnal.gov:/export/data/des61.a
 des61.b  -rw,vers=3,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768        des61.fnal.gov:/export/data/des61.b
+des70.a  -rw,vers=3,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768        des70.fnal.gov:/export/data/des70.a
+des70.b  -rw,vers=3,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768        des70.fnal.gov:/export/data/des70.b
+des70.c  -rw,vers=3,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768        des70.fnal.gov:/export/data/des70.c
+des71.a  -rw,vers=3,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768        des71.fnal.gov:/export/data/des71.a
+des71.b  -rw,vers=3,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768        des71.fnal.gov:/export/data/des71.b
+des71.c  -rw,vers=3,grpid,noac,hard,intr,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768        des71.fnal.gov:/export/data/des71.c

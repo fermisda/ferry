@@ -14,7 +14,7 @@ g045:-:1542:
 g144:-:1655:
 trf_write:*:2207:graf,dladams,vkuznet,mikeh,flera,mpc
 d0dspack::2507:
-mc_write::2807:serban,qzli,kunori,meena,baringer,dlc,zutshi,marek,sirotenk,oshima,azylber,elis,greenlee,klchan,dkcho,sceno,enagy,hadley,popkov,schellma,bonamy,laurent,royon,kuznets,thooris,sam,gusbroo,ggraham,vj,klima,jyothsna,oneil,buescher,mverzocc,crepe,bertram,hirosky,elcarr,szelitch,dekor,skachkov,golovang,tadams,kirby,ralf,msanders,banerjee,jaffre,varnes
+mc_write::2807:maciel,vokac,serban,qzli,kunori,meena,baringer,dlc,zutshi,marek,sirotenk,oshima,azylber,elis,greenlee,klchan,dkcho,sceno,enagy,hadley,popkov,schellma,bonamy,laurent,royon,kuznets,thooris,sam,gusbroo,ggraham,vj,klima,jyothsna,oneil,buescher,mverzocc,crepe,bertram,hirosky,elcarr,szelitch,dekor,skachkov,golovang,tadams,kirby,ralf,msanders,banerjee,jaffre,varnes
 smt_write:*:3007:steinbru,skulik,danielw,barberis,duensing,dhiman,alex_k,juste,rapidis,lipton,gerber,bkahl,marcel,elis,raymond,illingwo,fblekman,ghesketh,jonas,yu,nomerot,lehnerf,iashvili,smjt,juste,zdrazil,twyatt,kajfasz,vsorin,chahn,fox,clement,quinn,klute,sdean,webermi,estrada,avdhesh,harderk,burdin,harderk,melnit,shfu,t10,onoprien,kirby,lager,tsybych,masato,yezhenyu,satish,gagarcia,swyoun,gerbaudo
 higgs2_write:*:3407:neeti,meena,suyong,klute,jwittlin,tamburel,gwatts,code,rickv,dyer,meder,beaucero,ypogorel,gerstein,mverzocc,axel
 products:*:4525:dbox,wellner,russo,jallen,lauri,jonckheere,boyd,fagan,terekhov,vranicar,swhite,dhzhang,piccoli,jozwiak,akumar,diana,bgreen,weigand,garzogli,lyon,litmaath,vittone,abaranov,illingwo,parag,sam,herber
@@ -40,7 +40,7 @@ nuucp::10:nuucp
 user::20:
 e864:-:1020:
 d0_products::1107:diesburg,bartlett,qzli,cope,oshima,gwatts,d0librar,wsrvd0,greenlee,snyder,russo,savage,d0relmgr,alverson,jonckheere,axel,ritchie,haysjm,bertram,evansde,bertram,ron,dpchapin,asanchez,mverzocc,plove,skulik,illingwo,wicke,carsten,mundim,jaffre,ettab
-tralgo:-:9938:greenlee,mpc,rominsky,swyoun
+tralgo:-:9938:stark,yonishch,greenlee,mpc,rominsky,swyoun
 d0_req::1407:
 g020:-:1525:
 g022:-:1527:
@@ -80,7 +80,7 @@ dbi:-:5024:
 hppc::5440:root,farms
 lsfadm::5443:lsfadm,diesburg,bhat,piaf
 frameworks::5507:
-top_write::7507:dudko,heinson,greenlee,ellisonj,juste,gerber,meena,kehoe,qzli,schwier,banerjee,mverzocc,gotero,aharel,klchan,kirti,dgillber,gaston,begel,shary,aguiloe,mwang,sajot,jabeen,mop3,aran,peters,jhegeman,zhiyil,dmenezes,shossain,yezhenyu,cammin,benitez,andres,liangli,tadams,renkel,ettab,deliot,mpadilla,sjain,schwanen,perfilov,jyoti,baites,wicke,merciful,weigang,tschliep,daniel,thead,petrillo,yuntse,pcs,teich,khatidze,tutanon9,sungpark,jklim,obrandt,parihar,ayesh,jagnew,agrohsje,nathan,ajung,dorbaker,webermi,razumov,augsten,schukin,focke,msjeong,simak,vokac,swyoun,opturkot,parua,karacheb,shadow90,billl,achapela,manbir27,ajeeta,afalkows,savitsky,mba2012,adas,hliu,borysova,lidiaz,afaure,jhlim,swcho,francji,tuchming,aushev,yegor,amitov,gogota19,oshkola
+top_write::7507:oreshkin,dudko,heinson,greenlee,ellisonj,juste,gerber,meena,kehoe,qzli,schwier,banerjee,mverzocc,gotero,aharel,klchan,kirti,dgillber,gaston,begel,shary,aguiloe,mwang,sajot,jabeen,mop3,aran,peters,jhegeman,zhiyil,dmenezes,shossain,yezhenyu,cammin,benitez,andres,liangli,tadams,renkel,ettab,deliot,mpadilla,sjain,schwanen,perfilov,jyoti,baites,wicke,merciful,weigang,tschliep,daniel,thead,petrillo,yuntse,pcs,teich,khatidze,tutanon9,sungpark,jklim,obrandt,parihar,ayesh,jagnew,agrohsje,nathan,ajung,dorbaker,webermi,razumov,augsten,schukin,focke,msjeong,simak,vokac,swyoun,opturkot,parua,karacheb,shadow90,billl,achapela,manbir27,ajeeta,afalkows,savitsky,mba2012,adas,hliu,borysova,lidiaz,afaure,jhlim,swcho,francji,tuchming,aushev,yegor,amitov,gogota19,oshkola
 wz_write::8507:casey,diesburg,dzero,gerber,steinbru,aia,mostafa,kalk,nikos,lehnerf,daniel,xuq,askew,strang,schellma,gfacini,josta,yinh,junjie,mikav,ssbhatia,sahal,rclsa,hooper,mcgivern,stark,sekaric,hengne,hobbs,ddboline,xbbu,melnit,quinn,stefanaz,xie,dingpf,forseven,jakraus,bcasey,rominsky,jholzbau,lfeng
 ur_write::4407:marek,zutshi,dkcho,klchan,canelli,davisg
 infr_write::5207:qzli,greenlee,jbk,snyder,paterno,gerstein,swhite,vranicar,trippe,alverson,bosk,burnett,canelli,dlc,duflot,graf,hagopian,kahn,jeffk,meena,oshima,harry,dshpakov,womersle,shupe,haas,pcanal
@@ -259,7 +259,7 @@ www_dqual::9543:diehl,msanders,mikeh,dlam,sjain,jonckheere,estrauss,mommsen,stef
 sgismmsp:*:25:sgismmsp
 www_calib::9548:yasuda,hbarnor
 www_mcprod::4369:snow,bertram,tadams,kurca,ralf,varnes,jjesus
-calgo::9586:stark,petersk,pverdier,rangel,tammy,mt3,yinh,penning,bandurin,bellanto,royon,xbbu,thead,merciful,jklim,xie,mikav,keti,abhinav,fcouderc,kap01,lsuter,dingpf,razumov,jagnew,ihowley,dorbaker
+calgo::9586:yonishch,stark,petersk,pverdier,rangel,tammy,mt3,yinh,penning,bandurin,bellanto,royon,xbbu,thead,merciful,jklim,xie,mikav,keti,abhinav,fcouderc,kap01,lsuter,dingpf,razumov,jagnew,ihowley,dorbaker
 sam_dev::9587:lauri,sam,samgrid
 www_mc::9588:grenier,dprice,varnes,lidiaz,tuchming,cooljoe
 sam:-:9626:
@@ -270,7 +270,7 @@ caf_write::9592:gjdavies,gusbroo,rhauser,shary,deliot,dalton,steele,mundal,chunx
 fix_write::9593:gjdavies,rhauser,diesburg,shfu,greenlee,fcouderc,csgprod,renkel,psvoisky
 jes_caf::9594:gjdavies,juste,royon,parua,kupco,jabeen,parihar,mpadilla,kubants,atkins,mwang,wobisch,yuntse,petrillo,golovang,ayesh,esv,yezhenyu,hliu,bandurin,alver,loboden
 b_id::9595:ts297,sun786,gagarcia,jjesus,greder,satish,fmiconi,penning,jiamingy,pengj,jmansour,xlei,qzli,schukin
-d0phys::9666:hobbs,buescher,qianj
+d0phys::9666:greenlee,hobbs,buescher,qianj
 run2eb001::9667:wahl,browndp,mverzocc,gregorio,hirosky,rickv
 run2eb002::9668:mgstraus,babbott,mverzocc,gregorio,lucifer,hirosky,rickv
 run2eb003::9669:petersk,fox,graham,mverzocc,gregorio,hirosky,rickv
@@ -433,7 +433,7 @@ quality_data:-:9804:norik,ginther,begalli,daria,kinyip,illingwo,aarond,aia,alver
 ilcacc:-:9829:
 ilcdet:-:9828:
 wmass1:-:9847:stark,petroff,schellma,junjie,biscarat,josta,melnit,sahal,hengne,rominsky,jholzbau
-wmass2:-:9848:stark,petroff,tandeen,cwiok,fguo,guojun,melnit,josta,wetstein,sahal,junjie,sceno,mccarthy,mwg,mikeh,hobbs,rijssenb,schellma,hengne,jholzbau,jakraus,jcuth,mbrochma
+wmass2:-:9848:stark,petroff,tandeen,cwiok,fguo,guojun,melnit,josta,wetstein,sahal,junjie,sceno,mccarthy,mwg,mikeh,hobbs,rijssenb,schellma,hengne,jholzbau,jakraus,jcuth,mbrochma,yonishch
 icecube:-:9851:
 www_cal_dq:-:9852:sjain,jonckheere,sekaric,lidiaz,selcuk
 www_smt_dq:-:9853:sjain,jonckheere,satish
@@ -679,9 +679,9 @@ gridunesp:-:9986
 UD0:-:9941:jonckheere,mpc,katsanos,jholzbau,yinh
 hww_write:-:9942:mulhearn,ruchika,gerbaudo,kap01,weichert,chapon,xbbu,zhubacek,hohlfeld
 jet_id:-:9943:xbbu,dikaili,jklim
-hcc:hcc 44710:10020
-cmsgli:cms 44702:9617
-opsgli:ops 44703:9816
+hcc::10020:
+cmsgli::9617:
+opsgli::9816:
 microboone:-:9937:
 belle:-:10043:
 csiu:-:9104:

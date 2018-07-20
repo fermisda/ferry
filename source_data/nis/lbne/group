@@ -1,5 +1,5 @@
 lbnemars:x:9108:rakhno,mkarpov,einstein,strigano,reitzner,lundberg,mokhov,dbox,lueking
-lbne:x:9960:dune,duneana,dunecal,dunepro
+lbnf:x:9960:dune,duneana,dunecal,dunepro
 nusoft:x:10044:
 mars:x:9100:ifmon,dbox,mokhov,reitzner
 marslbne:x:9111:qzli,kriss,trj,glass,rakhno,mkarpov,velev,ifmon,lundberg,dbox,mokhov,lueking,tropin,reitzner,marslbneana,strigano

@@ -1,0 +1,357 @@
+djensen:KERBEROS:2809:5111:djensen:/nashome/d/djensen:/usr/local/bin/tcsh
+tebrenna:KERBEROS:9833:5111:Thomas Brennan:/nashome/t/tebrenna:/usr/local/bin/tcsh
+radovic:KERBEROS:45356:5111:Alexander Radovic:/nashome/r/radovic:/bin/bash
+lisa:KERBEROS:1291:5111:Lisa Giacchetti:/nashome/l/lisa:/usr/local/bin/tcsh
+petyt:KERBEROS:3895:5111:David_Petyt:/nashome/p/petyt:/usr/local/bin/tcsh
+rustem:KERBEROS:11825:5111:Rustem Ospanov:/nashome/r/rustem:/usr/local/bin/bash
+xbhuang:KERBEROS:43524:5111:Xiaobo Huang:/nashome/x/xbhuang:/usr/local/bin/tcsh
+alklein:KERBEROS:44040:5111:Andrea Klein:/nashome/a/alklein:/usr/local/bin/tcsh
+votava:KERBEROS:1103:5111:Cms Projects:/nashome/v/votava:/bin/bash
+mishi:KERBEROS:12709:5111:Masaki Ishitsuka:/nashome/m/mishi:/usr/local/bin/tcsh
+walding:KERBEROS:3481:5111:Joseph Walding:/nashome/w/walding:/bin/bash
+michael:KERBEROS:6104:5111:Douglas_Michael:/nashome/m/michael:/usr/local/bin/tcsh
+escobar:KERBEROS:6789:5111:Carlos Escobar:/nashome/e/escobar:/usr/local/bin/bash
+grossman:KERBEROS:2756:5111:Nancy Grossman:/nashome/g/grossman:/usr/local/bin/tcsh
+pgouffon:KERBEROS:2161:5111:pgouffon:/nashome/p/pgouffon:/usr/local/bin/tcsh
+mmichel3:KERBEROS:42543:5111:Matthew Michelotti:/nashome/m/mmichel3:/usr/local/bin/tcsh
+rmehdi:!:42916:5111:Rashid Mehdiyev:/nashome/r/rmehdi:/usr/local/bin/bash
+irisliu:KERBEROS:44041:5111:Iris Liu:/nashome/i/irisliu:/usr/local/bin/tcsh
+hennessy:KERBEROS:5456:5111:Daniel Cronin-Hennessy:/nashome/h/hennessy:/usr/local/bin/tcsh
+avva:KERBEROS:8087:5111:Sergey_Avvakumov:/nashome/a/avva:/usr/local/bin/bash
+raufer:KERBEROS:11581:5111:Tobias Raufer:/nashome/r/raufer:/usr/local/bin/tcsh
+nsmayer:KERBEROS:13406:5111:Nathan Mayer:/nashome/n/nsmayer:/bin/bash
+baller:KERBEROS:2535:5111:Bruce Baller:/nashome/b/baller:/usr/local/bin/bash
+idanko:KERBEROS:42869:5111:Istvan Danko:/nashome/i/idanko:/usr/local/bin/tcsh
+rodriges:KERBEROS:14177:5111:Philip Rodrigues:/nashome/r/rodriges:/bin/bash
+lucas:KERBEROS:1476:5111:Peter_Lucas:/nashome/l/lucas:/usr/local/bin/tcsh
+zkrahn:KERBEROS:16816:5111:Zebulun Krahn:/nashome/z/zkrahn:/usr/local/bin/tcsh
+sam:KERBEROS:7816:5024:sam users:/home/sam:/bin/bash
+cvson:KERBEROS:44279:5111:Son Cao:/nashome/c/cvson:/usr/local/bin/tcsh
+llhsu:KERBEROS:42533:5111:Lauren Hsu:/nashome/l/llhsu:/usr/local/bin/tcsh
+mssg:KERBEROS:6951:5111:_Mssg:/nashome/m/mssg:/bin/ksh
+carlr:KERBEROS:9663:5111:Carl_Rosenfeld:/nashome/c/carlr:/usr/local/bin/tcsh
+sjc:KERBEROS:1083:5111:Stephen Coleman:/nashome/s/sjc:/usr/local/bin/tcsh
+murgia:KERBEROS:6053:5111:Simona Morgia:/nashome/m/murgia:/usr/local/bin/tcsh
+kschu:KERBEROS:7885:5111:Kenneth_Schumacher:/nashome/k/kschu:/usr/local/bin/bash
+kostin:KERBEROS:9359:5111:Mikhail_Kostin:/nashome/k/kostin:/usr/local/bin/tcsh
+betan009:KERBEROS:43725:5111:Minerba Betancourt:/nashome/b/betan009:/bin/bash
+jdejong:KERBEROS:13234:5111:Jeffrey Dejong:/nashome/j/jdejong:/usr/local/bin/tcsh
+ochoa:KERBEROS:11632:5111:Juan Ochoa:/nashome/o/ochoa:/usr/local/bin/bash
+tagg:KERBEROS:9941:5111:Nathaniel_Tagg:/nashome/t/tagg:/usr/local/bin/bash
+yuyi:KERBEROS:8587:5111:Yuyi_Guo:/nashome/y/yuyi:/usr/local/bin/tcsh
+lartey:KERBEROS:9531:5111:Edward_Tetteh-Lartey:/nashome/l/lartey:/usr/local/bin/tcsh
+bbecker:KERBEROS:10095:5111:Bernard Becker:/nashome/b/bbecker:/usr/local/bin/tcsh
+joffem:KERBEROS:2539:5111:Tacy Joffe-Minor:/nashome/j/joffem:/usr/local/bin/tcsh
+mgoodman:KERBEROS:6739:5111:Maury Goodman:/nashome/m/mgoodman:/usr/local/bin/tcsh
+efalk:KERBEROS:3858:5111:Falk_Harris_Ingrid:/nashome/e/efalk:/usr/local/bin/tcsh
+kulik:KERBEROS:7233:5111:kulik:/nashome/k/kulik:/usr/local/bin/tcsh
+rhatcher:KERBEROS:5922:5111:Robert Hatcher:/nashome/r/rhatcher:/bin/bash
+condor:KERBEROS:4716:3302:condor:/local/stage1/condor:/bin/bash
+marshak:KERBEROS:10681:5111:Marvin L. Marshak:/nashome/m/marshak:/bin/bash
+mengel:KERBEROS:1733:5111:Marc Mengel:/nashome/m/mengel:/bin/bash
+tianxc:KERBEROS:43750:5111:Xinchun Tian:/nashome/t/tianxc:/usr/local/bin/tcsh
+blake:KERBEROS:11086:5111:Andrew Blake:/nashome/b/blake:/usr/local/bin/tcsh
+jpaley:!:11699:5111:Jonathan Paley:/nashome/j/jpaley:/usr/local/bin/tcsh
+zarko:KERBEROS:12329:5111:Zarko Pavlovic:/nashome/z/zarko:/usr/local/bin/tcsh
+brebel:KERBEROS:9907:5111:Brian_Rebel:/nashome/b/brebel:/bin/bash
+kordosky:KERBEROS:3873:5111:Michael_Kordosky:/nashome/k/kordosky:/usr/local/bin/bash
+nevans:KERBEROS:43393:5111:Nicholas Evans:/nashome/n/nevans:/usr/local/bin/tcsh
+urish:KERBEROS:2645:5111:John Urish:/nashome/u/urish:/bin/bash
+mwang:KERBEROS:6553:5111:Michael H L Wang:/nashome/m/mwang:/bin/bash
+hzheng:KERBEROS:8319:5111:Hai Zheng:/nashome/h/hzheng:/usr/local/bin/tcsh
+minospro:KERBEROS:42411:5111:Minos Production:/minos/app/home/minospro:/bin/bash
+lefeuvre:KERBEROS:43177:5111:Gwenaelle Lefeuvre:/nashome/l/lefeuvre:/bin/bash
+talaga:KERBEROS:7998:5111:Richard_Talaga:/nashome/t/talaga:/usr/local/bin/tcsh
+rubin:KERBEROS:1334:5111:Howard Rubin:/nashome/r/rubin:/usr/local/bin/bash
+vanconan:KERBEROS:2643:5111:Rick Van Conant:/afs/fnal.gov/files/home/room3/vanconan:/usr/local/bin/bash
+mislivec:KERBEROS:12828:5111:Aaron Mislivec:/nashome/m/mislivec:/bin/bash
+jgogos:KERBEROS:5817:5111:Jeremy_Gogos:/nashome/j/jgogos:/usr/local/bin/tcsh
+niki:KERBEROS:7503:5111:Niki_Saoulidou:/nashome/n/niki:/usr/local/bin/tcsh
+hzhang02:KERBEROS:42840:5111:Hongshan Zhang:/nashome/h/hzhang02:/usr/local/bin/tcsh
+jyuko:KERBEROS:11781:5111:Jasmine Ma:/nashome/j/jyuko:/usr/local/bin/tcsh
+zisvan:KERBEROS:43231:5111:Zeynep Isvan:/nashome/z/zisvan:/usr/local/bin/bash
+jthomas:KERBEROS:2626:5111:Jennifer Thomas:/nashome/j/jthomas:/usr/local/bin/bash
+dreyna:KERBEROS:3571:5111:David_Reyna:/nashome/d/dreyna:/usr/local/bin/tcsh
+dstrain:KERBEROS:44678:5111:Douglas Strain:/nashome/d/dstrain:/bin/bash
+dbox:KERBEROS:8531:5111:Dennis_Box:/nashome/d/dbox:/bin/bash
+mstrait:KERBEROS:4980:5111:Matthew Strait:/nashome/m/mstrait:/usr/local/bin/bash
+lueking:KERBEROS:1434:5111:Lee Lueking:/nashome/l/lueking:/bin/bash
+pahlka:KERBEROS:42821:5111::/nashome/p/pahlka:/bin/bash
+bseilhan:KERBEROS:3475:5111:Brandon Seilhan:/nashome/b/bseilhan:/usr/local/bin/tcsh
+vahle:KERBEROS:3874:5111:Patricia_Vahle:/nashome/v/vahle:/usr/local/bin/bash
+erwin:KERBEROS:5163:5111:Albert Erwin:/nashome/e/erwin:/usr/local/bin/tcsh
+torretta:KERBEROS:1313:5111:Cms Projects:/nashome/t/torretta:/bin/bash
+jbrodsky:KERBEROS:43217:5111:Jason Brodsky:/nashome/j/jbrodsky:/usr/local/bin/tcsh
+romero:KERBEROS:2651:5111:Kelly Barnett:/nashome/r/romero:/usr/local/bin/tcsh
+djauty:!:43108:5111:David Auty:/nashome/d/djauty:/usr/local/bin/tcsh
+plunk:KERBEROS:1082:5111:Robert_Plunkett:/nashome/p/plunk:/usr/local/bin/tcsh
+ayres:KERBEROS:6767:5111:David Ayres:/nashome/a/ayres:/usr/local/bin/tcsh
+ebarnes:KERBEROS:11845:5111:Elizabeth Barnes:/nashome/e/ebarnes:/usr/local/bin/bash
+annah1:KERBEROS:3312:5111:Anna Holin:/nashome/a/annah1:/bin/bash
+gcooper:KERBEROS:6045:5111:Glenn Cooper:/nashome/g/gcooper:/usr/local/bin/tcsh
+products:KERBEROS:1342:4525:products account:/local/ups:/bin/sh
+grafnj:KERBEROS:11252:5111:Nicholas Graf:/nashome/g/grafnj:/usr/local/bin/bash
+mramirez:KERBEROS:43999:5111:Monica Ramirez:/nashome/m/mramirez:/usr/local/bin/tcsh
+arms:KERBEROS:13239:5111:Kregg Arms:/nashome/a/arms:/usr/local/bin/tcsh
+minosraw:KERBEROS:45263:5111:Minos Data Account:/minos/app/home/minosraw:/bin/bash
+rbpatter:KERBEROS:4356:5111:Ryan_Patterson:/nashome/r/rbpatter:/usr/local/bin/tcsh
+stan:KERBEROS:7831:5111:Stanley_Naymola:/nashome/s/stan:/usr/local/bin/tcsh
+pcanal:KERBEROS:6252:5111:pcanal:/nashome/p/pcanal:/usr/local/bin/tcsh
+messier:KERBEROS:4838:5111:Mark_Messier:/nashome/m/messier:/usr/local/bin/tcsh
+bv:KERBEROS:9716:5111:Brett_Viren:/nashome/b/bv:/usr/local/bin/bash
+bbock:KERBEROS:10602:5111:Brian Bock:/nashome/b/bbock:/bin/bash2
+naples:KERBEROS:1838:5111:Donna_Naples:/nashome/n/naples:/usr/local/bin/tcsh
+pa:KERBEROS:10306:5111:Philip Adamson:/nashome/p/pa:/usr/local/bin/tcsh
+deb4:KERBEROS:11231:5111:Debdatta Bhattacharya:/nashome/d/deb4:/usr/local/bin/tcsh
+rahaman:KERBEROS:10772:5111:Azizur Rahaman:/nashome/r/rahaman:/usr/local/bin/tcsh
+wangzhe:KERBEROS:43088:5111:Zhe Wang:/nashome/w/wangzhe:/usr/local/bin/tcsh
+bckhouse:KERBEROS:42797:5111:Christopher Backhouse:/nashome/b/bckhouse:/usr/local/bin/tcsh
+qiu:KERBEROS:42391:5111:Xinjie Qiu:/nashome/q/qiu:/bin/bash
+jkn:KERBEROS:6462:5111:Jeffrey Nelson:/nashome/j/jkn:/bin/csh
+jurgenr:KERBEROS:12802:5111:Juergen Reichenbacher:/nashome/j/jurgenr:/usr/local/bin/tcsh
+howcroft:KERBEROS:9950:5111:Caius_Howcroft:/nashome/h/howcroft:/usr/local/bin/tcsh
+mgreaney:KERBEROS:7650:5111:Margaret_Greaney:/nashome/m/mgreaney:/usr/local/bin/tcsh
+psymes:KERBEROS:60116:5111:Philip Symes:/nashome/p/psymes:/usr/local/bin/tcsh
+artemis:KERBEROS:11954:5111:Artemios Geromitsos:/nashome/a/artemis:/usr/local/bin/tcsh
+richa:KERBEROS:44556:5111:Richa Sharma:/nashome/r/richa:/bin/bash
+feldman:KERBEROS:8860:5111:Gary_Feldman:/nashome/f/feldman:/usr/local/bin/tcsh
+rtoner:!:12836:5111:Ruth Toner:/nashome/r/rtoner:/usr/local/bin/tcsh
+gfactory:x:42917:42917:Glide-in Account:/home/gfactory:/bin/bash
+mbt:KERBEROS:13574:5111:Meagan Thompson:/nashome/m/mbt:/usr/local/bin/tcsh
+med:KERBEROS:14147:5111:Mark Dorman:/nashome/m/med:/usr/local/bin/tcsh
+moeller:KERBEROS:12833:5111:Victoria Moeller:/nashome/m/moeller:/usr/local/bin/tcsh
+gfrontend:x:42918:42918:Glide-in Account:/home/gfrontend:/bin/bash
+jjling:KERBEROS:12695:5111:Jiajie Ling:/nashome/j/jjling:/bin/bash
+grid:x:4287:10000:GRID:/home/grid:/bin/bash
+wojcicki:KERBEROS:6965:5111:Stanley Wojcicki:/nashome/w/wojcicki:/usr/local/bin/tcsh
+rearmstr:KERBEROS:13498:5111:Robert Armstrong:/nashome/r/rearmstr:/usr/local/bin/tcsh
+admarino:KERBEROS:12084:5111:Alysia Marino:/nashome/a/admarino:/usr/local/bin/tcsh
+hylen:KERBEROS:6862:5111:James Hylen:/nashome/h/hylen:/usr/local/bin/tcsh
+habig:KERBEROS:9448:5111:Alec_Habig:/nashome/h/habig:/usr/local/bin/tcsh
+tzanakos:KERBEROS:7083:5111:George Tzanakos:/nashome/t/tzanakos:/usr/local/bin/tcsh
+bishai:KERBEROS:8353:5111:Mary_Bishai:/nashome/b/bishai:/usr/local/bin/tcsh
+ggiurgiu:KERBEROS:4942:5111:Gavril Giurgiu:/nashome/g/ggiurgiu:/usr/local/bin/tcsh
+minsoft:x:9979:5111:MINOS Software:/minos/app/home/minsoft:/bin/bash
+mcgo0109:KERBEROS:13172:5111:Aaron Mcgowan:/nashome/m/mcgo0109:/bin/bash
+rhbob:KERBEROS:6863:5111:Robert Bernstein:/nashome/r/rhbob:/bin/bash
+urheim:KERBEROS:4499:5111:Jon_Urheim:/nashome/u/urheim:/usr/local/bin/tcsh
+minfarm:KERBEROS:10871:5111:Minos Farm:/minos/app/home/minfarm:/bin/bash
+minosdb:KERBEROS:46692:5111:Minos DB:/minos/app/home/minosdb:/bin/bash
+tjyang:KERBEROS:11232:5111:Tingjun Yang:/nashome/t/tjyang:/bin/bash
+venktesh:KERBEROS:44872:5111:Venktesh Singh:/nashome/v/venktesh:/bin/bash
+dharris:KERBEROS:2603:5111:Deborah Harris:/nashome/d/dharris:/usr/local/bin/tcsh
+kevinh:KERBEROS:9945:5111:Kevin Hill:/nashome/k/kevinh:/usr/local/bin/bash
+grzelakk:KERBEROS:11249:5111:Katarzyna Grzelak:/nashome/g/grzelakk:/usr/local/bin/tcsh
+morfin:KERBEROS:7644:5111:Jorge_Morfin:/nashome/m/morfin:/usr/local/bin/tcsh
+djalbrec:KERBEROS:43216:5111:Dylan Albrecht:/nashome/d/djalbrec:/usr/local/bin/tcsh
+jcoelho:KERBEROS:43737:5111:Joao Coelho:/nashome/j/jcoelho:/usr/local/bin/bash
+cherdack:KERBEROS:12660:5111:Daniel Cherdack:/nashome/c/cherdack:/usr/local/bin/tcsh
+qkwu:KERBEROS:11359:5111:Qun Wu:/nashome/q/qkwu:/usr/local/bin/tcsh
+jmusser:KERBEROS:9277:5111:James_Musser:/nashome/j/jmusser:/usr/local/bin/tcsh
+sbudd:KERBEROS:11733:5111:Sarah Budd:/nashome/s/sbudd:/usr/local/bin/tcsh
+buckley:KERBEROS:1019:5111:Liz Buckley:/nashome/b/buckley:/usr/local/bin/tcsh
+ltrung:KERBEROS:44698:5111:Trung Le:/nashome/l/ltrung:/bin/bash
+spanacek:KERBEROS:4515:5111:Suzanne_Panacek:/nashome/s/spanacek:/usr/local/bin/tcsh
+pittam:KERBEROS:13893:5111:Robert Pittam:/nashome/p/pittam:/usr/local/bin/tcsh
+mualem:KERBEROS:5218:5111:Leon_Mualem:/nashome/m/mualem:/usr/local/bin/tcsh
+tcn:KERBEROS:3071:5111:Timothy_Nicholls:/nashome/t/tcn:/usr/local/bin/tcsh
+cjames:KERBEROS:1355:5111:Catherine James:/nashome/c/cjames:/usr/local/bin/tcsh
+thosieck:KERBEROS:3178:5111:Thomas Osiecki:/nashome/t/thosieck:/usr/local/bin/tcsh
+kasahara:KERBEROS:9344:5111:Susan_Kasahara:/nashome/k/kasahara:/usr/local/bin/bash
+bain:KERBEROS:16798:5111:Kevin Bain:/nashome/b/bain:/usr/local/bin/tcsh
+paolone:KERBEROS:1494:5111:Vittorio Paolone:/nashome/p/paolone:/bin/csh
+pawloski:KERBEROS:11509:5111:Gregory Pawloski:/nashome/p/pawloski:/usr/local/bin/tcsh
+jkwong:KERBEROS:44574:5111:John Kwong:/nashome/j/jkwong:/bin/bash
+ahimmel:KERBEROS:11213:5111:Alexander Himmel:/nashome/a/ahimmel:/usr/local/bin/bash
+saranen:KERBEROS:9455:5111:David_Saranen:/nashome/s/saranen:/usr/local/bin/tcsh
+alberto:KERBEROS:4392:5111:Alberto_Marchionni:/nashome/a/alberto:/usr/local/bin/tcsh
+asousa:KERBEROS:3870:5111:Alexandre_Sousa:/nashome/a/asousa:/usr/local/bin/tcsh
+cbs:KERBEROS:3632:5111:Christopher Smith:/nashome/c/cbs:/usr/local/bin/tcsh
+fromm:KERBEROS:7474:5111:James_Fromm:/nashome/f/fromm:/bin/ksh
+dawson:KERBEROS:6989:5111:Troy Dawson:/nashome/d/dawson:/usr/local/bin/bash
+gmieg:KERBEROS:7645:5111:George_Irwin:/nashome/g/gmieg:/usr/local/bin/tcsh
+scavan:KERBEROS:13836:5111:Steven Cavanaugh:/nashome/s/scavan:/usr/local/bin/tcsh
+merina:KERBEROS:1967:5111:Merina Albert:/nashome/m/merina:/usr/local/bin/tcsh
+joes:KERBEROS:7853:5111:Jr-Jung_Syu:/nashome/j/joes:/usr/local/bin/bash
+jsm62:KERBEROS:43189:5111:Jessica Mitchell:/nashome/j/jsm62:/usr/local/bin/tcsh
+prabhatb:KERBEROS:43663:5111:Prabhat Bhattarai:/nashome/p/prabhatb:/usr/local/bin/tcsh
+ettab:KERBEROS:1963:5111:Etta Burns:/nashome/e/ettab:/usr/local/bin/tcsh
+behzad:KERBEROS:43943:5111:Neil Fazel:/nashome/b/behzad:/bin/bash
+pjl:KERBEROS:7740:5111:Peter_Litchfield:/nashome/p/pjl:/usr/local/bin/tcsh
+tinti:KERBEROS:13849:5111:Gemma Tinti:/nashome/t/tinti:/usr/local/bin/tcsh
+grashorn:KERBEROS:11630:5111:Eric Grashorn:/nashome/g/grashorn:/usr/local/bin/bash
+zwaska:KERBEROS:9586:5111:Robert_Zwaska:/nashome/z/zwaska:/usr/local/bin/tcsh
+ragomes:KERBEROS:10792:5111:Ricardo Gomes:/nashome/r/ragomes:/usr/local/bin/tcsh
+dharma02:KERBEROS:60077:5111:Dharmaraj Indurthy:/nashome/d/dharma02:/usr/local/bin/tcsh
+brajesh:KERBEROS:1415:5111:Brajesh_Choudhary:/nashome/b/brajesh:/usr/local/bin/tcsh
+dave_b:KERBEROS:2261:5111:David Boehnlein:/nashome/d/dave_b:/usr/local/bin/tcsh
+brb:KERBEROS:12059:5111:Benjamin Brown:/nashome/b/brb:/usr/local/bin/tcsh
+dsdami:KERBEROS:13264:5111:Daniel Damiani:/nashome/d/dsdami:/usr/local/bin/tcsh
+minosana:KERBEROS:43021:5111:Minos Analysis:/minos/app/home/minosana:/bin/bash
+jlkaiser:KERBEROS:9521:5111:Joe_Kaiser:/nashome/j/jlkaiser:/usr/local/bin/bash
+stognini:KERBEROS:45506:5111:Stefano Tognini:/nashome/s/stognini:/bin/bash
+wehmann:KERBEROS:6446:5111:Alan Wehmann:/nashome/w/wehmann:/usr/local/bin/tcsh
+mho:KERBEROS:43480:5111:Mhair-Armen Orchanian:/nashome/m/mho:/bin/bash
+gfp:KERBEROS:8850:5111:G.F._Pearce:/nashome/g/gfp:/usr/local/bin/bash
+mskim:KERBEROS:4258:5111:Minsuk_Kim:/nashome/m/mskim:/usr/local/bin/tcsh
+verebryu:KERBEROS:5508:5111:Valery Verebrysov:/nashome/v/verebryu:/usr/local/bin/bash
+nigrant:KERBEROS:43838:5111:Nick Grant:/nashome/n/nigrant:/usr/local/bin/tcsh
+hartouni:KERBEROS:6428:5111:Edward_Hartouni:/nashome/h/hartouni:/usr/local/bin/tcsh
+jcravens:KERBEROS:43513:5111:John Cravens:/nashome/j/jcravens:/bin/bash
+rayp:KERBEROS:7695:5111:Cms Projects:/nashome/r/rayp:/usr/local/bin/tcsh
+diwan:KERBEROS:2779:5111:Milind_Diwan:/nashome/d/diwan:/usr/local/bin/tcsh
+rgran:KERBEROS:13377:5111:Richard Gran:/nashome/r/rgran:/usr/local/bin/bash
+sfiligoi:KERBEROS:4732:5111:Igor Sfiligoi:/nashome/s/sfiligoi:/bin/bash
+kafka:KERBEROS:6851:5111:Tomas Kafka:/nashome/k/kafka:/usr/local/bin/tcsh
+whitehd:!:15873:5111:Lisa Whitehead:/nashome/w/whitehd:/usr/local/bin/bash
+sboyd:KERBEROS:11114:5111:Steven Boyd:/nashome/s/sboyd:/usr/local/bin/tcsh
+rameika:KERBEROS:1474:5111:Regina Rameika:/nashome/r/rameika:/usr/local/bin/tcsh
+medeiros:KERBEROS:45507:5111:Michelle Medeiros:/nashome/m/medeiros:/bin/bash
+moed:KERBEROS:12281:5111:Shulamit Moed Sher:/nashome/m/moed:/bin/bash
+boyd:KERBEROS:4395:5111:Joseph_Boyd:/nashome/b/boyd:/bin/bash
+avgavril:KERBEROS:43793:5111:Alena Gavrilenko:/nashome/a/avgavril:/bin/bash
+garkusha:KERBEROS:4636:5111:Valeri_Garkusha:/nashome/g/garkusha:/usr/local/bin/tcsh
+sanjay:KERBEROS:43592:5111:Sanjay Swain:/nashome/s/sanjay:/usr/local/bin/tcsh
+nagy:KERBEROS:1111:5111:Frank Nagy:/nashome/n/nagy:/usr/local/bin/bash
+mindata:KERBEROS:3648:5111:Minos Data:/minos/app/home/mindata:/bin/bash
+nusoft:KERBEROS:45318:10044:Nusoft:/nusoft/app/home/nusoft:/bin/bash
+jlove:KERBEROS:46183:5111:Joshua Love:/nashome/j/jlove:/bin/bash
+omanghel:KERBEROS:12644:5111:Ioana Anghel:/nashome/o/omanghel:/bin/bash
+boehm:KERBEROS:11634:5111:Joshua Boehm:/nashome/b/boehm:/usr/local/bin/tcsh
+ebeall:KERBEROS:10443:5111:Erik Beall:/nashome/e/ebeall:/usr/local/bin/bash
+lammel:KERBEROS:1714:5111:Cms Projects:/nashome/l/lammel:/bin/bash
+evansj:KERBEROS:13219:5111:Justin Evans:/nashome/e/evansj:/bin/bash
+dschmitz:KERBEROS:10475:5111:David Schmitz:/nashome/d/dschmitz:/bin/bash
+yumiceva:KERBEROS:12026:5111:Francisco Yumiceva:/nashome/y/yumiceva:/usr/local/bin/tcsh
+myhl82:KERBEROS:45039:5111:Marc Landeweer:/nashome/m/myhl82:/bin/bash
+nwest:KERBEROS:4777:5111:Nick_West:/nashome/n/nwest:/usr/local/bin/tcsh
+liuj:KERBEROS:3877:5111:Jing_Liu:/nashome/l/liuj:/usr/local/bin/tcsh
+rjn:KERBEROS:10913:5111:Ryan Nichol:/nashome/r/rjn:/usr/local/bin/tcsh
+baisley:nopaswd:2325:5111:Wayne Baisley:/nashome/b/baisley:/usr/local/bin/bash
+bock:KERBEROS:5927:5111:Gregory Bock:/nashome/b/bock:/usr/local/bin/tcsh
+litchfld:KERBEROS:11603:5111:Reuben Litchfield:/nashome/l/litchfld:/usr/local/bin/tcsh
+loiacono:KERBEROS:3261:5111:Laura Loiacono:/nashome/l/loiacono:/usr/local/bin/bash
+nickd:!:43122:5111:Nicholas Devenish:/nashome/n/nickd:/usr/local/bin/bash
+kopp:KERBEROS:9665:5111:Sacha_Kopp:/nashome/k/kopp:/usr/local/bin/tcsh
+kimjj:KERBEROS:14217:5111:Jae Kim:/nashome/k/kimjj:/usr/local/bin/tcsh
+onuchin:KERBEROS:3792:5111:Valeriy_Onuchin:/nashome/o/onuchin:/usr/local/bin/tcsh
+shanahan:KERBEROS:5580:5111:Peter Shanahan:/nashome/s/shanahan:/bin/bash
+sujeewa:KERBEROS:11916:5111:Sujeewa Kumaratunga:/nashome/s/sujeewa:/usr/local/bin/tcsh
+timm:KERBEROS:2904:5111:Steve Timm:/nashome/t/timm:/usr/local/bin/tcsh
+nkaplis:KERBEROS:13212:5111:Nikolaos Kaplis:/nashome/n/nkaplis:/usr/local/bin/tcsh
+jelena:KERBEROS:43839:5111:Jelena Ilic:/nashome/j/jelena:/usr/local/bin/tcsh
+cpw1:KERBEROS:12803:5111:Carol Ward:/nashome/c/cpw1:/usr/local/bin/tcsh
+hartnell:KERBEROS:10766:5111:Jeffrey Hartnell:/nashome/h/hartnell:/usr/local/bin/tcsh
+cwhite:KERBEROS:6375:5111:Christopher White:/nashome/c/cwhite:/usr/local/bin/tcsh
+godley:KERBEROS:9906:5111:Andrew_Godley:/nashome/g/godley:/usr/local/bin/tcsh
+hgallag:KERBEROS:6855:5111:Hugh Gallagher:/nashome/h/hgallag:/bin/bash
+hjkang:KERBEROS:10571:5111:Hyejoo Kang:/nashome/h/hjkang:/usr/local/bin/tcsh
+koskinen:KERBEROS:11720:5111:David Koskinen:/nashome/k/koskinen:/usr/local/bin/bash
+webera:KERBEROS:11070:5111:Alfons Weber:/nashome/w/webera:/usr/local/bin/tcsh
+wingmc:KERBEROS:12835:5111:Adam Schreckenberger:/nashome/w/wingmc:/usr/local/bin/tcsh
+belias:KERBEROS:9967:5111:Anastasios_Belias:/nashome/b/belias:/usr/local/bin/tcsh
+paschrei:KERBEROS:11684:5111:Philip A. Schreiner:/nashome/p/paschrei:/usr/local/bin/tcsh
+kreymer:KERBEROS:1060:5111:Art Kreymer:/nashome/k/kreymer:/bin/bash
+masaki:KERBEROS:11836:5111:Masaki Watabe:/nashome/m/masaki:/usr/local/bin/tcsh
+smart:KERBEROS:6770:5111:Wesley Smart:/nashome/s/smart:/usr/local/bin/tcsh
+emaher:KERBEROS:3857:5111:Emily_Maher:/nashome/e/emaher:/bin/bash
+janow:KERBEROS:14426:5111:Jaroslaw Nowak:/nashome/j/janow:/bin/bash
+lein:KERBEROS:44550:5111:Susan Lein:/nashome/l/lein:/bin/bash
+para:KERBEROS:1546:5111:Adam Para:/nashome/p/para:/usr/local/bin/tcsh
+barr:nopaswd:10674:5111:Giles Barr:/nashome/b/barr:/usr/local/bin/tcsh
+costas:KERBEROS:8388:5111:Andreopoulos_Costas:/nashome/c/costas:/usr/local/bin/tcsh
+msanchez:KERBEROS:3119:5111:Mayly_Sanchez:/nashome/m/msanchez:/usr/local/bin/tcsh
+zois:KERBEROS:10612:5111:Miltiadis Zois:/nashome/z/zois:/usr/local/bin/tcsh
+sfarrell:KERBEROS:42967:5111:Steven Farrell:/nashome/s/sfarrell:/usr/local/bin/tcsh
+svetlana:KERBEROS:10668:5111:Svetlana Lebedeva:/nashome/s/svetlana:/usr/local/bin/tcsh
+corwin:KERBEROS:43676:5111:Luke Corwin:/nashome/c/corwin:/usr/local/bin/tcsh
+samread:KERBEROS:12160:5024:Sequential Access - Run II:/home/samread:/bin/bash
+mmathis:KERBEROS:11324:5111:Mark Mathis:/nashome/m/mmathis:/bin/bash
+mtavera:KERBEROS:42632:5111:Marta Artamendi Tavera:/nashome/m/mtavera:/usr/local/bin/tcsh
+jason:KERBEROS:9729:5111:Jason Harrington:/nashome/j/jason:/bin/bash
+lsfadm:KERBEROS:7628:5443:Admin_Load_Sharing_Facility:/home/room1/lsf/v6_1:/bin/bash
+bspeak:KERBEROS:4305:5111:Ben_Speakman:/nashome/b/bspeak:/usr/local/bin/tcsh
+mdier:KERBEROS:11654:5111:Mark Dierckxsens:/nashome/m/mdier:/usr/local/bin/bash
+panos:KERBEROS:10378:5111:Panagiotis Stamoulis:/nashome/p/panos:/usr/local/bin/tcsh
+semenov:KERBEROS:4874:5111:Vitali_Semenov:/nashome/s/semenov:/usr/local/bin/tcsh
+shepelak:KERBEROS:2189:5111:Karen Shepelak:/nashome/s/shepelak:/usr/local/bin/tcsh
+thron:KERBEROS:6762:5111:Jonathan Thron:/nashome/t/thron:/usr/local/bin/tcsh
+garzogli:KERBEROS:7160:5111:Cms Projects:/nashome/g/garzogli:/bin/bash
+seun:KERBEROS:10157:5111:Sin Man Seun:/nashome/s/seun:/usr/local/bin/tcsh
+ifmon:KERBEROS:45438:9102:IF monitoring:/nusoft/app/home/ifmon:/bin/bash
+joconnor:KERBEROS:46362:5111:Joseph O'Connor:/nashome/j/joconnor:/bin/bash
+lena:KERBEROS:6245:5111:Elena Gerchtein:/nashome/l/lena:/bin/bash
+huuhieu:KERBEROS:46374:5111:Hieu Nguyen:/nashome/h/huuhieu:/bin/bash
+terlyga:KERBEROS:10932:5111:Olga Terlyga:/nashome/t/terlyga:/bin/bash
+kridl:KERBEROS:46503:5111:Kent Ridl:/nashome/k/kridl:/bin/bash
+fnova:KERBEROS:46568:5111:Federico Nova:/nashome/f/fnova:/bin/bash
+gmills:KERBEROS:4273:5111:Geoffrey Mills:/nashome/g/gmills:/bin/bash
+lwhite86:KERBEROS:46683:5111:Leigh Whitehead:/nashome/l/lwhite86:/bin/bash
+nav:KERBEROS:46709:5111:Navaneeth Poonthottathil:/nashome/n/nav:/bin/bash
+mcgivern:KERBEROS:42472:5111:Carrie Mcgivern:/nashome/m/mcgivern:/bin/bash
+jack:KERBEROS:8260:5111:Jack Ritchie:/nashome/j/jack:/bin/bash
+cesarc:KERBEROS:13277:5111:Cesar Castromonte:/nashome/c/cesarc:/bin/bash
+ashley90:KERBEROS:47311:5111:Ashley Timmons:/nashome/a/ashley90:/bin/bash
+lang:KERBEROS:6942:5111:Karol Lang:/nashome/l/lang:/bin/bash
+badgett:KERBEROS:7260:5111:William Badgett:/nashome/b/badgett:/bin/bash
+aurisano:KERBEROS:12827:5111:Adam Aurisano:/nashome/a/aurisano:/bin/bash
+diesburg:KERBEROS:1224:5111:Michael Diesburg:/nashome/d/diesburg:/bin/bash
+illingwo:KERBEROS:6233:5111:Robert Illingworth:/nashome/i/illingwo:/bin/bash
+anorman:KERBEROS:11537:5111:Andrew Norman:/nashome/a/anorman:/bin/bash
+lyon:KERBEROS:5049:5111:Adam Lyon:/nashome/l/lyon:/bin/bash
+minos:KERBEROS:7927:5111:minos e875:/minos/app/home/minos:/bin/bash
+aperch:KERBEROS:47336:5111:Andrew Perch:/nashome/a/aperch:/bin/bash
+steph:KERBEROS:42905:5111:Stephanie Schuler:/nashome/s/steph:/bin/bash
+mkiveni:KERBEROS:43139:5111:Manungu Kiveni:/nashome/m/mkiveni:/bin/bash
+junting:KERBEROS:46572:5111:Junting Huang:/nashome/j/junting:/bin/bash
+mpf:KERBEROS:47279:5111:Maciej Pfutzner:/nashome/m/mpf:/bin/bash
+aevans26:KERBEROS:48026:5111:Andrew Evans:/nashome/a/aevans26:/bin/bash
+babu2038:KERBEROS:48141:5111:Babu Bhandari:/nashome/b/babu2038:/bin/bash
+neha:KERBEROS:60158:5111:Neha Sharma:/nashome/n/neha:/bin/bash
+gerard1:KERBEROS:47331:5111:Gerard Bernabeu Altayo:/nashome/g/gerard1:/bin/bash
+mgabriel:KERBEROS:48014:5111:Marianna Gabrielyan:/nashome/m/mgabriel:/bin/bash
+litvinse:KERBEROS:8637:5111:Dmitry Litvintsev:/nashome/l/litvinse:/bin/bash
+geld0021:KERBEROS:48577:5111:Sean Geldert:/nashome/g/geld0021:/bin/bash
+mmr:KERBEROS:46553:5111:Matthew Rosenberg:/nashome/m/mmr:/bin/bash
+vittone:KERBEROS:1591:5111:Margherita Wiersma:/nashome/v/vittone:/bin/bash
+marek:KERBEROS:1320:5111:Marek Zielinski:/nashome/m/marek:/bin/bash
+kriesten:KERBEROS:47597:5111:Brandon Kriesten:/nashome/k/kriesten:/bin/bash
+simon217:KERBEROS:49150:5111:Simon De Rijck:/nashome/s/simon217:/bin/bash
+tcarroll:KERBEROS:46557:5111:Thomas Carroll:/nashome/t/tcarroll:/bin/bash
+willhf:KERBEROS:44318:5111:Will Flanagan:/nashome/w/willhf:/bin/bash
+njp:KERBEROS:49007:5111:Nicholas Peregonow:/nashome/n/njp:/bin/bash
+kherner:KERBEROS:11469:5111:Kenneth Herner:/nashome/k/kherner:/bin/bash
+dphan:KERBEROS:49537:5111:Dung Phan:/nashome/d/dphan:/bin/bash
+pblack:KERBEROS:49615:5111:Paulo Black:/nashome/p/pblack:/bin/bash
+rchen2:KERBEROS:49676:5111:Rui Chen:/nashome/r/rchen2:/bin/bash
+jtodd2:KERBEROS:49687:5111:Jacob Todd:/nashome/j/jtodd2:/bin/bash
+psail:KERBEROS:49766:5111:Paul Sail:/nashome/p/psail:/bin/bash
+hyepesra:KERBEROS:49426:5111:Harold Yepes-Ramirez:/nashome/h/hyepesra:/bin/bash
+jteheran:KERBEROS:49401:5111:Jeny Teheran:/nashome/j/jteheran:/bin/bash
+pbuitrag:KERBEROS:49406:5111:Paola Buitrago:/nashome/p/pbuitrag:/bin/bash
+mazzacan:KERBEROS:14185:5111:Anna Mazzacane:/nashome/m/mazzacan:/bin/bash
+sgermani:KERBEROS:50045:5111:Stefano Germani:/nashome/s/sgermani:/bin/bash
+parag:KERBEROS:11017:5111:Parag Mhashilkar:/nashome/p/parag:/bin/bash
+mgheith:KERBEROS:48737:5111:Michael Gheith:/nashome/m/mgheith:/bin/bash
+kretzke:KERBEROS:50216:5111:Kevin Retzke:/nashome/k/kretzke:/bin/bash
+wetstein:KERBEROS:60027:5111:Matthew Wetstein:/nashome/w/wetstein:/bin/bash
+qhuang:KERBEROS:50038:5111:Qiulan Huang:/nashome/q/qhuang:/bin/bash
+vito:KERBEROS:14191:5111:Vito Di Benedetto:/nashome/v/vito:/bin/bash
+jmullin:KERBEROS:50642:5111:Joseph Mullin:/nashome/j/jmullin:/bin/bash
+ahandres:KERBEROS:50765:5111:Andres Alba Hernandez:/nashome/a/ahandres:/bin/bash
+tshimek:KERBEROS:51078:5111:Taylor Shimek:/nashome/t/tshimek:/bin/bash
+tpropp:KERBEROS:50554:5111:Tyler Propp:/nashome/t/tpropp:/bin/bash
+mfattoru:KERBEROS:51508:5111:Michele Fattoruso:/nashome/m/mfattoru:/bin/bash
+sbhat:KERBEROS:10610:5111:Shreyas Bhat:/nashome/s/sbhat:/bin/bash
+drimal:KERBEROS:49480:5111:Dipak Rimal:/nashome/d/drimal:/bin/bash
+agao:KERBEROS:50456:5111:Amanda Gao:/nashome/a/agao:/bin/bash
+drut1186:KERBEROS:48745:5111:Daniel Ruterbories:/nashome/d/drut1186:/bin/bash
+aghosh12:KERBEROS:48890:5111:Anushree Ghosh:/nashome/a/aghosh12:/bin/bash
+bremple:KERBEROS:52146:5111:Bryce Remple:/nashome/b/bremple:/bin/bash
+arouhiai:KERBEROS:52558:5111:Adam Rouhiainen:/nashome/a/arouhiai:/bin/bash
+jpcesar:KERBEROS:52573:5111:John Cesar:/nashome/j/jpcesar:/bin/bash
+coimbra:KERBEROS:52872:5111:Bruno Coimbra:/nashome/c/coimbra:/bin/bash
+djena:KERBEROS:52796:5111:Deepika Jena:/nashome/d/djena:/bin/bash
+nur:KERBEROS:50250:5111:Fnu Nuruzzaman:/nashome/n/nur:/bin/bash
+sultana:KERBEROS:49107:5111:Mehreen Sultana:/nashome/s/sultana:/bin/bash
+jyhan:KERBEROS:11339:5111:Jiyeon Han:/nashome/j/jyhan:/bin/bash

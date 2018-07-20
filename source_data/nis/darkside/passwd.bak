@@ -6,7 +6,7 @@ paterno:KERBEROS:2475:9985:Marc_Paterno:/nashome/p/paterno:/bin/bash
 biery:KERBEROS:2310:9985:Kurt_Biery:/nashome/b/biery:/bin/tcsh
 kirby:KERBEROS:8957:9985:Michael_Kirby:/nashome/k/kirby:/bin/tcsh
 huajiec:KERBEROS:46397:9985:Huajie Cao:/nashome/h/huajiec:/bin/bash
-pmeyers:KERBEROS:3048:9985:Peter Meyers:/nashome/p/pmeyers:/bin/tcsh
+pmeyers:KERBEROS:3048:9985:Peter Meyers:/nashome/p/pmeyers:/bin/bash
 brossi:KERBEROS:44774:9985:Biagio Rossi:/nashome/b/brossi:/bin/bash
 cocco:KERBEROS:47429:9985:Alfredo Cocco:/nashome/c/cocco:/bin/bash
 lgrandi:KERBEROS:47599:9985:Luca Grandi:/nashome/l/lgrandi:/bin/bash
@@ -29,7 +29,7 @@ ettab:KERBEROS:1963:9985:Etta Burns:/nashome/e/ettab:/bin/bash
 eshields:KERBEROS:47637:9985:Emily Shields:/nashome/e/eshields:/bin/bash
 jbrodsky:KERBEROS:43217:9985:Jason Brodsky:/nashome/j/jbrodsky:/bin/bash
 alvaro:KERBEROS:10794:9985:Alvaro Spelgatti:/nashome/a/alvaro:/bin/bash
-darkside:KERBEROS:47653:9246:Darkside:/ds50/app/home/darkside:/bin/bash
+darksideadmin:KERBEROS:47653:9246:Darkside Admin:/ds50/app/home/darksideadmin:/bin/bash
 awatson:KERBEROS:47582:9985:Andrew Watson:/nashome/a/awatson:/bin/bash
 aheavey:KERBEROS:6302:9985:Anne Heavey:/nashome/a/aheavey:/bin/bash
 kutschke:KERBEROS:7652:9985:Robert Kutschke:/nashome/k/kutschke:/bin/bash
@@ -140,3 +140,25 @@ escappar:KERBEROS:52710:9985:Eugenio Scapparone:/nashome/e/escappar:/bin/bash
 kmiller:KERBEROS:52745:9985:Katrina Miller:/nashome/k/kmiller:/bin/bash
 lisa:KERBEROS:1291:9985:Lisa Giacchetti:/nashome/l/lisa:/bin/bash
 knoepfel:KERBEROS:45271:9985:Kyle Knoepfel:/nashome/k/knoepfel:/bin/bash
+youngr:KERBEROS:46784:9985:Richard Young:/nashome/y/youngr:/bin/bash
+coimbra:KERBEROS:52872:9985:Bruno Coimbra:/nashome/c/coimbra:/bin/bash
+anavrera:KERBEROS:53236:9985:Anyssa Navrer-Agasson:/nashome/a/anavrera:/bin/bash
+stam:KERBEROS:53583:9985:Shifra Tam:/nashome/s/stam:/bin/bash
+lpandola:KERBEROS:53582:9985:Luciano Pandola:/nashome/l/lpandola:/bin/bash
+sjayakum:KERBEROS:53712:9985:Shashank Jayakumar:/nashome/s/sjayakum:/bin/bash
+csavares:KERBEROS:53751:9985:Claudio Savarese:/nashome/c/csavares:/bin/bash
+ssanfili:KERBEROS:53812:9985:Simone Sanfilippo:/nashome/s/ssanfili:/bin/bash
+graraujo:KERBEROS:53813:9985:Gabriela Araujo:/nashome/g/graraujo:/bin/bash
+asokolov:KERBEROS:53822:9985:Andrey Sokolov:/nashome/a/asokolov:/bin/bash
+rescigno:KERBEROS:7810:9985:Marco Rescigno:/nashome/r/rescigno:/bin/bash
+yystepan:KERBEROS:54013:9985:Yury Stepanenko:/nashome/y/yystepan:/bin/bash
+litvinse:KERBEROS:8637:9985:Dmitry Litvintsev:/nashome/l/litvinse:/bin/bash
+gtestera:KERBEROS:54036:9985:Gemma Testera:/nashome/g/gtestera:/bin/bash
+caminata:KERBEROS:54041:9985:Alessio Caminata:/nashome/c/caminata:/bin/bash
+spoudel:KERBEROS:54087:9985:Sagar Poudel:/nashome/s/spoudel:/bin/bash
+vippolit:KERBEROS:54141:9985:Valerio Ippolito:/nashome/v/vippolit:/bin/bash
+miguelcm:KERBEROS:54360:9985:Miguel Cardenas-Montes:/nashome/m/miguelcm:/bin/bash
+rsantore:KERBEROS:54363:9985:Roberto Santorelli:/nashome/r/rsantore:/bin/bash
+sstracka:KERBEROS:54509:9985:Simone Stracka:/nashome/s/sstracka:/bin/bash
+boyd:KERBEROS:4395:9985:Joseph Boyd:/nashome/b/boyd:/bin/bash
+fdordei:KERBEROS:54557:9985:Francesca Dordei:/nashome/f/fdordei:/bin/bash

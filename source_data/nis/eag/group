@@ -84,7 +84,7 @@ nagios:-:9520:
 demo:-:9521:
 mysql:-:9531:
 snap:-:9551:snapdp
-des:-:9620:stoughto,drp21,dtucker,annis,hollyb1,dpark,sallam,hspinka,fausti,hhead,jhelsby,yanny,hlin,elliotta,kuropat,mslyz,boj,kakazu21,kgrabow,mrhawley,yash2292,hgaitsch,martinm,smueller,dodelson,jbk,paterno,mcmarch,skent,dscolnic,taliaw,stevenmp,marcelle,romero,klindgre,ifmon,ettab,perera,bwelch,hamil332,bzhang,jackmuel,dgulledg,mcdonald,pereira,benoitl,mgarcia,zdoctor,yspark1,aguena,hcamacho,vbusti
+des:-:9620:stoughto,drp21,dtucker,annis,hollyb1,dpark,sallam,hspinka,fausti,hhead,jhelsby,yanny,hlin,elliotta,kuropat,mslyz,boj,kakazu21,kgrabow,mrhawley,yash2292,hgaitsch,martinm,smueller,dodelson,jbk,paterno,mcmarch,skent,dscolnic,taliaw,stevenmp,marcelle,romero,klindgre,ifmon,ettab,perera,bwelch,hamil332,bzhang,jackmuel,dgulledg,mcdonald,pereira,benoitl,mgarcia,zdoctor,yspark1,aguena,hcamacho,vbusti,buckley,bechtol
 desi:-:9657:codemanager
 desdp:-:9933:hlin,buckley,annis,jen_a,kuropat
 sdssdas:-:9961:neilsen,yanny

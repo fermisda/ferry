@@ -449,7 +449,7 @@ rgm:KERBEROS:45850:5444:Richard McMahon:/home/s1/rgm:/bin/bash
 pmartini:KERBEROS:45878:5444:Paul Martini:/home/s1/pmartini:/bin/bash
 hhead:KERBEROS:45947:5444:Hillary Head:/home/s1/hhead:/bin/bash
 yxin2:KERBEROS:45999:5444:Yizhou Xin:/home/s1/yxin2:/bin/tcsh
-garyb:KERBEROS:46012:9620:Gary Bernstein:/home/s1/garyb:/bin/bash
+garyb:KERBEROS:46012:9620:Gary Bernstein:/home/s1/garyb:/bin/tcsh
 crisf:KERBEROS:46028:9620:Cristina Furlanetto:/home/s1/crisf:/bin/bash
 preeti28:KERBEROS:46052:9620:Anupreeta More:/home/s1/preeti28:/bin/bash
 mcmarch:KERBEROS:46093:5444:Marisa March:/home/s1/mcmarch:/bin/bash
@@ -601,3 +601,65 @@ bsessa:KERBEROS:52585:9620:Bennett Sessa:/home/s1/bsessa:/bin/bash
 mmironov:KERBEROS:51968:9620:Mishelle Mironov:/home/s1/mmironov:/bin/bash
 smau:KERBEROS:52727:9620:Sidney Mau:/home/s1/smau:/bin/bash
 fpazchin:KERBEROS:52125:9620:Francisco Paz-Chinchon:/home/s1/fpazchin:/bin/bash
+ragarwal:KERBEROS:52740:9620:Rishabh Agarwal:/home/s1/ragarwal:/bin/bash
+pbernard:KERBEROS:52159:9620:Pedro Bernardinelli:/home/s1/pbernard:/bin/bash
+cjacobs:KERBEROS:51719:9620:Colin Jacobs:/home/s1/cjacobs:/bin/bash
+emhuff:KERBEROS:47466:9620:Eric Huff:/home/s1/emhuff:/bin/bash
+jburgad:KERBEROS:52928:9620:Jaford Burgad:/home/s1/jburgad:/bin/bash
+kperezsa:KERBEROS:52995:9620:Karen Perez Sarmiento:/home/s1/kperezsa:/bin/bash
+awhaley:KERBEROS:51683:9620:Amanda Whaley:/home/s1/awhaley:/bin/bash
+kretzke:KERBEROS:50216:9620:Kevin Retzke:/home/s1/kretzke:/bin/bash
+ckeith:KERBEROS:53032:9620:Celeste Keith:/home/s1/ckeith:/bin/bash
+mrodrig:KERBEROS:52880:9620:Martin Rodriguez Monroy:/home/s1/mrodrig:/bin/bash
+marika:KERBEROS:53006:9620:Marika Mcghee:/home/s1/marika:/bin/bash
+coimbra:KERBEROS:52872:9620:Bruno Coimbra:/home/s1/coimbra:/bin/bash
+ringlein:KERBEROS:52908:9620:Grace Ringlein:/home/s1/ringlein:/bin/bash
+qguo:KERBEROS:53124:9620:Qiaochu Guo:/home/s1/qguo:/bin/bash
+apace:KERBEROS:52191:9620:Andrew Pace:/home/s1/apace:/bin/bash
+severett:KERBEROS:52814:9620:Spencer Everett:/home/s1/severett:/bin/bash
+ylleung:KERBEROS:53125:9620:Yat Long Leung:/home/s1/ylleung:/bin/bash
+emorgans:KERBEROS:50471:9620:Eric Morganson:/home/s1/emorgans:/bin/bash
+debom:KERBEROS:47791:9620:Clecio De Bom:/home/s1/debom:/bin/bash
+gvolta:KERBEROS:53185:9620:Giovanni Volta:/home/s1/gvolta:/bin/bash
+lgelman:KERBEROS:53145:9620:Landon Gelman:/home/s1/lgelman:/bin/bash
+hwu:KERBEROS:53283:9620:Hao-Yi Wu:/home/s1/hwu:/bin/bash
+zz3x7:KERBEROS:48454:9620:Zhang Zhang:/home/s1/zz3x7:/bin/bash
+pbarchi:KERBEROS:53458:9620:Paulo Barchi:/home/s1/pbarchi:/bin/bash
+cbonnaud:KERBEROS:45340:9937:Christophe Bonnaud:/nashome/c/cbonnaud:/bin/bash
+kwei:KERBEROS:53094:9620:Kuang Wei:/home/s1/kwei:/bin/bash
+lnunes:KERBEROS:53474:9620:Lucas Nunes:/home/s1/lnunes:/bin/bash
+mkaur:KERBEROS:53483:9620:Mehr Kaur:/home/s1/mkaur:/bin/bash
+choi:KERBEROS:11387:9620:Ami Choi:/home/s1/choi:/bin/bash
+niallm1:KERBEROS:47347:9620:Niall Maccrann:/home/s1/niallm1:/bin/bash
+luidhy:KERBEROS:53527:9620:Luidhy Santana Da Silva:/home/s1/luidhy:/bin/bash
+kdowney:KERBEROS:52260:9620:Kathryn Downey:/home/s1/kdowney:/bin/bash
+sjakka:KERBEROS:52615:9620:Spoorthi Jakka:/home/s1/sjakka:/bin/bash
+jaortiz:KERBEROS:53528:9620:Joseph Ortiz:/home/s1/jaortiz:/bin/bash
+tamarad:KERBEROS:47612:9620:Tamara Davis:/home/s1/tamarad:/bin/bash
+twhitmor:KERBEROS:53569:9620:Tyrone Whitmore-Wilson:/home/s1/twhitmor:/bin/bash
+mcraigie:KERBEROS:53367:9620:Matthew Craigie:/home/s1/mcraigie:/bin/bash
+kmaier:KERBEROS:53576:9620:Katarina Maier:/home/s1/kmaier:/bin/bash
+jmaner:KERBEROS:53675:9620:John Maner:/home/s1/jmaner:/bin/bash
+lplybon:KERBEROS:52600:9620:Liam Plybon:/home/s1/lplybon:/bin/bash
+czucker:KERBEROS:53763:9620:Catherine Zucker:/home/s1/czucker:/bin/bash
+rmorgan:KERBEROS:53669:9620:Robert Morgan:/home/s1/rmorgan:/bin/bash
+zzhang13:KERBEROS:53753:9620:Zhuowen Zhang:/home/s1/zzhang13:/bin/bash
+mspletts:KERBEROS:53245:9620:Megan Splettstoesser:/home/s1/mspletts:/bin/bash
+alyssag:KERBEROS:53509:9620:Alyssa Garcia:/home/s1/alyssag:/bin/bash
+tominaga:KERBEROS:53887:9620:Nozomu Tominaga:/home/s1/tominaga:/bin/bash
+kamile:KERBEROS:53914:9620:Kamile Lukosiute:/home/s1/kamile:/bin/bash
+rwilkins:KERBEROS:53344:9620:Reese Wilkinson:/home/s1/rwilkins:/bin/bash
+jwelch:KERBEROS:54044:9620:Jamin Welch:/home/s1/jwelch:/bin/bash
+lsecco:KERBEROS:52170:9620:Lucas Secco:/home/s1/lsecco:/bin/bash
+jcalcino:KERBEROS:52174:9620:Josh Calcino:/home/s1/jcalcino:/bin/bash
+alenon:KERBEROS:54298:9620:Amber Lenon:/home/s1/alenon:/bin/bash
+nsherman:KERBEROS:54028:9620:Nora Sherman:/home/s1/nsherman:/bin/bash
+nglaeser:KERBEROS:54022:9620:Noemi Glaeser:/home/s1/nglaeser:/bin/bash
+emeador:KERBEROS:54021:9620:Elizabeth Meador:/home/s1/emeador:/bin/bash
+berlfein:KERBEROS:54239:9620:Federico Berlfein:/home/s1/berlfein:/bin/bash
+jhinds:KERBEROS:54061:9620:Julia Hinds:/home/s1/jhinds:/bin/bash
+jmetzger:KERBEROS:54371:9620:Jessica Metzger:/home/s1/jmetzger:/bin/bash
+jfreuden:KERBEROS:51395:9620:Jenna Freudenburg:/home/s1/jfreuden:/bin/bash
+boyd:KERBEROS:4395:9620:Joseph Boyd:/home/s1/boyd:/bin/bash
+nicolea:KERBEROS:54501:9620:Nicole Arredondo:/home/s1/nicolea:/bin/bash
+scantu:KERBEROS:52058:9620:Sarah Cantu:/home/s1/scantu:/bin/bash

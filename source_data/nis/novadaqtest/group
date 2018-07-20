@@ -1,0 +1,8 @@
+postgres:x:3532:
+products:x:4525:
+ifbeam:x:9159:ifbeam,ifbeamdb
+novaddt:x:9189:
+novaoutfitting:x:9227:
+nova:x:9553:nova,novaassembly.novacr01,novacr02,novacr03,novacr04,novacr11,novacr12,novacr13,novadaq,novadata,novadcs,novanearline,novapro,novaqa,novaraw,novasoft
+ganglia:x:9862:
+novaraw:x:600:novadaq,novaraw

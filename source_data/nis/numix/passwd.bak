@@ -22,6 +22,15 @@ annah1:KERBEROS:3312:9276:Anna Holin:/nashome/a/annah1:/bin/bash
 agao:KERBEROS:50456:9007:Amanda Gao:/nashome/a/agao:/bin/bash
 sbhat:KERBEROS:10610:9007:Shreyas Bhat:/nashome/s/sbhat:/bin/bash
 kreymer:KERBEROS:1060:9007:Arthur Kreymer:/nashome/k/kreymer:/bin/bash
-tcarroll:KERBEROS:46557:9007:Thomas Carroll:/nashome/t/tcarroll:/bin/bash
+tcarroll:KERBEROS:46557:9276:Thomas Carroll:/nashome/t/tcarroll:/bin/bash
 lcremone:KERBEROS:51090:9276:Linda Cremonesi:/nashome/l/lcremone:/bin/bash
 bmesserl:KERBEROS:47718:9276:Benjamin Messerly:/nashome/b/bmesserl:/bin/bash
+boyd:KERBEROS:4395:9276:Joseph Boyd:/nashome/b/boyd:/bin/bash
+coimbra:KERBEROS:52872:9276:Bruno Coimbra:/nashome/c/coimbra:/bin/bash
+snopok:KERBEROS:11124:9276:Pavel Snopok:/nashome/s/snopok:/bin/bash
+njp:KERBEROS:49007:9276:Nicholas Peregonow:/nashome/n/njp:/bin/bash
+jeffderb:KERBEROS:53187:9276:Jeffrey Derbyshire:/nashome/j/jeffderb:/bin/bash
+andrzejs:KERBEROS:45753:9276:Andrzej Michal Szelc:/nashome/a/andrzejs:/bin/bash
+ogoodwin:KERBEROS:52452:9276:Owen Goodwin:/nashome/o/ogoodwin:/bin/bash
+kmistry:KERBEROS:53498:9276:Krishan Mistry:/nashome/k/kmistry:/bin/bash
+ychow:KERBEROS:54437:9276:Yvette Chow:/nashome/y/ychow:/bin/bash
