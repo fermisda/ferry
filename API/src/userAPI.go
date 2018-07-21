@@ -1458,29 +1458,29 @@ func setUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Request)
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 
-	_, err = DBtx.Exec(fmt.Sprintf(`do $$
-									declare v_uid int;
-									
-									declare c_uname text = '%s';
-									declare c_attribute text = '%s';
-									declare c_value text = '%s';
-
-									begin
-										select uid into v_uid from users where uname = c_uname;
-										if v_uid is null then
-											raise 'uname does not exist';
-										end if;
-
-										if (v_uid, c_attribute) not in (select uid, attribute from external_affiliation_attribute) then
-											insert into external_affiliation_attribute (uid, attribute, value)
-											values (v_uid, c_attribute, c_value);
-										else
-											update external_affiliation_attribute set
-												value = c_value,
-												last_updated = NOW()
-											where uid = v_uid and attribute = c_attribute;
-										end if;
-									end $$;`, uName, attribute, value))
+//	_, err = DBtx.Exec(fmt.Sprintf(`do $$
+//									declare v_uid int;
+//									
+//									declare c_uname text = '%s';
+//									declare c_attribute text = '%s';
+//									declare c_value text = '%s';
+//
+//									begin
+//										select uid into v_uid from users where uname = c_uname;
+//										if v_uid is null then
+//											raise 'uname does not exist';
+//										end if;
+//
+//										if (v_uid, c_attribute) not in (select uid, attribute from external_affiliation_attribute) then
+//											insert into external_affiliation_attribute (uid, attribute, value)
+//											values (v_uid, c_attribute, c_value);
+//										else
+//											update external_affiliation_attribute set
+//												value = c_value,
+//												last_updated = NOW()
+//											where uid = v_uid and attribute = c_attribute;
+//										end if;
+//									end $$;`, uName, attribute, value))
 	execstr := ""
 	var uid int
 	var att sql.NullString
@@ -1501,7 +1501,7 @@ func setUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Request)
 	} else {
 		execstr = `insert into external_affiliation_attribute (uid, attribute, value) values ($1, $2, $3)`	
 	}
-	_, err = DBtx.Exec(execstr, uid, attribute, value)
+	_, err = DBtx.Exec(execstr, uid, att.String, value)
 	
 	if err == nil {
 		DBtx.Commit(cKey)
@@ -1554,7 +1554,7 @@ func removeUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Reque
 	var uid int
 	var att sql.NullString
 
-	queryerr := DBtx.tx.QueryRow(`select us.uid,eaa.attribute from (select uid from users where uname = $1) as us left join (select uid, attribute from external_affiliation_attribute where attribute = $2) as eaa on us.uid=eaa.uid`).Scan(&uid,&att)
+	queryerr := DBtx.tx.QueryRow(`select us.uid,eaa.attribute from (select uid from users where uname = $1) as us left join (select uid, attribute from external_affiliation_attribute where attribute = $2) as eaa on us.uid=eaa.uid`,uName, attribute).Scan(&uid,&att)
 	if queryerr == sql.ErrNoRows {
 		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
@@ -1589,7 +1589,7 @@ func removeUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Reque
 //										delete from external_affiliation_attribute where uid = v_uid and attribute = c_attribute;
 //									end $$;`, uName, attribute))
 //
-	_, err = DBtx.Exec(`delete from external_affiliation_attribute where uid = $1 and attribute = $2`, uid, attribute)
+	_, err = DBtx.Exec(`delete from external_affiliation_attribute where uid = $1 and attribute = $2`, uid, att.String)
 
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
@@ -1797,30 +1797,30 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 			log.WithFields(QueryFields(r, startTime)).Info("Success!")
 			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 		}
-	} else {
-		log.Print(err.Error())
-		if strings.Contains(err.Error(), `pk_affiliation_unit_user_certificate`) {
-			if cKey != 0 {
-				log.WithFields(QueryFields(r, startTime)).Error("DN already exists and is assigned to this affiliation unit.")
-				fmt.Fprintf(w, "{ \"ferry_error\": \"DN already exists and is assigned to this affiliation unit.\" }")
-			}
-		} else if strings.Contains(err.Error(), `duplicated dn`) {
-			log.WithFields(QueryFields(r, startTime)).Error("DN already exists.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"DN already exists.\" }")
-		} else if strings.Contains(err.Error(), `"uid" violates not-null constraint`) {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-		} else if strings.Contains(err.Error(), `"unitid" violates not-null constraint`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Affiliation unit does not exist.\" }")
-		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
-		}
-		return
-	}
-
-	DBtx.Commit(cKey)
+	}// else {
+//		log.Print(err.Error())
+//		if strings.Contains(err.Error(), `pk_affiliation_unit_user_certificate`) {
+//			if cKey != 0 {
+//				log.WithFields(QueryFields(r, startTime)).Error("DN already exists and is assigned to this affiliation unit.")
+//				fmt.Fprintf(w, "{ \"ferry_error\": \"DN already exists and is assigned to this affiliation unit.\" }")
+//			}
+//		} else if strings.Contains(err.Error(), `duplicated dn`) {
+//			log.WithFields(QueryFields(r, startTime)).Error("DN already exists.")
+//			fmt.Fprintf(w, "{ \"ferry_error\": \"DN already exists.\" }")
+//		} else if strings.Contains(err.Error(), `"uid" violates not-null constraint`) {
+//			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+//			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+//		} else if strings.Contains(err.Error(), `"unitid" violates not-null constraint`) {
+//			log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
+//			fmt.Fprintf(w, "{ \"ferry_error\": \"Affiliation unit does not exist.\" }")
+//		} else {
+//			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+//			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
+//		}
+//		return
+//	}
+//
+//	DBtx.Commit(cKey)
 }
 
 func removeUserCertificateDN(w http.ResponseWriter, r *http.Request) {
@@ -1835,8 +1835,8 @@ func removeUserCertificateDN(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q := r.URL.Query()
-	uName := q.Get("username")
-	subjDN := q.Get("dn")
+	uName := strings.TrimSpace(q.Get("username"))
+	subjDN := strings.TrimSpace(q.Get("dn"))
 	if uName == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
