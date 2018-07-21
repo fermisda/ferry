@@ -1718,31 +1718,80 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 
-	_, err = DBtx.Exec(fmt.Sprintf(`do $$ 	
-										declare u_uid int;
-										declare au_unitid int;
-										declare uc_dnid int;
-										declare new_dn bool;
-										u_dn constant text := '%s';
-										u_uname constant text := '%s';
-										au_name constant text := '%s';
-									begin
-										new_dn = false;
-										select uid into u_uid from users where uname=u_uname;
-										if u_dn not in (select dn from user_certificates) then
-											new_dn = true;
-											insert into user_certificates (dn, uid, last_updated) values (u_dn, u_uid, NOW());
-										end if;
-										if au_name != '' then
-											select unitid into au_unitid from affiliation_units where name = au_name;
-											select dnid into uc_dnid from user_certificates where dn = u_dn;
-											insert into affiliation_unit_user_certificate (unitid, dnid, last_updated) values (au_unitid, uc_dnid, NOW());
-										else
-											if not new_dn then
-												raise 'duplicated dn';
-											end if;
-										end if;
-									end $$;`, subjDN, uName, unitName))
+	var uid, dnid sql.NullInt64
+	queryerr := DBtx.tx.QueryRow(`select us.uid, uc.dnid from (select 1 as key, uid from users where uname=$1) as us full outer join (select 1 as key, dnid from user_certificates where dn=$2) as uc on uc.key=us.key`,uName, subjDN).Scan(&uid,&dnid)
+	if queryerr == sql.ErrNoRows {
+		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+		return
+	} else if queryerr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query. Check logs.\" }")
+		return
+	}
+	if ! uid.Valid {
+		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+		return		
+	}
+	if ! dnid.Valid {
+		foobar, err := DBtx.Exec(`insert into user_certificates (dn, uid, last_updated) values ($1, $2, NOW()) returning dnid`, subjDN, uid.Int64)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + err.Error())
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB insert. Check logs.\" }")
+			return
+		}
+		insid, inserr := foobar.LastInsertId()
+		log.WithFields(QueryFields(r, startTime)).Println(fmt.Sprintf("foobar = %d", insid))
+		if inserr == nil {
+			dnid.Valid = true
+			dnid.Int64 = insid
+		}
+	} else {
+		if unitName == "" {
+			// error about DN already existing
+			log.WithFields(QueryFields(r, startTime)).Error("DN already exists and is assigned to this affiliation unit.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"DN already exists and is assigned to this affiliation unit.\" }")
+			return	
+		}
+		
+	}
+	if unitName != "" {
+		
+		_, err = DBtx.Exec(`insert into affiliation_unit_user_certificate (unitid, dnid, last_updated) values (select unitid from affiliation_units where name=$1), $2, NOW())`,unitName, dnid.Int64)	
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + err.Error())
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB insert. Check logs.\" }")
+			DBtx.Rollback()
+			return
+		}
+	}
+
+//	_, err = DBtx.Exec(fmt.Sprintf(`do $$ 	
+//										declare u_uid int;
+//										declare au_unitid int;
+//										declare uc_dnid int;
+//										declare new_dn bool;
+//										u_dn constant text := '%s';
+//										u_uname constant text := '%s';
+//										au_name constant text := '%s';
+//									begin
+//										new_dn = false;
+//										select uid into u_uid from users where uname=u_uname;
+//										if u_dn not in (select dn from user_certificates) then
+//											new_dn = true;
+//											insert into user_certificates (dn, uid, last_updated) values (u_dn, u_uid, NOW());
+//										end if;
+//										if au_name != '' then
+//											select unitid into au_unitid from affiliation_units where name = au_name;
+//											select dnid into uc_dnid from user_certificates where dn = u_dn;
+//											insert into affiliation_unit_user_certificate (unitid, dnid, last_updated) values (au_unitid, uc_dnid, NOW());
+//										else
+//											if not new_dn then
+//												raise 'duplicated dn';
+//											end if;
+//										end if;
+//									end $$;`, subjDN, uName, unitName))
 	if err == nil {
 		if cKey != 0 {
 			log.WithFields(QueryFields(r, startTime)).Info("Success!")
@@ -1804,44 +1853,51 @@ func removeUserCertificateDN(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 
+	var uid, dnid sql.NullInt64
+	queryerr := DBtx.tx.QueryRow(`select us.uid, uc.dnid from (select 1 as key, uid from users where uname=$1) as us full outer join (select 1 as key, dnid from user_certificates where dn=$2) as uc on uc.key=us.key`,uName, subjDN).Scan(&uid,&dnid)
+	if queryerr == sql.ErrNoRows {
+		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+		return
+	} else if queryerr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query. Check logs.\" }")
+		return
+	}
+	if ! uid.Valid {
+		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+		return		
+	}
+	if ! dnid.Valid {
+		log.WithFields(QueryFields(r, startTime)).Error("DN does not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"DN does not exist.\" }")
+		return		
+	}
 	_, err = DBtx.Exec(fmt.Sprintf(`do $$ 	
-										declare  u_uid int;
-										declare  u_dnid int;
-										u_dn constant text := '%s';
-										u_uname constant text := '%s';
-
+										declare  u_uid constant int := %d;
+										declare  u_dnid constant int := %d;
+									
 									begin
-										select uid into u_uid from users where uname=u_uname;
-										if u_uid is null then
-											raise 'uname does not exist';
-										end if;
-										select dnid into u_dnid from user_certificates where dn=u_dn;
-										if u_dnid is null then
-											raise 'dn does not exist';
-										end if;
+
 										if (u_dnid, u_uid) not in (select dnid, uid from user_certificates) then
 											raise 'dnid uid association does not exist';
 										end if;
 
 										delete from affiliation_unit_user_certificate where dnid=u_dnid;
 										delete from user_certificates where dnid=u_dnid and uid=u_uid;
-									end $$;`, subjDN, uName))
+									end $$;`, uid.Int64, dnid.Int64))
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 	} else {
-		if strings.Contains(err.Error(), `uname does not exist`) {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-		} else if strings.Contains(err.Error(), `dn does not exist`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Certificate DN does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Certificate DN does not exist.\" }")
-		} else if strings.Contains(err.Error(), `dnid uid association does not exist`) {
+		if strings.Contains(err.Error(), `dnid uid association does not exist`) {
 			log.WithFields(QueryFields(r, startTime)).Error("USER DN association does not exist.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"USER DN association does not exist.\" }")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
+			return
 		}
 	}
 
