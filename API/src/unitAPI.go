@@ -1,6 +1,6 @@
 package main
 import (
-	"regexp"
+//	"regexp"
 	"strings"
 	"database/sql"
 	"fmt"
@@ -16,10 +16,10 @@ func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
-	unitName := q.Get("unitname")
-	voms_url := q.Get("voms_url")
-	altName := q.Get("alternative_name")
-	unitType := q.Get("type") 
+	unitName := strings.TrimSpace(q.Get("unitname"))
+	voms_url := strings.TrimSpace(q.Get("voms_url"))
+	altName  := strings.TrimSpace(q.Get("alternative_name"))
+	unitType := strings.TrimSpace(q.Get("type")) 
 //only the unit name is actually required; the others can be empty
 	if unitName == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
@@ -28,21 +28,21 @@ func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 	}// else {
 //		unitName = "'" + unitName + "'"
 //	}
-	if voms_url == "" {
-		voms_url = "NULL"
-	} else if voms_url != "NULL" {
-		voms_url = "'" + voms_url + "'"
-	}
-	if altName == "" {
-		altName = "NULL"
-	} else if altName != "NULL" {
-		altName = "'" + altName + "'"
-	}
-	if unitType == "" {
-		unitType = "NULL"
-	} else if unitType != "NULL" {
-		unitType = "'" + unitType + "'"
-	}
+//	if voms_url == "" {
+//		voms_url = "NULL"
+//	} else if voms_url != "NULL" {
+//		voms_url = "'" + voms_url + "'"
+//	}
+//	if altName == "" {
+//		altName = "NULL"
+//	} else if altName != "NULL" {
+//		altName = "'" + altName + "'"
+//	}
+//	if unitType == "" {
+//		unitType = "NULL"
+//	} else if unitType != "NULL" {
+//		unitType = "'" + unitType + "'"
+//	}
 	authorized,authout := authorize(r,AuthorizedDNs)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -66,35 +66,48 @@ func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 		}
 		log.WithFields(QueryFields(r, startTime)).Info("cKey = " + fmt.Sprintf("%d",cKey))
 		// string for the insert statement
-		createstr := fmt.Sprintf(`do $$
-									declare c_uname text = %s;
-									declare c_aname text = %s;
-									declare c_type text = %s;
-									declare c_url text = %s;
-								  begin
-									insert into affiliation_units (name, alternative_name, type) values (c_uname, c_aname, c_type);
-									if c_url is not null then
-										insert into voms_url (unitid, url) values ((select unitid from affiliation_units where name = c_uname), c_url);
-									end if;
-								  end $$;`,
-								  "'" + unitName + "'", altName, unitType, voms_url)
-		//create prepared statement
-		stmt, err := DBtx.Prepare(createstr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error preparing DB command: " + err.Error())
-			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Error preparing database command.\" }")
-			return
-		}
-		//run said statement and check errors
-		_, err = stmt.Exec()
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error adding " + unitName + " to affiliation_units: " + err.Error())
+//		createstr := fmt.Sprintf(`do $$
+//									declare c_uname text = %s;
+//									declare c_aname text = %s;
+//									declare c_type text = %s;
+//									declare c_url text = %s;
+//								  begin
+//									insert into affiliation_units (name, alternative_name, type) values (c_uname, c_aname, c_type);
+//									if c_url is not null then
+//										insert into voms_url (unitid, url) values ((select unitid from affiliation_units where name = c_uname), c_url);
+//									end if;
+//								  end $$;`,
+//								  "'" + unitName + "'", altName, unitType, voms_url)
+//		//create prepared statement
+//		stmt, err := DBtx.Prepare(createstr)
+//		if err != nil {
+//			log.WithFields(QueryFields(r, startTime)).Error("Error preparing DB command: " + err.Error())
+//			w.WriteHeader(http.StatusNotFound)
+//			fmt.Fprintf(w,"{ \"ferry_error\": \"Error preparing database command.\" }")
+//			return
+//		}
+//		//run said statement and check errors
+
+		_, inserr := DBtx.Exec(`insert into affiliation_units (name, alternative_name, type) values ($1, $2, $3)`,unitName, altName, unitType)
+		if inserr != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error adding " + unitName + " to affiliation_units: " + inserr.Error())
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB insert.\" }")
 			if cKey != 0 {
 				DBtx.Rollback()
 			}
 		} else {
+			// check if voms_url was also supplied; insert there too if it was.
+			if voms_url != "" {
+				_, vomserr := DBtx.Exec(`insert into voms_url (unitid, url) values ((select unitid from affiliation_units where name = $1), $2)`, unitName, voms_url)
+				if vomserr != nil {
+					log.WithFields(QueryFields(r, startTime)).Error("Error adding " + unitName + " voms_url: " + vomserr.Error())
+					fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB insert.\" }")
+					if cKey != 0 {
+						DBtx.Rollback()
+					}
+					return
+				}
+			}
 			// error is nil, so it's a success. Commit the transaction and return success.
 			if cKey != 0 {
 				DBtx.Commit(cKey)
@@ -102,11 +115,10 @@ func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 			log.WithFields(QueryFields(r, startTime)).Info("Successfully added " + unitName + " to affiliation_units.")
 			fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
 		}
-		stmt.Close()
+//	stmt.Close()
 		return
 	case checkerr != nil:
 		//other weird error
-		w.WriteHeader(http.StatusNotFound)
 		log.WithFields(QueryFields(r, startTime)).Error("Cannot create affiliation unit " + unitName + ": " + checkerr.Error())
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Database error; check logs.\" }")
 		return
@@ -121,7 +133,7 @@ func removeAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
-	unitName := q.Get("unitname")	
+	unitName := strings.TrimSpace(q.Get("unitname"))
 	if unitName == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No experiment specified in http query.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No experiment name specified.\" }")
@@ -161,27 +173,20 @@ func removeAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 			// string for the remove statement
-		removestr := fmt.Sprintf("delete from affiliation_units where name='%s'", unitName)
+
+		removestr := fmt.Sprintf(`do $$ declare v_unitid int = %d ; begin delete from voms_url where unitid=v_unitid; delete from affiliation_units where unitid=v_unitid ; end $$;`, unitId)
 		//create prepared statement
-		stmt, err := DBtx.tx.Prepare(removestr)
+		_, err = DBtx.Exec(removestr)
+	
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error preparing DB command: " + err.Error())
-			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Error preparing database command.\" }")
-			return
-		}
-		//run said statement and check errors
-		_, err = stmt.Exec()
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error adding " + unitName + " to affiliation_units: " + err.Error())
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB insert.\" }")
+			log.WithFields(QueryFields(r, startTime)).Error("Error deleting " + unitName + " to affiliation_units: " + err.Error())
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB deletion.\" }")
 		} else {
 			// error is nil, so it's a success. Commit the transaction and return success.
-			DBtx.Commit(cKey)
+			if cKey != 0 { DBtx.Commit(cKey) }
 			log.WithFields(QueryFields(r, startTime)).Info("Successfully added " + unitName + " to affiliation_units.")
 			fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
 		}
-		stmt.Close()
 		return	
 	}
 }
@@ -191,10 +196,10 @@ func setAffiliationUnitInfo(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
-	unitName := q.Get("unitname")
-	voms_url := q.Get("voms_url")
-	altName := q.Get("alternative_name")
-	unitType := q.Get("type")
+	unitName := strings.TrimSpace(q.Get("unitname"))
+	voms_url := strings.TrimSpace(q.Get("voms_url"))
+	altName := strings.TrimSpace(q.Get("alternative_name"))
+	unitType := strings.TrimSpace(q.Get("type"))
 //	unitId := q.Get("unitid")
 //only unitName is required
 	if unitName == "" {
@@ -244,76 +249,73 @@ func setAffiliationUnitInfo(w http.ResponseWriter, r *http.Request) {
 
 		// parse the values and get the quotes right. 
 		// Keep the existing values for those fields that were not explicitly set by the API call.
-		unitName = "'" + unitName + "'"
-		if voms_url == "" {
-			if tmpvoms.Valid == false {
-				voms_url = "NULL"
+		// If the new values are "null" then assume the API is trying to null out the existing values.
+
+		// if options provided set the tmp* variables to be the new values.
+
+		if voms_url != "" {
+			if strings.ToUpper(voms_url) == "NULL" {
+				tmpvoms.Valid = false
+				tmpvoms.String = ""
 			} else {
-				voms_url = "'" + tmpvoms.String + "'"
+				tmpvoms.Valid = true
+				tmpvoms.String = voms_url
 			}
-		} else if voms_url != "NULL" {
-			voms_url = "'" + voms_url + "'"
 		}
-		if altName == "" {
-			if tmpaltName.Valid == false {
-				altName = "NULL"
+		if altName != "" {
+			if strings.ToUpper(altName) == "NULL" {
+				tmpaltName.Valid = false
+				tmpaltName.String = ""
 			} else {
-				altName = "'" + tmpaltName.String + "'"
+				tmpaltName.Valid = true
+				tmpaltName.String = altName
 			}
-		} else if altName != "NULL" {
-			altName = "'" + altName + "'"
 		}
-		if unitType == "" {
-			if tmpType.Valid == false {
-				unitType = "NULL"
+		if unitType != "" {
+			if strings.ToUpper(unitType) == "NULL" {
+				tmpType.Valid = false
+				tmpType.String = ""
 			} else {
-				unitType = "'" + tmpType.String + "'"
+				tmpType.Valid = true
+				tmpType.String = unitType
 			}
-		} else if unitType != "NULL" {
-			unitType = "'" + unitType + "'"
 		}
+		
 
-		modstr := fmt.Sprintf(`do $$
-									declare v_unitid int;
-
-									declare c_uname text = %s;
-									declare c_aname text = %s;
-									declare c_type text = %s;
-									declare c_url text = %s;
-							   begin
-							   		select unitid into v_unitid from affiliation_units where name = c_uname;
-
-									update affiliation_units set alternative_name = c_aname, type = c_type, last_updated = NOW()
-									where unitid = v_unitid;
-
-									if c_url is not null and ((v_unitid, c_url) not in (select unitid, url from voms_url)) then
-										insert into voms_url (unitid, url) values (v_unitid, c_url);
-									end if;
-							   end $$;`,
-							unitName, altName, unitType, voms_url)
-
-		log.WithFields(QueryFields(r, startTime)).Info("Full string is " + modstr)
+//		modstr := fmt.Sprintf(`do $$
+//									declare v_unitid int;
+//
+//									declare c_uname text = %s;
+//									declare c_aname text = %s;
+//									declare c_type text = %s;
+//									declare c_url text = %s;
+//							   begin
+//							   		select unitid into v_unitid from affiliation_units where name = c_uname;
+//
+//									update affiliation_units set alternative_name = c_aname, type = c_type, last_updated = NOW()
+//									where unitid = v_unitid;
+//
+//									if c_url is not null and ((v_unitid, c_url) not in (select unitid, url from voms_url)) then
+//										insert into voms_url (unitid, url) values (v_unitid, c_url);
+//									end if;
+//							   end $$;`,
+//							unitName, altName, unitType, voms_url)
+//
+//		log.WithFields(QueryFields(r, startTime)).Info("Full string is " + modstr)
 
 		// start DB transaction
 		DBtx, cKey, err := LoadTransaction(r, DBptr)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
-			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 			DBtx.Rollback()
 			return
 		}
-		
-		stmt, err := DBtx.tx.Prepare(modstr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error preparing DB command: " + err.Error())
-			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Error preparing database command.\" }")
-			return
-		}
 
-	//run said statement and check errors
-		_, err = stmt.Exec()
+
+// First update the affiliation_units table
+		
+		_, err = DBtx.Exec(`update affiliation_units set alternative_name = $1, type = $2, last_updated = NOW() where unitid = $3`, tmpaltName, tmpType, tmpId)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error updating " + unitName + " in affiliation_units: " + err.Error())
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB update.\" }")
@@ -322,12 +324,17 @@ func setAffiliationUnitInfo(w http.ResponseWriter, r *http.Request) {
 				log.WithFields(QueryFields(r, startTime)).Error("Error during rollback: " + rberr.Error())
 			}
 		} else {
+
+// Now try updating voms_url if needed. Do nothing if 
+			if tmpvoms.Valid {
+
+}
 			// error is nil, so it's a success. Commit the transaction and return success.
 			DBtx.Commit(cKey)
 			log.WithFields(QueryFields(r, startTime)).Info("Successfully set values for " + unitName + " in affiliation_units.")
 			fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
 		}
-		stmt.Close()
+//		stmt.Close()
 		return
 	}
 }
@@ -711,37 +718,52 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 
-	query := fmt.Sprintf(`do $$
-						  declare
-								v_unitid int;
-								v_uid bigint;
-								v_groupid int;
 
-								c_fqan  constant text := %s;
-								c_aname constant text := %s;
-								c_uname constant text := %s;
-								c_gname constant text := %s;
-						  begin
-								select unitid into v_unitid from affiliation_units where name = c_aname;
-								select groupid into v_groupid from groups where name = c_gname and type = 'UnixGroup';
-								select uid into v_uid from users where uname = c_uname;
+	var uid, unitid, groupid sql.NullInt64
+	queryerr := DBtx.tx.QueryRow(`select unitid, groupid, uid from (select 1 as key, unitid from affiliation_units where name = $1) as au full outer join (select 1 as key, uid from users where uname=$2) as u on u.key = au.key right join (select 1 as key, groupid from groups where name=$3 and type = 'UnixGroup') as g on g.key=au.key`, unit, mUser, mGroup).Scan(&unitid, &uid, &groupid)
+	if queryerr != nil && queryerr != sql.ErrNoRows {
+		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	}
+	if groupid.Valid == false {
+		log.WithFields(QueryFields(r, startTime)).Error("Specified mapped_group does not exist.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Specified mapped_group does not exist.\" }")
+		return
+	}
+//	query := fmt.Sprintf(`do $$
+//						  declare
+//								v_unitid int;
+//								v_uid bigint;
+//								v_groupid int;
+//
+//								c_fqan  constant text := %s;
+//								c_aname constant text := %s;
+//								c_uname constant text := %s;
+//								c_gname constant text := %s;
+//						  begin
+//								select unitid into v_unitid from affiliation_units where name = c_aname;
+//								select groupid into v_groupid from groups where name = c_gname and type = 'UnixGroup';
+//								select uid into v_uid from users where uname = c_uname;
+//
+//								if v_unitid is null and c_aname is not null then
+//									raise 'affiliation unit does not exist';
+//								end if;
+//								if v_groupid is null and c_gname is not null then
+//									raise 'group does not exist';
+//								end if;
+//								if v_uid is null and c_uname is not null then
+//									raise 'user does not exist';
+//								end if;
+//
+//								insert into grid_fqan (fqan, unitid, mapped_user, mapped_group, last_updated)
+//								values (c_fqan, v_unitid, v_uid, v_groupid, NOW());
+//						  end $$;`, `'` + fqan + `'`, unit, mUser, `'` + mGroup + `'`)
+//
+//	re := regexp.MustCompile(`[\s\t\n]+`)
+//	log.WithFields(QueryFields(r, startTime)).Debug(re.ReplaceAllString(query, " "))
 
-								if v_unitid is null and c_aname is not null then
-									raise 'affiliation unit does not exist';
-								end if;
-								if v_groupid is null and c_gname is not null then
-									raise 'group does not exist';
-								end if;
-								if v_uid is null and c_uname is not null then
-									raise 'user does not exist';
-								end if;
-
-								insert into grid_fqan (fqan, unitid, mapped_user, mapped_group, last_updated)
-								values (c_fqan, v_unitid, v_uid, v_groupid, NOW());
-						  end $$;`, `'` + fqan + `'`, unit, mUser, `'` + mGroup + `'`)
-	re := regexp.MustCompile(`[\s\t\n]+`)
-	log.WithFields(QueryFields(r, startTime)).Debug(re.ReplaceAllString(query, " "))
-	_, err = DBtx.Exec(query)
+	_, err = DBtx.Exec(`insert into grid_fqan (fqan, unitid, mapped_user, mapped_group, last_updated) values ($1, $2, $3, $4, NOW())`, fqan, unitid, uid, groupid)
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
@@ -913,7 +935,7 @@ func setFQANMappings(w http.ResponseWriter, r *http.Request) {
 	var res sql.Result
 	var rowsErr error
 	var rows int64
-	res, err = DBtx.Exec(fmt.Sprintf("update grid_fqan set %s where fqan = '%s'", strings.Join(values, ", "), fqan))
+	res, err = DBtx.Exec(`update grid_fqan set $1 where fqan = $2`, strings.Join(values, ", "), fqan)
 	if err == nil {
 		rows, rowsErr = res.RowsAffected()
 		if rowsErr != nil {

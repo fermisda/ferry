@@ -2059,6 +2059,10 @@ func setGroupStorageQuotaDB(tx *Transaction, gName, unitname, rName, groupquota,
 
 // since this function is not directly web accessible we don't do as much parameter checking/validation here.
 // We assume that the inputs have already been sanitized by the calling function.
+// 2018-07-20 Let's not make that a blanket assumption
+
+// quotaunit is known to be OK because it is explicitly set to "B" for internal DB storeage.
+// ditto groupquota because the value passed in is derived from the unit conversion function already
 
 	_, err := tx.Exec(fmt.Sprintf(`do $$
 							declare 
