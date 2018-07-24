@@ -258,7 +258,7 @@ def update_users(userdb, ferry):
                 firstname = user.full_name.split(" ", 1)[0]
                 lastname = user.full_name.split(" ", 1)[1]
             else:
-                firstname = user.full_name.split(" ", 1)
+                firstname = user.full_name
                 lastname = ""
             params = {
                 "uid": user.uid,
@@ -320,6 +320,8 @@ def update_groups(userdb, ferry, users):
 def update_certificates(userdb, ferry):
     changes = False
     for user in userdb.values():
+        if user.uid not in ferry:
+            continue
         diff = user.diff(ferry[user.uid])
         if "certificates" in diff:
             for certificate in user.certificates:
@@ -341,6 +343,8 @@ def update_certificates(userdb, ferry):
 def update_compute_access(userdb, ferry):
     changes = False
     for user in userdb.values():
+        if user.uid not in ferry:
+            continue
         diff = user.diff(ferry[user.uid])
         if "compute_access" in diff:
             for resource, params in user.compute_access.items():
