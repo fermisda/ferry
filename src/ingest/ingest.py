@@ -801,24 +801,30 @@ def read_vulcan_storage_resources(config, users, groups, cms_groups):
                             unit = row[2][-1] + "B"
                         else:
                             unit = "B"
-
-                        if uquota: # user quotas
-                            if row[0] in users:
-                                storage_structure[storage[1]].quotas.append(
-                                        StorageQuota(users[row[0]].uid, "null", "cms", "%s/%s" % (storage_structure[storage[1]].spath, row[0]), quota, unit, "null")
-                                    )
-                            else:
-                                print("User %s doesn't exist in userdb. Skipping quota it's quota in %s." % (row[0], storage[0]))
-                        else: # group quotas
-                            if row[0] in cms_groups.values():
-                                storage_structure[storage[1]].quotas.append(
-                                        StorageQuota("null", groups[row[0]], "cms", "null", quota, unit, "null")
-                                    )
-                            else:
-                                print("Group %s is not a valid CMS group. Skipping quota it's quota in %s." % (row[0], storage[0]))
+                    elif re.match(r"[a-z0-9]+\s+(\d+.\d{2}\s[PTGMK]?B\s+){4}(\d+\s+){2}\w+\/\w+", row):
+                        row = row.split()
+                        quota = row[7]
+                        unit = row[8]
                     else:
-                        if row.startswith("Group quota"):
+                        if "Group" in row:
                             uquota = False
+                        continue
+
+                    if uquota: # user quotas
+                        if row[0] in users:
+                            storage_structure[storage[1]].quotas.append(
+                                    StorageQuota(users[row[0]].uid, "null", "cms", "%s/%s" % (storage_structure[storage[1]].spath, row[0]), quota, unit, "null")
+                                )
+                        else:
+                            print("User %s doesn't exist in userdb. Skipping quota it's quota in %s." % (row[0], storage[0]))
+                    else: # group quotas
+                        if row[0] in cms_groups.values():
+                            storage_structure[storage[1]].quotas.append(
+                                    StorageQuota("null", groups[row[0]], "cms", "null", quota, unit, "null")
+                                )
+                        else:
+                            print("Group %s is not a valid CMS group. Skipping quota it's quota in %s." % (row[0], storage[0]))
+
             except:
                 print("failed to fetch %s data from %s" % (storage[0], cfg[storage[0].lower()]), file=sys.stderr)
 
