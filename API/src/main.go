@@ -264,7 +264,7 @@ func main() {
 		ClientCAs:                Certpool,
 		GetConfigForClient:       checkClientIP,
 		Certificates:             nil,
-		MinVersion:               tls.VersionTLS11,
+		MinVersion:               tls.VersionTLS12,
 		InsecureSkipVerify:       false,
 		CipherSuites:             Ciphers,
 		PreferServerCipherSuites: true,
