@@ -720,7 +720,7 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 
 
 	var uid, unitid, groupid sql.NullInt64
-	queryerr := DBtx.tx.QueryRow(`select unitid, groupid, uid from (select 1 as key, unitid from affiliation_units where name = $1) as au full outer join (select 1 as key, uid from users where uname=$2) as u on u.key = au.key right join (select 1 as key, groupid from groups where name=$3 and type = 'UnixGroup') as g on g.key=au.key`, unit, mUser, mGroup).Scan(&unitid, &uid, &groupid)
+	queryerr := DBtx.tx.QueryRow(`select unitid, uid, groupid from (select 1 as key, unitid from affiliation_units where name = $1) as au full outer join (select 1 as key, uid from users where uname=$2) as u on u.key = au.key right join (select 1 as key, groupid from groups where name=$3 and type = 'UnixGroup') as g on g.key=au.key`, unit, mUser, mGroup).Scan(&unitid, &uid, &groupid)
 	if queryerr != nil && queryerr != sql.ErrNoRows {
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
