@@ -1089,8 +1089,8 @@ func getCondorQuotas(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q := r.URL.Query()
-	uName := q.Get("unitname")
-	rName := q.Get("resourcename")
+	uName := strings.TrimSpace(q.Get("unitname"))
+	rName := strings.TrimSpace(q.Get("resourcename"))
 
 	if uName == "" {
 		uName = "%"
@@ -1099,8 +1099,8 @@ func getCondorQuotas(w http.ResponseWriter, r *http.Request) {
 		rName = "%"
 	}
 
-	query := `select resourcename, unitname, condorgroup, value, type, unit_exists, resource_exists from (
-				select 1 as key, cr.name as resourcename, au.name as unitname, cb.name as condorgroup, cb.value, cb.type
+	query := `select resourcename, unitname, condorgroup, value, type, valid_until, unit_exists, resource_exists from (
+				select 1 as key, cr.name as resourcename, au.name as unitname, cb.name as condorgroup, cb.value, cb.type, cb.valid_until as valid_until
 				from compute_batch as cb
 				left join affiliation_units as au on cb.unitid = au.unitid
 				join compute_resources as cr on cb.compid = cr.compid
@@ -1127,17 +1127,18 @@ func getCondorQuotas(w http.ResponseWriter, r *http.Request) {
 		Value float64 `json:"value"`
 		Qtype string `json:"type"`
 		Unit  string `json:"unitname"`
+		Vuntil string `json:"valid_until"`
 	}
 	out := make(map[string][]jsonquota)
 
-	var tmpRname, tmpUname, tmpGroup, tmpType sql.NullString
+	var tmpRname, tmpUname, tmpGroup, tmpType, tmpValid sql.NullString
 	var tmpValue sql.NullFloat64
 	var unitExists, resourceExists bool
 
 	for rows.Next() {
-		rows.Scan(&tmpRname, &tmpUname, &tmpGroup, &tmpValue, &tmpType, &unitExists, &resourceExists)
+		rows.Scan(&tmpRname, &tmpUname, &tmpGroup, &tmpValue, &tmpType, &tmpValid, &unitExists, &resourceExists)
 		if tmpGroup.Valid {
-			out[tmpRname.String] = append(out[tmpRname.String], jsonquota{tmpGroup.String, tmpValue.Float64, tmpType.String, tmpUname.String})
+			out[tmpRname.String] = append(out[tmpRname.String], jsonquota{tmpGroup.String, tmpValue.Float64, tmpType.String, tmpUname.String, tmpValid.String})
 		}
 	}
 
@@ -1194,10 +1195,10 @@ func setCondorQuota(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 
-	group := q.Get("condorgroup")
-	comp  := q.Get("resourcename")
-	quota := q.Get("quota")
-	until := q.Get("validuntil")
+	group := strings.TrimSpace(q.Get("condorgroup"))
+	comp  := strings.TrimSpace(q.Get("resourcename"))
+	quota := strings.TrimSpace(q.Get("quota"))
+	until := strings.TrimSpace(q.Get("validuntil"))
 
 	authorized,authout := authorize(r,AuthorizedDNs)
 	if authorized == false {
@@ -2059,6 +2060,44 @@ func setGroupStorageQuotaDB(tx *Transaction, gName, unitname, rName, groupquota,
 
 // since this function is not directly web accessible we don't do as much parameter checking/validation here.
 // We assume that the inputs have already been sanitized by the calling function.
+// 2018-07-20 Let's not make that a blanket assumption
+
+// quotaunit is known to be OK because it is explicitly set to "B" for internal DB storeage.
+// ditto groupquota because the value passed in is derived from the unit conversion function already
+
+	var vSid, vGid, vUnitid sql.NullInt64
+	
+	queryerr := tx.tx.QueryRow(`select storageid, groupid, unitid from (select 1 as key, storageid from storage_resources where name = $1) as sr full outer join (select groupid from groups where name = $2 and type = 'UnixGroup') as g on g.key=sr.key right join (select unitid from affiliation_units where name = $3) as au on au.key=sr.key`, rName, gName, unitname).Scan(&vSid, vGid, vUnitid)
+	if queryerr != nil && queryerr != sql.ErrNoRows {
+		return queryerr	
+	}
+	
+	if !vSid.Valid {
+		
+		
+	}
+	if !vGid.Valid {
+		
+		
+	}
+	if !vUnitid.Valid {
+		
+		
+	}
+	
+	var vValid sql.NullString
+	queryerr = tx.tx.QueryRow(`select valid_until from storage_resources where storageid=$1 and unitid=$2 and groupid=$3`,vSid, vUnitid, vGid).Scan(&vValid)
+	if queryerr == sql.ErrNoRows {
+		// we did not have this comb in the DB, so it is in insert
+		
+	} else if queryerr != nil {
+		//some other odd problem, fall back
+	} else {
+		// we need to update the existing DB entry
+		
+		
+	}
+	
 
 	_, err := tx.Exec(fmt.Sprintf(`do $$
 							declare 

@@ -392,8 +392,8 @@ func setSuperUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q := r.URL.Query()
-	uName := q.Get("username")
-	unitName := q.Get("unitname")
+	uName := strings.TrimSpace(q.Get("username"))
+	unitName := strings.TrimSpace(q.Get("unitname"))
 	if uName == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No user name specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
@@ -405,6 +405,8 @@ func setSuperUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var uid,unitid sql.NullInt64
+ 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
@@ -412,35 +414,55 @@ func setSuperUser(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Unable to start database transaction.\" }")
 		return
 	}
-	_, err = DBtx.Exec(fmt.Sprintf(`do $$
-										declare usid int;
-										declare unid int;
-										declare FqanList int;
-									begin
-										select uid into usid from users where uname = '%s';
-										select unitid into unid from affiliation_units where name = '%s';
+//	_, err = DBtx.Exec(fmt.Sprintf(`do $$
+//										declare usid int;
+//										declare unid int;
+//										declare FqanList int;
+//									begin
+//										select uid into usid from users where uname = '%s';
+//										select unitid into unid from affiliation_units where name = '%s';
+//
+//										if usid is null then raise 'User does not exist'; end if;
+//										if unid is null then raise 'Unit does not exist'; end if;
+//
+//										update grid_access set is_superuser = true, last_updated = NOW()
+//                                        where uid = usid and fqanid in (select fqanid from grid_fqan where unitid = unid);
+//									end $$;`, uName, unitName))
+//
 
-										if usid is null then raise 'User does not exist'; end if;
-										if unid is null then raise 'Unit does not exist'; end if;
+	queryerr := DBtx.tx.QueryRow(`select uid, unitid from (select 1 as key, uid from users where uname=$1) as us full outer join (select 1 as key, unitid from affiliation_units au where au.name=$2) as aut on us.key=aut.key`, uName, unitName).Scan(&uid,&unitid)
+	
+	if queryerr == sql.ErrNoRows {
+		log.WithFields(QueryFields(r, startTime)).Error("User and unit names do not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"User and unit names do not exist.\" }")
+		return
+	} else if queryerr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error: " + queryerr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
+		return
+	}
+	if ! uid.Valid {
+		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+		return
+	} 
+	if ! unitid.Valid {
+		log.WithFields(QueryFields(r, startTime)).Error("Unit does not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Unit does not exist.\" }")
+		return
+	}
 
-										update grid_access set is_superuser = true, last_updated = NOW()
-                                        where uid = usid and fqanid in (select fqanid from grid_fqan where unitid = unid);
-									end $$;`, uName, unitName))
+	_, err = DBtx.Exec(`update grid_access set is_superuser = true, last_updated = NOW() 
+                            where uid = $1 and fqanid in (select fqanid from grid_fqan  
+                            where unitid = $2)`, uid.Int64, unitid.Int64)
+
 	if err == nil {
-		DBtx.Commit(cKey)
+		if cKey != 0 { DBtx.Commit(cKey) }
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 	} else {
-		if strings.Contains(err.Error(), `User does not exist`) {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-		} else if strings.Contains(err.Error(), `Unit does not exist`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Unit does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Unit does not exist.\" }")
-		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
-		}
+		log.WithFields(QueryFields(r, startTime)).Error("Error: " + err.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
 	}
 }
 
@@ -571,10 +593,10 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 
-	uName := q.Get("username")
-	gName := q.Get("groupname")
-	gType := q.Get("grouptype")
-	isLeader := q.Get("is_leader")
+	uName := strings.TrimSpace(q.Get("username"))
+	gName := strings.TrimSpace(q.Get("groupname"))
+	gType := strings.TrimSpace(q.Get("grouptype"))
+	isLeader := strings.TrimSpace(q.Get("is_leader"))
 
 	if uName == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
@@ -614,17 +636,22 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 
-	_, err = DBtx.Exec(fmt.Sprintf(`do $$
-										declare uid int;
-										declare groupid int;
-									begin
-										select u.uid into uid from users as u where uname = '%s';
-										select g.groupid into groupid from groups as g where name = '%s' and type = '%s';
-										
-										insert into user_group (uid, groupid, is_leader, last_updated)
-														values (uid, groupid, %s, NOW());
-									end $$;`, uName, gName, gType, isLeader))
+//	_, err = DBtx.Exec(fmt.Sprintf(`do $$
+//										declare uid int;
+//										declare groupid int;
+//									begin
+//										select u.uid into uid from users as u where uname = '%s';
+//										select g.groupid into groupid from groups as g where name = '%s' and type = '%s';
+//										
+//										insert into user_group (uid, groupid, is_leader, last_updated)
+//														values (uid, groupid, %s, NOW());
+//									end $$;`, uName, gName, gType, isLeader))
+//
 
+	_, err = DBtx.Exec(`insert into user_group (uid, groupid, is_leader, last_updated) values
+                            ((select uid from users where uname=$1),
+                             (select groupid from groups where name=$2 and type=$3),
+                             $4, NOW())`,uName, gName, gType, isLeader)
 	if err == nil {
 		if cKey != 0 {
 			log.WithFields(QueryFields(r, startTime)).Info("Success!")
@@ -663,9 +690,9 @@ func removeUserFromGroup(w http.ResponseWriter, r *http.Request) {
 	}
 	var inputErr jsonerror
 
-	user := q.Get("username")
-	group := q.Get("groupname")
-	gtype := q.Get("grouptype")
+	user := strings.TrimSpace(q.Get("username"))
+	group := strings.TrimSpace(q.Get("groupname"))
+	gtype := strings.TrimSpace(q.Get("grouptype"))
 
 	if user == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
@@ -703,18 +730,36 @@ func removeUserFromGroup(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 
+	var uid, groupid sql.NullInt64
+
+	queryerr := DBtx.tx.QueryRow(`select uid, groupid from (select 1 as key, uid from users where uname=$1) as us full outer join (select 1 as key, groupid, type from groups where name = $2 and type = $3) as g on us.key=g.key`,user, group, gtype).Scan(&uid,&groupid)
+	if queryerr == sql.ErrNoRows {
+		log.WithFields(QueryFields(r, startTime)).Error("User and group names do not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"User and group names do not exist.\" }")
+		return	
+	} else if queryerr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error: " + queryerr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
+		return
+	}
+	if ! uid.Valid {
+		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+		return
+	} 
+	if ! groupid.Valid {
+		log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Group does not exist.\" }")
+		return
+	}
+
 	query := fmt.Sprintf(`do $$
 						  declare
-							cUser constant text := '%s';
-							cGroup constant text := '%s';
-							cGtype constant groups_group_type := '%s';
 
-							vUid int;
-							vGroupid int;
+							vUid constant int := %d;
+							vGroupid constant int := %d;
 							vError text;
 						  begin
-							select uid into vUid from users where uname = cUser;
-							select groupid into vGroupid from groups where name = cGroup and type = cGtype;
 
 							if vUid is null then vError = concat(vError, 'noUser,'); end if;
 							if vGroupid is null then vError = concat(vError, 'noGroup,'); end if;
@@ -724,7 +769,7 @@ func removeUserFromGroup(w http.ResponseWriter, r *http.Request) {
 							if vError is not null then raise '%%', vError; end if;
 							
 							delete from user_group where uid = vUid and groupid = vGroupid;
-						  end $$;`, user, group, gtype)
+						  end $$;`, uid.Int64, groupid.Int64)
 	_, err = DBtx.Exec(query)
 
 	re := regexp.MustCompile(`[\s\t\n]+`)
@@ -869,10 +914,10 @@ func setUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 
-	rName := q.Get("resourcename")
-	uName := q.Get("username")
-	shell := q.Get("shell")
-	hDir := q.Get("homedir")
+	rName := strings.TrimSpace(q.Get("resourcename"))
+	uName := strings.TrimSpace(q.Get("username"))
+	shell := strings.TrimSpace(q.Get("shell"))
+	hDir  := strings.TrimSpace(q.Get("homedir"))
 
 	if rName == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No resourcename specified in http query.")
@@ -907,19 +952,24 @@ func setUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 
-	_, err = DBtx.Exec(fmt.Sprintf(`do $$
-										declare vCompid int;
-										declare vUid int;
-									begin
-										select compid into vCompid from compute_resources where name = '%s';
-										select uid into vUid from users where uname = '%s';
+//	_, err = DBtx.Exec(fmt.Sprintf(`do $$
+//										declare vCompid int;
+//										declare vUid int;
+//									begin
+//										select compid into vCompid from compute_resources where name = '%s';
+//										select uid into vUid from users where uname = '%s';
+//
+//										if vCompid is null then raise 'Resource does not exist.'; end if;
+//										if vUid is null then raise 'User does not exist.'; end if;
+//										
+//										update compute_access set shell = '%s', home_dir = '%s', last_updated = NOW()
+//										where compid = vCompid and uid = vUid;
+//									end $$;`, rName, uName, shell, hDir))
+//
 
-										if vCompid is null then raise 'Resource does not exist.'; end if;
-										if vUid is null then raise 'User does not exist.'; end if;
-										
-										update compute_access set shell = '%s', home_dir = '%s', last_updated = NOW()
-										where compid = vCompid and uid = vUid;
-									end $$;`, rName, uName, shell, hDir))
+	_, err = DBtx.Exec(`update compute_access set shell = $1, home_dir = $2, last_updated = NOW() where compid = (select compid from compute_resources where name = $3) and uid = (select uid from users where uname = $4)`, shell, hDir, rName, uName)
+
+
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
@@ -936,7 +986,7 @@ func setUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	DBtx.Commit(cKey)
+	if cKey != 0 {	DBtx.Commit(cKey) }
 }
 
 func setUserShell(w http.ResponseWriter, r *http.Request) {
@@ -944,9 +994,9 @@ func setUserShell(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 
-	aName := q.Get("unitname")
-	uName := q.Get("username")
-	shell := q.Get("shell")
+	aName := strings.TrimSpace(q.Get("unitname"))
+	uName := strings.TrimSpace(q.Get("username"))
+	shell := strings.TrimSpace(q.Get("shell"))
 
 	if aName == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
@@ -1221,11 +1271,17 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No quota specified.\" }")
 		return
 	}
-	if validtime == "" || strings.ToUpper(validtime) == "NULL" {
-		validtime = "NULL"
-	} else {
-		validtime = "'" + validtime + "'"
+//	if validtime == "" || strings.ToUpper(validtime) == "NULL" {
+//		validtime = "NULL"
+//	} else {
+//		validtime = "'" + validtime + "'"
+//	}
+	var vUntil sql.NullString
+	if validtime != "" && strings.ToUpper(validtime) != "NULL" {
+		vUntil.Valid = true
+		vUntil.String = validtime
 	}
+	
 	if uName == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No user name given.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username provided.\" }")
@@ -1253,86 +1309,97 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	quota = strconv.FormatFloat(newquota, 'f', 0, 64)
 	unit = "B"
 	
-	if path == "" {
+	if path == "" || strings.ToUpper(path) == "NULL" {
 		spath.Valid = false
 		spath.String = ""
 	} else {
 		spath.Valid = true
 		spath.String = path
 	}
-
+	
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
+	
+	
+	
+	var vSid,vId,vUnitid sql.NullInt64
 
-
-
-//var vSid,vId,vUnitid int
-//var vPath vUntil sql.NullString
-//
-//querystr := 
-//queryerr := DBtx.QueryRow(querystr,
-//
-
-
-	_, err = DBtx.Exec(fmt.Sprintf(`do $$
-							declare
-								vSid int;
-								vUid int;
-								vUnitid int;
-								vGroupid int;
-								vQuotaid int;
-								vPath text;
-								vUntil date;
-         
-								cSname constant text := '%s';
-								cUname constant text := '%s';
-								cEname constant text := '%s';
-								cGname constant text := cUname;
-								cValue constant text := '%s';
-								cUnit constant text := '%s';
-								cVuntil constant date := %s;
-								cIsgrp constant boolean := %t;
-								cPath constant text := '%s';
-
-							begin
-                                                                
-								select storageid into vSid from storage_resources where name = cSname;
-								select unitid into vUnitid from affiliation_units where name = cEname;
-                                                                
-								if vSid is null then raise 'Resource does not exist.'; end if;
-								if vUnitid is null then raise 'Unit does not exist.'; end if;
-								if cVuntil is null then vUntil = null ; else vUntil = cVuntil ; end if;
-								if cIsgrp is FALSE then
-								    select uid into vUid from users where uname = cUname;
-								    if vUid is null then raise 'User does not exist.'; end if;
-                                	select quotaid, path into vQuotaid, vPath from storage_quota where storageid = vSid and uid = vUid and unitid = vUnitid and ((valid_until is NULL and vUntil is NULL) or (valid_until is not null and vUntil is not null and valid_until = vUntil));
-                                    if cPath = 'NULL' then vPath = null; elsif cPath is not null and cPath != '' then vPath = cPath; end if;
-									if vQuotaid is not null then
-										update storage_quota set value = cValue, unit = cUnit, valid_until = vUntil, last_updated = NOW(), path = vPath
-										where quotaid = vQuotaid; 
-									else
-										insert into storage_quota (storageid, uid, unitid, value, unit, valid_until, path, last_updated)
-										values (vSid, vUid, vUnitid, cValue, cUnit, cVuntil, cPath, NOW());
-									end if;
-                                else
-									select groupid into vGroupid from groups where name = cGname and type = 'UnixGroup';
-									if vGroupid is null then raise 'Group does not exist.'; end if;
-									select quotaid,path into vQuotaid,vPath from storage_quota where storageid = vSid and groupid = vGroupid and unitid = vUnitid and ((valid_until is NULL and vUntil is NULL) or (valid_until is not null and vUntil is not null and valid_until = vUntil));
-									if cPath = 'NULL' then vPath = null ; elsif cPath is not null and cPath != '' then vPath = cPath ; end if;
-									if vQuotaid is not null then
-										update storage_quota set value = cValue, unit = cUnit, valid_until = vUntil, last_updated = NOW(), path = vPath
-										where quotaid = vQuotaid; 
-									else
-										insert into storage_quota (storageid, groupid, unitid, value, unit, valid_until, path, last_updated)
-										values (vSid, vGroupid, vUnitid, cValue, cUnit, cVuntil, cPath, NOW());
-									end if;
-                            	end if;
-							end $$;`, rName, uName, unitName, quota, unit, validtime, isGroup, spath.String))
+	//
+	//querystr := 
+	//queryerr := DBtx.QueryRow(querystr,
+	//
+	
+	// get storageID, unitid, uid,
+	querystr := ""
+	if isGroup {
+		querystr = `select storageid, id, unitid from (select 1 as key, storageid from storage_resources where name=$1) as sr full outer join (select 1 as key, groupid as id from groups where name=$2) as g on sr.key=g.key right join (select 1 as key, unitid from affiliation_units where name=$3) as au on au.key=g.key`
+	} else {
+		querystr = `select storageid, id, unitid from (select 1 as key, storageid from storage_resources where name=$1) as sr full outer join (select 1 as key, uid as id from users where uname=$2) as us on sr.key=us.key right join (select 1 as key, unitid from affiliation_units where name=$3) as au on au.key=us.key`
+	}
+	queryerr := DBtx.tx.QueryRow(querystr,rName, uName, unitName).Scan(&vSid,&vId,&vUnitid)
+	if queryerr == sql.ErrNoRows {
+		log.WithFields(QueryFields(r, startTime)).Error("Unit does not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Unit does not exist.\" }")	
+		return
+	}
+	if ! vId.Valid {
+		if isGroup {
+			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Group does not exist.\" }")
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")	
+		}
+		return
+	} 
+	if ! vSid.Valid {
+		log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
+	} 
+	
+	var(
+		column string
+		quotaid sql.NullInt64
+		vPath sql.NullString
+	)
+	
+	if isGroup {
+		column = `groupid`
+	} else { 
+		column = `uid` 
+	}
+	
+	//	queryerr = DBtx.tx.QueryRow(`select quotaid,path from storage_quota where storageid = $1 and ` + column + ` = $2 and unitid = $3 and ((valid_until is NULL and not $4) or (valid_until is not null and (valid_until = $5 and $4)))`, vSid, vId, vUnitid, vUntil.Valid, vUntil).Scan(&quotaid,&vPath)
+	queryerr = DBtx.tx.QueryRow(`select quotaid,path from storage_quota where storageid = $1 and ` + column + ` = $2 and unitid = $3 and ((valid_until is NULL and not $4) or (valid_until is not null and $4))`, vSid, vId, vUnitid, vUntil.Valid).Scan(&quotaid,&vPath)
+	// if we did not specify a path in the API call, stick with the existing one
+	if vPath.Valid && ! spath.Valid && strings.ToUpper(path) != "NULL" {
+		spath.Valid = true
+		spath.String = vPath.String
+	}
+	if queryerr == sql.ErrNoRows {
+		if vUntil.Valid {
+			_, err = DBtx.Exec(`insert into storage_quota (storageid, ` + column + `, unitid, value, unit, valid_until, path, last_updated) values ($1, $2, $3, $4, $5, $6, $7, NOW())`,vSid, vId, vUnitid, quota, unit, vUntil.String, spath.String)
+		} else {
+			_, err = DBtx.Exec(`insert into storage_quota (storageid, ` + column + `, unitid, value, unit, path, last_updated) values ($1, $2, $3, $4, $5, $6, NOW())`,vSid, vId, vUnitid, quota, unit, spath.String)	
+			
+		}
+	} else if queryerr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error checking for existing quota: " + queryerr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error checking for existing quota.\" }")
+		return
+	} else {
+		if vUntil.Valid {
+			_, err = DBtx.Exec(`update storage_quota set value = $1, unit = $2, valid_until = $3, last_updated = NOW(), path = $4 where quotaid = $5`, quota, unit, vUntil.String, spath.String, quotaid)
+		} else {
+			_, err = DBtx.Exec(`update storage_quota set value = $1, unit = $2, last_updated = NOW(), path = $3 where quotaid = $4`, quota, unit, spath.String, quotaid)	
+		}
+	}
+	
 	if err == nil {
 		DBtx.Commit(cKey)
-
+		
 		if cKey != 0 {
 			log.WithFields(QueryFields(r, startTime)).Info("Success!")
 			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
@@ -1359,9 +1426,9 @@ func setUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 
-	uName := q.Get("username")
-	attribute := q.Get("attribute")
-	value := q.Get("value")
+	uName := strings.TrimSpace(q.Get("username"))
+	attribute := strings.TrimSpace(q.Get("attribute"))
+	value := strings.TrimSpace(q.Get("value"))
 
 	if uName == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
@@ -1391,30 +1458,51 @@ func setUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Request)
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 
-	_, err = DBtx.Exec(fmt.Sprintf(`do $$
-									declare v_uid int;
-									
-									declare c_uname text = '%s';
-									declare c_attribute text = '%s';
-									declare c_value text = '%s';
-
-									begin
-										select uid into v_uid from users where uname = c_uname;
-										if v_uid is null then
-											raise 'uname does not exist';
-										end if;
-
-										if (v_uid, c_attribute) not in (select uid, attribute from external_affiliation_attribute) then
-											insert into external_affiliation_attribute (uid, attribute, value)
-											values (v_uid, c_attribute, c_value);
-										else
-											update external_affiliation_attribute set
-												value = c_value,
-												last_updated = NOW()
-											where uid = v_uid and attribute = c_attribute;
-										end if;
-									end $$;`, uName, attribute, value))
-
+//	_, err = DBtx.Exec(fmt.Sprintf(`do $$
+//									declare v_uid int;
+//									
+//									declare c_uname text = '%s';
+//									declare c_attribute text = '%s';
+//									declare c_value text = '%s';
+//
+//									begin
+//										select uid into v_uid from users where uname = c_uname;
+//										if v_uid is null then
+//											raise 'uname does not exist';
+//										end if;
+//
+//										if (v_uid, c_attribute) not in (select uid, attribute from external_affiliation_attribute) then
+//											insert into external_affiliation_attribute (uid, attribute, value)
+//											values (v_uid, c_attribute, c_value);
+//										else
+//											update external_affiliation_attribute set
+//												value = c_value,
+//												last_updated = NOW()
+//											where uid = v_uid and attribute = c_attribute;
+//										end if;
+//									end $$;`, uName, attribute, value))
+	execstr := ""
+	var uid int
+	var att sql.NullString
+	queryerr := DBtx.tx.QueryRow(`select us.uid,eaa.attribute from (select uid from users where uname = $1) as us left join (select uid, attribute from external_affiliation_attribute where attribute = $2) as eaa on us.uid=eaa.uid`).Scan(&uid,&att)
+	if queryerr == sql.ErrNoRows {
+		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+		return
+	} else if queryerr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query. Check logs.\" }")
+		return
+	}
+	// if att is valid that means the user/attriute combo is in the table already, so this is an update.
+	// if it is not valid, then we are doing an insert.
+	if att.Valid {
+		execstr = `update external_affiliation_attribute set value = $3, last_updated = NOW() where uid = $1  and attribute = $2`
+	} else {
+		execstr = `insert into external_affiliation_attribute (uid, attribute, value) values ($1, $2, $3)`	
+	}
+	_, err = DBtx.Exec(execstr, uid, att.String, value)
+	
 	if err == nil {
 		DBtx.Commit(cKey)
 
@@ -1437,8 +1525,8 @@ func removeUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Reque
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 
-	uName := q.Get("username")
-	attribute := q.Get("attribute")
+	uName := strings.TrimSpace(q.Get("username"))
+	attribute := strings.TrimSpace(q.Get("attribute"))
 
 	if uName == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
@@ -1463,24 +1551,45 @@ func removeUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Reque
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 
-	_, err = DBtx.Exec(fmt.Sprintf(`do $$
-									declare v_uid int;
-									
-									declare c_uname text = '%s';
-									declare c_attribute text = '%s';
+	var uid int
+	var att sql.NullString
 
-									begin
-										select uid into v_uid from users where uname = c_uname;
-										if v_uid is null then
-											raise 'uname does not exist';
-										end if;
-
-										if (v_uid, c_attribute) not in (select uid, attribute from external_affiliation_attribute) then
-											raise 'attribute does not exist';
-										end if;
-
-										delete from external_affiliation_attribute where uid = v_uid and attribute = c_attribute;
-									end $$;`, uName, attribute))
+	queryerr := DBtx.tx.QueryRow(`select us.uid,eaa.attribute from (select uid from users where uname = $1) as us left join (select uid, attribute from external_affiliation_attribute where attribute = $2) as eaa on us.uid=eaa.uid`,uName, attribute).Scan(&uid,&att)
+	if queryerr == sql.ErrNoRows {
+		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+		return
+	} else if queryerr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query. Check logs.\" }")
+		return
+	}
+	if !att.Valid {
+		log.WithFields(QueryFields(r, startTime)).Error("Attribute does not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Attribute does not exist.\" }")
+		return	
+	}
+	
+	//	_, err = DBtx.Exec(fmt.Sprintf(`do $$
+	//									declare v_uid int;
+//									
+//									declare c_uname text = '%s';
+//									declare c_attribute text = '%s';
+//
+//									begin
+//										select uid into v_uid from users where uname = c_uname;
+//										if v_uid is null then
+//											raise 'uname does not exist';
+//										end if;
+//
+//										if (v_uid, c_attribute) not in (select uid, attribute from external_affiliation_attribute) then
+//											raise 'attribute does not exist';
+//										end if;
+//
+//										delete from external_affiliation_attribute where uid = v_uid and attribute = c_attribute;
+//									end $$;`, uName, attribute))
+//
+	_, err = DBtx.Exec(`delete from external_affiliation_attribute where uid = $1 and attribute = $2`, uid, att.String)
 
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
@@ -1590,9 +1699,9 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q := r.URL.Query()
-	uName := q.Get("username")
-	unitName := q.Get("unitname")
-	subjDN := q.Get("dn")
+	uName := strings.TrimSpace(q.Get("username"))
+	unitName := strings.TrimSpace(q.Get("unitname"))
+	subjDN := strings.TrimSpace(q.Get("dn"))
 	if uName == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
@@ -1609,60 +1718,109 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 
-	_, err = DBtx.Exec(fmt.Sprintf(`do $$ 	
-										declare u_uid int;
-										declare au_unitid int;
-										declare uc_dnid int;
-										declare new_dn bool;
-										u_dn constant text := '%s';
-										u_uname constant text := '%s';
-										au_name constant text := '%s';
-									begin
-										new_dn = false;
-										select uid into u_uid from users where uname=u_uname;
-										if u_dn not in (select dn from user_certificates) then
-											new_dn = true;
-											insert into user_certificates (dn, uid, last_updated) values (u_dn, u_uid, NOW());
-										end if;
-										if au_name != '' then
-											select unitid into au_unitid from affiliation_units where name = au_name;
-											select dnid into uc_dnid from user_certificates where dn = u_dn;
-											insert into affiliation_unit_user_certificate (unitid, dnid, last_updated) values (au_unitid, uc_dnid, NOW());
-										else
-											if not new_dn then
-												raise 'duplicated dn';
-											end if;
-										end if;
-									end $$;`, subjDN, uName, unitName))
+	var uid, dnid sql.NullInt64
+	queryerr := DBtx.tx.QueryRow(`select us.uid, uc.dnid from (select 1 as key, uid from users where uname=$1) as us full outer join (select 1 as key, dnid from user_certificates where dn=$2) as uc on uc.key=us.key`,uName, subjDN).Scan(&uid,&dnid)
+	if queryerr == sql.ErrNoRows {
+		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+		return
+	} else if queryerr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query. Check logs.\" }")
+		return
+	}
+	if ! uid.Valid {
+		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+		return		
+	}
+	if ! dnid.Valid {
+		foobar, err := DBtx.Exec(`insert into user_certificates (dn, uid, last_updated) values ($1, $2, NOW()) returning dnid`, subjDN, uid.Int64)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + err.Error())
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB insert. Check logs.\" }")
+			return
+		}
+		insid, inserr := foobar.LastInsertId()
+		log.WithFields(QueryFields(r, startTime)).Println(fmt.Sprintf("foobar = %d", insid))
+		if inserr == nil {
+			dnid.Valid = true
+			dnid.Int64 = insid
+		}
+	} else {
+		if unitName == "" {
+			// error about DN already existing
+			log.WithFields(QueryFields(r, startTime)).Error("DN already exists and is assigned to this affiliation unit.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"DN already exists and is assigned to this affiliation unit.\" }")
+			return	
+		}
+		
+	}
+	if unitName != "" {
+		
+		_, err = DBtx.Exec(`insert into affiliation_unit_user_certificate (unitid, dnid, last_updated) values (select unitid from affiliation_units where name=$1), $2, NOW())`,unitName, dnid.Int64)	
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + err.Error())
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB insert. Check logs.\" }")
+			DBtx.Rollback()
+			return
+		}
+	}
+
+//	_, err = DBtx.Exec(fmt.Sprintf(`do $$ 	
+//										declare u_uid int;
+//										declare au_unitid int;
+//										declare uc_dnid int;
+//										declare new_dn bool;
+//										u_dn constant text := '%s';
+//										u_uname constant text := '%s';
+//										au_name constant text := '%s';
+//									begin
+//										new_dn = false;
+//										select uid into u_uid from users where uname=u_uname;
+//										if u_dn not in (select dn from user_certificates) then
+//											new_dn = true;
+//											insert into user_certificates (dn, uid, last_updated) values (u_dn, u_uid, NOW());
+//										end if;
+//										if au_name != '' then
+//											select unitid into au_unitid from affiliation_units where name = au_name;
+//											select dnid into uc_dnid from user_certificates where dn = u_dn;
+//											insert into affiliation_unit_user_certificate (unitid, dnid, last_updated) values (au_unitid, uc_dnid, NOW());
+//										else
+//											if not new_dn then
+//												raise 'duplicated dn';
+//											end if;
+//										end if;
+//									end $$;`, subjDN, uName, unitName))
 	if err == nil {
 		if cKey != 0 {
 			log.WithFields(QueryFields(r, startTime)).Info("Success!")
 			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 		}
-	} else {
-		log.Print(err.Error())
-		if strings.Contains(err.Error(), `pk_affiliation_unit_user_certificate`) {
-			if cKey != 0 {
-				log.WithFields(QueryFields(r, startTime)).Error("DN already exists and is assigned to this affiliation unit.")
-				fmt.Fprintf(w, "{ \"ferry_error\": \"DN already exists and is assigned to this affiliation unit.\" }")
-			}
-		} else if strings.Contains(err.Error(), `duplicated dn`) {
-			log.WithFields(QueryFields(r, startTime)).Error("DN already exists.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"DN already exists.\" }")
-		} else if strings.Contains(err.Error(), `"uid" violates not-null constraint`) {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-		} else if strings.Contains(err.Error(), `"unitid" violates not-null constraint`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Affiliation unit does not exist.\" }")
-		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
-		}
-		return
-	}
-
-	DBtx.Commit(cKey)
+	}// else {
+//		log.Print(err.Error())
+//		if strings.Contains(err.Error(), `pk_affiliation_unit_user_certificate`) {
+//			if cKey != 0 {
+//				log.WithFields(QueryFields(r, startTime)).Error("DN already exists and is assigned to this affiliation unit.")
+//				fmt.Fprintf(w, "{ \"ferry_error\": \"DN already exists and is assigned to this affiliation unit.\" }")
+//			}
+//		} else if strings.Contains(err.Error(), `duplicated dn`) {
+//			log.WithFields(QueryFields(r, startTime)).Error("DN already exists.")
+//			fmt.Fprintf(w, "{ \"ferry_error\": \"DN already exists.\" }")
+//		} else if strings.Contains(err.Error(), `"uid" violates not-null constraint`) {
+//			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+//			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+//		} else if strings.Contains(err.Error(), `"unitid" violates not-null constraint`) {
+//			log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
+//			fmt.Fprintf(w, "{ \"ferry_error\": \"Affiliation unit does not exist.\" }")
+//		} else {
+//			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+//			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
+//		}
+//		return
+//	}
+//
+//	DBtx.Commit(cKey)
 }
 
 func removeUserCertificateDN(w http.ResponseWriter, r *http.Request) {
@@ -1677,8 +1835,8 @@ func removeUserCertificateDN(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q := r.URL.Query()
-	uName := q.Get("username")
-	subjDN := q.Get("dn")
+	uName := strings.TrimSpace(q.Get("username"))
+	subjDN := strings.TrimSpace(q.Get("dn"))
 	if uName == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
@@ -1695,44 +1853,51 @@ func removeUserCertificateDN(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 
+	var uid, dnid sql.NullInt64
+	queryerr := DBtx.tx.QueryRow(`select us.uid, uc.dnid from (select 1 as key, uid from users where uname=$1) as us full outer join (select 1 as key, dnid from user_certificates where dn=$2) as uc on uc.key=us.key`,uName, subjDN).Scan(&uid,&dnid)
+	if queryerr == sql.ErrNoRows {
+		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+		return
+	} else if queryerr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query. Check logs.\" }")
+		return
+	}
+	if ! uid.Valid {
+		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+		return		
+	}
+	if ! dnid.Valid {
+		log.WithFields(QueryFields(r, startTime)).Error("DN does not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"DN does not exist.\" }")
+		return		
+	}
 	_, err = DBtx.Exec(fmt.Sprintf(`do $$ 	
-										declare  u_uid int;
-										declare  u_dnid int;
-										u_dn constant text := '%s';
-										u_uname constant text := '%s';
-
+										declare  u_uid constant int := %d;
+										declare  u_dnid constant int := %d;
+									
 									begin
-										select uid into u_uid from users where uname=u_uname;
-										if u_uid is null then
-											raise 'uname does not exist';
-										end if;
-										select dnid into u_dnid from user_certificates where dn=u_dn;
-										if u_dnid is null then
-											raise 'dn does not exist';
-										end if;
+
 										if (u_dnid, u_uid) not in (select dnid, uid from user_certificates) then
 											raise 'dnid uid association does not exist';
 										end if;
 
 										delete from affiliation_unit_user_certificate where dnid=u_dnid;
 										delete from user_certificates where dnid=u_dnid and uid=u_uid;
-									end $$;`, subjDN, uName))
+									end $$;`, uid.Int64, dnid.Int64))
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 	} else {
-		if strings.Contains(err.Error(), `uname does not exist`) {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-		} else if strings.Contains(err.Error(), `dn does not exist`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Certificate DN does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Certificate DN does not exist.\" }")
-		} else if strings.Contains(err.Error(), `dnid uid association does not exist`) {
+		if strings.Contains(err.Error(), `dnid uid association does not exist`) {
 			log.WithFields(QueryFields(r, startTime)).Error("USER DN association does not exist.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"USER DN association does not exist.\" }")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
+			return
 		}
 	}
 
@@ -1744,11 +1909,11 @@ func setUserInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 
-	uid := q.Get("uid")
-	uName := q.Get("username")
-	fName := q.Get("fullname")
-	status := q.Get("status")
-	eDate := q.Get("expiration_date")
+	uid := strings.TrimSpace(q.Get("uid"))
+	uName := strings.TrimSpace(q.Get("username"))
+	fName := strings.TrimSpace(q.Get("fullname"))
+	status := strings.TrimSpace(q.Get("status"))
+	eDate :=strings.TrimSpace( q.Get("expiration_date"))
 
 	if uid == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No uid specified in http query.")
@@ -1794,32 +1959,31 @@ func setUserInfo(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 
-	_, err = DBtx.Exec(fmt.Sprintf(`do $$
-									declare c_uid constant int := %s;
 
-									begin
-										if c_uid not in (select uid from users) then
-											raise 'uid does not exist';
-										end if;
-
-										update users set
-											uname = '%s',
-											full_name = coalesce(%s, full_name),
-											status = coalesce(%s, status),
-											expiration_date = coalesce(%s, expiration_date),
-											last_updated = NOW()
-										where uid = c_uid;
-									end $$;`, uid, uName, fName, status, eDate))
+	uidint, converr := strconv.Atoi(uid)
+	if converr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error converting uid to int.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error converting uid to int.\" }")
+		return	
+	}
+	queryerr := DBtx.tx.QueryRow(`select uid from users where uid=$1`,uidint).Scan(&uidint)
+	if queryerr == sql.ErrNoRows {
+		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+		return
+	} else if queryerr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error determining uid.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"DB error determining uid.\" }")
+		return
+	}
+	_, err = DBtx.Exec(`update users set uname = $2, full_name = coalesce($3, full_name), status = coalesce($4, status), expiration_date = coalesce($5, expiration_date), last_updated = NOW() where uid = $1`, uidint, uName, fName, status, eDate)
 
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 		DBtx.Commit(cKey)
 	} else {
-		if strings.Contains(err.Error(), `uid does not exist`) {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-		} else if strings.Contains(err.Error(), `invalid input syntax for type date`) ||
+		if strings.Contains(err.Error(), `invalid input syntax for type date`) ||
 			strings.Contains(err.Error(), `date/time field value out of range`) {
 			log.WithFields(QueryFields(r, startTime)).Error("Invalid expiration date.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid expiration date.\" }")
@@ -2137,21 +2301,16 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error(err)
 		}
-		myStmt,myStmterr := DBptr.Prepare(fmt.Sprintf("delete from users where uname='%s'",uName))
-		if myStmterr != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error creating prepared statement for deleteUser(" + uName + ").")	
-		}
-		_, err = myStmt.Exec() 
+	
+		_, err = DBtx.Exec(`delete from users where uname=$1`,uName) 
 		if err == nil {	
 			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 			log.WithFields(QueryFields(r, startTime)).Info("Success!")
 			DBtx.Commit(cKey)
-			myStmt.Close()
 			return
 		} else {
 			fmt.Fprintf(w, "{ \"ferry_error\": \"%s\" }",err.Error())
 			log.WithFields(QueryFields(r, startTime)).Error("deleteUser: Error during delete action for user " + uName + ": " + err.Error())
-			myStmt.Close()
 			return			
 		}	
 	}
