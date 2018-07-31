@@ -1735,17 +1735,11 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 		return		
 	}
 	if ! dnid.Valid {
-		foobar, err := DBtx.Exec(`insert into user_certificates (dn, uid, last_updated) values ($1, $2, NOW()) returning dnid`, subjDN, uid.Int64)
+		_, err := DBtx.Exec(`insert into user_certificates (dn, uid, last_updated) values ($1, $2, NOW()) returning dnid`, subjDN, uid.Int64)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + err.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB insert. Check logs.\" }")
 			return
-		}
-		insid, inserr := foobar.LastInsertId()
-		log.WithFields(QueryFields(r, startTime)).Println(fmt.Sprintf("foobar = %d", insid))
-		if inserr == nil {
-			dnid.Valid = true
-			dnid.Int64 = insid
 		}
 	} else {
 		if unitName == "" {
@@ -1757,9 +1751,13 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 		
 	}
 	if unitName != "" {
-		
-		_, err = DBtx.Exec(`insert into affiliation_unit_user_certificate (unitid, dnid, last_updated) values (select unitid from affiliation_units where name=$1), $2, NOW())`,unitName, dnid.Int64)	
-		if err != nil {
+		_, err = DBtx.Exec(`insert into affiliation_unit_user_certificate (unitid, dnid, last_updated) values ((select unitid from affiliation_units where name=$1), (select dnid from user_certificates where dn=$2), NOW())`,unitName, subjDN)
+		if strings.Contains(err.Error(), `pk_affiliation_unit_user_certificate`) {
+			if cKey != 0 {
+				log.WithFields(QueryFields(r, startTime)).Error("DN already exists and is assigned to this affiliation unit.")
+				fmt.Fprintf(w, "{ \"ferry_error\": \"DN already exists and is assigned to this affiliation unit.\" }")
+			}
+		} else if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + err.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB insert. Check logs.\" }")
 			DBtx.Rollback()
@@ -1797,6 +1795,7 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 			log.WithFields(QueryFields(r, startTime)).Info("Success!")
 			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 		}
+		DBtx.Commit(cKey)
 	}// else {
 //		log.Print(err.Error())
 //		if strings.Contains(err.Error(), `pk_affiliation_unit_user_certificate`) {
