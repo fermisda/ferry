@@ -1,8 +1,0 @@
-home -rw,grpid,proto=tcp,vers=3,wsize=32768,rsize=32768,hard,intr,timeo=600 blue2.fnal.gov:/fermigrid-home/
-app -rw,grpid,proto=tcp,vers=3,wsize=32768,rsize=32768,hard,intr,timeo=600 blue2.fnal.gov:/fermigrid-app/
-data -rw,grpid,proto=tcp,vers=3,wsize=32768,rsize=32768,hard,intr,timeo=600 blue2.fnal.gov:/fermigrid-data/
-login -rw,grpid,proto=tcp,vers=3,wsize=32768,rsize=32768,hard,intr,timeo=600 blue2.fnal.gov:/fermigrid-login/
-wnclient -rw,grpid,proto=tcp,vers=3,wsize=32768,rsize=32768,hard,intr,timeo=600 blue2.fnal.gov:/fermigrid-oseclient/usr/local/grid-1.2.x-${ARCH}.vdt-2.0.0p22 
-wnclient_sl5 -rw,grpid,proto=tcp,vers=3,wsize=32768,rsize=32768,hard,intr,timeo=600  blue2.fnal.gov:/fermigrid-oseclient/usr/local/gridsl5-1.2.x-${ARCH}.vdt-2.0.0p29 
-testhome -rw,grpid,proto=tcp,vers=3,wsize=32768,rsize=32768,hard,intr,timeo=600 fgnas0:/fermigrid-home
-fermiapp -rw,grpid,proto=tcp,vers=3,wsize=32768,rsize=32768,hard,intr,timeo=600 blue2.fnal.gov:/fermigrid-fermiapp

@@ -1,3 +1,0 @@
-s1	-rw,vers=3,grpid,hard,intr,quota,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768	homesrv01.fnal.gov:/eag-home
-condor	-rw,grpid,hard,intr,quota,nodev,nosuid,timeo=10,retrans=3,rsize=32768,wsize=32768	homesrv01.fnal.gov:/eag-home/condor
-ssinagios -rw,vers=4 homesrv01:/home/s/ssinagios

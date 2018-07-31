@@ -1,1 +1,0 @@
-ups	-rw,grpid,noac,hard,intr,nodev,timeo=10,retrans=3,rsize=32768,wsize=32768	sdsshead0.fnal.gov:/export/fnal/ups
