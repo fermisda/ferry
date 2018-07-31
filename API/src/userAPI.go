@@ -1909,11 +1909,13 @@ func setUserInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 
+	var fName, status, eDate sql.NullString
+
 	uid := strings.TrimSpace(q.Get("uid"))
 	uName := strings.TrimSpace(q.Get("username"))
-	fName := strings.TrimSpace(q.Get("fullname"))
-	status := strings.TrimSpace(q.Get("status"))
-	eDate :=strings.TrimSpace( q.Get("expiration_date"))
+	fName.String = strings.TrimSpace(q.Get("fullname"))
+	status.String = strings.TrimSpace(q.Get("status"))
+	eDate.String =strings.TrimSpace( q.Get("expiration_date"))
 
 	if uid == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No uid specified in http query.")
@@ -1925,26 +1927,29 @@ func setUserInfo(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
 		return
 	}
-	if fName == "" {
-		fName = "null"
+	if fName.String == "" {
+		fName.Valid = false
 	} else {
-		fName = fmt.Sprintf("'%s'", fName)
+		fName.String = fmt.Sprintf("'%s'", fName.String)
+		fName.Valid = true
 	}
-	if status == "" {
-		status = "null"
+	if status.String == "" {
+		status.Valid = false
 	} else {
-		_, err := strconv.ParseBool(status)
+		_, err := strconv.ParseBool(status.String)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Invalid is_leader specified in http query.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid is_leader specified.\" }")
 			return
 		}
+		status.Valid = true
 	}
 
-	if eDate == "" {
-		eDate = "null"
+	if eDate.String == "" {
+		eDate.Valid = false
 	} else {
-		eDate = fmt.Sprintf("'%s'", eDate)
+		eDate.String = fmt.Sprintf("'%s'", eDate.String)
+		eDate.Valid = true
 	}
 
 	authorized, authout := authorize(r, AuthorizedDNs)
@@ -1983,6 +1988,7 @@ func setUserInfo(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 		DBtx.Commit(cKey)
 	} else {
+		DBtx.Rollback()
 		if strings.Contains(err.Error(), `invalid input syntax for type date`) ||
 			strings.Contains(err.Error(), `date/time field value out of range`) {
 			log.WithFields(QueryFields(r, startTime)).Error("Invalid expiration date.")
