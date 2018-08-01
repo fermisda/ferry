@@ -658,6 +658,7 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 		}
 	} else {
+		DBtx.Rollback()
 		if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User already belongs to this group.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"User already belongs to this group.\" }")
@@ -1970,6 +1971,8 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 	status, err := strconv.ParseBool(strings.TrimSpace(q.Get("status")))
 	expdate := strings.TrimSpace(q.Get("expirationdate"))
 
+	fullname := firstName + " " + lastName
+
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error("Invalid status specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid status value. Must be true or false.\" }")
@@ -1985,21 +1988,14 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No uid specified.\" }")
 		return
 	}
-	if firstName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No first name specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No firstname specified.\" }")
-		return
-	}
-	if lastName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No last name specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No lastname specified.\" }")
+	if fullname == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No name specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No name specified.\" }")
 		return
 	}
 	if expdate == "" {
 		expdate = "2038-01-01"
 	}
-	
-	fullname := firstName + " " + lastName
 
 	var checkExist string
 	checkerr := DBptr.QueryRow(`select uname from users where uname=$1 and uid=$2 and full_name=$3`, uName, uid, fullname).Scan(&checkExist)
