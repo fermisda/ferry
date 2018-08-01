@@ -1747,11 +1747,10 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 			log.WithFields(QueryFields(r, startTime)).Error("DN already exists and is assigned to this affiliation unit.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"DN already exists and is assigned to this affiliation unit.\" }")
 			return	
-		}
-		
+		}	
 	}
-	if unitName != "" {
-		_, err = DBtx.Exec(`insert into affiliation_unit_user_certificate (unitid, dnid, last_updated) values ((select unitid from affiliation_units where name=$1), (select dnid from user_certificates where dn=$2), NOW())`,unitName, subjDN)
+	_, err = DBtx.Exec(`insert into affiliation_unit_user_certificate (unitid, dnid, last_updated) values ((select unitid from affiliation_units where name=$1), (select dnid from user_certificates where dn=$2), NOW())`,unitName, subjDN)
+	if err != nil {
 		if strings.Contains(err.Error(), `pk_affiliation_unit_user_certificate`) {
 			if cKey != 0 {
 				log.WithFields(QueryFields(r, startTime)).Error("DN already exists and is assigned to this affiliation unit.")
@@ -1766,63 +1765,13 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 			DBtx.Rollback()
 			return
 		}
-	}
-
-//	_, err = DBtx.Exec(fmt.Sprintf(`do $$ 	
-//										declare u_uid int;
-//										declare au_unitid int;
-//										declare uc_dnid int;
-//										declare new_dn bool;
-//										u_dn constant text := '%s';
-//										u_uname constant text := '%s';
-//										au_name constant text := '%s';
-//									begin
-//										new_dn = false;
-//										select uid into u_uid from users where uname=u_uname;
-//										if u_dn not in (select dn from user_certificates) then
-//											new_dn = true;
-//											insert into user_certificates (dn, uid, last_updated) values (u_dn, u_uid, NOW());
-//										end if;
-//										if au_name != '' then
-//											select unitid into au_unitid from affiliation_units where name = au_name;
-//											select dnid into uc_dnid from user_certificates where dn = u_dn;
-//											insert into affiliation_unit_user_certificate (unitid, dnid, last_updated) values (au_unitid, uc_dnid, NOW());
-//										else
-//											if not new_dn then
-//												raise 'duplicated dn';
-//											end if;
-//										end if;
-//									end $$;`, subjDN, uName, unitName))
-	if err == nil {
+	} else {
 		if cKey != 0 {
 			log.WithFields(QueryFields(r, startTime)).Info("Success!")
 			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 		}
 		DBtx.Commit(cKey)
-	}// else {
-//		log.Print(err.Error())
-//		if strings.Contains(err.Error(), `pk_affiliation_unit_user_certificate`) {
-//			if cKey != 0 {
-//				log.WithFields(QueryFields(r, startTime)).Error("DN already exists and is assigned to this affiliation unit.")
-//				fmt.Fprintf(w, "{ \"ferry_error\": \"DN already exists and is assigned to this affiliation unit.\" }")
-//			}
-//		} else if strings.Contains(err.Error(), `duplicated dn`) {
-//			log.WithFields(QueryFields(r, startTime)).Error("DN already exists.")
-//			fmt.Fprintf(w, "{ \"ferry_error\": \"DN already exists.\" }")
-//		} else if strings.Contains(err.Error(), `"uid" violates not-null constraint`) {
-//			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-//			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-//		} else if strings.Contains(err.Error(), `"unitid" violates not-null constraint`) {
-//			log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
-//			fmt.Fprintf(w, "{ \"ferry_error\": \"Affiliation unit does not exist.\" }")
-//		} else {
-//			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-//			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
-//		}
-//		return
-//	}
-//
-//	DBtx.Commit(cKey)
+	}
 }
 
 func removeUserCertificateDN(w http.ResponseWriter, r *http.Request) {
