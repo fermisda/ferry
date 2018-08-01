@@ -1,6 +1,6 @@
 FROM golang:1.8 as builder
 WORKDIR /go/src/app
-COPY ../../API .
+COPY API .
 ENV GOPATH $PWD
 RUN go get github.com/lib/pq
 RUN go get github.com/gorilla/mux
@@ -19,10 +19,8 @@ RUN yum -y --nogpgcheck install osg-ca-certs
 RUN yum -y --nogpgcheck install net-tools
 RUN yum -y --nogpgcheck install bind-utils
 WORKDIR /ferry
-COPY ../../../default.yaml .
-COPY ../../../hostcert.pem .
-COPY ../../../hostkey.pem  .
-COPY --from=builder /go/src/app/API/myDN.list .
+COPY .env ./default.yaml 
+COPY API/myDN.list .
 COPY --from=builder /go/src/app/API/ferry_svc .
 
 RUN chown ferry.ferry *
