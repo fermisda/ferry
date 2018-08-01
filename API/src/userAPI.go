@@ -1747,6 +1747,7 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 			// error about DN already existing
 			log.WithFields(QueryFields(r, startTime)).Error("DN already exists and is assigned to this affiliation unit.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"DN already exists and is assigned to this affiliation unit.\" }")
+			DBtx.Rollback()
 			return	
 		}	
 	}
