@@ -1757,6 +1757,9 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 				log.WithFields(QueryFields(r, startTime)).Error("DN already exists and is assigned to this affiliation unit.")
 				fmt.Fprintf(w, "{ \"ferry_error\": \"DN already exists and is assigned to this affiliation unit.\" }")
 			}
+		} else if strings.Contains(err.Error(), `null value in column "unitid"`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Affiliation unit does not exist.\" }")
 		} else if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + err.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB insert. Check logs.\" }")
