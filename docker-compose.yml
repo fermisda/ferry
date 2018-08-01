@@ -1,0 +1,11 @@
+version: "3"
+services:
+  ferry:
+    build: .
+    volumes:
+    - /home/ifmon/certs/ferry_cert.pem:/ferry/hostcert.pem
+    - /home/ifmon/certs/ferry_key.pem:/ferry/hostkey.pem
+    network_mode: "bridge"
+    restart: always
+    ports:
+    - "8443:8443"
