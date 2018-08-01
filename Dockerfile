@@ -1,6 +1,6 @@
 FROM golang:1.8 as builder
 WORKDIR /go/src/app
-COPY API .
+COPY API /go/src/app/API
 ENV GOPATH $PWD
 RUN go get github.com/lib/pq
 RUN go get github.com/gorilla/mux
