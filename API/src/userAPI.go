@@ -1740,6 +1740,7 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + err.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB insert. Check logs.\" }")
+			DBtx.Rollback()
 			return
 		}
 	} else {
