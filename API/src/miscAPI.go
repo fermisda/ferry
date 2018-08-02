@@ -1582,7 +1582,6 @@ func getAllComputeResources(w http.ResponseWriter, r *http.Request) {
 }
 
 func ping(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
 	return
