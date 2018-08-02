@@ -47,7 +47,10 @@ func (t *Transaction) Commit(key int64) error {
 }
 
 // Rollback aborts the transaction.
-func (t *Transaction) Rollback() error {
+func (t *Transaction) Rollback(key int64) error {
+	if key == 0 {
+		return nil
+	}
 	if t.commitKey != 0 {
 		t.commitKey = 0
 		return t.tx.Rollback()

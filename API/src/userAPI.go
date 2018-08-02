@@ -414,6 +414,7 @@ func setSuperUser(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Unable to start database transaction.\" }")
 		return
 	}
+	defer DBtx.Rollback(cKey)
 //	_, err = DBtx.Exec(fmt.Sprintf(`do $$
 //										declare usid int;
 //										declare unid int;
@@ -635,6 +636,7 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
+	defer DBtx.Rollback(cKey)
 
 //	_, err = DBtx.Exec(fmt.Sprintf(`do $$
 //										declare uid int;
@@ -658,7 +660,6 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 		}
 	} else {
-		DBtx.Rollback()
 		if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User already belongs to this group.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"User already belongs to this group.\" }")
@@ -730,6 +731,7 @@ func removeUserFromGroup(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
+	defer DBtx.Rollback(cKey)
 
 	var uid, groupid sql.NullInt64
 
@@ -881,6 +883,7 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
+	defer DBtx.Rollback(cKey)
 
 	_, err = DBtx.Exec(`insert into grid_access (uid, fqanid, is_superuser, is_banned, last_updated) values ($1, $2, false, false, NOW())`, uid, fqanid)
 	if err == nil {
@@ -952,6 +955,7 @@ func setUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
+	defer DBtx.Rollback(cKey)
 
 //	_, err = DBtx.Exec(fmt.Sprintf(`do $$
 //										declare vCompid int;
@@ -1026,6 +1030,7 @@ func setUserShell(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
+	defer DBtx.Rollback(cKey)
 
 	_, err = DBtx.Exec(fmt.Sprintf(`do $$
 										declare cUnitName constant text := '%s';
@@ -1322,6 +1327,7 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
+	defer DBtx.Rollback(cKey)
 	
 	
 	
@@ -1458,6 +1464,7 @@ func setUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
+	defer DBtx.Rollback(cKey)
 
 //	_, err = DBtx.Exec(fmt.Sprintf(`do $$
 //									declare v_uid int;
@@ -1551,6 +1558,7 @@ func removeUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
+	defer DBtx.Rollback(cKey)
 
 	var uid int
 	var att sql.NullString
@@ -1718,6 +1726,7 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
+	defer DBtx.Rollback(cKey)
 
 	var uid, dnid sql.NullInt64
 	queryerr := DBtx.tx.QueryRow(`select us.uid, uc.dnid from (select 1 as key, uid from users where uname=$1) as us full outer join (select 1 as key, dnid from user_certificates where dn=$2) as uc on uc.key=us.key`,uName, subjDN).Scan(&uid,&dnid)
@@ -1747,7 +1756,6 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 			// error about DN already existing
 			log.WithFields(QueryFields(r, startTime)).Error("DN already exists and is assigned to this affiliation unit.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"DN already exists and is assigned to this affiliation unit.\" }")
-			DBtx.Rollback()
 			return	
 		}	
 	}
@@ -1764,7 +1772,6 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 		} else if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + err.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB insert. Check logs.\" }")
-			DBtx.Rollback()
 			return
 		}
 	} else {
@@ -1805,6 +1812,7 @@ func removeUserCertificateDN(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
+	defer DBtx.Rollback(cKey)
 
 	var uid, dnid sql.NullInt64
 	queryerr := DBtx.tx.QueryRow(`select us.uid, uc.dnid from (select 1 as key, uid from users where uname=$1) as us full outer join (select 1 as key, dnid from user_certificates where dn=$2) as uc on uc.key=us.key`,uName, subjDN).Scan(&uid,&dnid)
@@ -1916,6 +1924,7 @@ func setUserInfo(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
+	defer DBtx.Rollback(cKey)
 
 
 	uidint, converr := strconv.Atoi(uid)
@@ -1941,7 +1950,6 @@ func setUserInfo(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 		DBtx.Commit(cKey)
 	} else {
-		DBtx.Rollback()
 		if strings.Contains(err.Error(), `invalid input syntax for type date`) ||
 			strings.Contains(err.Error(), `date/time field value out of range`) {
 			log.WithFields(QueryFields(r, startTime)).Error("Invalid expiration date.")
@@ -2006,6 +2014,7 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error(err)
 		}
+		defer DBtx.Rollback(cKey)
 		//actually insert
 		_, err = DBtx.Exec(`insert into users (uname, uid, full_name, status, expiration_date, last_updated)
 							values ($1, $2, $3, $4, $5, NOW())`, uName, uid, fullname, status, expdate)
@@ -2255,6 +2264,7 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error(err)
 		}
+		defer DBtx.Rollback(cKey)
 	
 		_, err = DBtx.Exec(`delete from users where uname=$1`,uName) 
 		if err == nil {	
@@ -2527,6 +2537,7 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
+	defer DBtx.Rollback(cKey)
 	
 	var (
 		defShell,defhome sql.NullString
@@ -2575,9 +2586,6 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 			// the given compid does not exist in this case. Exit accordingly.	
 			log.WithFields(QueryFields(r, startTime)).Error("resource " + rName + " does not exist.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
-			if cKey != 0 {
-				DBtx.Rollback()
-			}
 			return	
 		}
 		//check if the query specified a shell or directory value
@@ -2596,9 +2604,6 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 										(select uid from users where uname = $2), $3, $4)`,
 			rName, uname, defShell, defhome)
 		if inserr != nil {
-			if cKey != 0 {
-				DBtx.Rollback()
-			}
 			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + inserr.Error())
 			// now we also need to do a bunch of other checks here
 			if strings.Contains(inserr.Error(),"null value in column \"compid\"") {
@@ -2620,9 +2625,6 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error()) 
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		if cKey != 0 {
-			DBtx.Rollback()
-		}
 		return		
 		
 	default: // OK, we already have this user/group/resource combo. We just need to check if the call is trying to change the shell or home dir. If neither option was provided, that implies we're just keeping what is already there, so just log that nothing is changing and return success.
@@ -2638,9 +2640,6 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 			_, moderr := DBtx.Exec(`update compute_access set shell=$1,home_dir=$2,last_updated=NOW() where uid=$3 and compid=$4`,defShell,defhome,uid,compid)
 			if moderr != nil {
 				log.WithFields(QueryFields(r, startTime)).Error("Error in DB update: " + err.Error()) 
-				if cKey != 0 {
-				DBtx.Rollback()	
-				}
 				fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB update.\" }")
 				return		
 			} else {
@@ -2676,9 +2675,6 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 				
 				log.WithFields(QueryFields(r, startTime)).Error("Error update is_primary field in existing DB entries: " + uperr.Error())	
 				fmt.Fprintf(w, "{ \"ferry_error\": \"Error updating is_primary value for pre-existing compute_access_group entries. See ferry log.\" }")
-				if cKey != 0 {
-					DBtx.Rollback()
-				}
 				return
 			}
 		}
@@ -2732,9 +2728,6 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 					if moderr != nil {
 						log.WithFields(QueryFields(r, startTime)).Error("Error in DB update: " + err.Error()) 
 						fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB update.\" }")
-						if cKey != 0 {
-							DBtx.Rollback()
-						}
 						return		
 					} else {
 						
@@ -2744,9 +2737,6 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 					if moderr != nil {
 						log.WithFields(QueryFields(r, startTime)).Error("Error in DB update: " + err.Error()) 
 						fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB update.\" }")
-						if cKey != 0 {
-							DBtx.Rollback()
-						}
 						return		
 					} else {
 						
