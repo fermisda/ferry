@@ -1908,6 +1908,8 @@ func setUserInfo(w http.ResponseWriter, r *http.Request) {
 
 	if eDate.String == "" {
 		eDate.Valid = false
+	} else if strings.ToLower(eDate.String) == "null" {
+		eDate.Valid = false
 	} else {
 		eDate.String = fmt.Sprintf("'%s'", eDate.String)
 		eDate.Valid = true
@@ -1943,7 +1945,12 @@ func setUserInfo(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "{ \"ferry_error\": \"DB error determining uid.\" }")
 		return
 	}
-	_, err = DBtx.Exec(`update users set uname = $2, full_name = coalesce($3, full_name), status = coalesce($4, status), expiration_date = coalesce($5, expiration_date), last_updated = NOW() where uid = $1`, uidint, uName, fName, status, eDate)
+	query := `update users set uname = $2, full_name = coalesce($3, full_name), status = coalesce($4, status), expiration_date = coalesce($5, expiration_date), last_updated = NOW() where uid = $1`
+	if strings.ToLower(eDate.String) == "null" {
+		query = strings.Replace(query, "coalesce($5, expiration_date)", "$5", 1)
+	}
+	print(query)
+	_, err = DBtx.Exec(query, uidint, uName, fName, status, eDate)
 
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
