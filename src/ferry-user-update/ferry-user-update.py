@@ -279,7 +279,10 @@ def update_users(userdb, ferry):
                 if "full_name" in diff:
                     params["fullname"] = user.full_name
                 if "expiration_date" in diff:
-                    params["expiration_date"] = user.expiration_date
+                    if user.expiration_date == "":
+                        params["expiration_date"] = "null"
+                    else:
+                        params["expiration_date"] = user.expiration_date
                 if "status" in diff:
                     params["status"] = str(user.status)
                 writeToFerry("api_set_user_info", params)

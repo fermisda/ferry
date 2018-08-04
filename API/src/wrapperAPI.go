@@ -77,6 +77,7 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 		return
 	}
+	defer DBtx.Rollback(key)
 
 	uName := strings.TrimSpace(q.Get("username"))
 	dnTemplate := "/DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=%s/CN=UID:%s"
@@ -113,7 +114,6 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 	if !DBtx.Complete() {
 		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") {
 			log.WithFields(QueryFields(r, startTime)).Error("addCertificateDNToUser failed.")
-			DBtx.Rollback()
 			return
 		}
 		DBtx.RollbackToSavepoint("addCertificateDNToUser")
@@ -148,7 +148,6 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 		if !DBtx.Complete() {
 			if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") {
 				log.WithFields(QueryFields(r, startTime)).Error("Failed to set FQAN to user.")
-				DBtx.Rollback()
 				return	
 			}
 			DBtx.RollbackToSavepoint("setUserExperimentFQAN")
@@ -204,7 +203,6 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 	if !DBtx.Complete() {
 		if !strings.Contains(DBtx.Error().Error(), "The request already exists in the database.") {
 			log.WithFields(QueryFields(r, startTime)).Error("addUserToGroup failed")
-			DBtx.Rollback()
 			return
 		}
 		DBtx.RollbackToSavepoint("setUserAccessToComputeResource")
@@ -242,6 +240,7 @@ func setLPCStorageAccess(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 		return
 	}
+	defer DBtx.Rollback(key)
 
 	q.Set("unitname", "cms")
 	R.URL.RawQuery = q.Encode()
@@ -252,7 +251,6 @@ func setLPCStorageAccess(w http.ResponseWriter, r *http.Request) {
 	if !DBtx.Complete() {
 		if !strings.Contains(DBtx.Error().Error(), `pk_affiliation_unit_user_certificate`) {
 			log.WithFields(QueryFields(r, startTime)).Error("addCertificateDNToUser failed.")
-			DBtx.Rollback()
 			return
 		}
 		DBtx.RollbackToSavepoint("addCertificateDNToUser")
@@ -269,7 +267,6 @@ func setLPCStorageAccess(w http.ResponseWriter, r *http.Request) {
 		setUserExternalAffiliationAttribute(w, R)
 		if !DBtx.Complete() {
 			log.WithFields(QueryFields(r, startTime)).Error("setUserExternalAffiliationAttribute failed.")
-			DBtx.Rollback()
 			return
 		}
 	}
@@ -288,7 +285,6 @@ func setLPCStorageAccess(w http.ResponseWriter, r *http.Request) {
 	setUserStorageQuota(w, R)
 	if !DBtx.Complete() {
 		log.WithFields(QueryFields(r, startTime)).Error("setUserStorageQuota failed.")
-		DBtx.Rollback()
 		return
 	}
 
@@ -341,6 +337,7 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 		inputErr = append(inputErr, jsonerror{"Error starting database transaction."})
 		return
 	}
+	defer DBtx.Rollback(key)
 	if len(inputErr) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
@@ -371,7 +368,6 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 		// ERROR HANDLING AND ROLLBACK		
 		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") {
 			log.WithFields(QueryFields(r, startTime)).Error("Unit already exists.")
-			DBtx.Rollback()
 			return
 		}
 		DBtx.RollbackToSavepoint("createAffiliationUnit")
@@ -394,7 +390,6 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 	if !DBtx.Complete() {
 		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") {
 			log.WithFields(QueryFields(r, startTime)).Error("createComputeResource failed.")
-			DBtx.Rollback()
 			return
 		} else {
 			DBtx.RollbackToSavepoint("createComputeResource")
@@ -416,7 +411,6 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") && !strings.Contains(DBtx.Error().Error(), "Group and unit combination already in DB") {
 			log.WithFields(QueryFields(r, startTime)).Error("addGroupToUnit failed.")
 			log.WithFields(QueryFields(r, startTime)).Error("actual error: " + DBtx.Error().Error() )
-			DBtx.Rollback()
 			return
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error("actual error: " + DBtx.Error().Error() )

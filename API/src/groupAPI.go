@@ -47,6 +47,7 @@ func createGroup(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
+	defer DBtx.Rollback(cKey)
 
 	_, err = DBtx.Exec("insert into groups (gid, name, type, last_updated) values ($1, $2, $3, NOW())", gid, gName, gType)
 	if err == nil {
@@ -149,6 +150,7 @@ func addGroupToUnit(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
+	defer DBtx.Rollback(cKey)
 
 	err = addGroupToUnitDB(DBtx, groupname, grouptype, unitName, isPrimary)
 	
@@ -167,7 +169,7 @@ func addGroupToUnit(w http.ResponseWriter, r *http.Request) {
 			log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB insert.\" }")		
 		}
-		//				DBtx.Rollback() // COMMENT 2018-04-04
+		//				DBtx.Rollback(cKey) // COMMENT 2018-04-04
 		return
 	} else {
 		w.WriteHeader(http.StatusOK)
@@ -230,6 +232,7 @@ func removeGroupFromUnit(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
+	defer DBtx.Rollback(cKey)
 
 	typeExists := true
 	var groupExists, unitExists bool
@@ -329,6 +332,7 @@ func setPrimaryStatusGroup(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 		return
 	}
+	defer DBtx.Rollback(cKey)
 	
 	setstr := fmt.Sprintf(`do $FOO$
 								declare grpid int;
@@ -714,6 +718,7 @@ func setGroupLeader(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 		return
 	}
+	defer DBtx.Rollback(cKey)
 	
 	var groupId, uId int
 	grouperr := DBptr.QueryRow(`select groupid from groups where (name, type) = ($1, $2)`, groupname, grouptype).Scan(&groupId)
@@ -821,6 +826,7 @@ func removeGroupLeader(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 		return
 	}
+	defer DBtx.Rollback(cKey)
 	
 	var groupId, uId int
 	grouperr := DBptr.QueryRow(`select groupid from groups where (name, type) = ($1, $2)`, groupname, grouptype).Scan(&groupId)
@@ -1243,6 +1249,7 @@ func setCondorQuota(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
+	defer DBtx.Rollback(cKey)
 
 	_, err = DBtx.Exec(fmt.Sprintf(`do $$
 									declare 
@@ -1473,6 +1480,7 @@ func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 		return	
 	}
+	defer DBtx.Rollback(cKey)
 
 	err = setGroupStorageQuotaDB(DBtx, gName, unitName, rName, groupquota, unit, validtime)
 
@@ -1547,6 +1555,7 @@ func removeUserAccessFromResource(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 		return
 	}
+	defer DBtx.Rollback(cKey)
 
 	query := `select $1 in (select uname from users),
 					 $2 in (select name from groups),
@@ -1695,6 +1704,7 @@ func setGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 			return
 		}
+		defer DBtx.Rollback(cKey)
 		
 		_, inserr := DBtx.Exec(`insert into compute_access (compid, groupid, last_updated, shell, home_dir) values ($1,$2,NOW(),$3,$4)`, compid, gid, nullshell, nullhomedir)
 		if inserr != nil {
@@ -1726,6 +1736,7 @@ func setGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 			return
 		}
+		defer DBtx.Rollback(cKey)
 		
 		execstmt:= `update compute_access (shell, home_dir) values ($1,$2) where compid=$3 and groupid=$4`
 		_, moderr := DBtx.Exec(execstmt,nullshell, nullhomedir, compid, gid)
@@ -1949,6 +1960,7 @@ func addLPCCollaborationGroup(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 		return
 	}
+	defer DBtx.Rollback(cKey)
 	
 	
 	// Now we need to call addGroupToUnit, *but* we need to tack unitname=cms onto the query part.
@@ -1974,7 +1986,6 @@ func addLPCCollaborationGroup(w http.ResponseWriter, r *http.Request) {
 		//print out the error
 		// roll back transaction
 		log.WithFields(QueryFields(r, startTime)).Print("Error adjusting quota for " + gName + ". Rolling back addition of " + gName + " to cms.")
-		DBtx.Rollback()
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + quotaerr.Error() + "\"}")
 		return
 	} else {
@@ -2030,7 +2041,7 @@ insert into affiliation_unit_group (groupid, unitid, is_primary, last_updated) v
 			//	log.WithFields(QueryFields(r, startTime)).Print("Error preparing DB command: " + err.Error())
 			//	w.WriteHeader(http.StatusNotFound)
 			//	fmt.Fprintf(w,"{ \"ferry_error\": \"Error preparing database command.\" }")
-				//				DBtx.Rollback()
+				//				DBtx.Rollback(cKey)
 				return err
 			}
 			//run said statement and check errors
@@ -2042,7 +2053,7 @@ insert into affiliation_unit_group (groupid, unitid, is_primary, last_updated) v
 //				} else {
 //					log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
 //				}
-				//				DBtx.Rollback()
+				//				DBtx.Rollback(cKey)
 				return err
 			} else {
 				// error is nil, so it's a success. Commit the transaction and return success.

@@ -64,6 +64,7 @@ func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 			return
 		}
+		defer DBtx.Rollback(cKey)
 		log.WithFields(QueryFields(r, startTime)).Info("cKey = " + fmt.Sprintf("%d",cKey))
 		// string for the insert statement
 //		createstr := fmt.Sprintf(`do $$
@@ -92,9 +93,6 @@ func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 		if inserr != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error adding " + unitName + " to affiliation_units: " + inserr.Error())
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB insert.\" }")
-			if cKey != 0 {
-				DBtx.Rollback()
-			}
 		} else {
 			// check if voms_url was also supplied; insert there too if it was.
 			if voms_url != "" {
@@ -102,9 +100,6 @@ func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 				if vomserr != nil {
 					log.WithFields(QueryFields(r, startTime)).Error("Error adding " + unitName + " voms_url: " + vomserr.Error())
 					fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB insert.\" }")
-					if cKey != 0 {
-						DBtx.Rollback()
-					}
 					return
 				}
 			}
@@ -172,6 +167,7 @@ func removeAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 			return
 		}
+		defer DBtx.Rollback(cKey)
 			// string for the remove statement
 
 		removestr := fmt.Sprintf(`do $$ declare v_unitid int = %d ; begin delete from voms_url where unitid=v_unitid; delete from affiliation_units where unitid=v_unitid ; end $$;`, unitId)
@@ -308,9 +304,9 @@ func setAffiliationUnitInfo(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
-			DBtx.Rollback()
 			return
 		}
+		defer DBtx.Rollback(cKey)
 
 
 // First update the affiliation_units table
@@ -319,10 +315,6 @@ func setAffiliationUnitInfo(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error updating " + unitName + " in affiliation_units: " + err.Error())
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB update.\" }")
-			rberr := DBtx.Rollback()
-			if rberr != nil {
-				log.WithFields(QueryFields(r, startTime)).Error("Error during rollback: " + rberr.Error())
-			}
 		} else {
 
 // Now try updating voms_url if needed. Do nothing if 
@@ -717,6 +709,7 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
+	defer DBtx.Rollback(cKey)
 
 	var uid, unitid, groupid sql.NullInt64
 	queryerr := DBtx.tx.QueryRow(`select unitid, uid, groupid from (select 1 as key, unitid from affiliation_units where name = $1) as au full outer join (select 1 as key, uid from users where uname=$2) as u on u.key = au.key right join (select 1 as key, groupid from groups where name=$3 and type = 'UnixGroup') as g on g.key=au.key`, unit, mUser, mGroup).Scan(&unitid, &uid, &groupid)
@@ -863,6 +856,7 @@ func removeFQAN(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
+	defer DBtx.Rollback(cKey)
 
 	var aRows int64
 	var res sql.Result
@@ -971,6 +965,7 @@ func setFQANMappings(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
+	defer DBtx.Rollback(cKey)
 
 	var res sql.Result
 	var rowsErr error

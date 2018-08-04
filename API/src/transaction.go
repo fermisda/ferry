@@ -7,6 +7,7 @@ import (
 	"errors"
 	"time"
 	"database/sql"
+	log "github.com/sirupsen/logrus"
 )
 
 // Transaction for nested scopes.
@@ -21,6 +22,7 @@ type Transaction struct {
 func (t *Transaction) Start(db *sql.DB) (int64, error) {
 	t.err = errors.New("transaction did not complete properly")
 	if t.commitKey == 0 {
+		log.Debug("Creating new transaction")
 		t.commitKey = time.Now().Unix()
 		t.tx, t.err = db.Begin()
 		return t.commitKey, t.err
@@ -47,7 +49,10 @@ func (t *Transaction) Commit(key int64) error {
 }
 
 // Rollback aborts the transaction.
-func (t *Transaction) Rollback() error {
+func (t *Transaction) Rollback(key int64) error {
+	if key == 0 {
+		return nil
+	}
 	if t.commitKey != 0 {
 		t.commitKey = 0
 		return t.tx.Rollback()
@@ -131,6 +136,7 @@ func (t *Transaction) Error() (error) {
 // LoadTransaction loads a Transaction from an http context. Returns a new Transaction if none is found.
 func LoadTransaction(r *http.Request, db *sql.DB) (*Transaction, int64, error) {
 	if r.Context().Value("tx") != nil {
+		log.Debug("Reusing transaction")
 		tx := r.Context().Value("tx").(*Transaction)
 		return tx, 0, nil
 	}

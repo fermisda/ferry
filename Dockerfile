@@ -1,6 +1,6 @@
 FROM golang:1.8 as builder
 WORKDIR /go/src/app
-COPY API .
+COPY API /go/src/app/API
 ENV GOPATH $PWD
 RUN go get github.com/lib/pq
 RUN go get github.com/gorilla/mux
@@ -11,8 +11,8 @@ WORKDIR /go/src/app/API
 RUN go build -o ferry_svc src/*.go 
 
 FROM centos
-RUN groupadd --gid 8816 ferry
-RUN adduser --gid 8816 --uid 54136 ferry
+RUN groupadd --gid 9102 ferry
+RUN adduser --gid 9102 --uid 45438 ferry
 RUN rpm -Uvh --nosignature https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
 RUN rpm -Uvh --nosignature https://repo.opensciencegrid.org/osg/3.4/osg-3.4-el7-release-latest.rpm
 RUN yum -y --nogpgcheck install osg-ca-certs

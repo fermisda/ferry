@@ -1100,6 +1100,7 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 		return
 	}
+	defer DBtx.Rollback(cKey)
 
 	//figure out the unitID if we need it
 	
@@ -1135,9 +1136,6 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
 			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in database transaction.\" }")
-			if cKey != 0 {	
-				DBtx.Rollback()
-			}
 			return
 		} else {
 			if cKey != 0 {
@@ -1209,6 +1207,7 @@ func setComputeResourceInfo(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 		return
 	}
+	defer DBtx.Rollback(cKey)
 
 	// check if resource exists and grab existing values of everything if so
 	err = DBtx.tx.QueryRow(`select distinct compid, default_shell, unitid, default_home_dir, type from compute_resources where name=$1`,rName).Scan(&compid,&nullshell,&unitID,&nullhomedir,&currentType)
@@ -1367,13 +1366,14 @@ func createStorageResource(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 			return
 		}
+		defer DBtx.Rollback(cKey)
 		_, inserterr := DBtx.tx.Exec(`insert into storage_resources (name, default_path, default_quota, last_updated, default_unit, type) values ($1,$2,$3,NOW(),$4,$5)`, rName, nullpath, nullquota, nullunit, rType)
 		
 		if inserterr != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insertionn: " + inserterr.Error())
 			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in database transaction.\" }")
-			//	DBtx.Rollback()
+			//	DBtx.Rollback(cKey)
 			return
 		} else {
 			DBtx.Commit(cKey)
@@ -1506,6 +1506,7 @@ func setStorageResourceInfo(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 			return
 		}
+		defer DBtx.Rollback(cKey)
 		
 		_, commerr := DBtx.Exec(`update storage_resources set default_path=$1, default_quota=$2, last_updated=NOW(), default_unit=$3, type=$4 where name=$5`, nullpath, nullquota, nullunit, currentType, rName)
 		if commerr != nil {
