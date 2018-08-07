@@ -1729,7 +1729,7 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 	defer DBtx.Rollback(cKey)
 
 	var uid, dnid sql.NullInt64
-	queryerr := DBtx.tx.QueryRow(`select us.uid, uc.dnid from (select 1 as key, uid from users where uname=$1) as us full outer join (select 1 as key, dnid from user_certificates where dn=$2) as uc on uc.key=us.key`,uName, subjDN).Scan(&uid,&dnid)
+	queryerr := DBtx.tx.QueryRow(`select us.uid, uc.dnid from (select 1 as key, uid from users where uname=$1 for update) as us full outer join (select 1 as key, dnid from user_certificates where dn=$2 for update) as uc on uc.key=us.key`,uName, subjDN).Scan(&uid,&dnid)
 	if queryerr == sql.ErrNoRows {
 		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
@@ -1815,7 +1815,7 @@ func removeUserCertificateDN(w http.ResponseWriter, r *http.Request) {
 	defer DBtx.Rollback(cKey)
 
 	var uid, dnid sql.NullInt64
-	queryerr := DBtx.tx.QueryRow(`select us.uid, uc.dnid from (select 1 as key, uid from users where uname=$1) as us full outer join (select 1 as key, dnid from user_certificates where dn=$2) as uc on uc.key=us.key`,uName, subjDN).Scan(&uid,&dnid)
+	queryerr := DBtx.tx.QueryRow(`select us.uid, uc.dnid from (select 1 as key, uid from users where uname=$1 for update) as us full outer join (select 1 as key, dnid from user_certificates where dn=$2 for update) as uc on uc.key=us.key`,uName, subjDN).Scan(&uid,&dnid)
 	if queryerr == sql.ErrNoRows {
 		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")

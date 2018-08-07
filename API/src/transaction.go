@@ -25,6 +25,7 @@ func (t *Transaction) Start(db *sql.DB) (int64, error) {
 		log.Debug("Creating new transaction")
 		t.commitKey = time.Now().Unix()
 		t.tx, t.err = db.Begin()
+		//_, t.err = t.tx.Exec("set transaction isolation level serializable")
 		return t.commitKey, t.err
 	}
 	return 0, t.err
@@ -64,7 +65,7 @@ func (t *Transaction) Rollback(key int64) error {
 // Savepoint creates a Transaction savepoint
 func (t *Transaction) Savepoint(savepoint string) error {
 	if t.commitKey != 0 {
-		_, t.err = t.Exec(fmt.Sprintf("SAVEPOINT %s;", savepoint))
+		_, t.err = t.tx.Exec(fmt.Sprintf("SAVEPOINT %s;", savepoint))
 		return t.err
 	}
 	t.err = errors.New("transaction has not been started")
@@ -74,7 +75,7 @@ func (t *Transaction) Savepoint(savepoint string) error {
 // RollbackToSavepoint reverts the Trasaction to a savepoint
 func (t *Transaction) RollbackToSavepoint(savepoint string) error {
 	if t.commitKey != 0 {
-		_, t.err = t.Exec(fmt.Sprintf("ROLLBACK TO SAVEPOINT %s;", savepoint))
+		_, t.err = t.tx.Exec(fmt.Sprintf("ROLLBACK TO SAVEPOINT %s;", savepoint))
 		return t.err
 	}
 	t.err = errors.New("transaction has not been started")
