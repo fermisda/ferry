@@ -3,10 +3,8 @@ log:
   level: info
 
 database:
-  host: REPLACE
-  name: REPLACE
-  user: REPLACE
-  password: REPLACE
+  host: fermicloud051.fnal.gov
+  name: ferry
   timeout: 60
   sslmode: verify-full 
   certificate: /etc/grid-security/certificates/cilogon-osg.pem
@@ -15,14 +13,13 @@ server:
   port: 8443
   cert: /home/ferry/.cert/hostcert.pem
   key: /home/ferry/.cert/hostkey.pem
-  dnlist: myDN.list
 
 certificates:
   - /etc/grid-security/certificates/cilogon-osg.pem
   - /etc/grid-security/certificates/cilogon-basic.pem
 # - /etc/pki/tls/certs/ca-bundle.crt  
 
-whitelist:
+ip_whitelist:
   - 131.225.154.186
   - 131.225.108.61
   - 131.225.108.153
@@ -41,3 +38,21 @@ whitelist:
   - 131.225.58.54
   - 131.225.65.26
   - 131.225.155.102
+
+dn_whitelist:
+ - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Kenneth Herner/CN=UID:kherner
+ - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Tanya Levshina/CN=UID:tlevshin
+ - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Bruno Coimbra/CN=UID:coimbra
+ - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Jeny Teheran/CN=UID:jteheran
+ - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Mine Altunay/CN=UID:maltunay
+ - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Joe Boyd/CN=UID:boyd
+ - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Steven Timm/CN=UID:timm
+ - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=fermicloud044.fnal.gov
+ - /DC=ch/DC=cern/OU=Organic Units/OU=Users/CN=fakhan/CN=762000/CN=Farrukh Aftab Khan
+ - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=David Mason/CN=UID:dmason
+ - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Farrukh Khan/CN=UID:fkhan
+ - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Dmitry Litvintsev/CN=UID:litvinse
+ - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=fermicloud051.fnal.gov
+ - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Dave Dykstra/CN=UID:dwd
+ - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=fermicloud033.fnal.gov
+ - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=vomsdev2.fnal.gov

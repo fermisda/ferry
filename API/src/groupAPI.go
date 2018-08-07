@@ -36,7 +36,7 @@ func createGroup(w http.ResponseWriter, r *http.Request) {
 		gid.Scan(q.Get("gid"))
 	}
 
-	authorized,authout := authorize(r,AuthorizedDNs)
+	authorized,authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -77,7 +77,7 @@ func deleteGroupt(w http.ResponseWriter, r *http.Request) {
 //	groupname := q.Get("groupname")
 
 	//require auth	
-	authorized,authout := authorize(r,AuthorizedDNs)
+	authorized,authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -94,7 +94,7 @@ func deleteGroup(w http.ResponseWriter, r *http.Request) {
 //	gid := q.Get("gid")
 
 	//require auth	
-	authorized,authout := authorize(r,AuthorizedDNs)
+	authorized,authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -138,7 +138,7 @@ func addGroupToUnit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	authorized,authout := authorize(r,AuthorizedDNs)
+	authorized,authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -221,7 +221,7 @@ func removeGroupFromUnit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//require auth	
-	authorized,authout := authorize(r,AuthorizedDNs)
+	authorized,authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -318,7 +318,7 @@ func setPrimaryStatusGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authorized,authout := authorize(r,AuthorizedDNs)
+	authorized,authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -393,7 +393,7 @@ func removePrimaryStatusfromGroup(w http.ResponseWriter, r *http.Request) {
 //	collabunit := q.Get("collaboration_unit")
 
 	//require auth	
-	authorized,authout := authorize(r,AuthorizedDNs)
+	authorized,authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -704,7 +704,7 @@ func setGroupLeader(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//requires authorization
-	authorized,authout := authorize(r,AuthorizedDNs)
+	authorized,authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -812,7 +812,7 @@ func removeGroupLeader(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//requires authorization
-	authorized,authout := authorize(r,AuthorizedDNs)
+	authorized,authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -1187,7 +1187,7 @@ func setGroupBatchPriority(w http.ResponseWriter, r *http.Request) {
 //	// should be an int
 //	prio := q.Get("priority")
 
-	authorized,authout := authorize(r,AuthorizedDNs)
+	authorized,authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -1206,7 +1206,7 @@ func setCondorQuota(w http.ResponseWriter, r *http.Request) {
 	quota := strings.TrimSpace(q.Get("quota"))
 	until := strings.TrimSpace(q.Get("validuntil"))
 
-	authorized,authout := authorize(r,AuthorizedDNs)
+	authorized,authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -1417,7 +1417,7 @@ func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
-	authorized,authout := authorize(r,AuthorizedDNs)
+	authorized,authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -1541,7 +1541,7 @@ func removeUserAccessFromResource(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	//require auth	
-	authorized,authout := authorize(r,AuthorizedDNs)
+	authorized,authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -1647,7 +1647,7 @@ func setGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
 	var gid,compid int
 	
 	//require auth	
-	authorized,authout := authorize(r,AuthorizedDNs)
+	authorized,authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -1930,7 +1930,7 @@ func addLPCCollaborationGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authorized,authout := authorize(r,AuthorizedDNs)
+	authorized,authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")

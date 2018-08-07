@@ -27,7 +27,7 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 		expt = "%"
 	}
 
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -153,7 +153,7 @@ func getAllUsersCertificateDNs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -384,7 +384,7 @@ func setSuperUser(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
 	//call authorize function
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -625,7 +625,7 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -720,7 +720,7 @@ func removeUserFromGroup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//require auth	
-	authorized,authout := authorize(r,AuthorizedDNs)
+	authorized,authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -846,7 +846,7 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -944,7 +944,7 @@ func setUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -1019,7 +1019,7 @@ func setUserShell(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -1241,7 +1241,7 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
 	//call authorize function
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -1453,7 +1453,7 @@ func setUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -1547,7 +1547,7 @@ func removeUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -1700,7 +1700,7 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -1787,7 +1787,7 @@ func removeUserCertificateDN(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -1915,7 +1915,7 @@ func setUserInfo(w http.ResponseWriter, r *http.Request) {
 		eDate.Valid = true
 	}
 
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -1972,7 +1972,7 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -2243,7 +2243,7 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 		return		
 	}
 
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -2533,7 +2533,7 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
