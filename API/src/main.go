@@ -21,7 +21,6 @@ import (
 
 var DBptr *sql.DB
 var DBtx Transaction
-var AuthorizedDNs []string
 var Mainsrv *http.Server
 
 func handler(w http.ResponseWriter, r *http.Request) {
@@ -66,6 +65,9 @@ func main() {
 	flag.Parse()
 
 	//Setup configutation manager
+	viper.SetEnvPrefix("ferry")
+	viper.BindEnv("db_user")
+	viper.BindEnv("db_pass")
 	viper.SetConfigName("default")
 	viper.AddConfigPath(configDir)
 	cfgErr := viper.ReadInConfig()
@@ -110,8 +112,16 @@ func main() {
 	//		Once that is fixed we should set it to "verify-ca" or "verify-full" so that it actually checks that the cert that the DB machine presents is valid.
 	//		If you set it to "require" it skips the verification step.
 	dbConfig := viper.GetStringMapString("database")
+	dbUser := viper.Get("db_user")
+	if dbUser == nil {
+		dbUser = dbConfig["user"]
+	}
+	dbPass := viper.Get("db_pass")
+	if dbPass == nil {
+		dbPass = dbConfig["password"]
+	}
 	connString := fmt.Sprintf("user=%s password=%s host=%s dbname=%s connect_timeout=%s sslmode=%s sslrootcert=%s",
-		dbConfig["user"], dbConfig["password"], dbConfig["host"], dbConfig["name"],
+		dbUser, dbPass, dbConfig["host"], dbConfig["name"],
 		dbConfig["timeout"], dbConfig["sslmode"], dbConfig["certificate"])
 	Mydb, err := sql.Open("postgres", connString)
 	if err != nil {
@@ -270,17 +280,7 @@ func main() {
 		CipherSuites:             Ciphers,
 		PreferServerCipherSuites: true,
 	}
-	
-	dnlist, listerror := createDNlist(srvConfig["dnlist"])
-	if listerror != nil {
-		log.Fatal(listerror)
-	}
-	AuthorizedDNs = make([]string, len(dnlist))
-	copy(AuthorizedDNs, dnlist)
-	log.Debugf("Authorized DN list created with %d entries.", len(AuthorizedDNs))
-	if len(AuthorizedDNs) == 0 {
-		log.Fatal("Authorized DN slice has zero elements.")
-	}
+
 	// We should probably make the cert and key paths variables in a config file at some point
 	log.WithFields(log.Fields{"port": Mainsrv.Addr[1:]}).Infof("Starting FERRY API")
 	serverror := Mainsrv.ListenAndServeTLS(srvConfig["cert"], srvConfig["key"])

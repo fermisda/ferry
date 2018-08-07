@@ -43,7 +43,7 @@ func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 //	} else if unitType != "NULL" {
 //		unitType = "'" + unitType + "'"
 //	}
-	authorized,authout := authorize(r,AuthorizedDNs)
+	authorized,authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -135,7 +135,7 @@ func removeAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	//requires auth	
-	authorized,authout := authorize(r,AuthorizedDNs)
+	authorized,authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -210,7 +210,7 @@ func setAffiliationUnitInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//require auth	
-	authorized,authout := authorize(r,AuthorizedDNs)
+	authorized,authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -698,7 +698,7 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 		unit = `null`
 	}
 
-	authorized,authout := authorize(r,AuthorizedDNs)
+	authorized,authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -845,7 +845,7 @@ func removeFQAN(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authorized,authout := authorize(r,AuthorizedDNs)
+	authorized,authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -954,7 +954,7 @@ func setFQANMappings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authorized,authout := authorize(r,AuthorizedDNs)
+	authorized,authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")

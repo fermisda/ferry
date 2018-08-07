@@ -27,7 +27,7 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 		expt = "%"
 	}
 
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -153,7 +153,7 @@ func getAllUsersCertificateDNs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -384,7 +384,7 @@ func setSuperUser(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
 	//call authorize function
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -625,7 +625,7 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -720,7 +720,7 @@ func removeUserFromGroup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//require auth	
-	authorized,authout := authorize(r,AuthorizedDNs)
+	authorized,authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -846,7 +846,7 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -944,7 +944,7 @@ func setUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -1019,7 +1019,7 @@ func setUserShell(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -1241,7 +1241,7 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
 	//call authorize function
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -1453,7 +1453,7 @@ func setUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -1547,7 +1547,7 @@ func removeUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -1700,7 +1700,7 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -1729,7 +1729,7 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 	defer DBtx.Rollback(cKey)
 
 	var uid, dnid sql.NullInt64
-	queryerr := DBtx.tx.QueryRow(`select us.uid, uc.dnid from (select 1 as key, uid from users where uname=$1) as us full outer join (select 1 as key, dnid from user_certificates where dn=$2) as uc on uc.key=us.key`,uName, subjDN).Scan(&uid,&dnid)
+	queryerr := DBtx.tx.QueryRow(`select us.uid, uc.dnid from (select 1 as key, uid from users where uname=$1 for update) as us full outer join (select 1 as key, dnid from user_certificates where dn=$2 for update) as uc on uc.key=us.key`,uName, subjDN).Scan(&uid,&dnid)
 	if queryerr == sql.ErrNoRows {
 		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
@@ -1788,7 +1788,7 @@ func removeUserCertificateDN(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -1816,7 +1816,7 @@ func removeUserCertificateDN(w http.ResponseWriter, r *http.Request) {
 	defer DBtx.Rollback(cKey)
 
 	var uid, dnid sql.NullInt64
-	queryerr := DBtx.tx.QueryRow(`select us.uid, uc.dnid from (select 1 as key, uid from users where uname=$1) as us full outer join (select 1 as key, dnid from user_certificates where dn=$2) as uc on uc.key=us.key`,uName, subjDN).Scan(&uid,&dnid)
+	queryerr := DBtx.tx.QueryRow(`select us.uid, uc.dnid from (select 1 as key, uid from users where uname=$1 for update) as us full outer join (select 1 as key, dnid from user_certificates where dn=$2 for update) as uc on uc.key=us.key`,uName, subjDN).Scan(&uid,&dnid)
 	if queryerr == sql.ErrNoRows {
 		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
@@ -1916,7 +1916,7 @@ func setUserInfo(w http.ResponseWriter, r *http.Request) {
 		eDate.Valid = true
 	}
 
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -1973,7 +1973,7 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -2244,7 +2244,7 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 		return		
 	}
 
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -2534,7 +2534,7 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	authorized, authout := authorize(r, AuthorizedDNs)
+	authorized, authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")

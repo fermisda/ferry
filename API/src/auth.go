@@ -85,10 +85,11 @@ func ParseDN(names []pkix.AttributeTypeAndValue, sep string) string {
 	return sep + strings.Join(subject, sep)
 }
 
-func authorize( req *http.Request, authDNs []string ) (bool, string) {
+func authorize( req *http.Request ) (bool, string) {
 	thetime := time.Now()
 	ip := req.RemoteAddr
-	authIPs := viper.GetStringSlice("whitelist")
+	authIPs := viper.GetStringSlice("ip_whitelist")
+	authDNs := viper.GetStringSlice("dn_whitelist")
 
 	// authorization should fail by default
 	authorized := false

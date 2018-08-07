@@ -61,7 +61,7 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-    	authorized,authout := authorize(r,AuthorizedDNs)
+    	authorized,authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -224,7 +224,7 @@ func setLPCStorageAccess(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 	
-	authorized,authout := authorize(r,AuthorizedDNs)
+	authorized,authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -321,7 +321,7 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 		inputErr = append(inputErr, jsonerror{"No unitname specified."})	
 	}
 
-	authorized,authout := authorize(r,AuthorizedDNs)
+	authorized,authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
