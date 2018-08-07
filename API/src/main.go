@@ -112,8 +112,16 @@ func main() {
 	//		Once that is fixed we should set it to "verify-ca" or "verify-full" so that it actually checks that the cert that the DB machine presents is valid.
 	//		If you set it to "require" it skips the verification step.
 	dbConfig := viper.GetStringMapString("database")
+	dbUser := viper.Get("db_user")
+	if dbUser == nil {
+		dbUser = dbConfig["user"]
+	}
+	dbPass := viper.Get("db_pass")
+	if dbPass == nil {
+		dbPass = dbConfig["password"]
+	}
 	connString := fmt.Sprintf("user=%s password=%s host=%s dbname=%s connect_timeout=%s sslmode=%s sslrootcert=%s",
-		viper.Get("db_user"), viper.Get("db_pass"), dbConfig["host"], dbConfig["name"],
+		dbUser, dbPass, dbConfig["host"], dbConfig["name"],
 		dbConfig["timeout"], dbConfig["sslmode"], dbConfig["certificate"])
 	Mydb, err := sql.Open("postgres", connString)
 	if err != nil {
