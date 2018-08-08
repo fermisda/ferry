@@ -19,6 +19,7 @@ class User:
         self.status = status
         self.expiration_date = expiration_date
         self.certificates = []
+        self.fqans = []
         self.compute_access = {}
     
     def __str__(self):
@@ -46,6 +47,10 @@ class User:
         user.certificates.sort()
         if self.certificates != user.certificates:
             diff.append("certificates")
+        self.fqans.sort()
+        user.fqans.sort()
+        if self.fqans != user.fqans:
+            diff.append("fqans")
         if self.compute_access != user.compute_access:
             diff.append("compute_access")
         return diff
@@ -193,6 +198,7 @@ def fetch_userdb():
             users[unameUid[uname]].full_name = full_name
             users[unameUid[uname]].expiration_date = expiration_date
             users[unameUid[uname]].certificates.append(dn)
+            users[unameUid[uname]].fqans = [tuple(i.split(":")) for i in config.get("ferry", "fqans").split(",")]
             for resoruce in config.get("ferry", "compute_resources").split(";"):
                 users[unameUid[uname]].addComputeAccess(resoruce)
             if expiration_date != "":
@@ -237,12 +243,21 @@ def fetch_ferry():
             for jUser in jGroup["members"]:
                 groups[str(jGroup["gid"])].members.append(jUser["uid"])
 
+    url = source["hostname"] + source["api_get_users_fqans"]
+    jFQANs = json.loads(urllib.request.urlopen(url, context=ferryContext).read().decode())
+    for uname, items in jFQANs.items():
+        for item in items:
+            users[unameUid[uname]].fqans.append((item["fqan"], item["unitname"]))
+
     for accessString in source["compute_resources"].split(";"):
         resource = accessString.split(":")[0]
         url = source["hostname"] + source["api_get_passwd_file"] + "?resourcename=%s" % resource
         logging.debug("Fetching Ferry users access to %s: %s" % (resource, url))
         jPasswd = json.loads(urllib.request.urlopen(url, context=ferryContext).read().decode())
         jPasswd = list(jPasswd.values())[0] # get first affiliation unit
+        if resource not in jPasswd["resources"]:
+            logging.debug("Resorce %s does not exist.") % resource
+            continue
         jPasswd = jPasswd["resources"][resource]
         for access in jPasswd:
             users[access["uid"]].addComputeAccess(accessString)
@@ -342,6 +357,26 @@ def update_certificates(userdb, ferry):
     if not changes:
         logging.info("Certificates are up to date")
 
+# Updates users FQANs
+def update_fqans(userdb, ferry):
+    changes = False
+    for user in userdb.values():
+        if user.uid not in ferry:
+            continue
+        diff = user.diff(ferry[user.uid])
+        if "fqans" in diff:
+            for fqan in user.fqans:
+                if fqan not in ferry[user.uid].fqans:
+                    params = {
+                        "username": user.uname,
+                        "fqan": fqan[0],
+                        "unitname": fqan[1]
+                    }
+                    writeToFerry("api_set_user_fqan", params)
+                    changes = True
+    if not changes:
+        logging.info("FQANs are up to date")
+
 # Updates users access to Fermilab batch resources
 def update_compute_access(userdb, ferry):
     changes = False
@@ -406,6 +441,9 @@ if __name__ == "__main__":
 
     logging.info("Updating certificates...")
     update_certificates(userdbUsers, ferryUsers)
+
+    logging.info("Updating FQANs...")
+    update_fqans(userdbUsers, ferryUsers)
 
     logging.info("Updating compute access...")
     update_compute_access(userdbUsers, ferryUsers)
