@@ -33,8 +33,8 @@ def read_uid(fname):
             if not usrs.__contains__(tmp[4].strip().lower()):
                 usrs[tmp[4].strip().lower()] = User(tmp[0].strip(), tmp[3].strip().capitalize() + " " +
                                                      tmp[2].strip().capitalize(), tmp[4].strip().lower())
-                gname = list(gids.keys())[list(gids.values()).index(tmp[1].strip().lower())]
-                usrs[tmp[4].strip().lower()].add_group(gname, (tmp[1].strip().lower()))
+            gname = list(gids.keys())[list(gids.values()).index(tmp[1].strip().lower())]
+            usrs[tmp[4].strip().lower()].add_group(gname, (tmp[1].strip().lower()))
         except:
             print("Failed ", line, file=sys.stderr)
     return usrs
@@ -623,24 +623,25 @@ def read_nis(primary_groups, dir_path, exclude_list, altnames, users, groups):
 
     return nis
 
-def add_compute_resources(users, groups):
+def add_compute_resources(users, groups, gums):
     computeResources = {}
 
     # Add fermi_workers resource
     name = "fermi_workers"
+    group = "fnalgrid"
     defHome = "/home"
     defShell = "/sbin/nologin"
     computeResources[name] = ComputeResource(name, None, "Batch", defHome, defShell)
     for uname in users:
         if users[uname].is_k5login or uname in gums:
             computeResources[name].users[uname] = users[uname]
-            if groups["fnalgrid"] not in users[uname].groups:
-                users[uname].add_group("fnalgrid", groups["fnalgrid"], False)
-            users[uname].compute_access[name] = ComputeAccess(name, groups["fnalgrid"], defHome + "/" + uname, defShell)
+            if groups[group] not in users[uname].groups:
+                users[uname].add_group(group, groups[group], False)
+            users[uname].compute_access[name] = ComputeAccess(name, groups[group], defHome + "/" + uname, defShell)
 
     return computeResources
 
-def read_compute_batch(config):
+def read_compute_batch(config, users, groups, gums):
     """
     read batch resources quotas and priorities
     Args:
@@ -653,17 +654,28 @@ def read_compute_batch(config):
     batch_structure = {}
 
     # FermiGrid
-    batch_structure["fermigrid"] = ComputeResource("fermigrid", None, "Batch", None, None)
-    quotas = open(config.config._sections["fermigrid"]["quotas"]).readlines()
+    name = "fermigrid"
+    group = "fnalgrid"
+    defHome = "/home"
+    defShell = "/sbin/nologin"
 
+    batch_structure[name] = ComputeResource(name, None, "Batch", None, None)
+    for uname in users:
+        if users[uname].is_k5login or uname in gums:
+            batch_structure[name].users[uname] = users[uname]
+            if groups[group] not in users[uname].groups:
+                users[uname].add_group(group, groups[group], False)
+            users[uname].compute_access[name] = ComputeAccess(name, groups[group], defHome + "/" + uname, defShell)
+
+    quotas = open(config.config._sections[name]["quotas"]).readlines()
     for quota in quotas:
-        name, value = quota.strip().split(" = ")
-        experiment = re.findall(r"GROUP_QUOTA_(group|DYNAMIC_group)_(\w+)\.?(\w+)?", name)[0][1]
-        if name.__contains__("DYNAMIC"):
+        qname, value = quota.strip().split(" = ")
+        experiment = re.findall(r"GROUP_QUOTA_(group|DYNAMIC_group)_(\w+)\.?(\w+)?", qname)[0][1]
+        if qname.__contains__("DYNAMIC"):
             quotaType = "dynamic"
         else:
             quotaType = "static"
-        batch_structure["fermigrid"].batch.append(ComputeBatch(name, value, quotaType, experiment))
+        batch_structure[name].batch.append(ComputeBatch(qname, value, quotaType, experiment))
 
     return batch_structure
 
@@ -853,7 +865,7 @@ def read_nas_storage(config):
     
     return nas_structure
 
-def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, storages, batch_structure, nas_structure):
+def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, storages, batch_structure, nas_structure, compute_resources):
     """
     create mysql dump for ferry database
     Args:
@@ -1099,9 +1111,8 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
                      "\'%s\',NOW());\n" % (int(user.uid), external_affiliation[0], external_affiliation[1]))
 
     # populating compute_batch
-    cr_counter = res_counter
     for cr_name, cr_data in batch_structure.items():
-        cr_counter += 1
+        res_counter += 1
         query = ("insert into compute_resources (name, default_shell, default_home_dir, type, unitid, last_updated) " + 
                  "values (\'%s\', \'%s\', \'%s\', \'%s\', %s, NOW());\n"
               % (cr_name, cr_data.cshell, cr_data.chome, cr_data.ctype, cr_data.cunit))
@@ -1109,8 +1120,19 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
         for batch in cr_data.batch:
             query = ("insert into compute_batch (compid, name, value, type, unitid, last_updated) " +
                      "values (%s, \'%s\', %s, \'%s\', (select unitid from affiliation_units where name = '%s'), NOW());\n"
-                  % (cr_counter, batch.name, batch.value, batch.type, batch.experiment))
+                  % (res_counter, batch.name, batch.value, batch.type, batch.experiment))
             fd.write(query.replace("'None'", "Null").replace("None", "Null"))
+        for _, user in cr_data.users.items():
+            comp = user.compute_access[res.cresource]
+            groupid = gid_map[comp.gid]
+            fd.write("insert into compute_access (compid, uid, shell, home_dir, last_updated)" + \
+                     " values (%s, %s, \'%s\', \'%s\', NOW());\n" % (res_counter, user.uid, comp.shell, comp.home_dir))
+            fd.write("insert into compute_access_group (compid, uid, groupid, is_primary)" + \
+                     " values (%s, %s, %s, true);\n" % (res_counter, user.uid, groupid))
+            for gid in user.compute_access[res.cresource].secondary_groups:
+                fd.write("insert into compute_access_group (compid, uid, groupid, is_primary)" + \
+                         " values (%s, %s, %s, false);\n" % (res_counter, user.uid, gid_map[gid]))
+
 
     # populating nas_storage
     for nas in nas_structure:
@@ -1258,9 +1280,6 @@ if __name__ == "__main__":
     # read NAS storages
     nas_structure = read_nas_storage(config)
 
-    # read FermiGrid quotas
-    batch_structure = read_compute_batch(config)
-
     # read valid CMS resources from Vulcan
     read_vulcan_compute_resources(config, nis_structure, users, gids, cms_groups)
     storages = read_vulcan_storage_resources(config, users, gids, cms_groups)
@@ -1276,8 +1295,11 @@ if __name__ == "__main__":
     # read Vulcan X509 certificates and voms and add this information to proper containers
     read_vulcan_certificates(config, users, vomss)
 
+    # read FermiGrid quotas
+    batch_structure = read_compute_batch(config, users, gids, gums)
+
     # add special compute resoruces
-    compute_resources = add_compute_resources(users, gids)
+    compute_resources = add_compute_resources(users, gids, gums)
 
     # need to assign incremental ids to all the entities
     # groupid  - use gids index
@@ -1325,7 +1347,7 @@ if __name__ == "__main__":
     #                for l in v:
     #                    print k, l.__dict__
     if not config.config.has_option("main_db", "append"):
-        populate_db(config.config, users, gids, vomss, gums, roles,collaborations, nis_structure, storages, batch_structure, nas_structure)
+        populate_db(config.config, users, gids, vomss, gums, roles,collaborations, nis_structure, storages, batch_structure, nas_structure, compute_resources)
     else:
         update_db(config.config, users, gids, vomss, gums, roles,collaborations, nis_structure, storages, batch_structure, nas_structure)
     print("Done!")
