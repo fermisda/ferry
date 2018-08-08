@@ -723,7 +723,38 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Specified mapped_group does not exist.\" }")
 		return
 	}
-//	query := fmt.Sprintf(`do $$
+
+	// Make sure that the user is actually in the unit and group in question, if we provided a user
+	var tmpu,tmpg int
+	if uid.Valid {
+		ingrouperr := DBtx.tx.QueryRow(`select uid, groupid from user_group where uid=$1 and groupid=$2`, uid.Int64, groupid.Int64).Scan(&tmpu,&tmpg)
+		if ingrouperr == sql.ErrNoRows {
+			log.WithFields(QueryFields(r, startTime)).Error("User not a member of this group.")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"User not a member of this group.\" }")
+			return	
+			
+		} else if ingrouperr != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + ingrouperr.Error())
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+			return
+		}
+		if unitid.Valid {
+			inuniterr := DBtx.tx.QueryRow(`	select count(*) > 0  from affiliation_unit_user_certificate as ac
+							left join user_certificates as uc on ac.dnid = uc.dnid
+                                   			where ac.unitid = $1 and uid = $2`, unitid.Int64, uid.Int64).Scan(&tmpu)
+			if inuniterr == sql.ErrNoRows {
+				log.WithFields(QueryFields(r, startTime)).Error("User not a member of this unit.")
+				fmt.Fprintf(w,"{ \"ferry_error\": \"User not a member of this unit.\" }")
+				return	
+				
+			} else if inuniterr != nil {
+				log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + inuniterr.Error())
+				fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+				return
+			}		
+		}
+	}
+	//	query := fmt.Sprintf(`do $$
 //						  declare
 //								v_unitid int;
 //								v_uid bigint;
@@ -737,7 +768,10 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 //								select unitid into v_unitid from affiliation_units where name = c_aname;
 //								select groupid into v_groupid from groups where name = c_gname and type = 'UnixGroup';
 //								select uid into v_uid from users where uname = c_uname;
-//
+//                                                       	select (v_uid, v_groupid) in (select uid, groupid from user_group) into v_uid_groupid;
+//								select count(*) > 0 into v_uid_dnid from affiliation_unit_user_certificate as ac
+//								left join user_certificates as uc on ac.dnid = uc.dnid
+//								where ac.unitid = v_unitid and uid = v_uid;
 //								if v_unitid is null and c_aname is not null then
 //									raise 'affiliation unit does not exist';
 //								end if;
