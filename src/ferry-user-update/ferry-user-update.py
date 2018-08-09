@@ -18,6 +18,7 @@ class User:
         self.full_name = full_name
         self.status = status
         self.expiration_date = expiration_date
+        self.gid = ""
         self.certificates = []
         self.fqans = []
         self.compute_access = {}
@@ -166,7 +167,9 @@ def fetch_userdb():
         gid = gid
         uname = uname.lower().strip()
         full_name = " ".join([first_name.strip().capitalize(), last_name.strip().capitalize()]).strip()
-        users[uid] = User(uid, uname, full_name)
+        if uid not in users:
+            users[uid] = User(uid, uname, full_name)
+            users[uid].gid = gid
         if uname not in unameUid:
             unameUid[uname] = []
         if uid not in unameUid[uname]:
@@ -265,85 +268,96 @@ def fetch_ferry():
     return users, groups
 
 # Updates users with data from uid.lis and services-users.csv
-def update_users(userdb, ferry):
+def update_users():
     changes = False
-    for user in userdb.values():
-        if user.uid not in ferry.keys():
-            if len(user.full_name.split(" ", 1)) > 1:
-                firstname = user.full_name.split(" ", 1)[0]
-                lastname = user.full_name.split(" ", 1)[1]
-            else:
-                firstname = user.full_name
-                lastname = ""
+    for user in userdbUsers.values():
+        if user.uid not in ferryUsers.keys():
+            if user.gid not in ferryGroups.keys():
+                params = {
+                    "gid": user.gid,
+                    "groupname": userdbGroups[user.gid].name,
+                    "grouptype": userdbGroups[user.gid].type
+                }
+                if writeToFerry("api_create_group", params):
+                    ferryGroups[user.gid] = Group(user.gid, userdbGroups[user.gid].name)
+                changes = True
             params = {
                 "uid": user.uid,
                 "username": user.uname,
-                "firstname": firstname,
-                "lastname": lastname,
+                "fullname":  user.full_name,
                 "status": str(user.status),
-                "expirationdate": user.expiration_date
+                "expirationdate": user.expiration_date,
+                "groupname": userdbGroups[user.gid].name
             }
             if user.expiration_date == "":
                 params.__delitem__("expirationdate")
-            writeToFerry("api_create_user", params)
+            if writeToFerry("api_create_user", params):
+                ferryUsers[user.uid] = User(user.uid, user.uname, user.full_name, user.status, user.expiration_date)
             changes = True
         else:
-            diff = user.diff(ferry[user.uid])
+            diff = user.diff(ferryUsers[user.uid])
             if "full_name" in diff or "expiration_date" in diff or "status" in diff:
+                auxUser = ferryUsers[user.uid]
                 params = {"uid": user.uid, "username": user.uname}
                 if "full_name" in diff:
                     params["fullname"] = user.full_name
+                    auxUser.full_name = user.full_name
                 if "expiration_date" in diff:
                     if user.expiration_date == "":
                         params["expiration_date"] = "null"
                     else:
                         params["expiration_date"] = user.expiration_date
+                    auxUser.expiration_date = user.expiration_date
                 if "status" in diff:
                     params["status"] = str(user.status)
-                writeToFerry("api_set_user_info", params)
+                    auxUser.status = user.status
+                if writeToFerry("api_set_user_info", params):
+                    ferryUsers[user.uid] = auxUser
                 changes = True
     if not changes:
         logging.info("Users are up to date")
 
 # Updates groups with data from gid.lis
-def update_groups(userdb, ferry, users):
+def update_groups():
     changes = False
-    for group in userdb.values():
-        if group.gid not in ferry.keys():
+    for group in userdbGroups.values():
+        if group.gid not in ferryGroups.keys():
             params = {
                 "gid": group.gid,
                 "groupname": group.name,
-                "grouptype": "UnixGroup"
+                "grouptype": group.type
             }
-            writeToFerry("api_create_group", params)
+            if writeToFerry("api_create_group", params):
+                ferryGroups[group.gid] = Group(group.gid, group.name)
             changes = True
-        else:
-            diff = group.diff(ferry[group.gid])
-            if "groupname" in diff:
-                logging.warning("Group %s name has changed from %s to %s" % (group.gid, ferry[group.gid].name, group.name))
-            if "members" in diff:
-                for member in group.members:
-                    if member not in ferry[group.gid].members:
-                        params = {
-                            "username": users[member].uname,
-                            "groupname": group.name,
-                            "grouptype": "UnixGroup"
-                        }
-                        writeToFerry("api_add_group_member", params)
-                        changes = True
+
+        diff = group.diff(ferryGroups[group.gid])
+        if "groupname" in diff:
+            logging.warning("Group %s name has changed from %s to %s" % (group.gid, ferryGroups[group.gid].name, group.name))
+        if "members" in diff:
+            for member in group.members:
+                if member not in ferryGroups[group.gid].members:
+                    params = {
+                        "username": userdbUsers[member].uname,
+                        "groupname": group.name,
+                        "grouptype": group.type
+                    }
+                    if writeToFerry("api_add_group_member", params):
+                        ferryGroups[group.gid].members.append(member)
+                    changes = True
     if not changes:
         logging.info("Groups are up to date")
 
 # Updates users certificates with data from services-users.csv
-def update_certificates(userdb, ferry):
+def update_certificates():
     changes = False
-    for user in userdb.values():
-        if user.uid not in ferry:
+    for user in userdbUsers.values():
+        if user.uid not in ferryUsers:
             continue
-        diff = user.diff(ferry[user.uid])
+        diff = user.diff(ferryUsers[user.uid])
         if "certificates" in diff:
             for certificate in user.certificates:
-                if certificate not in ferry[user.uid].certificates:
+                if certificate not in ferryUsers[user.uid].certificates:
                     if any(c in "," for c in certificate):
                         logging.warning("Certificate \"%s\" contains illegal characters" % certificate)
                         continue
@@ -352,42 +366,45 @@ def update_certificates(userdb, ferry):
                         "unitname": "fermilab",
                         "dn": certificate
                     }
-                    writeToFerry("api_add_user_certificate", params)
-            changes = True
+                    if writeToFerry("api_add_user_certificate", params):
+                        ferryUsers[user.uid].certificates.append(certificate)
+                    changes = True
     if not changes:
         logging.info("Certificates are up to date")
 
 # Updates users FQANs
-def update_fqans(userdb, ferry):
+def update_fqans():
     changes = False
-    for user in userdb.values():
-        if user.uid not in ferry:
+    for user in userdbUsers.values():
+        if user.uid not in ferryUsers:
             continue
-        diff = user.diff(ferry[user.uid])
+        diff = user.diff(ferryUsers[user.uid])
         if "fqans" in diff:
             for fqan in user.fqans:
-                if fqan not in ferry[user.uid].fqans:
+                if fqan not in ferryUsers[user.uid].fqans:
                     params = {
                         "username": user.uname,
                         "fqan": fqan[0],
                         "unitname": fqan[1]
                     }
-                    writeToFerry("api_set_user_fqan", params)
+                    if writeToFerry("api_set_user_fqan", params):
+                        ferryUsers[user.uid].fqans.append(fqan)
                     changes = True
     if not changes:
         logging.info("FQANs are up to date")
 
 # Updates users access to Fermilab batch resources
-def update_compute_access(userdb, ferry):
+def update_compute_access():
     changes = False
-    for user in userdb.values():
-        if user.uid not in ferry:
+    for user in userdbUsers.values():
+        if user.uid not in ferryUsers:
             continue
-        diff = user.diff(ferry[user.uid])
+        diff = user.diff(ferryUsers[user.uid])
         if "compute_access" in diff:
             for resource, params in user.compute_access.items():
-                if resource not in ferry[user.uid].compute_access:
-                    writeToFerry("api_set_compute_access", params)
+                if resource not in ferryUsers[user.uid].compute_access.keys():
+                    if writeToFerry("api_set_compute_access", params):
+                        ferryUsers[user.uid].compute_access[resource] = params
                     changes = True
     if not changes:
         logging.info("Compute access is up to date")
@@ -434,16 +451,16 @@ if __name__ == "__main__":
     ferryUsers, ferryGroups = fetch_ferry()
 
     logging.info("Updating users...")
-    update_users(userdbUsers, ferryUsers)
+    update_users()
 
     logging.info("Updating groups...")
-    update_groups(userdbGroups, ferryGroups, userdbUsers)
+    update_groups()
 
     logging.info("Updating certificates...")
-    update_certificates(userdbUsers, ferryUsers)
+    update_certificates()
 
     logging.info("Updating FQANs...")
-    update_fqans(userdbUsers, ferryUsers)
+    update_fqans()
 
     logging.info("Updating compute access...")
-    update_compute_access(userdbUsers, ferryUsers)
+    update_compute_access()
