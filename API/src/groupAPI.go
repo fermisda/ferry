@@ -1314,7 +1314,14 @@ func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 	groupname := q.Get("groupname")
 	resource := q.Get("resourcename")
 	exptname := q.Get("unitname")
-
+	quota_unit := strings.TrimSpace(strings.ToUpper(q.Get("quota_unit")))
+	if quota_unit != "" {
+	okunit := checkUnits(quota_unit)	
+		if !okunit {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid unit specified in http query.")
+			inputErr = append(inputErr, jsonerror{"Invalid unit specified."})	
+		}
+	}
 	if groupname == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No groupname specified."})
@@ -1359,7 +1366,7 @@ func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 		defer log.WithFields(QueryFields(r, startTime)).Print("Error in DB query: " + err.Error())
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
-
+		
 		return
 	}		
 	defer rows.Close()	
@@ -1371,15 +1378,25 @@ func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 	}
 	var Out []jsonentry
 	var groupExists, resourceExists, unitExists bool
-
+	
 	for rows.Next() {
 		var tmpValue,tmpUnit,tmpValid sql.NullString
 		rows.Scan(&tmpValue, &tmpUnit, &tmpValid, &groupExists, &resourceExists, &unitExists)
 		if tmpValue.Valid {
+			
+			if quota_unit != "" && quota_unit != tmpUnit.String {
+				newval, converr := convertValue(tmpValue.String,tmpUnit.String,quota_unit)
+				if converr != nil {
+					log.WithFields(QueryFields(r, startTime)).Error("Error converting quota value: " + converr.Error())
+					inputErr = append(inputErr, jsonerror{"Error converting quota value to desired unit."})	
+				} else {
+					tmpValue.String = strconv.FormatFloat(newval, 'f', -1, 64)
+				}
+			}
 			Out = append(Out, jsonentry{tmpValue.String, tmpUnit.String, tmpValid.String})
 		}
-	}
-
+		}
+	
 	var output interface{}
 	if len(Out) == 0 {
 		type jsonerror struct {
@@ -2102,7 +2119,7 @@ func setGroupStorageQuotaDB(tx *Transaction, gName, unitname, rName, groupquota,
 	}
 	
 	var vValid sql.NullString
-	if valid_until != "" {
+	if valid_until != "" && strings.ToUpper(valid_until) != "NULL" {
 		queryerr = tx.tx.QueryRow(`select valid_until from storage_quota where storageid = $1 and unitid = $2 and groupid = $3 and valid_until = $4`,vSid, vUnitid, vGid, valid_until).Scan(&vValid)
 	} else {
 		queryerr = tx.tx.QueryRow(`select valid_until from storage_quota where storageid = $1 and unitid = $2 and groupid = $3 and valid_until is null`,vSid, vUnitid, vGid).Scan(&vValid)		
@@ -2110,20 +2127,32 @@ func setGroupStorageQuotaDB(tx *Transaction, gName, unitname, rName, groupquota,
 	
 	if queryerr == sql.ErrNoRows {
 		// we did not have this comb in the DB, so it is an insert
-		if valid_until != "" {
+		if valid_until != "" && strings.ToUpper(valid_until) != "NULL" {
 			vValid.Valid = true
 			vValid.String = valid_until
-		}
-		_, reterr = tx.Exec(`insert into storage_quota (storageid, groupid, unitid, value, unit, valid_until)
+			
+			_, reterr = tx.Exec(`insert into storage_quota (storageid, groupid, unitid, value, unit, valid_until)
 			             values ($1, $2, $3, $4, $5, $6)`, vSid, vGid, vUnitid, groupquota, quotaunit, vValid)
+		} else {
+			_, reterr = tx.Exec(`insert into storage_quota (storageid, groupid, unitid, value, unit)
+			             values ($1, $2, $3, $4, $5)`, vSid, vGid, vUnitid, groupquota, quotaunit)
+		}
 	} else if queryerr != nil {
 		//some other odd problem, fall back
 		return queryerr
 	} else {
 		// we need to update the existing DB entry
-		
-		_, reterr = tx.Exec(`update storage_quota set value = $1, unit = $2, last_updated = NOW()
-//				   where storageid = $3 and groupid = $4 and unitid = $5 and valid_until = $6`, groupquota, quotaunit, vSid, vGid, vUnitid, vValid) 
+		if valid_until != "" && strings.ToUpper(valid_until) != "NULL" {
+			vValid.Valid = true
+			vValid.String = valid_until
+			
+			_, reterr = tx.Exec(`update storage_quota set value = $1, unit = $2, last_updated = NOW()
+				   where storageid = $3 and groupid = $4 and unitid = $5 and valid_until = $6`, groupquota, quotaunit, vSid, vGid, vUnitid, vValid)
+		} else {
+
+	_, reterr = tx.Exec(`update storage_quota set value = $1, unit = $2, last_updated = NOW()
+				   where storageid = $3 and groupid = $4 and unitid = $5 and valid_until is null`, groupquota, quotaunit, vSid, vGid, vUnitid)
+} 
 	}
 	
 
