@@ -853,13 +853,24 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var uid,fqanid int
-	queryerr := DBptr.QueryRow(`select uid from users where uname=$1`,uName).Scan(&uid)
-
+	var uid, unitid, fqanid int
+	queryerr := DBptr.QueryRow(`select uid from users where uname=$1 for update`, uName).Scan(&uid)
 	switch {
 	case queryerr == sql.ErrNoRows:
 		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"User does not exist.\" }")
+		return
+	case queryerr != nil:
+		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
+		return	
+	}
+
+	queryerr = DBptr.QueryRow(`select unitid from affiliation_units where name=$1 for update`, unitName).Scan(&unitid)
+	switch {
+	case queryerr == sql.ErrNoRows:
+		log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Affiliation unit does not exist.\" }")
 		return
 	case queryerr != nil:
 		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
@@ -877,6 +888,23 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
 		return
+	}
+
+	var hasCert bool
+	queryerr = DBptr.QueryRow(`select count(*) > 0 from affiliation_unit_user_certificate as ac
+							   join user_certificates as uc on ac.dnid = uc.dnid
+							   where uid = $1 and unitid = $2`, uid, unitid).Scan(&hasCert)
+	switch {
+	case queryerr == nil:
+		if !hasCert {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"User does not exist.\" }")
+			return
+		}
+	default:
+		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
+		return	
 	}
 	
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
