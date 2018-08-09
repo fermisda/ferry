@@ -688,15 +688,15 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if q.Get("mapped_user") != "" {
-		mUser = `'` + q.Get("mapped_user") + `'`
-	} else {
-		mUser = `null`
-	}
+		mUser = strings.TrimSpace(q.Get("mapped_user"))
+	} //else {
+	//	mUser = `null`
+	//}
 	if q.Get("unitname") != "" {
-		unit = `'` + q.Get("unitname") + `'`
-	} else {
-		unit = `null`
-	}
+		unit = strings.TrimSpace(q.Get("unitname"))
+	} //else {
+	//	unit = `null`
+	//}
 
 	authorized,authout := authorize(r)
 	if authorized == false {
@@ -727,7 +727,7 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 	// Make sure that the user is actually in the unit and group in question, if we provided a user
 	var tmpu,tmpg int
 	if uid.Valid {
-		ingrouperr := DBtx.tx.QueryRow(`select uid, groupid from user_group where uid=$1 and groupid=$2`, uid.Int64, groupid.Int64).Scan(&tmpu,&tmpg)
+		ingrouperr := DBtx.tx.QueryRow(`select uid, groupid from user_group where uid=$1 and groupid=$2`, uid, groupid).Scan(&tmpu,&tmpg)
 		if ingrouperr == sql.ErrNoRows {
 			log.WithFields(QueryFields(r, startTime)).Error("User not a member of this group.")
 			fmt.Fprintf(w,"{ \"ferry_error\": \"User not a member of this group.\" }")
@@ -739,9 +739,10 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if unitid.Valid {
+			var tmpc bool
 			inuniterr := DBtx.tx.QueryRow(`	select count(*) > 0  from affiliation_unit_user_certificate as ac
 							left join user_certificates as uc on ac.dnid = uc.dnid
-                                   			where ac.unitid = $1 and uid = $2`, unitid.Int64, uid.Int64).Scan(&tmpu)
+                                   			where ac.unitid = $1 and uid = $2`, unitid, uid).Scan(&tmpc)
 			if inuniterr == sql.ErrNoRows {
 				log.WithFields(QueryFields(r, startTime)).Error("User not a member of this unit.")
 				fmt.Fprintf(w,"{ \"ferry_error\": \"User not a member of this unit.\" }")
@@ -970,7 +971,7 @@ func setFQANMappings(w http.ResponseWriter, r *http.Request) {
 	var res sql.Result
 	var rowsErr error
 	var rows int64
-	res, err = DBtx.Exec(`update grid_fqan set $1 where fqan = $2`, strings.Join(values, ", "), fqan)
+	res, err = DBtx.Exec(`update grid_fqan set ` + strings.Join(values, ", ") + `  where fqan = $1`, fqan)
 	if err == nil {
 		rows, rowsErr = res.RowsAffected()
 		if rowsErr != nil {

@@ -11,6 +11,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"strconv"
 //	"io/ioutil"
+	"errors"
 )
 
 func createGroup(w http.ResponseWriter, r *http.Request) {
@@ -1313,7 +1314,14 @@ func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 	groupname := q.Get("groupname")
 	resource := q.Get("resourcename")
 	exptname := q.Get("unitname")
-
+	quota_unit := strings.TrimSpace(strings.ToUpper(q.Get("quota_unit")))
+	if quota_unit != "" {
+	okunit := checkUnits(quota_unit)	
+		if !okunit {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid unit specified in http query.")
+			inputErr = append(inputErr, jsonerror{"Invalid unit specified."})	
+		}
+	}
 	if groupname == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No groupname specified."})
@@ -1358,7 +1366,7 @@ func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 		defer log.WithFields(QueryFields(r, startTime)).Print("Error in DB query: " + err.Error())
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
-
+		
 		return
 	}		
 	defer rows.Close()	
@@ -1370,15 +1378,25 @@ func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 	}
 	var Out []jsonentry
 	var groupExists, resourceExists, unitExists bool
-
+	
 	for rows.Next() {
 		var tmpValue,tmpUnit,tmpValid sql.NullString
 		rows.Scan(&tmpValue, &tmpUnit, &tmpValid, &groupExists, &resourceExists, &unitExists)
 		if tmpValue.Valid {
+			
+			if quota_unit != "" && quota_unit != tmpUnit.String {
+				newval, converr := convertValue(tmpValue.String,tmpUnit.String,quota_unit)
+				if converr != nil {
+					log.WithFields(QueryFields(r, startTime)).Error("Error converting quota value: " + converr.Error())
+					inputErr = append(inputErr, jsonerror{"Error converting quota value to desired unit."})	
+				} else {
+					tmpValue.String = strconv.FormatFloat(newval, 'f', -1, 64)
+				}
+			}
 			Out = append(Out, jsonentry{tmpValue.String, tmpUnit.String, tmpValid.String})
 		}
-	}
-
+		}
+	
 	var output interface{}
 	if len(Out) == 0 {
 		type jsonerror struct {
@@ -2072,77 +2090,105 @@ func setGroupStorageQuotaDB(tx *Transaction, gName, unitname, rName, groupquota,
 // since this function is not directly web accessible we don't do as much parameter checking/validation here.
 // We assume that the inputs have already been sanitized by the calling function.
 // 2018-07-20 Let's not make that a blanket assumption
-
-// quotaunit is known to be OK because it is explicitly set to "B" for internal DB storeage.
-// ditto groupquota because the value passed in is derived from the unit conversion function already
-
+	
+	// quotaunit is known to be OK because it is explicitly set to "B" for internal DB storeage.
+	// ditto groupquota because the value passed in is derived from the unit conversion function already
+	
+	var reterr error
 	var vSid, vGid, vUnitid sql.NullInt64
 	
-	queryerr := tx.tx.QueryRow(`select storageid, groupid, unitid from (select 1 as key, storageid from storage_resources where name = $1) as sr full outer join (select groupid from groups where name = $2 and type = 'UnixGroup') as g on g.key=sr.key right join (select unitid from affiliation_units where name = $3) as au on au.key=sr.key`, rName, gName, unitname).Scan(&vSid, vGid, vUnitid)
+	reterr = nil
+	
+	queryerr := tx.tx.QueryRow(`select storageid, groupid, unitid from (select 1 as key, storageid from storage_resources where name = $1) as sr full outer join (select 1as key, groupid from groups where name = $2 and type = 'UnixGroup') as g on g.key=sr.key right join (select 1as key, unitid from affiliation_units where name = $3) as au on au.key=sr.key`, rName, gName, unitname).Scan(&vSid, &vGid, &vUnitid)
 	if queryerr != nil && queryerr != sql.ErrNoRows {
 		return queryerr	
 	}
 	
 	if !vSid.Valid {
-		
-		
+		reterr = errors.New("Resource does not exist.")
 	}
 	if !vGid.Valid {
-		
-		
+		reterr  = errors.New("Group does not exist.")
 	}
 	if !vUnitid.Valid {
-		
-		
+		reterr  = errors.New("Unit does not exist.")
+	}
+	
+	if reterr != nil {
+		return reterr
 	}
 	
 	var vValid sql.NullString
-	queryerr = tx.tx.QueryRow(`select valid_until from storage_resources where storageid=$1 and unitid=$2 and groupid=$3`,vSid, vUnitid, vGid).Scan(&vValid)
+	if valid_until != "" && strings.ToUpper(valid_until) != "NULL" {
+		queryerr = tx.tx.QueryRow(`select valid_until from storage_quota where storageid = $1 and unitid = $2 and groupid = $3 and valid_until = $4`,vSid, vUnitid, vGid, valid_until).Scan(&vValid)
+	} else {
+		queryerr = tx.tx.QueryRow(`select valid_until from storage_quota where storageid = $1 and unitid = $2 and groupid = $3 and valid_until is null`,vSid, vUnitid, vGid).Scan(&vValid)		
+	}
+	
 	if queryerr == sql.ErrNoRows {
-		// we did not have this comb in the DB, so it is in insert
-		
+		// we did not have this comb in the DB, so it is an insert
+		if valid_until != "" && strings.ToUpper(valid_until) != "NULL" {
+			vValid.Valid = true
+			vValid.String = valid_until
+			
+			_, reterr = tx.Exec(`insert into storage_quota (storageid, groupid, unitid, value, unit, valid_until)
+			             values ($1, $2, $3, $4, $5, $6)`, vSid, vGid, vUnitid, groupquota, quotaunit, vValid)
+		} else {
+			_, reterr = tx.Exec(`insert into storage_quota (storageid, groupid, unitid, value, unit)
+			             values ($1, $2, $3, $4, $5)`, vSid, vGid, vUnitid, groupquota, quotaunit)
+		}
 	} else if queryerr != nil {
 		//some other odd problem, fall back
+		return queryerr
 	} else {
 		// we need to update the existing DB entry
-		
-		
+		if valid_until != "" && strings.ToUpper(valid_until) != "NULL" {
+			vValid.Valid = true
+			vValid.String = valid_until
+			
+			_, reterr = tx.Exec(`update storage_quota set value = $1, unit = $2, last_updated = NOW()
+				   where storageid = $3 and groupid = $4 and unitid = $5 and valid_until = $6`, groupquota, quotaunit, vSid, vGid, vUnitid, vValid)
+		} else {
+
+	_, reterr = tx.Exec(`update storage_quota set value = $1, unit = $2, last_updated = NOW()
+				   where storageid = $3 and groupid = $4 and unitid = $5 and valid_until is null`, groupquota, quotaunit, vSid, vGid, vUnitid)
+} 
 	}
 	
 
-	_, err := tx.Exec(fmt.Sprintf(`do $$
-							declare 
-								vSid int;
-								vGid int;
-								vUnitid int;
-
-								cSname constant text := '%s';
-								cGname constant text := '%s';
-								cGtype constant groups_group_type := '%s';
-								cUname constant text := '%s';
-								cValue constant text := '%s';
-								cUnit constant text := '%s';
-								cVuntil constant date := %s;
-							begin
-								select storageid into vSid from storage_resources where name = cSname;
-								select groupid into vGid from groups where (name, type) = (cGname, cGtype);
-								select unitid into vUnitid from affiliation_units where name = cUname;
-
-								if vSid is null then raise 'Resource does not exist.'; end if;
-								if vGid is null then raise 'Group does not exist.'; end if;
-								if vUnitid is null then raise 'Unit does not exist.'; end if;
-								
-								if (vSid, vGid, vUnitid) in (select storageid, groupid, unitid from storage_quota) and cVuntil is NULL then
-									update storage_quota set value = cValue, unit = cUnit, valid_until = cVuntil, last_updated = NOW()
-									where storageid = vSid and groupid = vGid and unitid = vUnitid and valid_until is NULL;
-								else
-									insert into storage_quota (storageid, groupid, unitid, value, unit, valid_until)
-									values (vSid, vGid, vUnitid, cValue, cUnit, cVuntil);
-								end if;
-							end $$;`, rName, gName, "UnixGroup", unitname, groupquota, quotaunit, valid_until))
-	
+//	_, err := tx.Exec(fmt.Sprintf(`do $$
+//							declare 
+//								vSid int;
+//								vGid int;
+//								vUnitid int;
+//
+//								cSname constant text := '%s';
+//								cGname constant text := '%s';
+//								cGtype constant groups_group_type := '%s';
+//								cUname constant text := '%s';
+//								cValue constant text := '%s';
+//								cUnit constant text := '%s';
+//								cVuntil constant date := %s;
+//							begin
+//								select storageid into vSid from storage_resources where name = cSname;
+//								select groupid into vGid from groups where (name, type) = (cGname, cGtype);
+//								select unitid into vUnitid from affiliation_units where name = cUname;
+//
+//								if vSid is null then raise 'Resource does not exist.'; end if;
+//								if vGid is null then raise 'Group does not exist.'; end if;
+//								if vUnitid is null then raise 'Unit does not exist.'; end if;
+//								
+//								if (vSid, vGid, vUnitid) in (select storageid, groupid, unitid from storage_quota) and cVuntil is NULL then
+//									update storage_quota set value = cValue, unit = cUnit, valid_until = cVuntil, last_updated = NOW()
+//									where storageid = vSid and groupid = vGid and unitid = vUnitid and valid_until is NULL;
+//								else
+//									insert into storage_quota (storageid, groupid, unitid, value, unit, valid_until)
+//									values (vSid, vGid, vUnitid, cValue, cUnit, cVuntil);
+//								end if;
+//							end $$;`, rName, gName, "UnixGroup", unitname, groupquota, quotaunit, valid_until))
+//	
 	//move all error handling to the outside calling function and just return the err itself here
-	return err
+	return reterr
 }
 
 func getGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
