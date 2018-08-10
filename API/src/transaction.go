@@ -93,6 +93,16 @@ func (t *Transaction) Query(query string, args ...interface{}) (*sql.Rows, error
 	return nil, t.err
 }
 
+// QueryRow executes a query that returns one row, typically a SELECT.
+func (t *Transaction) QueryRow(query string, args ...interface{}) (*sql.Row) {
+	if t.commitKey != 0 {
+		row := t.tx.QueryRow(query, args...)
+		return row
+	}
+	t.err = errors.New("transaction has not been started")
+	return nil
+}
+
 // Exec executes a query that doesn't return rows.
 // For example: an INSERT and UPDATE.
 func (t *Transaction) Exec(query string, args ...interface{}) (sql.Result, error) {

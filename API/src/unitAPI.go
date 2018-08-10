@@ -1,5 +1,6 @@
 package main
 import (
+	"regexp"
 //	"regexp"
 	"strings"
 	"database/sql"
@@ -694,6 +695,11 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 	//}
 	if q.Get("unitname") != "" {
 		unit = strings.TrimSpace(q.Get("unitname"))
+		if ok, _ := regexp.MatchString(fmt.Sprintf(`^\/(fermilab\/)?%s\/.*`, unit), fqan); !ok {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid FQAN.")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid FQAN.\" }")
+			return
+		}
 	} //else {
 	//	unit = `null`
 	//}
