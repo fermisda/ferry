@@ -51,56 +51,37 @@ func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// start a transaction
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
+		return
+	}
+	defer DBtx.Rollback(cKey)
+	
 	// check if it already exists
 	var unitId int
-	checkerr := DBptr.QueryRow(`select unitid from affiliation_units where name=$1`,unitName).Scan(&unitId)
+	checkerr := DBtx.QueryRow(`select unitid from affiliation_units where name=$1`,unitName).Scan(&unitId)
 	switch {
 	case checkerr == sql.ErrNoRows:
 		// OK, it doesn't exist, let's add it now.
 		
-		// start a transaction
-		DBtx, cKey, err := LoadTransaction(r, DBptr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
-			return
-		}
-		defer DBtx.Rollback(cKey)
+
 		log.WithFields(QueryFields(r, startTime)).Info("cKey = " + fmt.Sprintf("%d",cKey))
-		// string for the insert statement
-//		createstr := fmt.Sprintf(`do $$
-//									declare c_uname text = %s;
-//									declare c_aname text = %s;
-//									declare c_type text = %s;
-//									declare c_url text = %s;
-//								  begin
-//									insert into affiliation_units (name, alternative_name, type) values (c_uname, c_aname, c_type);
-//									if c_url is not null then
-//										insert into voms_url (unitid, url) values ((select unitid from affiliation_units where name = c_uname), c_url);
-//									end if;
-//								  end $$;`,
-//								  "'" + unitName + "'", altName, unitType, voms_url)
-//		//create prepared statement
-//		stmt, err := DBtx.Prepare(createstr)
-//		if err != nil {
-//			log.WithFields(QueryFields(r, startTime)).Error("Error preparing DB command: " + err.Error())
-//			w.WriteHeader(http.StatusNotFound)
-//			fmt.Fprintf(w,"{ \"ferry_error\": \"Error preparing database command.\" }")
-//			return
-//		}
-//		//run said statement and check errors
 
 		_, inserr := DBtx.Exec(`insert into affiliation_units (name, alternative_name, type) values ($1, $2, $3)`,unitName, altName, unitType)
 		if inserr != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error adding " + unitName + " to affiliation_units: " + inserr.Error())
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB insert.\" }")
+			if cKey != 0 {	fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB insert.\" }") }
+			return
 		} else {
 			// check if voms_url was also supplied; insert there too if it was.
 			if voms_url != "" {
 				_, vomserr := DBtx.Exec(`insert into voms_url (unitid, url) values ((select unitid from affiliation_units where name = $1), $2)`, unitName, voms_url)
 				if vomserr != nil {
 					log.WithFields(QueryFields(r, startTime)).Error("Error adding " + unitName + " voms_url: " + vomserr.Error())
-					fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB insert.\" }")
+					if cKey != 0 { fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB insert.\" }") }
 					return
 				}
 			}
@@ -116,11 +97,11 @@ func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 	case checkerr != nil:
 		//other weird error
 		log.WithFields(QueryFields(r, startTime)).Error("Cannot create affiliation unit " + unitName + ": " + checkerr.Error())
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Database error; check logs.\" }")
+		if cKey != 0 { fmt.Fprintf(w,"{ \"ferry_error\": \"Database error; check logs.\" }") }
 		return
 	default:
 		log.WithFields(QueryFields(r, startTime)).Error("Cannot create affiliation unit " + unitName + "; another unit with that name already exists.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Unit %s already exists.\" }",unitName)
+		if cKey != 0 { fmt.Fprintf(w,"{ \"ferry_error\": \"Unit %s already exists.\" }",unitName) }
 		return
 	} 
 }
@@ -721,12 +702,16 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 	queryerr := DBtx.tx.QueryRow(`select unitid, uid, groupid from (select 1 as key, unitid from affiliation_units where name = $1) as au full outer join (select 1 as key, uid from users where uname=$2) as u on u.key = au.key right join (select 1 as key, groupid from groups where name=$3 and type = 'UnixGroup') as g on g.key=au.key`, unit, mUser, mGroup).Scan(&unitid, &uid, &groupid)
 	if queryerr != nil && queryerr != sql.ErrNoRows {
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+		if cKey != 0 {
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+		}
 		return
 	}
 	if groupid.Valid == false {
 		log.WithFields(QueryFields(r, startTime)).Error("Specified mapped_group does not exist.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Specified mapped_group does not exist.\" }")
+		if cKey != 0 {
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Specified mapped_group does not exist.\" }")
+		}
 		return
 	}
 
@@ -735,12 +720,16 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 	queryerr = DBtx.tx.QueryRow(`select fqanid from grid_fqan where unitid=$1 and fqan=$2`, unitid, fqan).Scan(&tmpfqanid) 
 	if queryerr != nil && queryerr != sql.ErrNoRows {
 		log.WithFields(QueryFields(r, startTime)).Error("Query error: unable to verify whether FQAN/unit combo already in DB." + queryerr.Error())
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Unable to verify whether FQAN/unit combo already in DB. Will not proceed.\" }")
+		if cKey != 0 {
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Unable to verify whether FQAN/unit combo already in DB. Will not proceed.\" }")
+		}
 		return
 	} else if queryerr == nil {
 		// if the error is nil, then it DID find the combo alreayd, and so we should exit.
 		log.WithFields(QueryFields(r, startTime)).Error("Specified FQAN already associated with specified unit. Check specified values. Use setFQANMappings to modify an existing entry.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Specified FQAN already associated with this unit. Use setFQANMappings to modify an existing entry.\" }")
+		if cKey != 0 {
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Specified FQAN already associated with this unit. Use setFQANMappings to modify an existing entry.\" }")
+		}
 		return		
 	}
 	
@@ -750,12 +739,16 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 		ingrouperr := DBtx.tx.QueryRow(`select uid, groupid from user_group where uid=$1 and groupid=$2`, uid, groupid).Scan(&tmpu,&tmpg)
 		if ingrouperr == sql.ErrNoRows {
 			log.WithFields(QueryFields(r, startTime)).Error("User not a member of this group.")
-			fmt.Fprintf(w,"{ \"ferry_error\": \"User not a member of this group.\" }")
+			if cKey != 0 {
+				fmt.Fprintf(w,"{ \"ferry_error\": \"User not a member of this group.\" }")
+			}
 			return	
 			
 		} else if ingrouperr != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + ingrouperr.Error())
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+			if cKey != 0 {
+				fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+			}
 			return
 		}
 		if unitid.Valid {
@@ -765,76 +758,61 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
                                    			where ac.unitid = $1 and uid = $2`, unitid, uid).Scan(&tmpc)
 			if inuniterr == sql.ErrNoRows {
 				log.WithFields(QueryFields(r, startTime)).Error("User not a member of this unit.")
-				fmt.Fprintf(w,"{ \"ferry_error\": \"User not a member of this unit.\" }")
+				if cKey != 0 {
+					fmt.Fprintf(w,"{ \"ferry_error\": \"User not a member of this unit.\" }")
+				}
 				return	
 				
 			} else if inuniterr != nil {
 				log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + inuniterr.Error())
-				fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+				if cKey != 0 {
+					fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+				}
 				return
 			}		
 		}
 	}
-	//	query := fmt.Sprintf(`do $$
-//						  declare
-//								v_unitid int;
-//								v_uid bigint;
-//								v_groupid int;
-//
-//								c_fqan  constant text := %s;
-//								c_aname constant text := %s;
-//								c_uname constant text := %s;
-//								c_gname constant text := %s;
-//						  begin
-//								select unitid into v_unitid from affiliation_units where name = c_aname;
-//								select groupid into v_groupid from groups where name = c_gname and type = 'UnixGroup';
-//								select uid into v_uid from users where uname = c_uname;
-//                                                       	select (v_uid, v_groupid) in (select uid, groupid from user_group) into v_uid_groupid;
-//								select count(*) > 0 into v_uid_dnid from affiliation_unit_user_certificate as ac
-//								left join user_certificates as uc on ac.dnid = uc.dnid
-//								where ac.unitid = v_unitid and uid = v_uid;
-//								if v_unitid is null and c_aname is not null then
-//									raise 'affiliation unit does not exist';
-//								end if;
-//								if v_groupid is null and c_gname is not null then
-//									raise 'group does not exist';
-//								end if;
-//								if v_uid is null and c_uname is not null then
-//									raise 'user does not exist';
-//								end if;
-//
-//								insert into grid_fqan (fqan, unitid, mapped_user, mapped_group, last_updated)
-//								values (c_fqan, v_unitid, v_uid, v_groupid, NOW());
-//						  end $$;`, `'` + fqan + `'`, unit, mUser, `'` + mGroup + `'`)
-//
-//	re := regexp.MustCompile(`[\s\t\n]+`)
-//	log.WithFields(QueryFields(r, startTime)).Debug(re.ReplaceAllString(query, " "))
 
 	_, err = DBtx.Exec(`insert into grid_fqan (fqan, unitid, mapped_user, mapped_group, last_updated) values ($1, $2, $3, $4, NOW())`, fqan, unitid, uid, groupid)
 
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
+		if cKey != 0 {
+			fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
+		}
 	} else {
 		if strings.Contains(err.Error(), `user does not exist`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User doesn't exist.")
-			fmt.Fprintf(w,"{ \"ferry_error\": \"User doesn't exist.\" }")
+			if cKey != 0 {
+				fmt.Fprintf(w,"{ \"ferry_error\": \"User doesn't exist.\" }")
+			}
 		} else if strings.Contains(err.Error(), `group does not exist`) {
 			log.WithFields(QueryFields(r, startTime)).Error("Group doesn't exist.")
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Group doesn't exist.\" }")
+			if cKey != 0 {
+				fmt.Fprintf(w,"{ \"ferry_error\": \"Group doesn't exist.\" }")
+			}
 		} else if strings.Contains(err.Error(), `user does not belong to group`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not belong to group.")
-			fmt.Fprintf(w,"{ \"ferry_error\": \"User does not belong to group.\" }")
+			if cKey != 0 {
+				fmt.Fprintf(w,"{ \"ferry_error\": \"User does not belong to group.\" }")
+			}
 		} else if strings.Contains(err.Error(), `user does not belong to experiment`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not belong to experiment.")
-			fmt.Fprintf(w,"{ \"ferry_error\": \"User does not belong to experiment.\" }")
+			if cKey != 0 {
+				fmt.Fprintf(w,"{ \"ferry_error\": \"User does not belong to experiment.\" }")
+			}
 		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
 			log.WithFields(QueryFields(r, startTime)).Error("FQAN already exists.")
-			fmt.Fprintf(w,"{ \"ferry_error\": \"FQAN already exists.\" }")
+			if cKey != 0 {
+				fmt.Fprintf(w,"{ \"ferry_error\": \"FQAN already exists.\" }")
+			}
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			fmt.Fprintf(w,"{ \"ferry_error\": \"" + err.Error() + "\" }")
+			if cKey != 0 {
+				fmt.Fprintf(w,"{ \"ferry_error\": \"" + err.Error() + "\" }")
+			}
 		}
+		return
 	}
 	if cKey != 0 {
 		DBtx.Commit(cKey)

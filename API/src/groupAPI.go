@@ -158,26 +158,33 @@ func addGroupToUnit(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if strings.Contains(err.Error(), `Group and unit combination already in DB`) {
 			log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Group already belongs to unit.\" }")
+			if cKey != 0 {
+				fmt.Fprintf(w,"{ \"ferry_error\": \"Group already belongs to unit.\" }")
+			}
 		} else if strings.Contains(err.Error(), `unq_affiliation_unit_group_unitid_is_primary`) {
 			log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Unit can not have more then one primary group.\" }")
+			if cKey != 0 {
+				fmt.Fprintf(w,"{ \"ferry_error\": \"Unit can not have more then one primary group.\" }")
+			}
 		} else if strings.Contains(err.Error(), `invalid input value for enum`) {
 			log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid group type.\" }")
+			if cKey != 0 {
+				fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid group type.\" }")
+			}
 		} else {
-			w.WriteHeader(http.StatusNotFound)
 			log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB insert.\" }")		
+			if cKey != 0 {
+				fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB insert.\" }")
+			}
 		}
 		//				DBtx.Rollback(cKey) // COMMENT 2018-04-04
 		return
 	} else {
 		w.WriteHeader(http.StatusOK)
 		log.WithFields(QueryFields(r, startTime)).Print("Successfully added " + groupname + " to affiliation_unit_groups.")
-		fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
 		if cKey != 0 {
 			DBtx.Commit(cKey)
+			fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
 		}
 	}
 	return	

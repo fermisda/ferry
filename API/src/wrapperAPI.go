@@ -450,7 +450,6 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 		if !DBtx.Complete() {
 			// do some error handling and rollback 
 			DBtx.RollbackToSavepoint("crateFQAN_"+role)
-
 		}
 	}
 	

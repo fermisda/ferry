@@ -1111,13 +1111,15 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 		uniterr := DBtx.tx.QueryRow(`select unitid from affiliation_units where name=$1`,unitName).Scan(&unitID)
 		if uniterr != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error determining unitid for " + unitName + ": " + uniterr.Error())
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Error determining unitID for " + unitName + ". You cannot add a unit name that does not already exist in affiliation_units.\" }")
+			if cKey != 0 {
+				fmt.Fprintf(w,"{ \"ferry_error\": \"Error determining unitID for " + unitName + ". You cannot add a unit name that does not already exist in affiliation_units.\" }") 
+			}
 			return
 		}
 	}
 	
 	//now, make sure the the resource does not already exist. If it does, bail out. If it does not, do the insertion
-
+	
 	var compId int;	
 	checkerr := DBtx.tx.QueryRow(`select compid from  compute_resources where name=$1`,rName).Scan(&compId)
 	
@@ -1138,27 +1140,35 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
 			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in database transaction.\" }")
+			if cKey != 0 {
+				fmt.Fprintf(w,"{ \"ferry_error\": \"Error in database transaction.\" }")
+			}
 			return
 		} else {
 			if cKey != 0 {
-			DBtx.Commit(cKey)
-				}
+				DBtx.Commit(cKey)
+			}
 			log.WithFields(QueryFields(r, startTime)).Error("Added " + rName + " to compute_resources.")
-			fmt.Fprintf(w,"{ \"result\": \"success.\" }")
-			return		
+			if cKey != 0 {
+				fmt.Fprintf(w,"{ \"result\": \"success.\" }")
+			}
+			return
 		}
 		
 	case checkerr != nil:
 		//some other error, exit with status 500
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + checkerr.Error())
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in database check.\" }")
+		if cKey != 0 {
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in database check.\" }")
+		}
 		return
 	default:
 		// if we get here, it means that the unit already exists. Bail out.
 		log.WithFields(QueryFields(r, startTime)).Error("Resource " + rName + " already exists.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Resource already exists.\" }")
+		if cKey != 0 {
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Resource already exists.\" }")
+		}
 		return	
 	}
 
