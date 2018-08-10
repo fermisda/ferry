@@ -1078,6 +1078,9 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 	}
 	if homedir == "" ||  strings.ToUpper(strings.TrimSpace(homedir)) == "NULL" {
 		nullhomedir.Valid=false
+		log.WithFields(QueryFields(r, startTime)).Print("No defaulthomedir specified in http query.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No defaulthomedir specified.\" }")
+		return
 	} else {
 		nullhomedir.Valid = true
 		nullhomedir.String = homedir
@@ -1126,7 +1129,7 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 		//	addstr := fmt.Sprintf(`do declare cmpid bigint;  begin select compid into cmpid from compute_resources order by compid desc limit 1; if exists (select name from compute_resources where name=$1) then raise 'resource already exists'; else insert into compute_resources (compid, name, default_shell, unitid, last_updated, default_home_dir, type) values (cmpid+1,$1,$2,$3,NOW(),$4,$5); end if ;  end ;`)
 		var addstr string
 		if nullshell == "default" {
-			addstr = fmt.Sprintf(`insert into compute_resources (name, default_shell, unitid, last_updated, default_home_dir, type) values ($1, default, $2, NOW(), $3, $4)`)
+			addstr = fmt.Sprintf(`insert into compute_resources (name, default_shell, unitid, last_updated, default_home_dir, type) values ($1, '/sbin/nologin', $2, NOW(), $3, $4)`)
 			_, err = DBtx.Exec(addstr, rName, unitID, nullhomedir, rType)
 		} else {
 			addstr = fmt.Sprintf(`insert into compute_resources (name, default_shell, unitid, last_updated, default_home_dir, type) values ($1, $2, $3, NOW(), $4, $5)`)
