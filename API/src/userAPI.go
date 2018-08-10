@@ -864,11 +864,15 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case queryerr == sql.ErrNoRows:
 		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"User does not exist.\" }")
+		if cKey != 0 {
+			fmt.Fprintf(w,"{ \"ferry_error\": \"User does not exist.\" }")
+		}
 		return
 	case queryerr != nil:
 		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
+		if cKey != 0 {
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
+		}
 		return	
 	}
 
@@ -876,11 +880,15 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case queryerr == sql.ErrNoRows:
 		log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Affiliation unit does not exist.\" }")
+		if cKey != 0 {
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Affiliation unit does not exist.\" }")
+		}
 		return
 	case queryerr != nil:
 		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
+		if cKey != 0 {
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
+		}
 		return	
 	}
 	
@@ -888,11 +896,15 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case queryerr == sql.ErrNoRows:
 		log.WithFields(QueryFields(r, startTime)).Error("FQAN " + fqan + " not assigned to affiliation unit " + unitName + ".")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"FQAN not assigned to specified unit.\" }")
+		if cKey != 0 {
+			fmt.Fprintf(w,"{ \"ferry_error\": \"FQAN not assigned to specified unit.\" }")
+		}
 		return
 	case queryerr != nil:
 		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
+		if cKey != 0 {
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
+		}
 		return
 	}
 
@@ -904,12 +916,16 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 	case queryerr == nil:
 		if !hasCert {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-			fmt.Fprintf(w,"{ \"ferry_error\": \"User does not exist.\" }")
+			if cKey != 0 {
+				fmt.Fprintf(w,"{ \"ferry_error\": \"User does not exist.\" }")
+			}
 			return
 		}
 	default:
 		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
+		if cKey != 0 {
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
+		}
 		return	
 	}
 
@@ -922,10 +938,14 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 	} else {
 		if strings.Contains(err.Error(), `null value in column "uid" violates not-null constraint`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+			}
 		} else if strings.Contains(err.Error(), `null value in column "fqanid" violates not-null constraint`) {
 			log.WithFields(QueryFields(r, startTime)).Error("FQAN does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"FQAN does not exist.\" }")
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"FQAN does not exist.\" }")
+			}
 		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
 			if cKey != 0 {
 				log.WithFields(QueryFields(r, startTime)).Error("This association already exists.")
@@ -933,11 +953,13 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
+			}
 		}
 		return
 	}
-
+	
 	DBtx.Commit(cKey)
 }
 
@@ -1785,23 +1807,31 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 	queryerr := DBtx.tx.QueryRow(`select us.uid, uc.dnid from (select 1 as key, uid from users where uname=$1 for update) as us full outer join (select 1 as key, dnid from user_certificates where dn=$2 for update) as uc on uc.key=us.key`,uName, subjDN).Scan(&uid,&dnid)
 	if queryerr == sql.ErrNoRows {
 		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+		if cKey != 0 {
+			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+		}
 		return
 	} else if queryerr != nil {
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query. Check logs.\" }")
+		if cKey != 0 {
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query. Check logs.\" }")
+		}
 		return
 	}
 	if ! uid.Valid {
 		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+		if cKey != 0 {
+			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+		}
 		return		
 	}
 	if ! dnid.Valid {
 		_, err := DBtx.Exec(`insert into user_certificates (dn, uid, last_updated) values ($1, $2, NOW()) returning dnid`, subjDN, uid.Int64)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + err.Error())
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB insert. Check logs.\" }")
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB insert. Check logs.\" }")
+			}
 			DBtx.Rollback(cKey)
 			return
 		}
@@ -1809,7 +1839,9 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 		if unitName == "" {
 			// error about DN already existing
 			log.WithFields(QueryFields(r, startTime)).Error("DN already exists and is assigned to this affiliation unit.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"DN already exists and is assigned to this affiliation unit.\" }")
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"DN already exists and is assigned to this affiliation unit.\" }")
+			}
 			return	
 		}	
 	}
@@ -1822,10 +1854,14 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 			}
 		} else if strings.Contains(err.Error(), `null value in column "unitid"`) {
 			log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Affiliation unit does not exist.\" }")
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"Affiliation unit does not exist.\" }")
+			}
 		} else if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + err.Error())
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB insert. Check logs.\" }")
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB insert. Check logs.\" }")
+			}
 			return
 		}
 	} else {
@@ -2629,13 +2665,17 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 		_, ugerr := DBtx.Exec(`insert into user_group (uid, groupid) values ((select uid from users where uname=$1),(select groupid from groups where name=$2))`,uname,gName)
 		if ugerr != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error inserting into user_group: " + ugerr.Error())
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Error checking user_group table. Aborting.\" }")	
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"Error checking user_group table. Aborting.\" }")	
+			}
 			return	
 		}
 	} else if err != nil {
 		
 		log.WithFields(QueryFields(r, startTime)).Error("Error checking user_group: " + err.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")	
+		if cKey != 0 {
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+		}
 		return
 	}
 	
@@ -2656,7 +2696,9 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 		if checkerr == sql.ErrNoRows {
 			// the given compid does not exist in this case. Exit accordingly.	
 			log.WithFields(QueryFields(r, startTime)).Error("resource " + rName + " does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
+			}
 			return	
 		}
 		//check if the query specified a shell or directory value
@@ -2687,15 +2729,21 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + inserr.Error())
 			// now we also need to do a bunch of other checks here
 			if strings.Contains(inserr.Error(),"null value in column \"compid\"") {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
+				if cKey != 0 {
+					fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
+				}
 				return	
 				
 			} else if strings.Contains(inserr.Error(),"null value in column \"uid\"") {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+				if cKey != 0 {
+					fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+				}
 				return	
 			} else {
 				w.WriteHeader(http.StatusNotFound)
-				fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB insert.\" }")
+				if cKey != 0 {
+					fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB insert.\" }")
+				}
 				return		
 			}
 		} else {
@@ -2704,7 +2752,9 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 		
 	case err != nil:
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error()) 
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+		if cKey != 0 {
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+		}
 		return		
 		
 	default: // OK, we already have this user/group/resource combo. We just need to check if the call is trying to change the shell or home dir. If neither option was provided, that implies we're just keeping what is already there, so just log that nothing is changing and return success.
@@ -2720,11 +2770,13 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 			_, moderr := DBtx.Exec(`update compute_access set shell=$1,home_dir=$2,last_updated=NOW() where uid=$3 and compid=$4`,defShell,defhome,uid,compid)
 			if moderr != nil {
 				log.WithFields(QueryFields(r, startTime)).Error("Error in DB update: " + err.Error()) 
-				fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB update.\" }")
+				if cKey != 0 {
+					fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB update.\" }")
+				}
 				return		
 			} else {
 				
-				log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully updated (%s,%s,%s,%s) in compute_access.",rName, uname, defShell, defhome))					
+				log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully updated (%s,%s,%s,%s) in compute_access.",rName, uname, defShell, defhome))			
 			}
 		}
 		
@@ -2754,7 +2806,9 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 			if uperr != nil {	
 				
 				log.WithFields(QueryFields(r, startTime)).Error("Error update is_primary field in existing DB entries: " + uperr.Error())	
-				fmt.Fprintf(w, "{ \"ferry_error\": \"Error updating is_primary value for pre-existing compute_access_group entries. See ferry log.\" }")
+				if cKey != 0 {
+					fmt.Fprintf(w, "{ \"ferry_error\": \"Error updating is_primary value for pre-existing compute_access_group entries. See ferry log.\" }")
+				}
 				return
 			}
 		}
@@ -2764,17 +2818,25 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + inserr.Error())
 			// now we also need to do a bunch of other checks here
 			if strings.Contains(inserr.Error(),"null value in column \"compid\"") {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
+				if cKey != 0 {
+					fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
+				}
 				return	
 				
 			} else if strings.Contains(inserr.Error(),"null value in column \"uid\"") {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+				if cKey != 0 {
+					fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+				}
 				return	
 			} else if strings.Contains(inserr.Error(),"null value in column \"groupid\"") {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"Group does not exist.\" }")
+				if cKey != 0 {
+					fmt.Fprintf(w, "{ \"ferry_error\": \"Group does not exist.\" }")
+				}
 				return		
 			} else {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB insert.\" }")
+				if cKey != 0 {
+					fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB insert.\" }")
+				}
 				return		
 			}
 			
@@ -2784,7 +2846,9 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 		
 	case err != nil:
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error()) 
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+		if cKey != 0 {
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+			}
 		return		
 		
 	default: // OK, we already have this user/group/resource combo. We just need to check if the call is trying to change is_primary from what it is. If is_primary was not provided, that implies we're just keeping what is already there, so just log that nothing is changing and return success.
@@ -2807,7 +2871,9 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 					_, moderr := DBtx.Exec(`update compute_access_group set is_primary=false,last_updated=NOW() where groupid != $1 and uid=$2 and compid=$3`,grpid,uid,compid)
 					if moderr != nil {
 						log.WithFields(QueryFields(r, startTime)).Error("Error in DB update: " + err.Error()) 
-						fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB update.\" }")
+						if cKey != 0 {
+							fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB update.\" }")
+							}
 						return		
 					} else {
 						
@@ -2816,7 +2882,9 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 					_, moderr = DBtx.Exec(`update compute_access_group set is_primary=$1,last_updated=NOW() where groupid=$2 and uid=$3 and compid=$4`,cagPrimary,grpid,uid,compid)
 					if moderr != nil {
 						log.WithFields(QueryFields(r, startTime)).Error("Error in DB update: " + err.Error()) 
-						fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB update.\" }")
+						if cKey != 0 {
+							fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB update.\" }")
+						}
 						return		
 					} else {
 						
