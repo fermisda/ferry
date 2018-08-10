@@ -853,8 +853,14 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	defer DBtx.Rollback(cKey)
+
 	var uid, unitid, fqanid int
-	queryerr := DBptr.QueryRow(`select uid from users where uname=$1 for update`, uName).Scan(&uid)
+	queryerr := DBtx.QueryRow(`select uid from users where uname=$1 for update`, uName).Scan(&uid)
 	switch {
 	case queryerr == sql.ErrNoRows:
 		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
@@ -866,7 +872,7 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 		return	
 	}
 
-	queryerr = DBptr.QueryRow(`select unitid from affiliation_units where name=$1 for update`, unitName).Scan(&unitid)
+	queryerr = DBtx.QueryRow(`select unitid from affiliation_units where name=$1 for update`, unitName).Scan(&unitid)
 	switch {
 	case queryerr == sql.ErrNoRows:
 		log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
@@ -878,7 +884,7 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 		return	
 	}
 	
-	queryerr = DBptr.QueryRow(`select fqanid from grid_fqan as gf join affiliation_units as au on gf.unitid=au.unitid where au.name=$1 and gf.fqan=$2`,unitName, fqan).Scan(&fqanid)
+	queryerr = DBtx.QueryRow(`select fqanid from grid_fqan as gf join affiliation_units as au on gf.unitid=au.unitid where au.name=$1 and gf.fqan=$2`,unitName, fqan).Scan(&fqanid)
 	switch {
 	case queryerr == sql.ErrNoRows:
 		log.WithFields(QueryFields(r, startTime)).Error("FQAN " + fqan + " not assigned to affiliation unit " + unitName + ".")
@@ -891,7 +897,7 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var hasCert bool
-	queryerr = DBptr.QueryRow(`select count(*) > 0 from affiliation_unit_user_certificate as ac
+	queryerr = DBtx.QueryRow(`select count(*) > 0 from affiliation_unit_user_certificate as ac
 							   join user_certificates as uc on ac.dnid = uc.dnid
 							   where uid = $1 and unitid = $2`, uid, unitid).Scan(&hasCert)
 	switch {
@@ -906,12 +912,6 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
 		return	
 	}
-	
-	DBtx, cKey, err := LoadTransaction(r, DBptr)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	defer DBtx.Rollback(cKey)
 
 	_, err = DBtx.Exec(`insert into grid_access (uid, fqanid, is_superuser, is_banned, last_updated) values ($1, $2, false, false, NOW())`, uid, fqanid)
 	if err == nil {
