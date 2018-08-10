@@ -724,6 +724,20 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// check if the fqan and unit combo is already in the DB. Return an error if so advising the caller to use setFQANMappings instead
+	var tmpfqanid int
+	queryerr = DBtx.tx.QueryRow(`select fqanid from grid_fqan where unitid=$1 and fqan=$2`, unitid, fqan).Scan(&tmpfqanid) 
+	if queryerr != nil && queryerr != sql.ErrNoRows {
+		log.WithFields(QueryFields(r, startTime)).Error("Query error: unable to verify whether FQAN/unit combo already in DB." + queryerr.Error())
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Unable to verify whether FQAN/unit combo already in DB. Will not proceed.\" }")
+		return
+	} else if queryerr == nil {
+		// if the error is nil, then it DID find the combo alreayd, and so we should exit.
+		log.WithFields(QueryFields(r, startTime)).Error("Specified FQAN already associated with specified unit. Check specified values. Use setFQANMappings to modify an existing entry.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Specified FQAN already associated with this unit. Use setFQANMappings to modify an existing entry.\" }")
+		return		
+	}
+	
 	// Make sure that the user is actually in the unit and group in question, if we provided a user
 	var tmpu,tmpg int
 	if uid.Valid {
@@ -813,6 +827,7 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w,"{ \"ferry_error\": \"FQAN already exists.\" }")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			fmt.Fprintf(w,"{ \"ferry_error\": \"" + err.Error() + "\" }")
 		}
 	}
 	if cKey != 0 {

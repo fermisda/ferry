@@ -1026,36 +1026,61 @@ func setUserShell(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	
+	var uid, unitid sql.NullInt64
+
+	queryerr := DBptr.QueryRow(`select uid, unitid from (select 1 as key, uid from users where uname = $1) as u full outer join (select 1 as key, unitid from affiliation_units au where au.name = $2 ) as aut on u.key=aut.key`).Scan(&uid,&unitid)
+	if queryerr == sql.ErrNoRows {
+		log.WithFields(QueryFields(r, startTime)).Error("User and unit do not exist.")	
+		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not have access to this resource.\" }")
+		return
+	}
+	if ! uid.Valid {
+		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+	}
+	if ! unitid.Valid {
+		log.WithFields(QueryFields(r, startTime)).Error("Unit does not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Unit does not exist.\" }")
+	}
+	queryerr = DBptr.QueryRow(`select uid, unitid from compute_access ca left join compute_resources cr on ca.compid=cr.compid where ca.uid=$1) and unitid=(select unitid from affiliation_units au where au.name = $2 )`, uName, aName).Scan(&uid,&unitid)
+	if queryerr == sql.ErrNoRows {
+		log.WithFields(QueryFields(r, startTime)).Error("User does not have access to this compute resource.")	
+		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not have access to this resource.\" }")
+	}
+	
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 	defer DBtx.Rollback(cKey)
 
-	_, err = DBtx.Exec(fmt.Sprintf(`do $$
-										declare cUnitName constant text := '%s';
-										declare cUserName constant text := '%s';
-										declare cShell    constant text := '%s';
-
-										declare vUid int;
-										declare vUnitid int;
-									begin
-										select uid into vUid from users where uname = cUserName;
-										select unitid into vUnitid from affiliation_units where name = cUnitName;
-
-										if vUid is null then raise 'User does not exist.'; end if;
-										if vUnitid is null then raise 'Experiment does not exist.'; end if;
-										
-										if (vUid, vUnitid) not in
-										(select uid, unitid from compute_access as ca left join compute_resources as cr on ca.compid = cr.compid)
-										then raise 'User does not have access to this resource.';
-										end if;
-
-										update compute_access set shell = cShell, last_updated = NOW()
-										where uid = vUid and compid in (
-											select compid from compute_resources where unitid = vUnitid
-										);
-									end $$;`, aName, uName, shell))
+//	_, err = DBtx.Exec(fmt.Sprintf(`do $$
+//										declare cUnitName constant text := '%s';
+//										declare cUserName constant text := '%s';
+//										declare cShell    constant text := '%s';
+//
+//										declare vUid int;
+//										declare vUnitid int;
+//									begin
+//										select uid into vUid from users where uname = cUserName;
+//										select unitid into vUnitid from affiliation_units where name = cUnitName;
+//
+//										if vUid is null then raise 'User does not exist.'; end if;
+//										if vUnitid is null then raise 'Experiment does not exist.'; end if;
+//										
+//										if (vUid, vUnitid) not in
+//										(select uid, unitid from compute_access as ca left join compute_resources as cr on ca.compid = cr.compid)
+//										then raise 'User does not have access to this resource.';
+//										end if;
+//
+//										update compute_access set shell = cShell, last_updated = NOW()
+//										where uid = vUid and compid in (
+//											select compid from compute_resources where unitid = vUnitid
+//										);
+//									end $$;`, aName, uName, shell))
+	_, err = DBtx.Exec(`update compute_access set shell = $1, last_updated = NOW()
+			    where uid = $2  and compid in (select compid from compute_resources where unitid = $3)`, shell, uid, unitid)
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
@@ -2601,9 +2626,18 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 			defShell.Valid = true
 			defShell.String = strings.TrimSpace(shell)
 		}
+		//if homedir was provided, use it exactly
 		if homedir != "" {
 			defhome.Valid = true
 			defhome.String = strings.TrimSpace(homedir)
+		} else {
+			// it was not provided, so we are going to assume the home dir is default_home_dir/username.
+			// If default_home_dir is /nashome, we will do /nashome/first letter of username/username
+			if defhome.String == "/nashome" || defhome.String == "/nashome/" {
+				defhome. Valid = true
+				defhome.String = "/nashome/" + uname[0:1]
+			} 
+			defhome.String = defhome.String + "/" + uname
 		}
 		// now, do the actual insert
 		

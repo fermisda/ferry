@@ -74,7 +74,12 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 	key, err := DBtx.Start(DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error("Error starting database transaction: " + err.Error())
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
+		inputErr = append(inputErr, jsonerror{"Error starting database transaction." })
+		jsonout, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err)
+		}
+		fmt.Fprintf(w, string(jsonout))
 		return
 	}
 	defer DBtx.Rollback(key)
@@ -84,10 +89,9 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 	var fullName string
 	var valid bool
 
-	rows, err := DBtx.Query("select full_name, status from users where uname = $1;", uName)
+	rows, err := DBtx.Query("select full_name, status from users where uname = $1", uName)
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
@@ -143,14 +147,14 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 		R.URL.RawQuery = q.Encode()
 
 		DBtx.Continue()
-		DBtx.Savepoint("setUserExperimentFQAN")
+		DBtx.Savepoint("setUserExperimentFQAN_" + fqan)
 		setUserExperimentFQAN(w, R)
 		if !DBtx.Complete() {
 			if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") {
 				log.WithFields(QueryFields(r, startTime)).Error("Failed to set FQAN to user.")
 				return	
 			}
-			DBtx.RollbackToSavepoint("setUserExperimentFQAN")
+			DBtx.RollbackToSavepoint("setUserExperimentFQAN_" + fqan)
 			duplicateCount ++
 		}
 	}
@@ -301,6 +305,7 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 	
 	unitName := strings.TrimSpace(q.Get("unitname"))
 	voms_url := strings.TrimSpace(q.Get("voms_url"))
+	homedir := strings.TrimSpace(q.Get("defaulthomedir"))
 	standalone := strings.TrimSpace(q.Get("standalone")) // it is a standalone VO, i.e. not a subgroup of the Fermilab VO.
 	saVO, parserr := strconv.ParseBool(standalone)
 	if standalone == "" {
@@ -320,7 +325,10 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No unitname specified."})	
 	}
-
+	//Set the default home directory to /nashome if it was not provided.
+	if homedir == "" {
+		homedir = "/nashome"
+	}
 	authorized,authout := authorize(r)
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -377,11 +385,11 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 		}
 
 	//OK, we made the unit. Now, create the compute resource. By default its name is the same as the unit name.
-	q.Set("unitname",unitName)
-	q.Set("resourcename",unitName)
+	q.Set("unitname", unitName)
+	q.Set("resourcename", unitName)
 	q.Set("type", "Interactive")
 	q.Set("default_shell", "/bin/bash")
-	q.Set("default_homedir","/nashome")
+	q.Set("defaulthomedir", homedir)
 	
 	R.URL.RawQuery = q.Encode()
 	DBtx.Savepoint("createComputeResource")
@@ -430,6 +438,11 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 		}
 		q.Set("fqan",fqan)
 		q.Set("mapped_group",unitName)
+		if role == "Production" {
+			q.Set("mapped_user", unitName + "pro")
+		} else {
+			q.Set("mapped_user","")
+		}
 		R.URL.RawQuery = q.Encode()
 		DBtx.Continue()
 		DBtx.Savepoint("createFQAN_" + role)
