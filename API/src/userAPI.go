@@ -1303,7 +1303,7 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 
 	q := r.URL.Query()
 	quota := strings.TrimSpace(q.Get("quota"))
-	uName := strings.TrimSpace(q.Get("accountname"))
+	uName := strings.TrimSpace(q.Get("username"))
 	unitName := strings.TrimSpace(q.Get("unitname"))
 	unit := strings.TrimSpace(q.Get("unit"))
 	rName := strings.TrimSpace(strings.ToUpper(q.Get("resourcename")))
@@ -1354,6 +1354,11 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	if unitName == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No affiliation unit given.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname provided.\" }")
+		return
+	}
+	if unit == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No unit given.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No unit provided.\" }")
 		return
 	}
 
@@ -1417,6 +1422,7 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	if ! vSid.Valid {
 		log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
+		return
 	} 
 	
 	var(
