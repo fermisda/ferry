@@ -56,3 +56,7 @@ dn_whitelist:
  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Dave Dykstra/CN=UID:dwd
  - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=fermicloud033.fnal.gov
  - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=vomsdev2.fnal.gov
+ - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=vomsdev1.fnal.gov
+ - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=vomsitbgpvm01.fnal.gov
+ - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=voms1.fnal.gov
+ - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=voms2.fnal.gov
