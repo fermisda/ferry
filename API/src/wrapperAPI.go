@@ -202,16 +202,39 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 	R.URL.RawQuery = q.Encode()
 
 	DBtx.Continue()
-	DBtx.Savepoint("setUserAccessToComputeResource")
+	DBtx.Savepoint("setUserAccessToComputeResource_" + compResource)
 	setUserAccessToComputeResource(w, R)
 	if !DBtx.Complete() {
 		if !strings.Contains(DBtx.Error().Error(), "The request already exists in the database.") {
 			log.WithFields(QueryFields(r, startTime)).Error("addUserToGroup failed")
 			return
 		}
-		DBtx.RollbackToSavepoint("setUserAccessToComputeResource")
+		DBtx.RollbackToSavepoint("setUserAccessToComputeResource_" + compResource)
 		duplicateCount ++
 	}
+	
+	// now we need to do the storage resources. Comment out for now 20180813, until we figure out how to do it.
+	
+	
+//	rows, err = DBtx.Query(`select sr.name from storage_resources as cr
+//							 left join affiliation_units au on sr.unitid = au.unitid
+//							 where au.name = $1;`, unit)
+//	if err != nil {
+//		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+//		w.WriteHeader(http.StatusNotFound)
+//		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+//		return
+//	}
+//	
+//	if !rows.Next() {
+//		log.WithFields(QueryFields(r, startTime)).Error("Compute resource not found.")
+//		fmt.Fprintf(w, "{ \"ferry_error\": \"Compute resource not found.\" }")
+//		return
+//	}
+//	rows.Scan(&compResource)
+//	rows.Close()
+//	
+
 
 	if duplicateCount == 4 {
 		fmt.Fprintf(w, "{ \"ferry_error\": \"User already belongs to the experiment.\" }")
