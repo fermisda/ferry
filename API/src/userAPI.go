@@ -657,19 +657,29 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 	} else {
 		if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User already belongs to this group.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"User already belongs to this group.\" }")
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"User already belongs to this group.\" }")
+			}
 		} else if strings.Contains(err.Error(), `null value in column "uid" violates not-null constraint`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+			}
 		} else if strings.Contains(err.Error(), `null value in column "groupid" violates not-null constraint`) {
 			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Group does not exist.\" }")
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"Group does not exist.\" }")
+			}
 		} else if strings.Contains(err.Error(), `invalid input value for enum`) {
 			log.WithFields(QueryFields(r, startTime)).Error("Invalid group type.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid group type.\" }")
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid group type.\" }")
+			}
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
+			}
 		}
 	}
 	if cKey != 0 {
