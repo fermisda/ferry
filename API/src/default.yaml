@@ -1,5 +1,4 @@
 log:
-  file: ferry.log
   level: info
 
 database:
@@ -7,7 +6,7 @@ database:
   port: 5432
   name: ferry
   timeout: 60
-  sslmode: verify-full 
+  sslmode: disable 
   certificate: /etc/grid-security/certificates/cilogon-osg.pem
 
 server:
