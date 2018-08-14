@@ -259,7 +259,7 @@ def fetch_ferry():
         jPasswd = json.loads(urllib.request.urlopen(url, context=ferryContext).read().decode())
         jPasswd = list(jPasswd.values())[0] # get first affiliation unit
         if resource not in jPasswd["resources"]:
-            logging.debug("Resorce %s does not exist.") % resource
+            logging.debug("Resorce %s does not exist." % resource)
             continue
         jPasswd = jPasswd["resources"][resource]
         for access in jPasswd:

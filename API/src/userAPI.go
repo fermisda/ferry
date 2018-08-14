@@ -2786,6 +2786,7 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"The request already exists in the database.\" }")
 			}
 			DBtx.Report("The request already exists in the database.")
+			return
 		} else {
 			_, moderr := DBtx.Exec(`update compute_access set shell=$1,home_dir=$2,last_updated=NOW() where uid=$3 and compid=$4`,defShell,defhome,uid,compid)
 			if moderr != nil {
