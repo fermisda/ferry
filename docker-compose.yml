@@ -6,6 +6,8 @@ services:
     - FERRY_DB_USER=${FERRY_DB_USER}
     - FERRY_DB_PASS=${FERRY_DB_PASS}
     - FERRY_DB_HOST=${FERRY_DB_HOST}
+    - FERRY_DB_NAME=${FERRY_DB_NAME}
+    - FERRY_DB_PORT=${FERRY_DB_PORT}
     volumes:
     - ~/certs/ferry_cert.pem:/home/ferry/.cert/hostcert.pem
     - ~/certs/ferry_key.pem:/home/ferry/.cert/hostkey.pem
