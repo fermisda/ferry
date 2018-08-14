@@ -4,6 +4,7 @@ log:
 
 database:
   host: fermicloud051.fnal.gov
+  port: 5432
   name: ferry
   timeout: 60
   sslmode: verify-full 

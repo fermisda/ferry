@@ -120,8 +120,20 @@ func main() {
 	if dbPass == nil {
 		dbPass = dbConfig["password"]
 	}
-	connString := fmt.Sprintf("user=%s password=%s host=%s dbname=%s connect_timeout=%s sslmode=%s sslrootcert=%s",
-		dbUser, dbPass, dbConfig["host"], dbConfig["name"],
+	dbHost := viper.Get("db_host")
+	if dbHost == nil {
+		dbHost = dbConfig["host"]
+	}
+	dbName := viper.Get("db_name")
+	if dbName == nil {
+		dbName = dbConfig["name"]
+	}
+	dbPort := viper.Get("db_port")
+	if dbPort == nil {
+		dbPort = dbConfig["port"]
+	}
+	connString := fmt.Sprintf("user=%s password=%s host=%s port=%s dbname=%s connect_timeout=%s sslmode=%s sslrootcert=%s",
+		dbUser, dbPass, dbHost, dbPort, dbName,
 		dbConfig["timeout"], dbConfig["sslmode"], dbConfig["certificate"])
 	Mydb, err := sql.Open("postgres", connString)
 	if err != nil {
