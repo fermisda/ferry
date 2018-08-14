@@ -709,6 +709,7 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 	}
 	if groupid.Valid == false {
 		log.WithFields(QueryFields(r, startTime)).Error("Specified mapped_group does not exist.")
+		DBtx.Report("Specified mapped_group does not exist.")
 		if cKey != 0 {
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Specified mapped_group does not exist.\" }")
 		}
@@ -722,6 +723,8 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error("Query error: unable to verify whether FQAN/unit combo already in DB." + queryerr.Error())
 		if cKey != 0 {
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Unable to verify whether FQAN/unit combo already in DB. Will not proceed.\" }")
+		} else {
+			DBtx.Report("Unable to verify whether FQAN/unit combo already in DB. Will not proceed.")
 		}
 		return
 	} else if queryerr == nil {
@@ -730,6 +733,7 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 		if cKey != 0 {
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Specified FQAN already associated with this unit. Use setFQANMappings to modify an existing entry.\" }")
 		}
+		DBtx.Report("Specified FQAN already associated with specified unit. Check specified values. Use setFQANMappings to modify an existing entry.")
 		return		
 	}
 	
@@ -742,6 +746,7 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 			if cKey != 0 {
 				fmt.Fprintf(w,"{ \"ferry_error\": \"User not a member of this group.\" }")
 			}
+			DBtx.Report("User not a member of this group.")
 			return	
 			
 		} else if ingrouperr != nil {
@@ -760,6 +765,8 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 				log.WithFields(QueryFields(r, startTime)).Error("User not a member of this unit.")
 				if cKey != 0 {
 					fmt.Fprintf(w,"{ \"ferry_error\": \"User not a member of this unit.\" }")
+				} else {
+					DBtx.Report("User not a member of this unit.")
 				}
 				return	
 				

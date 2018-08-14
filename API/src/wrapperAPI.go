@@ -86,6 +86,16 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 	defer DBtx.Rollback(key)
 
 	uName := strings.TrimSpace(q.Get("username"))
+	if uName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No username specified.")
+		inputErr = append(inputErr, jsonerror{"No username specified." })
+		jsonout, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err)
+		}
+		fmt.Fprintf(w, string(jsonout))
+		return	
+	}
 	dnTemplate := "/DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=%s/CN=UID:%s"
 	var fullName string
 	var valid bool
@@ -151,7 +161,7 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 		q.Set("fqan", fullFqan)
 		R.URL.RawQuery = q.Encode()
 
-		DBtx.Continue()
+//		DBtx.Continue()
 		DBtx.Savepoint("setUserExperimentFQAN_" + fqan)
 		setUserExperimentFQAN(w, R)
 		if !DBtx.Complete() {
@@ -194,8 +204,8 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !rows.Next() {
-		log.WithFields(QueryFields(r, startTime)).Error("Primary group not found.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Primary group not found.\" }")
+		log.WithFields(QueryFields(r, startTime)).Error("Primary group not found for this unit.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Primary group not found for this unit.\" }")
 		return
 	}
 	rows.Scan(&compGroup)
@@ -206,7 +216,7 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 	q.Set("is_primary", "true")
 	R.URL.RawQuery = q.Encode()
 
-	DBtx.Continue()
+//	DBtx.Continue()
 	DBtx.Savepoint("setUserAccessToComputeResource_" + compResource)
 	setUserAccessToComputeResource(w, R)
 	if !DBtx.Complete() {
@@ -243,6 +253,7 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 				srunit.Valid = true
 				srunit.String = "B" // if not default unit, set a default of bytes
 			}
+			
 			q.Set("resourcename", srname.String)
 			q.Set("path", srpath.String + "/" + uName)
 			q.Set("isGroup", "false")
@@ -425,6 +436,7 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 		// ERROR HANDLING AND ROLLBACK		
 		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") {
 			log.WithFields(QueryFields(r, startTime)).Error("Unit already exists.")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in createAffiliationUnit: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
 			return
 		}
 		DBtx.RollbackToSavepoint("createAffiliationUnit")
@@ -447,6 +459,7 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 	if !DBtx.Complete() {
 		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") {
 			log.WithFields(QueryFields(r, startTime)).Error("createComputeResource failed.")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in createComputeResource: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
 			return
 		} else {
 			DBtx.RollbackToSavepoint("createComputeResource")
@@ -468,6 +481,7 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") && !strings.Contains(DBtx.Error().Error(), "Group and unit combination already in DB") {
 			log.WithFields(QueryFields(r, startTime)).Error("addGroupToUnit failed.")
 			log.WithFields(QueryFields(r, startTime)).Error("actual error: " + DBtx.Error().Error() )
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in addGroupToUnit: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
 			return
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error("actual error: " + DBtx.Error().Error() )
@@ -498,10 +512,15 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 		createFQAN(w, R)
 		if !DBtx.Complete() {
 			// do some error handling and rollback 
+			
+			if !strings.Contains(DBtx.Error().Error(), "Specified FQAN already associated") {
+				fmt.Fprintf(w,"{ \"ferry_error\": \"Error in createFQAN for " + role + ": " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
+				log.WithFields(QueryFields(r, startTime)).Error("Error in createFQAN for role " + role + ": " +  DBtx.Error().Error())
+				return
+			}
 			DBtx.RollbackToSavepoint("crateFQAN_"+role)
 		}
 	}
-	
 	
 	// If everything worked
 	DBtx.Commit(key)

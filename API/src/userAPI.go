@@ -415,36 +415,31 @@ func setSuperUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer DBtx.Rollback(cKey)
-//	_, err = DBtx.Exec(fmt.Sprintf(`do $$
-//										declare usid int;
-//										declare unid int;
-//										declare FqanList int;
-//									begin
-//										select uid into usid from users where uname = '%s';
-//										select unitid into unid from affiliation_units where name = '%s';
-//
-//										if usid is null then raise 'User does not exist'; end if;
-//										if unid is null then raise 'Unit does not exist'; end if;
-//
-//										update grid_access set is_superuser = true, last_updated = NOW()
-//                                        where uid = usid and fqanid in (select fqanid from grid_fqan where unitid = unid);
-//									end $$;`, uName, unitName))
-//
 
 	queryerr := DBtx.tx.QueryRow(`select uid, unitid from (select 1 as key, uid from users where uname=$1) as us full outer join (select 1 as key, unitid from affiliation_units au where au.name=$2) as aut on us.key=aut.key`, uName, unitName).Scan(&uid,&unitid)
 	
 	if queryerr == sql.ErrNoRows {
 		log.WithFields(QueryFields(r, startTime)).Error("User and unit names do not exist.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"User and unit names do not exist.\" }")
+		if cKey != 0 {
+			fmt.Fprintf(w, "{ \"ferry_error\": \"User and unit names do not exist.\" }")
+		} else {
+			DBtx.Report("User and unit names do not exist.")
+		}
 		return
 	} else if queryerr != nil {
 		log.WithFields(QueryFields(r, startTime)).Error("Error: " + queryerr.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
+		if cKey !=0 {
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
+		} 
 		return
 	}
 	if ! uid.Valid {
 		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+		if cKey != 0 {
+			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+		} else {
+			DBtx.Report("User does not exist.")	
+		}
 		return
 	} 
 	if ! unitid.Valid {
@@ -898,6 +893,8 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error("FQAN " + fqan + " not assigned to affiliation unit " + unitName + ".")
 		if cKey != 0 {
 			fmt.Fprintf(w,"{ \"ferry_error\": \"FQAN not assigned to specified unit.\" }")
+		} else {
+			DBtx.Report("FQAN not assigned to specified unit")	
 		}
 		return
 	case queryerr != nil:
@@ -945,6 +942,8 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 			log.WithFields(QueryFields(r, startTime)).Error("FQAN does not exist.")
 			if cKey != 0 {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"FQAN does not exist.\" }")
+			} else {
+				DBtx.Report("FQAN does not exist.")
 			}
 		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
 			if cKey != 0 {
@@ -1428,22 +1427,37 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	queryerr := DBtx.tx.QueryRow(querystr,rName, uName, unitName).Scan(&vSid,&vId,&vUnitid)
 	if queryerr == sql.ErrNoRows {
 		log.WithFields(QueryFields(r, startTime)).Error("Unit does not exist.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Unit does not exist.\" }")	
+		if cKey != 0 { 
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Unit does not exist.\" }")	
+		}
+		DBtx.Report("Unit does not exist.")
 		return
 	}
 	if ! vId.Valid {
 		if isGroup {
 			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Group does not exist.\" }")
+			if cKey !=0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"Group does not exist.\" }")
+			} else{
+				DBtx.Report("Group does not exist.")	
+			}
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")	
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")	
+			} else {
+				DBtx.Report("User does not exist.")	
+			}
 		}
 		return
 	} 
 	if ! vSid.Valid {
 		log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
+		if cKey != 0 {
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
+		} else {
+			DBtx.Report("Resource does not exist.")	
+		}
 		return
 	} 
 	

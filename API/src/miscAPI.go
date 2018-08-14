@@ -1099,7 +1099,6 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
-		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 		return
 	}
@@ -1114,6 +1113,7 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 			if cKey != 0 {
 				fmt.Fprintf(w,"{ \"ferry_error\": \"Error determining unitID for " + unitName + ". You cannot add a unit name that does not already exist in affiliation_units.\" }") 
 			}
+			DBtx.Report("Error determining unitID for " + unitName + ".")
 			return
 		}
 	}
