@@ -420,11 +420,11 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 		if voms_url != "" {
 			q.Set("voms_url",voms_url)
 		} else {
-			q.Set("voms_url","https://voms.fnal.gov:8443/vomses/" + unitName)
+			q.Set("voms_url","https://voms.fnal.gov:8443/voms/" + unitName)
 		}
 		
 	} else {
-		q.Set("voms_url","https://voms.fnal.gov:8443/vomses/fermilab/" + unitName)	
+		q.Set("voms_url","https://voms.fnal.gov:8443/voms/fermilab/" + unitName)	
 	}
 
 	R.URL.RawQuery = q.Encode()	
@@ -493,7 +493,7 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 	for _, role := range []string{"Analysis", "None", "Production"} {
 		//createFQAN
 		// if standalone VO, change the string a bit
-		fqan := "/Role=" + role
+		fqan := "/Role=" + role  + "/Capability=NULL"
 		if saVO {
 			fqan = "/" + unitName + fqan
 		} else {
