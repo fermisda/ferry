@@ -18,9 +18,7 @@ RUN rpm -Uvh --nosignature https://repo.opensciencegrid.org/osg/3.4/osg-3.4-el7-
 RUN yum -y --nogpgcheck install osg-ca-certs
 RUN yum -y --nogpgcheck install net-tools
 RUN yum -y --nogpgcheck install bind-utils
-WORKDIR /ferry
-COPY .env ./default.yaml 
-COPY API/myDN.list .
+WORKDIR /home/ferry
 COPY --from=builder /go/src/app/API/ferry_svc .
 
 RUN chown ferry.ferry *

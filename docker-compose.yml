@@ -2,9 +2,14 @@ version: "3"
 services:
   ferry:
     build: .
+    environment:
+    - FERRY_DB_USER=${FERRY_DB_USER}
+    - FERRY_DB_PASS=${FERRY_DB_PASS}
+    - FERRY_DB_HOST=${FERRY_DB_HOST}
     volumes:
-    - /home/ifmon/certs/ferry_cert.pem:/ferry/hostcert.pem
-    - /home/ifmon/certs/ferry_key.pem:/ferry/hostkey.pem
+    - ~/certs/ferry_cert.pem:/home/ferry/.cert/hostcert.pem
+    - ~/certs/ferry_key.pem:/home/ferry/.cert/hostkey.pem
+    - ./API/src/default.yaml:/home/ferry/default.yaml
     network_mode: "bridge"
     restart: always
     ports:
