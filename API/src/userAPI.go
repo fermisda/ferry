@@ -1369,7 +1369,7 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if rName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No resource type given.")
+		log.WithFields(QueryFields(r, startTime)).Error("No resource name given.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No resourcename provided.\" }")
 		return
 	}

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 	"strconv"
+	"database/sql"
 )
 
 func testWrapper(w http.ResponseWriter, r *http.Request) {
@@ -117,7 +118,12 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 	addCertificateDNToUser(w, R)
 	if !DBtx.Complete() {
 		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") {
-			log.WithFields(QueryFields(r, startTime)).Error("addCertificateDNToUser failed.")
+			log.WithFields(QueryFields(r, startTime)).Error("addCertificateDNToUser failed: DBtx.Error().Error()" )
+			if  strings.Contains(DBtx.Error().Error(), `null value in column "unitid" violates not-null constraint`) {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"Affiliation unit does not exist.\" }")					
+			} else {		
+				fmt.Fprintf(w, "{ \"ferry_error\": \"addCertificateDNToUser failed. Last DB error: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
+			}
 			return
 		}
 		DBtx.RollbackToSavepoint("addCertificateDNToUser")
@@ -129,7 +135,6 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 								 where fqan like $1 and lower(fqan) like lower($2);`, "%" + fqan + "%", "%" + unit + "%")
 		if err != nil {
 			defer log.WithFields(QueryFields(r, startTime)).Error(err)
-			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 			return
 		}
@@ -151,7 +156,8 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 		setUserExperimentFQAN(w, R)
 		if !DBtx.Complete() {
 			if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") {
-				log.WithFields(QueryFields(r, startTime)).Error("Failed to set FQAN to user.")
+				log.WithFields(QueryFields(r, startTime)).Error("Failed to set FQAN to user: " + DBtx.Error().Error())
+				fmt.Fprintf(w, "{ \"ferry_error\": \"setUserExperimentFQAN failed. Last DB error: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
 				return	
 			}
 			DBtx.RollbackToSavepoint("setUserExperimentFQAN_" + fqan)
@@ -183,7 +189,6 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 							where ag.is_primary and au.name = $1;`, unit)
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
@@ -206,7 +211,8 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 	setUserAccessToComputeResource(w, R)
 	if !DBtx.Complete() {
 		if !strings.Contains(DBtx.Error().Error(), "The request already exists in the database.") {
-			log.WithFields(QueryFields(r, startTime)).Error("addUserToGroup failed")
+			log.WithFields(QueryFields(r, startTime)).Error("addUserToGroup failed: " + DBtx.Error().Error() )
+			fmt.Fprintf(w, "{ \"ferry_error\": \"setUserAccessToComputeResource for " + compResource + " failed. Last DB error: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
 			return
 		}
 		DBtx.RollbackToSavepoint("setUserAccessToComputeResource_" + compResource)
@@ -215,27 +221,47 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 	
 	// now we need to do the storage resources. Comment out for now 20180813, until we figure out how to do it.
 	
+	var( 
+		storageid int64
+		srquota sql.NullInt64
+		srname, srpath, srunit sql.NullString
+	)
 	
-//	rows, err = DBtx.Query(`select sr.name from storage_resources as cr
-//							 left join affiliation_units au on sr.unitid = au.unitid
-//							 where au.name = $1;`, unit)
-//	if err != nil {
-//		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-//		w.WriteHeader(http.StatusNotFound)
-//		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-//		return
-//	}
-//	
-//	if !rows.Next() {
-//		log.WithFields(QueryFields(r, startTime)).Error("Compute resource not found.")
-//		fmt.Fprintf(w, "{ \"ferry_error\": \"Compute resource not found.\" }")
-//		return
-//	}
-//	rows.Scan(&compResource)
-//	rows.Close()
-//	
-
-
+	if unit == "cms" {
+		rows, err = DBtx.Query(`select sr.storageid, sr.name, sr.default_path, sr.default_quota, sr.default_unit from storage_resources as sr`)
+		if err != nil {
+			defer log.WithFields(QueryFields(r, startTime)).Error(err)
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+			return
+		}
+		defer rows.Close()	
+		for rows.Next() {
+			
+			
+			rows.Scan(&storageid, &srname, &srpath, &srquota, &srunit)
+			if ! srunit.Valid {
+				srunit.Valid = true
+				srunit.String = "B" // if not default unit, set a default of bytes
+			}
+			q.Set("resourcename", srname.String)
+			q.Set("path", srpath.String + "/" + uName)
+			q.Set("isGroup", "false")
+			q.Set("valid_until", "")
+			q.Set("quota", strconv.FormatInt(srquota.Int64, 10))
+			q.Set("unit", srunit.String)
+			R.URL.RawQuery = q.Encode()
+			DBtx.Savepoint("setUserStorageQuota_" + srname.String)
+			setUserStorageQuota(w,R)
+			if !DBtx.Complete() {
+				log.WithFields(QueryFields(r, startTime)).Error("setUserStorageQuota on  " + srname.String + "  failed: " + DBtx.Error().Error() )
+				fmt.Fprintf(w, "{ \"ferry_error\": \"setUserStorageQuota for " + srname.String + " failed. Last DB error: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
+				return
+			}	
+		}
+	}
+	//	
+	
+	
 	if duplicateCount == 4 {
 		fmt.Fprintf(w, "{ \"ferry_error\": \"User already belongs to the experiment.\" }")
 	} else {
