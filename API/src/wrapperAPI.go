@@ -165,7 +165,7 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 		DBtx.Savepoint("setUserExperimentFQAN_" + fqan)
 		setUserExperimentFQAN(w, R)
 		if !DBtx.Complete() {
-			if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") {
+			if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") && !strings.Contains(DBtx.Error().Error(), "FQAN not assigned to specified unit") {
 				log.WithFields(QueryFields(r, startTime)).Error("Failed to set FQAN to user: " + DBtx.Error().Error())
 				fmt.Fprintf(w, "{ \"ferry_error\": \"setUserExperimentFQAN failed. Last DB error: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
 				return	
@@ -503,11 +503,28 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 		q.Set("mapped_group",unitName)
 		if role == "Production" {
 			q.Set("mapped_user", unitName + "pro")
+			q.Set("is_leader", "false")
+			q.Set("username", unitName + "pro")
 		} else {
 			q.Set("mapped_user","")
 		}
 		R.URL.RawQuery = q.Encode()
-		DBtx.Continue()
+
+		//Production is a special case since we need a mapped user. We should check if experimentpro has been added to the relevant group already.
+		//We also skip CMS since it is another special case.
+
+		if role == "Production" && unitName != "cms" {
+			var tmpuid,tmpgid int
+			queryerr := DBtx.QueryRow(`select uid, groupid from user_group ug join groups g using (groupid) join users u using(uid) where u.uname=$1 and g.name=$2`,unitName + "pro", unitName).Scan(&tmpuid, &tmpgid)
+			if queryerr == sql.ErrNoRows {
+				DBtx.Savepoint("addUserToGroup_" + role)
+				addUserToGroup(w,R)
+				if !DBtx.Complete() {
+					log.WithFields(QueryFields(r, startTime)).Error("Error in addUserToGroup for " + unitName + "pro: " + DBtx.Error().Error())	
+				}
+			}
+		}
+		//		DBtx.Continue()
 		DBtx.Savepoint("createFQAN_" + role)
 		createFQAN(w, R)
 		if !DBtx.Complete() {
