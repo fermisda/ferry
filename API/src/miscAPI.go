@@ -11,6 +11,12 @@ import (
 	"strings"
 )
 
+// build parameters
+var (
+        release_ver  = "unknown"
+        build_date = "unknown"
+)
+
 func NotDoneYet(w http.ResponseWriter, r *http.Request, t time.Time) {
 	fmt.Fprintf(w, `{"ferry_error": "This function is not done yet!"}`)
 	log.WithFields(QueryFields(r, t)).Error("This function is not done yet!")
@@ -1597,6 +1603,6 @@ func getAllComputeResources(w http.ResponseWriter, r *http.Request) {
 
 func ping(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
+	fmt.Fprintf(w,"{ \"ferry_status\": \"success. %s %s\" }", release_ver, build_date)
 	return
 }
