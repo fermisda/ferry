@@ -16,3 +16,12 @@ services:
     restart: always
     ports:
     - "8443:8443"
+  postgres-exporter:
+    image: wrouesnel/postgres_exporter
+    network_mode: "bridge"
+    environment:
+    - DATA_SOURCE_URI=${FERRY_DB_HOST}:${FERRY_DB_PORT}/ferry_prd?sslmode=disable
+    - DATA_SOURCE_USER=${FERRY_DB_USER}
+    - DATA_SOURCE_PASS=${FERRY_DB_PASS}
+    ports:
+    - "9187:9187"
