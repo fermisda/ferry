@@ -1060,7 +1060,7 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 	rType := q.Get("type")
 	shell := q.Get("defaultshell")
 	homedir := q.Get("defaulthomedir")
-	var nullshell string
+
 	var nullhomedir sql.NullString
 	if rName == "" {
 		log.WithFields(QueryFields(r, startTime)).Print("No resource name specified in http query.")
@@ -1080,8 +1080,8 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 //		unitName = "NULL"
 //		}
 	if shell == "" || strings.ToUpper(strings.TrimSpace(shell)) == "NULL" {
-		nullshell = "default"
-	}
+		shell = "default"
+	} 
 	if homedir == "" ||  strings.ToUpper(strings.TrimSpace(homedir)) == "NULL" {
 		nullhomedir.Valid=false
 		log.WithFields(QueryFields(r, startTime)).Print("No defaulthomedir specified in http query.")
@@ -1136,12 +1136,12 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 		
 		//	addstr := fmt.Sprintf(`do declare cmpid bigint;  begin select compid into cmpid from compute_resources order by compid desc limit 1; if exists (select name from compute_resources where name=$1) then raise 'resource already exists'; else insert into compute_resources (compid, name, default_shell, unitid, last_updated, default_home_dir, type) values (cmpid+1,$1,$2,$3,NOW(),$4,$5); end if ;  end ;`)
 		var addstr string
-		if nullshell == "default" {
+		if shell == "default" {
 			addstr = fmt.Sprintf(`insert into compute_resources (name, default_shell, unitid, last_updated, default_home_dir, type) values ($1, '/sbin/nologin', $2, NOW(), $3, $4)`)
 			_, err = DBtx.Exec(addstr, rName, unitID, nullhomedir, rType)
 		} else {
 			addstr = fmt.Sprintf(`insert into compute_resources (name, default_shell, unitid, last_updated, default_home_dir, type) values ($1, $2, $3, NOW(), $4, $5)`)
-			_, err = DBtx.Exec(addstr, rName, nullshell, unitID, nullhomedir, rType)
+			_, err = DBtx.Exec(addstr, rName, shell, unitID, nullhomedir, rType)
 		}
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
@@ -1603,6 +1603,6 @@ func getAllComputeResources(w http.ResponseWriter, r *http.Request) {
 
 func ping(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	fmt.Fprintf(w,"{ \"ferry_status\": \"success. %s %s\" }", release_ver, build_date)
+	fmt.Fprintf(w,`[{ "ferry_status": "success."}, { "release_version" : "` + release_ver + `"}, {"build_date" : "` + build_date + `"}]`)
 	return
 }
