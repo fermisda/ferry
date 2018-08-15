@@ -151,8 +151,8 @@ resources:
        - {username: cmsgli, groupname: us_cms,  shell: /sbin/nologin, homedir: /home/cmsgli, is_primary: True}
        - {username: admxpro, groupname: admx,  shell: /sbin/nologin, homedir: /home/admxpro, is_primary: True}
        - {username: anniepro, groupname: annie,  shell: /sbin/nologin, homedir: /home/anniepro, is_primary: True}
-       - {username: argoneutpro, groupname: argoneut,  shell: /sbin/nologin, homedir: /home/argoneutpro, is_primary: True}
-       - {username: cdmspro, groupname: cdms,  shell: /sbin/nologin, homedir: /home/cdmspro, is_primary: True}
+       - {username: argoneutpro, groupname: t-962,  shell: /sbin/nologin, homedir: /home/argoneutpro, is_primary: True}
+       - {username: cdmspro, groupname: supercdms,  shell: /sbin/nologin, homedir: /home/cdmspro, is_primary: True}
        - {username: chipspro, groupname: chips,  shell: /sbin/nologin, homedir: /home/chipspro, is_primary: True}
        - {username: coupp, groupname: coupp,  shell: /sbin/nologin, homedir: /home/coupp, is_primary: True}
        - {username: darksidepro, groupname: darkside,  shell: /sbin/nologin, homedir: /home/darksidepro, is_primary: True}
@@ -161,21 +161,29 @@ resources:
        - {username: geniepro, groupname:  genie,  shell: /sbin/nologin, homedir: /home/geniepro, is_primary: True}
        - {username: gm2pro, groupname:  gm2,  shell: /sbin/nologin, homedir: /home/gm2pro, is_primary: True}
        - {username: icaruspro, groupname:  icarus,  shell: /sbin/nologin, homedir: /home/icaruspro, is_primary: True}
-       - {username: lariatpro, groupname:  lariat,  shell: /sbin/nologin, homedir: /home/lariatpro, is_primary: True}
+       - {username: lariatpro, groupname:  t-1034,  shell: /sbin/nologin, homedir: /home/lariatpro, is_primary: True}
+       - {username: lariatraw, groupname:  t-1034,  shell: /sbin/nologin, homedir: /home/lariatraw, is_primary: True}
        - {username: accelpro, groupname:  accel,  shell: /sbin/nologin, homedir: /home/accelpro, is_primary: True}
-       - {username: minervapro, groupname:  minerva,  shell: /sbin/nologin, homedir: /home/minervapro, is_primary: True}
-       - {username: minospro, groupname:  minos,  shell: /sbin/nologin, homedir: /home/minospro, is_primary: True}
+       - {username: minervapro, groupname:  e-938,  shell: /sbin/nologin, homedir: /home/minervapro, is_primary: True}
+       - {username: minervacal, groupname:  e-938,  shell: /sbin/nologin, homedir: /home/minervacal, is_primary: True}
+       - {username: minervadat, groupname:  e-938,  shell: /sbin/nologin, homedir: /home/minervadat, is_primary: True}
+       - {username: mnvonline, groupname:  e-938,  shell: /sbin/nologin, homedir: /home/mnvonline, is_primary: True}
+       - {username: minervasam, groupname:  e-938,  shell: /sbin/nologin, homedir: /home/minervasam, is_primary: True}
+       - {username: minospro, groupname:  e875,  shell: /sbin/nologin, homedir: /home/minospro, is_primary: True}
        - {username: mu2epro, groupname:  mu2e,  shell: /sbin/nologin, homedir: /home/mu2epro, is_primary: True}
        - {username: nextpro, groupname:  next,  shell: /sbin/nologin, homedir: /home/nextpro, is_primary: True}
        - {username: noblepro, groupname:  noble,  shell: /sbin/nologin, homedir: /home/noblepro, is_primary: True}
        - {username: novapro, groupname:  nova,  shell: /sbin/nologin, homedir: /home/novapro, is_primary: True}
+       - {username: novadaq, groupname:  nova,  shell: /sbin/nologin, homedir: /home/novadaq, is_primary: True}
+       - {username: novaraw, groupname:  nova,  shell: /sbin/nologin, homedir: /home/novaraw, is_primary: True}
        - {username: numixpro, groupname:  numix,  shell: /sbin/nologin, homedir: /home/numixpro, is_primary: True}
        - {username: sbndpro, groupname:  sbnd,  shell: /sbin/nologin, homedir: /home/sbndpro, is_primary: True}
-       - {username: seaquestpro, groupname:  seaquest,  shell: /sbin/nologin, homedir: /home/seaquestpro, is_primary: True}
+       - {username: sbndraw, groupname:  sbnd,  shell: /sbin/nologin, homedir: /home/sbndraw, is_primary: True}
+       - {username: seaquestpro, groupname:  e-906,  shell: /sbin/nologin, homedir: /home/seaquestpro, is_primary: True}
        - {username: uboonepro, groupname:  uboone,  shell: /sbin/nologin, homedir: /home/uboonepro, is_primary: True}
        - {username: fermipro, groupname:  fnalgrid,  shell: /sbin/nologin, homedir: /home/fermipro, is_primary: True}
        - {username: testpro, groupname:  fgtest,  shell: /sbin/nologin, homedir: /home/testpro, is_primary: True}
-       - {username: minbpro, groupname:  e898,  shell: /sbin/nologin, homedir: /home/minbpro, is_primary: True}
+       - {username: minbnpro, groupname:  e898,  shell: /sbin/nologin, homedir: /home/minbnpro, is_primary: True}
   - none:
      - addCertificateDNToUser:
        - {username: boyd, dn: /DC=org/DC=opensciencegrid/O=Open%20Science%20Grid/OU=Services/CN=pilot/gpfrontend01.fnal.gov, unitname: fermilab}
