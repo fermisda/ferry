@@ -699,7 +699,7 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 	defer DBtx.Rollback(cKey)
 
 	var uid, unitid, groupid sql.NullInt64
-	queryerr := DBtx.tx.QueryRow(`select unitid, uid, groupid from (select 1 as key, unitid from affiliation_units where name = $1) as au full outer join (select 1 as key, uid from users where uname=$2) as u on u.key = au.key right join (select 1 as key, groupid from groups where name=$3 and type = 'UnixGroup') as g on g.key=au.key`, unit, mUser, mGroup).Scan(&unitid, &uid, &groupid)
+	queryerr := DBtx.tx.QueryRow(`select (select unitid from affiliation_units where name = $1), (select uid from users where uname=$2), (select groupid from groups where name=$3 and type = 'UnixGroup')`, unit, mUser, mGroup).Scan(&unitid, &uid, &groupid)
 	if queryerr != nil && queryerr != sql.ErrNoRows {
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
 		if cKey != 0 {
@@ -712,6 +712,14 @@ func createFQAN(w http.ResponseWriter, r *http.Request) {
 		DBtx.Report("Specified mapped_group does not exist.")
 		if cKey != 0 {
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Specified mapped_group does not exist.\" }")
+		}
+		return
+	}
+	if uid.Valid == false && mUser != "" {
+		log.WithFields(QueryFields(r, startTime)).Error("Specified mapped_user does not exist.")
+		DBtx.Report("Specified mapped_user does not exist.")
+		if cKey != 0 {
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Specified mapped_user does not exist.\" }")
 		}
 		return
 	}
