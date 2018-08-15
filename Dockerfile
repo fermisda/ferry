@@ -8,7 +8,7 @@ RUN go get github.com/fsnotify/fsnotify
 RUN go get github.com/sirupsen/logrus
 RUN go get github.com/spf13/viper
 WORKDIR /go/src/app/API
-RUN go build -o ferry_svc src/*.go 
+RUN go build -ldflags "-X main.build_date=`date -u +%Y%m%d.%H%M%S` -X main.release_ver=`git describe --tags`" -o ferry_svc src/*.go 
 
 FROM centos
 RUN groupadd --gid 9102 ferry
