@@ -12,12 +12,12 @@ resources:
         unitname: cms
         defaultshell : /sbin/nologin
         defaulthomedir : /home
-     - createFQAN: 
-       - {fqan: "/cms/Role=pilot/Capability=NULL", mapped_user: cmsgli, mapped_group: us_cms}
-       - {fqan: "/cms/local/Role=pilot/Capability=NULL", mapped_user: cmslocal,mapped_group: us_cms}
      - setUserAccessToComputeResource:
        - {username: cmslocal, groupname: us_cms,  shell: /sbin/nologin, homedir: /home/cmslocal, is_primary: True}
        - {username: cmsgli, groupname: us_cms,  shell: /sbin/nologin, homedir: /home/cmsgli, is_primary: True}
+     - createFQAN: 
+       - {fqan: "/cms/Role=pilot/Capability=NULL", mapped_user: cmsgli, mapped_group: us_cms}
+       - {fqan: "/cms/local/Role=pilot/Capability=NULL", mapped_user: cmslocal,mapped_group: us_cms}
   - cmst1opp:
      - createComputeResource:
         type : Batch
@@ -25,46 +25,6 @@ resources:
         defaulthomedir : /home
      - addUserToGroup:
        - {groupname: osg, username: ligo, grouptype: UnixGroup}
-     - createFQAN:
-       - {fqan: "/cdf/Role=None/Capability=NULL", mapped_user: cdf, mapped_group: cdf}
-       - {fqan: "/fermilab/Role=pilot/Capability=NULL", mapped_user: fermigli, mapped_group: fnalgrid}
-       - {fqan: "/mis/*", mapped_user: mis, mapped_group: mis}
-       - {fqan: "/star/*", mapped_user: star, mapped_group: star}
-       - {fqan: "/dosar/*", mapped_user: dosar, mapped_group: dosar}
-       - {fqan: "/des/Role=Analysis/Capability=NULL", mapped_user: des, mapped_group: des}
-       - {fqan: "/des/production/Role=None/Capability=NULL", mapped_user: des, mapped_group: des}
-       - {fqan: "/GLOW/*", mapped_user: glow, mapped_group: glow}
-       - {fqan: "/nanohub/*", mapped_user: nanohub, mapped_group: nanohub}
-       - {fqan: "/geant4/*", mapped_user: geant4, mapped_group: geant4}
-       - {fqan: "/osg/ligo/*", mapped_user: ligo, mapped_group: osg}
-       - {fqan: "/osg/*", mapped_user: osg, mapped_group: osg}
-       - {fqan: "/atlas/*Role=production/Capability=*", mapped_user: usatlas1, mapped_group: atlas}
-       - {fqan: "/atlas/*Role=lcgadmin/Capability=*", mapped_user: usatlas2, mapped_group: atlas}
-       - {fqan: "/atlas/*Role=software/Capability=*", mapped_user: usatlas2, mapped_group: atlas}
-       - {fqan: "/atlas/*", mapped_user: usatlas3, mapped_group: atlas}
-       - {fqan: "/ops/*", mapped_user: ops, mapped_group: ops}
-       - {fqan: "/ilc/*", mapped_user: ilc, mapped_group: ilc}
-       - {fqan: "/SBGrid/*", mapped_user: sbgrid, mapped_group: sbgrid}
-       - {fqan: "/CIGI/*", mapped_user: cigi, mapped_group: cigi}
-       - {fqan: "/icecube/*", mapped_user: icecube, mapped_group: icecube}
-       - {fqan: "/Gluex/Role=None/Capability=NULL", mapped_user: gluex, mapped_group: gluex}
-       - {fqan: "/GridUNESP/Role=None/Capability=NULL", mapped_user: gridunesp, mapped_group: gridunesp}
-       - {fqan: "/hcc/Role=None/Capability=NULL", mapped_user: hcc, mapped_group: hcc}
-       - {fqan: "/belle/Role=None/Capability=NULL", mapped_user: belle, mapped_group: belle}
-       - {fqan: "/belle/Role=production/Capability=NULL", mapped_user: bellepro, mapped_group: belle}
-       - {fqan: "/suragrid/*", mapped_user: suragrid, mapped_group: suragrid}
-       - {fqan: "/dream/*", mapped_user: dream, mapped_group: dream}
-       - {fqan: "/lsst/*", mapped_user: lsst, mapped_group: lsst}
-       - {fqan: "/glast.org/Role=None/Capability=NULL", mapped_user: glast, mapped_group: glast}
-       - {fqan: "/enmr.eu/*", mapped_user: enmr, mapped_group: enmr}
-       - {fqan: "/vo.cta.in2p3.fr/*", mapped_user: cta, mapped_group: cta}
-       - {fqan: "/xenon.biggrid.nl/*", mapped_user: xenon, mapped_group: xenon}
-       - {fqan: "/snoplus.snolab.ca/*", mapped_user: snoplus, mapped_group: snoplus}
-       - {fqan: "/lz/*", mapped_user: lzvo, mapped_group: lz}
-       - {fqan: "/dune/Role=None/Capability=NULL", mapped_user: dune, mapped_group: dune}
-       - {fqan: "/dune/Role=Production/Capability=NULL", mapped_user: dunepro, mapped_group: dune}
-       - {fqan: "/dune/Role=Analysis/Capability=NULL", mapped_user: duneana, mapped_group: dune}
-       - {fqan: "/dune/Role=pilot/Capability=NULL", mapped_user: dunegli, mapped_group: dune}
      - setUserAccessToComputeResource:
        - {username: cdf, groupname: cdf, shell: /sbin/nologin, home_dir: /home/cdf, is_primary: True}
        - {username: fermigli, groupname: fnalgrid, shell: /sbin/nologin, home_dir: /home/fermigli, is_primary: True}
@@ -107,7 +67,46 @@ resources:
        - {username: dunepro, groupname: dune, shell: /sbin/nologin, home_dir: /home/dunepro, is_primary: True}
        - {username: duneana, groupname: dune, shell: /sbin/nologin, home_dir: /home/duneana, is_primary: True}
        - {username: dunegli, groupname: dune, shell: /sbin/nologin, home_dir: /home/dunegli, is_primary: True}
-
+     - createFQAN:
+       - {fqan: "/cdf/Role=None/Capability=NULL", mapped_user: cdf, mapped_group: cdf}
+       - {fqan: "/fermilab/Role=pilot/Capability=NULL", mapped_user: fermigli, mapped_group: fnalgrid}
+       - {fqan: "/mis/*", mapped_user: mis, mapped_group: mis}
+       - {fqan: "/star/*", mapped_user: star, mapped_group: star}
+       - {fqan: "/dosar/*", mapped_user: dosar, mapped_group: dosar}
+       - {fqan: "/des/Role=Analysis/Capability=NULL", mapped_user: des, mapped_group: des}
+       - {fqan: "/des/production/Role=None/Capability=NULL", mapped_user: des, mapped_group: des}
+       - {fqan: "/GLOW/*", mapped_user: glow, mapped_group: glow}
+       - {fqan: "/nanohub/*", mapped_user: nanohub, mapped_group: nanohub}
+       - {fqan: "/geant4/*", mapped_user: geant4, mapped_group: geant4}
+       - {fqan: "/osg/ligo/*", mapped_user: ligo, mapped_group: osg}
+       - {fqan: "/osg/*", mapped_user: osg, mapped_group: osg}
+       - {fqan: "/atlas/*Role=production/Capability=*", mapped_user: usatlas1, mapped_group: atlas}
+       - {fqan: "/atlas/*Role=lcgadmin/Capability=*", mapped_user: usatlas2, mapped_group: atlas}
+       - {fqan: "/atlas/*Role=software/Capability=*", mapped_user: usatlas2, mapped_group: atlas}
+       - {fqan: "/atlas/*", mapped_user: usatlas3, mapped_group: atlas}
+       - {fqan: "/ops/*", mapped_user: ops, mapped_group: ops}
+       - {fqan: "/ilc/*", mapped_user: ilc, mapped_group: ilc}
+       - {fqan: "/SBGrid/*", mapped_user: sbgrid, mapped_group: sbgrid}
+       - {fqan: "/CIGI/*", mapped_user: cigi, mapped_group: cigi}
+       - {fqan: "/icecube/*", mapped_user: icecube, mapped_group: icecube}
+       - {fqan: "/Gluex/Role=None/Capability=NULL", mapped_user: gluex, mapped_group: gluex}
+       - {fqan: "/GridUNESP/Role=None/Capability=NULL", mapped_user: gridunesp, mapped_group: gridunesp}
+       - {fqan: "/hcc/Role=None/Capability=NULL", mapped_user: hcc, mapped_group: hcc}
+       - {fqan: "/belle/Role=None/Capability=NULL", mapped_user: belle, mapped_group: belle}
+       - {fqan: "/belle/Role=production/Capability=NULL", mapped_user: bellepro, mapped_group: belle}
+       - {fqan: "/suragrid/*", mapped_user: suragrid, mapped_group: suragrid}
+       - {fqan: "/dream/*", mapped_user: dream, mapped_group: dream}
+       - {fqan: "/lsst/*", mapped_user: lsst, mapped_group: lsst}
+       - {fqan: "/glast.org/Role=None/Capability=NULL", mapped_user: glast, mapped_group: glast}
+       - {fqan: "/enmr.eu/*", mapped_user: enmr, mapped_group: enmr}
+       - {fqan: "/vo.cta.in2p3.fr/*", mapped_user: cta, mapped_group: cta}
+       - {fqan: "/xenon.biggrid.nl/*", mapped_user: xenon, mapped_group: xenon}
+       - {fqan: "/snoplus.snolab.ca/*", mapped_user: snoplus, mapped_group: snoplus}
+       - {fqan: "/lz/*", mapped_user: lzvo, mapped_group: lz}
+       - {fqan: "/dune/Role=None/Capability=NULL", mapped_user: dune, mapped_group: dune}
+       - {fqan: "/dune/Role=Production/Capability=NULL", mapped_user: dunepro, mapped_group: dune}
+       - {fqan: "/dune/Role=Analysis/Capability=NULL", mapped_user: duneana, mapped_group: dune}
+       - {fqan: "/dune/Role=pilot/Capability=NULL", mapped_user: dunegli, mapped_group: dune}
   - fermi_workers:
      - setUserAccessToComputeResource:
        - {username: cdf, groupname: cdf,shell: /sbin/nologin, home_dir: /home/cdf, is_primary: True}
