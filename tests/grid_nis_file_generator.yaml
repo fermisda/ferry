@@ -1,0 +1,14 @@
+ca_path : /etc/grid-security/certificates
+cert : /tmp/x509up_uXXX
+ferry_url : "https://ferry.fnal.gov:8443"
+
+actions:
+   - getPasswdFile:
+   - getGroupFile:
+   - getVORoleMapFile:
+     - cmst1
+     - cmst1opp
+     - fermi_workers
+   - getGridMapFile:
+     - lpcinteractive
+     - fermi_workers
