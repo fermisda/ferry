@@ -184,7 +184,7 @@ resources:
        - {username: fermipro, groupname:  fnalgrid,  shell: /sbin/nologin, homedir: /home/fermipro, is_primary: True}
        - {username: testpro, groupname:  fgtest,  shell: /sbin/nologin, homedir: /home/testpro, is_primary: True}
        - {username: minbnpro, groupname:  e898,  shell: /sbin/nologin, homedir: /home/minbnpro, is_primary: True}
-       - {username: desgw, groupname: des,  shell: /sbin/nologin, homedir: /home/des, is_primary: True}
+       - {username: desgw, groupname: des,  shell: /sbin/nologin, homedir: /home/desgw, is_primary: True}
   - none:
      - addCertificateDNToUser:
        - {username: boyd, dn: /DC=org/DC=opensciencegrid/O=Open%20Science%20Grid/OU=Services/CN=pilot/gpfrontend01.fnal.gov, unitname: fermilab}
