@@ -426,16 +426,20 @@ if __name__ == "__main__":
         logging.error("could not find configuration file")
         exit(1)
 
-    if config.has_section("log"):
-        logging.basicConfig(filename=config.get("log", "dir") + "/" + datetime.datetime.now().strftime("ferry_user_update.log"),
-                            level=getattr(logging, config.get("log", "level")),
-                            format="[%(asctime)s][%(levelname)s] %(message)s",
-                            datefmt="%m/%d/%Y %H:%M:%S")
+    logArgs = {
+        "format": "[%(asctime)s][%(levelname)s] %(message)s",
+        "datefmt": "%m/%d/%Y %H:%M:%S"
+    }
+    if config.has_option("log", "level"):
+        logArgs["level"] = getattr(logging, config.get("log", "level"))
     else:
-        logging.basicConfig(stream=sys.stdout,
-                            level=logging.DEBUG,
-                            format="[%(asctime)s][%(levelname)s] %(message)s",
-                            datefmt="%m/%d/%Y %H:%M:%S")
+        logArgs["level"] = logging.DEBUG
+    if config.has_option("log", "file"):
+        logArgs["filename"] = config.get("log", "file")
+    else:
+        logArgs["stream"] = sys.stdout
+
+    logging.basicConfig(**logArgs)
 
     ferryContext = ssl.SSLContext(protocol=ssl.PROTOCOL_TLSv1_2)
     ferryContext.verify_mode = ssl.CERT_REQUIRED
