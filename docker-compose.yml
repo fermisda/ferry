@@ -25,3 +25,13 @@ services:
     - DATA_SOURCE_PASS=${FERRY_DB_PASS}
     ports:
     - "9187:9187"
+  ferry-ingest:
+    build:
+      context: .
+      dockerfile: Dockerfile-cron
+    volumes:
+    - ~/certs/ferry_cert.pem:/home/ferry/.cert/hostcert.pem
+    - ~/certs/ferry_key.pem:/home/ferry/.cert/hostkey.pem
+    - ./API/src/default.yaml:/home/ferry/default.yaml
+    network_mode: "bridge"
+
