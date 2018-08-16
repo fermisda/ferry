@@ -632,8 +632,13 @@ def add_compute_resources(users, groups, gums):
     defHome = "/home"
     defShell = "/sbin/nologin"
     computeResources[name] = ComputeResource(name, None, "Batch", defHome, defShell)
+
+    gumsUsers = []
+    for v in gums:
+        gumsUsers.append(gums[v].account_mappers)
+
     for uname in users:
-        if users[uname].is_k5login or uname in gums:
+        if users[uname].is_k5login or uname in gumsUsers:
             computeResources[name].users[uname] = users[uname]
             if groups[group] not in users[uname].groups:
                 users[uname].add_group(group, groups[group], False)
@@ -659,9 +664,13 @@ def read_compute_batch(config, users, groups, gums):
     defHome = "/home"
     defShell = "/sbin/nologin"
 
+    gumsUsers = []
+    for v in gums:
+        gumsUsers.append(gums[v].account_mappers)
+
     batch_structure[name] = ComputeResource(name, None, "Batch", None, None)
     for uname in users:
-        if users[uname].is_k5login or uname in gums:
+        if users[uname].is_k5login or uname in gumsUsers:
             batch_structure[name].users[uname] = users[uname]
             if groups[group] not in users[uname].groups:
                 users[uname].add_group(group, groups[group], False)
@@ -759,6 +768,18 @@ def read_vulcan_storage_resources(config, users, groups, cms_groups):
     Returns:
 
     """
+    multiplier = {
+	    "B": 1,
+	    "KB": 1000,
+	    "KIB": 1024,
+	    "MB": 1000000,
+	    "MIB": 1048576,         #1024^2
+	    "GB": 1000000000,
+	    "GIB": 1073741824,      #1024^3
+	    "TB": 1000000000000,
+	    "TIB": 1099511627776,   #1024^4
+	}
+
     cfg = config.config._sections["vulcan"]
     conn_string = "host='%s' dbname='%s' user='%s' password='%s'" % \
                   (cfg["hostname"], cfg["database"], cfg["username"], cfg["password"])
@@ -770,7 +791,7 @@ def read_vulcan_storage_resources(config, users, groups, cms_groups):
     storage_structure = {}
     for storage in storageList:
         storage = storage.strip().split(",")
-        if storage[0] != "0": # This resources are coming from an external file instead of Vulcan
+        if storage[0] != "0": # This resources are coming from Vulcan
             storage_structure[storage[1]] = StorageResource(storage[1], storage[2], storage[3], storage[4], storage[5])
             try:
                 # user quotas
@@ -797,7 +818,7 @@ def read_vulcan_storage_resources(config, users, groups, cms_groups):
                         print("Group %s doesn't exist in userdb. Skipping quota it's quota in %s." % (row["gpname"], storage[1]))
             except:
                 print("failed to fetch %s data from Vulcan" % storage[1], file=sys.stderr)
-        else:
+        else: #This resources are coming from an external file instead of Vulcan
             storage_structure[storage[1]] = StorageResource(storage[1], storage[2], storage[3], storage[4], storage[5])
             try:
                 rows = open(cfg[storage[1].lower()]).readlines()
@@ -825,14 +846,14 @@ def read_vulcan_storage_resources(config, users, groups, cms_groups):
                     if uquota: # user quotas
                         if row[0] in users:
                             storage_structure[storage[1]].quotas.append(
-                                    StorageQuota(users[row[0]].uid, "null", "cms", "%s/%s" % (storage_structure[storage[1]].spath, row[0]), quota, unit, "null")
+                                    StorageQuota(users[row[0]].uid, "null", "cms", "%s/%s" % (storage_structure[storage[1]].spath, row[0]), str(int(float(quota) * multiplier[unit])), "B", "null")
                                 )
                         else:
                             print("User %s doesn't exist in userdb. Skipping quota it's quota in %s." % (row[0], storage[0]))
                     else: # group quotas
                         if row[0] in cms_groups.values():
                             storage_structure[storage[1]].quotas.append(
-                                    StorageQuota("null", groups[row[0]], "cms", "null", quota, unit, "null")
+                                    StorageQuota("null", groups[row[0]], "cms", "null", str(int(float(quota) * multiplier[unit])), "B", "null")
                                 )
                         else:
                             print("Group %s is not a valid CMS group. Skipping quota it's quota in %s." % (row[0], storage[0]))
