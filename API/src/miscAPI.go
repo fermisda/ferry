@@ -501,8 +501,7 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 	rows, err := DBptr.Query(`select distinct t.fqan, t.uname, t.name, c.unit_exists, c.resource_exists from
 							  (select 1 as key, fqan, uname, au.name from grid_fqan as gf
 							   join users as u on gf.mapped_user = u.uid
-							   join groups as g on gf.mapped_group = g.groupid
-							   join compute_access_group as cag using (groupid)
+							   join compute_access_group as cag on (cag.groupid=gf.mapped_group and gf.mapped_user=cag.uid)
 							   join compute_resources as cr on cag.compid=cr.compid
 							   left join affiliation_units as au on gf.unitid = au.unitid
 							   where (au.name like $1 or $2 ) and fqan like $3 and (gf.last_updated >= $4 or u.last_updated >= $4 or $4 is null) and ($5 or cr.name=$6)
