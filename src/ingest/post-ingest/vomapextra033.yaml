@@ -5,76 +5,31 @@ ferry_url : "https://fermicloud033.fnal.gov:8443"
 resources:
   - cms:
      - createFQAN:
-        - {fqan: "/cms/Role=NULL/Capability=NULL", unitname: cms,mapped_group: us_cms }
+        - {fqan: "/cms/Role=None/Capability=NULL", unitname: cms,mapped_group: us_cms }
   - cmst1:
      - createComputeResource:
         type : Batch
         unitname: cms
-     - setComputeResourceInfo:
         defaultshell : /sbin/nologin
         defaulthomedir : /home
-     - createFQAN: 
-       - {fqan: "/cms/Role=pilot/Capability=NULL", mapped_user: cmsgli, mapped_group: us_cms}
-       - {fqan: "/cms/local/Role=pilot/Capability=NULL", mapped_user: cmslocal,mapped_group: us_cms}
      - setUserAccessToComputeResource:
        - {username: cmslocal, groupname: us_cms,  shell: /sbin/nologin, homedir: /home/cmslocal, is_primary: True}
        - {username: cmsgli, groupname: us_cms,  shell: /sbin/nologin, homedir: /home/cmsgli, is_primary: True}
+     - createFQAN: 
+       - {fqan: "/cms/Role=pilot/Capability=NULL", mapped_user: cmsgli, mapped_group: us_cms}
+       - {fqan: "/cms/local/Role=pilot/Capability=NULL", mapped_user: cmslocal,mapped_group: us_cms}
   - cmst1opp:
      - createComputeResource:
         type : Batch
-     - setComputeResourceInfo:
         defaultshell : /sbin/nologin
         defaulthomedir : /home
-     - createFQAN:
-       - {fqan: "/cdf/Role=NULL/Capability=NULL", mapped_user: cdf, mapped_group: cdf}
-       - {fqan: "/cdf/Role=Analysis/Capability=NULL", mapped_user: cdfana, mapped_group: cdf}
-       - {fqan: "/fermilab/Role=pilot/Capability=NULL", mapped_user: fermigli, mapped_group: fnalgrid}
-       - {fqan: "/mis/*", mapped_user: mis, mapped_group: mis}
-       - {fqan: "/star/*", mapped_user: star, mapped_group: star}
-       - {fqan: "/dzero/Role=Analysis/Capability=NULL", mapped_user: dzeroana, mapped_group: dzero}
-       - {fqan: "/dosar/*", mapped_user: dosar, mapped_group: dosar}
-       - {fqan: "/des/Role=Analysis/Capability=NULL", mapped_user: des, mapped_group: des}
-       - {fqan: "/des/production/Role=NULL/Capability=NULL", mapped_user: des, mapped_group: des}
-       - {fqan: "/GLOW/*", mapped_user: glow, mapped_group: glow}
-       - {fqan: "/nanohub/*", mapped_user: nanohub, mapped_group: nanohub}
-       - {fqan: "/geant4/*", mapped_user: geant4, mapped_group: geant4}
-       - {fqan: "/osg/ligo/*", mapped_user: ligo, mapped_group: osg}
-       - {fqan: "/osg/*", mapped_user: osg, mapped_group: osg}
-       - {fqan: "/atlas/*Role=production/Capability=*", mapped_user: usatlas1, mapped_group: atlas}
-       - {fqan: "/atlas/*Role=lcgadmin/Capability=*", mapped_user: usatlas2, mapped_group: atlas}
-       - {fqan: "/atlas/*Role=software/Capability=*", mapped_user: usatlas2, mapped_group: atlas}
-       - {fqan: "/atlas/*", mapped_user: usatlas3, mapped_group: atlas}
-       - {fqan: "/ops/*", mapped_user: ops, mapped_group: ops}
-       - {fqan: "/ilc/*", mapped_user: ilc, mapped_group: ilc}
-       - {fqan: "/SBGrid/*", mapped_user: sbgrid, mapped_group: sbgrid}
-       - {fqan: "/CIGI/*", mapped_user: cigi, mapped_group: cigi}
-       - {fqan: "/icecube/*", mapped_user: icecube, mapped_group: icecube}
-       - {fqan: "/alice/*", mapped_user: alice, mapped_group: alice}
-       - {fqan: "/Gluex/Role=NULL/Capability=NULL", mapped_user: gluex, mapped_group: gluex}
-       - {fqan: "/GridUNESP/Role=NULL/Capability=NULL", mapped_user: gridunesp, mapped_group: gridunesp}
-       - {fqan: "/hcc/Role=NULL/Capability=NULL", mapped_user: hcc, mapped_group: hcc}
-       - {fqan: "/belle/Role=NULL/Capability=NULL", mapped_user: belle, mapped_group: belle}
-       - {fqan: "/belle/Role=production/Capability=NULL", mapped_user: bellepro, mapped_group: belle}
-       - {fqan: "/suragrid/*", mapped_user: suragrid, mapped_group: suragrid}
-       - {fqan: "/dream/*", mapped_user: dream, mapped_group: dream}
-       - {fqan: "/lsst/*", mapped_user: lsst, mapped_group: lsst}
-       - {fqan: "/glast.org/Role=NULL/Capability=NULL", mapped_user: glast, mapped_group: glast}
-       - {fqan: "/enmr.eu/*", mapped_user: enmr, mapped_group: enmr}
-       - {fqan: "/vo.cta.in2p3.fr/*", mapped_user: cta, mapped_group: cta}
-       - {fqan: "/xenon.biggrid.nl/*", mapped_user: xenon, mapped_group: xenon}
-       - {fqan: "/snoplus.snolab.ca/*", mapped_user: snoplus, mapped_group: snoplus}
-       - {fqan: "/lz/*", mapped_user: lzvo, mapped_group: lz}
-       - {fqan: "/dune/Role=NULL/Capability=NULL", mapped_user: dune, mapped_group: dune}
-       - {fqan: "/dune/Role=Production/Capability=NULL", mapped_user: dunepro, mapped_group: dune}
-       - {fqan: "/dune/Role=Analysis/Capability=NULL", mapped_user: duneana, mapped_group: dune}
-       - {fqan: "/dune/Role=pilot/Capability=NULL", mapped_user: dunegli, mapped_group: dune}
+     - addUserToGroup:
+       - {groupname: osg, username: ligo, grouptype: UnixGroup}
      - setUserAccessToComputeResource:
        - {username: cdf, groupname: cdf, shell: /sbin/nologin, home_dir: /home/cdf, is_primary: True}
-       - {username: cdfana, groupname: cdf, shell: /sbin/nologin, home_dir: /home/cdfana, is_primary: True}
        - {username: fermigli, groupname: fnalgrid, shell: /sbin/nologin, home_dir: /home/fermigli, is_primary: True}
        - {username: mis, groupname: mis, shell: /sbin/nologin, home_dir: /home/mis, is_primary: True}
        - {username: star, groupname: star, shell: /sbin/nologin, home_dir: /home/star, is_primary: True}
-       - {username: dzeroana, groupname: dzeroana, shell: /sbin/nologin, home_dir: /home/dzeroana, is_primary: True}
        - {username: dosar, groupname: dosar, shell: /sbin/nologin, home_dir: /home/dosar, is_primary: True}
        - {username: glow, groupname: glow, shell: /sbin/nologin, home_dir: /home/glow, is_primary: True}
        - {username: nanohub, groupname: nanohub, shell: /sbin/nologin, home_dir: /home/nanohub, is_primary: True}
@@ -94,7 +49,6 @@ resources:
        - {username: sbgrid, groupname: sbgrid, shell: /sbin/nologin, home_dir: /home/sbgrid, is_primary: True}
        - {username: cigi, groupname: cigi, shell: /sbin/nologin, home_dir: /home/cigi, is_primary: True}
        - {username: icecube, groupname: icecube, shell: /sbin/nologin, home_dir: /home/icecube, is_primary: True}
-       - {username: alice, groupname: alice, shell: /sbin/nologin, home_dir: /home/alice, is_primary: True}
        - {username: gluex, groupname: gluex, shell: /sbin/nologin, home_dir: /home/gluex, is_primary: True}
        - {username: gridunesp, groupname: gridunesp, shell: /sbin/nologin, home_dir: /home/gridunesp, is_primary: True}
        - {username: hcc, groupname: hcc, shell: /sbin/nologin, home_dir: /home/hcc, is_primary: True}
@@ -113,56 +67,53 @@ resources:
        - {username: dunepro, groupname: dune, shell: /sbin/nologin, home_dir: /home/dunepro, is_primary: True}
        - {username: duneana, groupname: dune, shell: /sbin/nologin, home_dir: /home/duneana, is_primary: True}
        - {username: dunegli, groupname: dune, shell: /sbin/nologin, home_dir: /home/dunegli, is_primary: True}
-       - {username: cigi, groupname: cigi, shell: /sbin/nologin, home_dir: /home/cigi, is_primary: True}
-
-  - fermi_workers:
      - createFQAN:
-       - {fqan: "fermilab/minos/Role=Production/Capability=NULL",      mapped_user:  minospro     ,mapped_group:  minos}
-       - {fqan: "fermilab/cdms/Role=Production/Capability=NULL",       mapped_user:  cdmspro      ,mapped_group:  supercdms}
-       - {fqan: "fermilab/miniboone/Role=Production/Capability=NULL",  mapped_user:  minbnpro     ,mapped_group:  e898}
-       - {fqan: "fermilab/seaquest/Role=Production/Capability=NULL",   mapped_user:  seaquestpro  ,mapped_group:  e-906}
-       - {fqan: "fermilab/admx/Role=Production/Capability=NULL",       mapped_user:  admxpro      ,mapped_group:  admx}
-       - {fqan: "fermilab/noble/Role=Production/Capability=NULL",      mapped_user:  noblepro     ,mapped_group:  noble}
-       - {fqan: "fermilab/lariat/Role=Production/Capability=NULL",     mapped_user:  lariatpro    ,mapped_group:  t-1034}
-       - {fqan: "fermilab/lariat/Role=Raw/Capability=NULL",            mapped_user:  lariatraw    ,mapped_group:  t-1034}
-       - {fqan: "fermilab/numix/Role=Production/Capability=NULL",      mapped_user:  numixpro     ,mapped_group:  numix}
-       - {fqan: "fermilab/chips/Role=Production/Capability=NULL",      mapped_user:  chipspro     ,mapped_group:  chips}
-       - {fqan: "fermilab/icarus/Role=Production/Capability=NULL",     mapped_user:  icaruspro    ,mapped_group:  icarus}
-       - {fqan: "fermilab/genie/Role=Production/Capability=NULL",      mapped_user:  geniepro     ,mapped_group:  genie}
-       - {fqan: "fermilab/mars/accel/Role=Production/Capability=NULL", mapped_user:  marsaccelpro ,mapped_group:  marsaccel}
-       - {fqan: "fermilab/annie/Role=Production/Capability=NULL",      mapped_user:  anniepro     ,mapped_group:  annie}
-       - {fqan: "fermilab/sbnd/Role=Production/Capability=NULL",       mapped_user:  sbndpro      ,mapped_group:  sbnd}
-       - {fqan: "fermilab/sbnd/Role=Raw/Capability=NULL",              mapped_user:  sbndraw      ,mapped_group:  sbnd}
-       - {fqan: "fermilab/next/Role=Production/Capability=NULL",       mapped_user:  nextpro      ,mapped_group:  next}
-       - {fqan: "fermilab/nova/Role=Production/Capability=NULL",       mapped_user:  novapro      ,mapped_group:  nova}
-       - {fqan: "fermilab/nova/Role=Raw/Capability=NULL",              mapped_user:  novaraw      ,mapped_group:  nova}
-       - {fqan: "fermilab/minerva/Role=Production/Capability=NULL",    mapped_user:  minervapro   ,mapped_group:  e-938}
-       - {fqan: "fermilab/minerva/Role=Calibration/Capability=NULL",   mapped_user:  minervacal   ,mapped_group:  e-938}
-       - {fqan: "fermilab/minerva/Role=Data/Capability=NULL",          mapped_user:  minervadat   ,mapped_group:  e-938}
-       - {fqan: "fermilab/minerva/Role=Storage/Capability=NULL",       mapped_user:  minervasam   ,mapped_group:  e-938}
-       - {fqan: "fermilab/minerva/Role=Online/Capability=NULL",        mapped_user:  mnvonline    ,mapped_group:  e-938}
-       - {fqan: "fermilab/coupp/Role=Production/Capability=NULL",      mapped_user:  coupp        ,mapped_group:  coupp}
-       - {fqan: "fermilab/coupp/Role=Storage/Capability=NULL",         mapped_user:  coupp        ,mapped_group:  coupp}
-       - {fqan: "fermilab/grid/Role=rsv/Capability=NULL",              mapped_user:  fgrsv        ,mapped_group:  fnalgrid}
-       - {fqan: "fermilab/Role=rsv/Capability=NULL",                   mapped_user:  fgrsv        ,mapped_group:  fnalgrid}
-       - {fqan: "fermilab/Role=Production/Capability=NULL",            mapped_user:  fermipro     ,mapped_group:  fnalgrid}
-       - {fqan: "fermilab/argoneut/Role=Production/Capability=NULL",   mapped_user:  argoneutpro  ,mapped_group:  t-962}
-       - {fqan: "fermilab/mu2e/Role=Production/Capability=NULL",       mapped_user:  mu2epro      ,mapped_group:  mu2e}
-       - {fqan: "fermilab/uboone/Role=Production/Capability=NULL",     mapped_user:  uboonepro    ,mapped_group:  microboone}
-       - {fqan: "fermilab/gm2/Role=Production/Capability=NULL",        mapped_user:  gm2pro       ,mapped_group:  gm2}
-       - {fqan: "fermilab/test/Role=Production/Capability=NULL",       mapped_user:  testpro      ,mapped_group:  fgtest}
-       - {fqan: "fermilab/darkside/Role=Production/Capability=NULL",   mapped_user:  darksidepro  ,mapped_group:  darkside}
-     - setComputeResourceInfo:
-        defaultshell : /sbin/nologin
-        defaulthomedir : /home
+       - {fqan: "/cdf/Role=None/Capability=NULL", mapped_user: cdf, mapped_group: cdf}
+       - {fqan: "/fermilab/Role=pilot/Capability=NULL", mapped_user: fermigli, mapped_group: fnalgrid}
+       - {fqan: "/mis/*", mapped_user: mis, mapped_group: mis}
+       - {fqan: "/star/*", mapped_user: star, mapped_group: star}
+       - {fqan: "/dosar/*", mapped_user: dosar, mapped_group: dosar}
+       - {fqan: "/des/Role=Analysis/Capability=NULL", mapped_user: des, mapped_group: des}
+       - {fqan: "/des/production/Role=None/Capability=NULL", mapped_user: des, mapped_group: des}
+       - {fqan: "/GLOW/*", mapped_user: glow, mapped_group: glow}
+       - {fqan: "/nanohub/*", mapped_user: nanohub, mapped_group: nanohub}
+       - {fqan: "/geant4/*", mapped_user: geant4, mapped_group: geant4}
+       - {fqan: "/osg/ligo/*", mapped_user: ligo, mapped_group: osg}
+       - {fqan: "/osg/*", mapped_user: osg, mapped_group: osg}
+       - {fqan: "/atlas/*Role=production/Capability=*", mapped_user: usatlas1, mapped_group: atlas}
+       - {fqan: "/atlas/*Role=lcgadmin/Capability=*", mapped_user: usatlas2, mapped_group: atlas}
+       - {fqan: "/atlas/*Role=software/Capability=*", mapped_user: usatlas2, mapped_group: atlas}
+       - {fqan: "/atlas/*", mapped_user: usatlas3, mapped_group: atlas}
+       - {fqan: "/ops/*", mapped_user: ops, mapped_group: ops}
+       - {fqan: "/ilc/*", mapped_user: ilc, mapped_group: ilc}
+       - {fqan: "/SBGrid/*", mapped_user: sbgrid, mapped_group: sbgrid}
+       - {fqan: "/CIGI/*", mapped_user: cigi, mapped_group: cigi}
+       - {fqan: "/icecube/*", mapped_user: icecube, mapped_group: icecube}
+       - {fqan: "/Gluex/Role=None/Capability=NULL", mapped_user: gluex, mapped_group: gluex}
+       - {fqan: "/GridUNESP/Role=None/Capability=NULL", mapped_user: gridunesp, mapped_group: gridunesp}
+       - {fqan: "/hcc/Role=None/Capability=NULL", mapped_user: hcc, mapped_group: hcc}
+       - {fqan: "/belle/Role=None/Capability=NULL", mapped_user: belle, mapped_group: belle}
+       - {fqan: "/belle/Role=production/Capability=NULL", mapped_user: bellepro, mapped_group: belle}
+       - {fqan: "/suragrid/*", mapped_user: suragrid, mapped_group: suragrid}
+       - {fqan: "/dream/*", mapped_user: dream, mapped_group: dream}
+       - {fqan: "/lsst/*", mapped_user: lsst, mapped_group: lsst}
+       - {fqan: "/glast.org/Role=None/Capability=NULL", mapped_user: glast, mapped_group: glast}
+       - {fqan: "/enmr.eu/*", mapped_user: enmr, mapped_group: enmr}
+       - {fqan: "/vo.cta.in2p3.fr/*", mapped_user: cta, mapped_group: cta}
+       - {fqan: "/xenon.biggrid.nl/*", mapped_user: xenon, mapped_group: xenon}
+       - {fqan: "/snoplus.snolab.ca/*", mapped_user: snoplus, mapped_group: snoplus}
+       - {fqan: "/lz/*", mapped_user: lzvo, mapped_group: lz}
+       - {fqan: "/dune/Role=None/Capability=NULL", mapped_user: dune, mapped_group: dune}
+       - {fqan: "/dune/Role=Production/Capability=NULL", mapped_user: dunepro, mapped_group: dune}
+       - {fqan: "/dune/Role=Analysis/Capability=NULL", mapped_user: duneana, mapped_group: dune}
+       - {fqan: "/dune/Role=pilot/Capability=NULL", mapped_user: dunegli, mapped_group: dune}
+  - fermi_workers:
      - setUserAccessToComputeResource:
        - {username: cdf, groupname: cdf,shell: /sbin/nologin, home_dir: /home/cdf, is_primary: True}
-       - {username: cdfana, groupname: cdf,shell: /sbin/nologin, home_dir: /home/cdfana, is_primary: True}
        - {username: fermigli, groupname: fnalgrid,shell: /sbin/nologin, home_dir: /home/fermigli, is_primary: True}
        - {username: fnalgrid, groupname: fnalgrid,shell: /sbin/nologin, home_dir: /home/fnalgrid, is_primary: True}
        - {username: mis, groupname: mis,shell: /sbin/nologin, home_dir: /home/mis, is_primary: True}
        - {username: star, groupname: star,shell: /sbin/nologin, home_dir: /home/star, is_primary: True}
-       - {username: dzeroana, groupname: dzeroana,shell: /sbin/nologin, home_dir: /home/dzeroana, is_primary: True}
        - {username: dosar, groupname: dosar,shell: /sbin/nologin, home_dir: /home/dosar, is_primary: True}
        - {username: glow, groupname: glow,shell: /sbin/nologin, home_dir: /home/glow, is_primary: True}
        - {username: nanohub, groupname: nanohub,shell: /sbin/nologin, home_dir: /home/nanohub, is_primary: True}
@@ -178,7 +129,6 @@ resources:
        - {username: sbgrid, groupname: sbgrid,shell: /sbin/nologin, home_dir: /home./sbgrid, is_primary: True}
        - {username: cigi, groupname: cigi,shell: /sbin/nologin, home_dir: /home/cigi, is_primary: True}
        - {username: icecube, groupname: icecube,shell: /sbin/nologin, home_dir: /home/icecube, is_primary: True}
-       - {username: alice, groupname: alice,shell: /sbin/nologin, home_dir: /home/alice, is_primary: True}
        - {username: gluex, groupname: gluex,shell: /sbin/nologin, home_dir: /home/gluex, is_primary: True}
        - {username: gridunesp, groupname: gridunesp,shell: /sbin/nologin, home_dir: /home/gridunesp, is_primary: True}
        - {username: hcc, groupname: hcc,shell: /sbin/nologin, home_dir: /home/hcc, is_primary: True}
@@ -197,15 +147,48 @@ resources:
        - {username: dunepro, groupname: dune,shell: /sbin/nologin, home_dir: /home/dunepro, is_primary: False}
        - {username: duneana, groupname: dune,shell: /sbin/nologin, home_dir: /home/duneana, is_primary: False}
        - {username: dunegli, groupname: dune,shell: /sbin/nologin, home_dir: /home/dunegli, is_primary: False}
-       - {username: cigi, groupname: cigi,shell: /sbin/nologin, home_dir: /home/cigi, is_primary: True}
        - {username: cmslocal, groupname: us_cms,  shell: /sbin/nologin, homedir: /home/cmslocal, is_primary: True}
        - {username: cmsgli, groupname: us_cms,  shell: /sbin/nologin, homedir: /home/cmsgli, is_primary: True}
+       - {username: admxpro, groupname: admx,  shell: /sbin/nologin, homedir: /home/admxpro, is_primary: True}
+       - {username: anniepro, groupname: annie,  shell: /sbin/nologin, homedir: /home/anniepro, is_primary: True}
+       - {username: argoneutpro, groupname: t-962,  shell: /sbin/nologin, homedir: /home/argoneutpro, is_primary: True}
+       - {username: cdmspro, groupname: supercdms,  shell: /sbin/nologin, homedir: /home/cdmspro, is_primary: True}
+       - {username: chipspro, groupname: chips,  shell: /sbin/nologin, homedir: /home/chipspro, is_primary: True}
+       - {username: coupp, groupname: coupp,  shell: /sbin/nologin, homedir: /home/coupp, is_primary: True}
+       - {username: darksidepro, groupname: darkside,  shell: /sbin/nologin, homedir: /home/darksidepro, is_primary: True}
+       - {username: ebdpro, groupname: ebd,  shell: /sbin/nologin, homedir: /home/ebdpro, is_primary: True}
+       - {username: egppro, groupname: egp,  shell: /sbin/nologin, homedir: /home/egppro, is_primary: True}
+       - {username: geniepro, groupname:  genie,  shell: /sbin/nologin, homedir: /home/geniepro, is_primary: True}
+       - {username: gm2pro, groupname:  gm2,  shell: /sbin/nologin, homedir: /home/gm2pro, is_primary: True}
+       - {username: icaruspro, groupname:  icarus,  shell: /sbin/nologin, homedir: /home/icaruspro, is_primary: True}
+       - {username: lariatpro, groupname:  t-1034,  shell: /sbin/nologin, homedir: /home/lariatpro, is_primary: True}
+       - {username: lariatraw, groupname:  t-1034,  shell: /sbin/nologin, homedir: /home/lariatraw, is_primary: True}
+       - {username: accelpro, groupname:  accel,  shell: /sbin/nologin, homedir: /home/accelpro, is_primary: True}
+       - {username: minervapro, groupname:  e-938,  shell: /sbin/nologin, homedir: /home/minervapro, is_primary: True}
+       - {username: minervacal, groupname:  e-938,  shell: /sbin/nologin, homedir: /home/minervacal, is_primary: True}
+       - {username: minervadat, groupname:  e-938,  shell: /sbin/nologin, homedir: /home/minervadat, is_primary: True}
+       - {username: mnvonline, groupname:  e-938,  shell: /sbin/nologin, homedir: /home/mnvonline, is_primary: True}
+       - {username: minervasam, groupname:  e-938,  shell: /sbin/nologin, homedir: /home/minervasam, is_primary: True}
+       - {username: minospro, groupname:  e875,  shell: /sbin/nologin, homedir: /home/minospro, is_primary: True}
+       - {username: mu2epro, groupname:  mu2e,  shell: /sbin/nologin, homedir: /home/mu2epro, is_primary: True}
+       - {username: nextpro, groupname:  next,  shell: /sbin/nologin, homedir: /home/nextpro, is_primary: True}
+       - {username: noblepro, groupname:  noble,  shell: /sbin/nologin, homedir: /home/noblepro, is_primary: True}
+       - {username: novapro, groupname:  nova,  shell: /sbin/nologin, homedir: /home/novapro, is_primary: True}
+       - {username: novadaq, groupname:  nova,  shell: /sbin/nologin, homedir: /home/novadaq, is_primary: True}
+       - {username: novaraw, groupname:  nova,  shell: /sbin/nologin, homedir: /home/novaraw, is_primary: True}
+       - {username: numixpro, groupname:  numix,  shell: /sbin/nologin, homedir: /home/numixpro, is_primary: True}
+       - {username: sbndpro, groupname:  sbnd,  shell: /sbin/nologin, homedir: /home/sbndpro, is_primary: True}
+       - {username: sbndraw, groupname:  sbnd,  shell: /sbin/nologin, homedir: /home/sbndraw, is_primary: True}
+       - {username: seaquestpro, groupname:  e-906,  shell: /sbin/nologin, homedir: /home/seaquestpro, is_primary: True}
+       - {username: uboonepro, groupname:  uboone,  shell: /sbin/nologin, homedir: /home/uboonepro, is_primary: True}
+       - {username: fermipro, groupname:  fnalgrid,  shell: /sbin/nologin, homedir: /home/fermipro, is_primary: True}
+       - {username: testpro, groupname:  fgtest,  shell: /sbin/nologin, homedir: /home/testpro, is_primary: True}
+       - {username: minbnpro, groupname:  e898,  shell: /sbin/nologin, homedir: /home/minbnpro, is_primary: True}
   - none:
      - addCertificateDNToUser:
        - {username: boyd, dn: /DC=org/DC=opensciencegrid/O=Open%20Science%20Grid/OU=Services/CN=pilot/gpfrontend01.fnal.gov, unitname: fermilab}
        - {username: boyd, dn: /DC=org/DC=opensciencegrid/O=Open%20Science%20Grid/OU=Services/CN=pilot/gpfrontend02.fnal.gov, unitname: fermilab}
        - {username: boyd, dn: /DC=org/DC=opensciencegrid/O=Open%20Science%20Grid/OU=Services/CN=frontend/fifebatch.fnal.gov, unitname: fermilab}
-       - {username: boyd, dn: /DC=org/DC=opensciencegrid/O=Open%20Science%20Grid/OU=Services/CN=frontend_pp/fifebatch.fnal.gov, unitname: fermilab}
        - {username: boyd, dn: /DC=org/DC=opensciencegrid/O=Open%20Science%20Grid/OU=Services/CN=frontend_pp/fifebatch.fnal.gov, unitname: fermilab}
        - {username: boyd, dn: /DC=org/DC=opensciencegrid/O=Open%20Science%20Grid/OU=Services/CN=pilot/htcfedev01.fnal.gov, unitname: fermilab}
        - {username: timm, dn: /DC=org/DC=opensciencegrid/O=Open%20Science%20Grid/OU=Services/CN=pilot/cmssrv266.fnal.gov, unitname: fermilab}

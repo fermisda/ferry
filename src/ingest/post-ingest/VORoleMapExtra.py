@@ -22,6 +22,7 @@ def execute_ferry_api(url, http, action, arguments):
     buffer = io.BytesIO()
     http.setopt(pycurl.WRITEFUNCTION, buffer.write)
     http.setopt(pycurl.URL, cmd[:-1])
+    print (cmd[:-1])
     try:
         http.perform()
     except pycurl.error as err:
@@ -36,7 +37,7 @@ def execute_ferry_api(url, http, action, arguments):
     # insanity of searching if it was an error
     if "ferry_error" in data:
         #raise FerryAPIError("%s: %s" % (cmd, data))
-        print ("ferry_error %s: %s" % (cmd[:-1], data))
+        print ("ferry_error %s - %s" % (cmd[:-1], data))
         return
     return json.loads(data)
 
@@ -57,12 +58,7 @@ def setComputeResourceInfo(url, http, action, key, info):
     execute_ferry_api(url, http, action, arguments)
 
 def createFQAN(url, http, action, key, info):
-    for m in info:
-        arguments = []
-        for attr, value in m.items():
-            arguments.append("%s=%s" % (attr, value))
-        execute_ferry_api(url, http, action, arguments)
-
+    do_something(url, http, action, key, info)
 
 def setUserAccessToComputeResource(url, http, action, key, info):
     for m in info:
@@ -72,13 +68,26 @@ def setUserAccessToComputeResource(url, http, action, key, info):
         execute_ferry_api(url, http, action, arguments)
 
 def addCertificateDNToUser(url, http, action, key, info):
+    do_something(url, http, action, key, info)
+
+def setUserExperimentFQAN(url, http, action, key, info):
+    do_something(url, http, action, key, info)
+
+def createExperiment(url, http, action, key, info):
+    do_something(url, http, action, key, info)
+
+def addUsertoExperiment(url, http, action, key, info):
+    do_something(url, http, action, key, info)
+
+def addUserToGroup(url, http, action, key, info):
+    do_something(url, http, action, key, info)
+
+def do_something(url, http, action, key, info):
     for m in info:
         arguments = []
         for attr, value in m.items():
             arguments.append("%s=%s" % (attr, value))
         execute_ferry_api(url, http, action, arguments)
-
-
 def main():
     config = read_config(sys.argv[1])
     http = set_ferry_access(config["cert"], config["ca_path"])
@@ -87,7 +96,6 @@ def main():
         for key, actions in resources.items():
             for dict_action in actions:
                 for action, info in dict_action.items():
-                   print (action,key)
                    method_to_call = globals()[action]
                    method_to_call(url, http, action, key, info)
 
