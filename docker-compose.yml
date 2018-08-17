@@ -30,8 +30,8 @@ services:
       context: .
       dockerfile: Dockerfile-cron
     volumes:
-    - ~/certs/ferry_cert.pem:/home/ferry/.cert/hostcert.pem
-    - ~/certs/ferry_key.pem:/home/ferry/.cert/hostkey.pem
-    - ./API/src/default.yaml:/home/ferry/default.yaml
+    - ~/certs/ferry_cert.pem:/home/ferry/hostcert.pem
+    - ~/certs/ferry_key.pem:/home/ferry/hostkey.pem
+    - /etc/grid-security/certificates/cilogon-osg.pem:/home/ferry/cilogon-osg.pem
     network_mode: "bridge"
 
