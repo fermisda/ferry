@@ -194,3 +194,5 @@ resources:
        - {username: boyd, dn: /DC=org/DC=opensciencegrid/O=Open%20Science%20Grid/OU=Services/CN=pilot/htcfedev01.fnal.gov, unitname: fermilab}
        - {username: timm, dn: /DC=org/DC=opensciencegrid/O=Open%20Science%20Grid/OU=Services/CN=pilot/cmssrv266.fnal.gov, unitname: fermilab}
        - {username: timm, dn: /DC=org/DC=opensciencegrid/O=Open%20Science%20Grid/OU=Services/CN=pilot/cmssrv266.fnal.gov, unitname: dune}
+       - {username: bv, dn: /DC=org/DC=opensciencegrid/O=Open%20Science%20Grid/OU=People/CN=Brett%20Viren%202598, unitname: dune}
+       - {username: hartnell, dn: /C=UK/O=eScience/OU=Sussex/L=ITServices/CN=jeffrey%20hartnell, unitname: dune}
