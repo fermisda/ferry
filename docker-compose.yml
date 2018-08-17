@@ -33,5 +33,5 @@ services:
     - ~/certs/ferry_cert.pem:/home/ferry/hostcert.pem
     - ~/certs/ferry_key.pem:/home/ferry/hostkey.pem
     - /etc/grid-security/certificates/cilogon-osg.pem:/home/ferry/cilogon-osg.pem
-    network_mode: "bridge"
+    network_mode: "host"
 
