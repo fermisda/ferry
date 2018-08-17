@@ -23,24 +23,21 @@ certificates:
 # - /etc/pki/tls/certs/ca-bundle.crt  
 
 ip_whitelist:
-  - 131.225.154.186
-  - 131.225.108.61
-  - 131.225.108.153
-  - 131.225.108.60
-  - 131.225.100.173
-  - 131.225.173.178
-  - 131.225.240.59
-  - 131.225.27.36
-  - 131.225.27.37
-  - 131.225.193.77
-  - 131.225.240.123
-  - 131.225.152.55
-  - 131.225.240.174
-  - 131.225.153.41
-  - 131.225.58.55
-  - 131.225.58.54
-  - 131.225.65.26
-  - 131.225.155.102
+  - 131.225.108.61      # fermi-snow-dev.fnal.gov
+  - 131.225.108.153     # fermi-snow-trn.fnal.gov
+  - 131.225.108.60      # fermi-snow.fnal.gov
+  - 131.225.240.59      # ssiadmin1.fnal.gov
+  - 131.225.27.36       # merricat.fnal.gov
+  - 131.225.27.37       # testify.fnal.gov
+  - 131.225.193.77      # slam-sat6.fnal.gov
+  - 131.225.240.123     # ssiferrygpvm01.fnal.gov
+  - 131.225.152.55      # voms1.fnal.gov
+  - 131.225.240.174     # vomsitbgpvm01.fnal.gov
+  - 131.225.153.41      # voms2.fnal.gov
+  - 131.225.58.55       # dbweb5.fnal.gov
+  - 131.225.58.54       # dbweb6.fnal.gov
+  - 131.225.65.26       # rexdb03.fnal.gov
+  - 131.225.155.102     # fermicloud365.fnal.gov
 
 dn_whitelist:
  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Kenneth Herner/CN=UID:kherner
