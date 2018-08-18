@@ -45,7 +45,7 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 							) as t right join (
 								select 1 as key,
 								$1 in (select uname from users) as user_exists,
-								$2 in (select name from affiliation_units) as unit_exists
+								($2 in (select name from affiliation_units) or $2 = '%') as unit_exists
 							) as c on t.key = c.key;`, uname, expt, "%" + expt + "%")
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
@@ -97,8 +97,8 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
 		}
 		if userExists && exptExists {
-			queryErr.Error = append(queryErr.Error, "User does not have any certifcates registered.")
-			log.WithFields(QueryFields(r, startTime)).Error("User does not have any certifcates registered.")
+			queryErr.Error = append(queryErr.Error, "User does not have any certificates registered.")
+			log.WithFields(QueryFields(r, startTime)).Error("User does not have any certificates registered.")
 		}
 		output = queryErr
 	} else {
