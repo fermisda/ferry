@@ -1992,17 +1992,11 @@ func setUserInfo(w http.ResponseWriter, r *http.Request) {
 
 	var fName, status, eDate sql.NullString
 
-	uid := strings.TrimSpace(q.Get("uid"))
 	uName := strings.TrimSpace(q.Get("username"))
 	fName.String = strings.TrimSpace(q.Get("fullname"))
 	status.String = strings.TrimSpace(q.Get("status"))
 	eDate.String =strings.TrimSpace( q.Get("expiration_date"))
 
-	if uid == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No uid specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No uid specified.\" }")
-		return
-	}
 	if uName == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
@@ -2018,8 +2012,8 @@ func setUserInfo(w http.ResponseWriter, r *http.Request) {
 	} else {
 		_, err := strconv.ParseBool(status.String)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid is_leader specified in http query.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid is_leader specified.\" }")
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid status specified in http query.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid status specified. Should be true or false.\" }")
 			return
 		}
 		status.Valid = true
@@ -2048,13 +2042,9 @@ func setUserInfo(w http.ResponseWriter, r *http.Request) {
 	defer DBtx.Rollback(cKey)
 
 
-	uidint, converr := strconv.Atoi(uid)
-	if converr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error converting uid to int.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error converting uid to int.\" }")
-		return	
-	}
-	queryerr := DBtx.tx.QueryRow(`select uid from users where uid=$1`,uidint).Scan(&uidint)
+	var uidint int
+
+	queryerr := DBtx.tx.QueryRow(`select uid from users where uname=$1`,uName).Scan(&uidint)
 	if queryerr == sql.ErrNoRows {
 		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
@@ -2064,12 +2054,12 @@ func setUserInfo(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "{ \"ferry_error\": \"DB error determining uid.\" }")
 		return
 	}
-	query := `update users set uname = $2, full_name = coalesce($3, full_name), status = coalesce($4, status), expiration_date = coalesce($5, expiration_date), last_updated = NOW() where uid = $1`
+	query := `update users set full_name = coalesce($2, full_name), status = coalesce($3, status), expiration_date = coalesce($4, expiration_date), last_updated = NOW() where uid = $1`
 	if strings.ToLower(eDate.String) == "null" {
-		query = strings.Replace(query, "coalesce($5, expiration_date)", "$5", 1)
+		query = strings.Replace(query, "coalesce($4, expiration_date)", "$4", 1)
 	}
 	print(query)
-	_, err = DBtx.Exec(query, uidint, uName, fName, status, eDate)
+	_, err = DBtx.Exec(query, uidint, fName, status, eDate)
 
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
