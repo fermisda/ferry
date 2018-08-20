@@ -244,7 +244,17 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 			return
 		}
-		defer rows.Close()	
+		
+		type srinfo struct {
+			SrID int64	
+			SrName string
+			SrPath string
+			SrQuota int64
+			SrUnit string
+		}
+		var tmpsr srinfo
+		var sr []srinfo
+		
 		for rows.Next() {
 			
 			
@@ -252,26 +262,38 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 			if ! srunit.Valid {
 				srunit.Valid = true
 				srunit.String = "B" // if not default unit, set a default of bytes
+				
 			}
+			if srname.Valid {
+				tmpsr.SrID = storageid	
+				tmpsr.SrName = srname.String
+				tmpsr.SrPath = srpath.String
+				tmpsr.SrQuota = srquota.Int64
+				tmpsr.SrUnit = srunit.String
+				sr = append(sr,tmpsr)	
+			}
+		}
+		rows.Close()
+
+		for isr := 0; isr<len(sr); isr++ {
 			
-			q.Set("resourcename", srname.String)
-			q.Set("path", srpath.String + "/" + uName)
+			q.Set("resourcename", sr[isr].SrName)
+			q.Set("path", sr[isr].SrPath + "/" + uName)
 			q.Set("isGroup", "false")
 			q.Set("valid_until", "")
-			q.Set("quota", strconv.FormatInt(srquota.Int64, 10))
-			q.Set("unit", srunit.String)
+			q.Set("quota", strconv.FormatInt(sr[isr].SrQuota, 10))
+			q.Set("unit", sr[isr].SrUnit)
 			R.URL.RawQuery = q.Encode()
-			DBtx.Savepoint("setUserStorageQuota_" + srname.String)
+			DBtx.Savepoint("setUserStorageQuota_" + sr[isr].SrName)
 			setUserStorageQuota(w,R)
 			if !DBtx.Complete() {
-				log.WithFields(QueryFields(r, startTime)).Error("setUserStorageQuota on  " + srname.String + "  failed: " + DBtx.Error().Error() )
-				fmt.Fprintf(w, "{ \"ferry_error\": \"setUserStorageQuota for " + srname.String + " failed. Last DB error: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
+				log.WithFields(QueryFields(r, startTime)).Error("setUserStorageQuota on  " + sr[isr].SrName + "  failed: " + DBtx.Error().Error() )
+				fmt.Fprintf(w, "{ \"ferry_error\": \"setUserStorageQuota for " + sr[isr].SrName + " failed. Last DB error: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
 				return
 			}	
 		}
 	}
-	//	
-	
+	//
 	
 	if duplicateCount == 4 {
 		fmt.Fprintf(w, "{ \"ferry_error\": \"User already belongs to the experiment.\" }")

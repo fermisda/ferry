@@ -1361,11 +1361,7 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No quota specified.\" }")
 		return
 	}
-//	if validtime == "" || strings.ToUpper(validtime) == "NULL" {
-//		validtime = "NULL"
-//	} else {
-//		validtime = "'" + validtime + "'"
-//	}
+
 	var vUntil sql.NullString
 	if validtime != "" && strings.ToUpper(validtime) != "NULL" {
 		vUntil.Valid = true
@@ -1430,17 +1426,24 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	// get storageID, unitid, uid,
 	querystr := ""
 	if isGroup {
-		querystr = `select storageid, id, unitid from (select 1 as key, storageid from storage_resources where name=$1) as sr full outer join (select 1 as key, groupid as id from groups where name=$2) as g on sr.key=g.key right join (select 1 as key, unitid from affiliation_units where name=$3) as au on au.key=g.key`
+		querystr = `select (select storageid from storage_resources where name=$1), (select groupid as id from groups where name=$2), (select unitid from affiliation_units where name=$3)`
 	} else {
-		querystr = `select storageid, id, unitid from (select 1 as key, storageid from storage_resources where name=$1) as sr full outer join (select 1 as key, uid as id from users where uname=$2) as us on sr.key=us.key right join (select 1 as key, unitid from affiliation_units where name=$3) as au on au.key=us.key`
+		querystr = `select (select storageid from storage_resources where name=$1), (select uid as id from users where uname=$2), (select unitid from affiliation_units where name=$3)`
 	}
-	queryerr := DBtx.tx.QueryRow(querystr,rName, uName, unitName).Scan(&vSid,&vId,&vUnitid)
+	queryerr := DBtx.QueryRow(querystr,rName, uName, unitName).Scan(&vSid, &vId, &vUnitid)
 	if queryerr == sql.ErrNoRows {
 		log.WithFields(QueryFields(r, startTime)).Error("Unit does not exist.")
 		if cKey != 0 { 
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Unit does not exist.\" }")	
 		}
 		DBtx.Report("Unit does not exist.")
+		return
+	} else if queryerr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("DB error: " + queryerr.Error())
+		if cKey != 0 { 
+			fmt.Fprintf(w, "{ \"ferry_error\": \"DB error; check log.\" }")	
+		}
+		DBtx.Report("DB error; check log.")
 		return
 	}
 	if ! vId.Valid {
