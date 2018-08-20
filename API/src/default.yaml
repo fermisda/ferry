@@ -38,6 +38,7 @@ ip_whitelist:
   - 131.225.58.54       # dbweb6.fnal.gov
   - 131.225.65.26       # rexdb03.fnal.gov
   - 131.225.155.102     # fermicloud365.fnal.gov
+  - 131.225.205.240     # cmsvulcan.fnal.gov
 
 dn_whitelist:
  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Kenneth Herner/CN=UID:kherner
