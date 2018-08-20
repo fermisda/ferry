@@ -4,8 +4,11 @@ ferry_url : "https://fermicloud051.fnal.gov:8443"
 
 resources:
   - cms:
+     - setPrimaryStatusGroup:
+        - {groupname: us_cms, unitname: cms} 
      - createFQAN:
         - {fqan: "/cms/Role=None/Capability=NULL", unitname: cms,mapped_group: us_cms }
+        - {fqan: "/cms/Role=Analysis/Capability=NULL", unitname: cms,mapped_group: us_cms }
   - cmst1:
      - createComputeResource:
         type : Batch

@@ -82,6 +82,9 @@ def addUsertoExperiment(url, http, action, key, info):
 def addUserToGroup(url, http, action, key, info):
     do_something(url, http, action, key, info)
 
+def setPrimaryStatusGroup(url, http, action, key, info):
+    do_something(url, http, action, key, info)
+
 def do_something(url, http, action, key, info):
     for m in info:
         arguments = []
