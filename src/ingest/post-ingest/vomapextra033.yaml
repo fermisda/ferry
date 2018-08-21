@@ -7,7 +7,7 @@ resources:
      - setPrimaryStatusGroup:
         - {groupname: us_cms, unitname: cms} 
      - createFQAN:
-        - {fqan: "/cms/Role=None/Capability=NULL", unitname: cms,mapped_group: us_cms }
+        - {fqan: "/cms/Role=NULL/Capability=NULL", unitname: cms,mapped_group: us_cms }
         - {fqan: "/cms/Role=Analysis/Capability=NULL", unitname: cms,mapped_group: us_cms }
   - cmst1:
      - createComputeResource:
@@ -71,13 +71,13 @@ resources:
        - {username: duneana, groupname: dune, shell: /sbin/nologin, home_dir: /home/duneana, is_primary: True}
        - {username: dunegli, groupname: dune, shell: /sbin/nologin, home_dir: /home/dunegli, is_primary: True}
      - createFQAN:
-       - {fqan: "/cdf/Role=None/Capability=NULL", mapped_user: cdf, mapped_group: cdf}
+       - {fqan: "/cdf/Role=NULL/Capability=NULL", mapped_user: cdf, mapped_group: cdf}
        - {fqan: "/fermilab/Role=pilot/Capability=NULL", mapped_user: fermigli, mapped_group: fnalgrid}
        - {fqan: "/mis/*", mapped_user: mis, mapped_group: mis}
        - {fqan: "/star/*", mapped_user: star, mapped_group: star}
        - {fqan: "/dosar/*", mapped_user: dosar, mapped_group: dosar}
        - {fqan: "/des/Role=Analysis/Capability=NULL", mapped_user: des, mapped_group: des}
-       - {fqan: "/des/production/Role=None/Capability=NULL", mapped_user: des, mapped_group: des}
+       - {fqan: "/des/production/Role=NULL/Capability=NULL", mapped_user: des, mapped_group: des}
        - {fqan: "/GLOW/*", mapped_user: glow, mapped_group: glow}
        - {fqan: "/nanohub/*", mapped_user: nanohub, mapped_group: nanohub}
        - {fqan: "/geant4/*", mapped_user: geant4, mapped_group: geant4}
@@ -92,21 +92,21 @@ resources:
        - {fqan: "/SBGrid/*", mapped_user: sbgrid, mapped_group: sbgrid}
        - {fqan: "/CIGI/*", mapped_user: cigi, mapped_group: cigi}
        - {fqan: "/icecube/*", mapped_user: icecube, mapped_group: icecube}
-       - {fqan: "/Gluex/Role=None/Capability=NULL", mapped_user: gluex, mapped_group: gluex}
-       - {fqan: "/GridUNESP/Role=None/Capability=NULL", mapped_user: gridunesp, mapped_group: gridunesp}
-       - {fqan: "/hcc/Role=None/Capability=NULL", mapped_user: hcc, mapped_group: hcc}
-       - {fqan: "/belle/Role=None/Capability=NULL", mapped_user: belle, mapped_group: belle}
+       - {fqan: "/Gluex/Role=NULL/Capability=NULL", mapped_user: gluex, mapped_group: gluex}
+       - {fqan: "/GridUNESP/Role=NULL/Capability=NULL", mapped_user: gridunesp, mapped_group: gridunesp}
+       - {fqan: "/hcc/Role=NULL/Capability=NULL", mapped_user: hcc, mapped_group: hcc}
+       - {fqan: "/belle/Role=NULL/Capability=NULL", mapped_user: belle, mapped_group: belle}
        - {fqan: "/belle/Role=production/Capability=NULL", mapped_user: bellepro, mapped_group: belle}
        - {fqan: "/suragrid/*", mapped_user: suragrid, mapped_group: suragrid}
        - {fqan: "/dream/*", mapped_user: dream, mapped_group: dream}
        - {fqan: "/lsst/*", mapped_user: lsst, mapped_group: lsst}
-       - {fqan: "/glast.org/Role=None/Capability=NULL", mapped_user: glast, mapped_group: glast}
+       - {fqan: "/glast.org/Role=NULL/Capability=NULL", mapped_user: glast, mapped_group: glast}
        - {fqan: "/enmr.eu/*", mapped_user: enmr, mapped_group: enmr}
        - {fqan: "/vo.cta.in2p3.fr/*", mapped_user: cta, mapped_group: cta}
        - {fqan: "/xenon.biggrid.nl/*", mapped_user: xenon, mapped_group: xenon}
        - {fqan: "/snoplus.snolab.ca/*", mapped_user: snoplus, mapped_group: snoplus}
        - {fqan: "/lz/*", mapped_user: lzvo, mapped_group: lz}
-       - {fqan: "/dune/Role=None/Capability=NULL", mapped_user: dune, mapped_group: dune}
+       - {fqan: "/dune/Role=NULL/Capability=NULL", mapped_user: dune, mapped_group: dune}
        - {fqan: "/dune/Role=Production/Capability=NULL", mapped_user: dunepro, mapped_group: dune}
        - {fqan: "/dune/Role=Analysis/Capability=NULL", mapped_user: duneana, mapped_group: dune}
        - {fqan: "/dune/Role=pilot/Capability=NULL", mapped_user: dunegli, mapped_group: dune}
