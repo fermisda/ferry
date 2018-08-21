@@ -148,21 +148,22 @@ def assign_vos(config, vn, vurl, rls, usrs, gums_map, collaborations):
 
     # map all vo members
     members_list = {}
-    command = "select u.dn,u.userid,d.subject_string,c.subject_string from certificate d, ca c, usr u where u.userid = "\
-              "d.usr_id and c.cid=d.ca_id and (c.subject_string not like \'%HSM%\' and c.subject_string not like " \
-              "\'%Digi%\' and c.subject_string  not like \'%DOE%\') and u.userid in (" \
-              "select distinct  u.userid from usr u, certificate d where u.userid = d.usr_id);"
+    command = "select unames.*, dns.subject_string, dns.ca from \
+                          (select c.usr_id, c.subject_string, ca.subject_string as ca from \
+                            certificate as c join ca on ca.cid = c.ca_id order by c.usr_id) as dns \
+                left join (select distinct usr_id, substr(subject_string, position('UID:' in subject_string) + 4) from \
+                            certificate where subject_string like '%UID:%') as unames \
+                on dns.usr_id = unames.usr_id where unames.usr_id is not null order by 2;"
     table, return_code = MySQLUtils.RunQuery(command, connect_str)
     if return_code:
         print("Failed to extract information from VOMS %s" % (vn), file=sys.stderr)
         return
     else:
         for line in table:
-            uname = re.findall("UID:([A-z0-9]*)", line)
-            if len(uname) > 0:
-                if uname[0] not in members_list:
-                    members_list[uname[0]] = []
-                members_list[uname[0]].append(line.split("\t", 1)[1])
+            line = line.split("\t")
+            if line[1] not in members_list:
+                members_list[line[1]] = []
+            members_list[line[1]].append((line[0], line[2], line[3]))
 
     # generates a map user: affiliations
     affiliation_list = {}
@@ -212,8 +213,7 @@ def assign_vos(config, vn, vurl, rls, usrs, gums_map, collaborations):
         mids = []
 
         # stores all voms uids
-        for m in members:
-            member = m.split("\t")
+        for member in members:
             if member[0] not in mids:
                 mids.append(member[0].strip())
 
@@ -234,8 +234,7 @@ def assign_vos(config, vn, vurl, rls, usrs, gums_map, collaborations):
                     group = groups[0]
                     url = vurl
                 user.add_to_vo(group, url)
-                for m in members:
-                    member = m.split("\t")
+                for member in members:
                     if member[0] == mid:
                         subject = member[1].strip()
                         issuer = member[2].strip()
@@ -245,8 +244,6 @@ def assign_vos(config, vn, vurl, rls, usrs, gums_map, collaborations):
                                 if CA:
                                     index = collaborations.index(cu) +1
                                     user.add_cert(Certificate(index,subject, issuer))
-                                else:
-                                    print("Certificate %s is not issued by a valid CA" % subject)
 
                 if len(tmp) > 1:
                     role = tmp[1].strip()
@@ -269,7 +266,8 @@ def assign_vos(config, vn, vurl, rls, usrs, gums_map, collaborations):
                         if umap.gid not in user.groups:
                             gname = list(gids.keys())[list(gids.values()).index(umap.gid)]
                             user.add_group(gname, umap.gid)
-                        user.add_to_vo_role(group, url, new_umap)
+                        if len(user.certificates) > 0:
+                            user.add_to_vo_role(group, url, new_umap)
 
                         break
                 if role not in rls:
