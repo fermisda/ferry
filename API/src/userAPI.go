@@ -1002,27 +1002,37 @@ func setUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
 	}
 	defer DBtx.Rollback(cKey)
 
-//	_, err = DBtx.Exec(fmt.Sprintf(`do $$
-//										declare vCompid int;
-//										declare vUid int;
-//									begin
-//										select compid into vCompid from compute_resources where name = '%s';
-//										select uid into vUid from users where uname = '%s';
-//
-//										if vCompid is null then raise 'Resource does not exist.'; end if;
-//										if vUid is null then raise 'User does not exist.'; end if;
-//										
-//										update compute_access set shell = '%s', home_dir = '%s', last_updated = NOW()
-//										where compid = vCompid and uid = vUid;
-//									end $$;`, rName, uName, shell, hDir))
-//
+	// check whether the user and resource actually exist before doing anything
+	var cauid,cacompid sql.NullInt64
+	queryerr := DBtx.QueryRow(`select (select uid from users where uname=$1), (select compid from compute_resources where name=$2)`, uName, rName).Scan(&cauid, &cacompid)
+	if queryerr != nil && queryerr != sql.ErrNoRows {
+		log.WithFields(QueryFields(r, startTime)).Error("Error verifying user and resource status: " + queryerr.Error() + ". Will not proceed.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query. Check log.\" }")
+		return
+	}
+	if !cauid.Valid {
+		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")	
+		return
+	}
+	if !cacompid.Valid {
+		log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")	
+		return
+	}
 
-	_, err = DBtx.Exec(`update compute_access set shell = $1, home_dir = $2, last_updated = NOW() where compid = (select compid from compute_resources where name = $3) and uid = (select uid from users where uname = $4)`, shell, hDir, rName, uName)
-
+	res, err := DBtx.Exec(`update compute_access set shell = $1, home_dir = $2, last_updated = NOW() where compid = $3 and uid = $4`, shell, hDir, cacompid, cauid)
 
 	if err == nil {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+		//check whether any rows were modified. If no rows were modified, the user did not have access to this compute resource. Print such a message.
+		aRows, _ := res.RowsAffected()
+		if aRows == 0 {
+			log.WithFields(QueryFields(r, startTime)).Info("User " + uName + " does not have access to resource " + rName + ".")
+                        fmt.Fprintf(w, "{ \"ferry_error\": \"User does not have access to this resource.\" }")
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Info("Success!")
+			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+		}
 	} else {
 		if strings.Contains(err.Error(), `User does not exist.`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
@@ -1074,78 +1084,44 @@ func setUserShell(w http.ResponseWriter, r *http.Request) {
 	
 	var uid, unitid sql.NullInt64
 
-	queryerr := DBptr.QueryRow(`select uid, unitid from (select 1 as key, uid from users where uname = $1) as u full outer join (select 1 as key, unitid from affiliation_units au where au.name = $2 ) as aut on u.key=aut.key`).Scan(&uid,&unitid)
+	queryerr := DBptr.QueryRow(`select uid, unitid from (select 1 as key, uid from users where uname = $1) as u full outer join (select 1 as key, unitid from affiliation_units au where au.name = $2 ) as aut on u.key=aut.key`, uName, aName).Scan(&uid,&unitid)
 	if queryerr == sql.ErrNoRows {
 		log.WithFields(QueryFields(r, startTime)).Error("User and unit do not exist.")	
-		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not have access to this resource.\" }")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"User and unit do not exist.\" }")
 		return
 	}
-	if ! uid.Valid {
+	if !uid.Valid {
 		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
 	}
-	if ! unitid.Valid {
+	if !unitid.Valid {
 		log.WithFields(QueryFields(r, startTime)).Error("Unit does not exist.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Unit does not exist.\" }")
 	}
-	queryerr = DBptr.QueryRow(`select uid, unitid from compute_access ca left join compute_resources cr on ca.compid=cr.compid where ca.uid=$1) and unitid=(select unitid from affiliation_units au where au.name = $2 )`, uName, aName).Scan(&uid,&unitid)
-	if queryerr == sql.ErrNoRows {
-		log.WithFields(QueryFields(r, startTime)).Error("User does not have access to this compute resource.")	
-		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not have access to this resource.\" }")
-	}
-	
+
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 	defer DBtx.Rollback(cKey)
 
-//	_, err = DBtx.Exec(fmt.Sprintf(`do $$
-//										declare cUnitName constant text := '%s';
-//										declare cUserName constant text := '%s';
-//										declare cShell    constant text := '%s';
-//
-//										declare vUid int;
-//										declare vUnitid int;
-//									begin
-//										select uid into vUid from users where uname = cUserName;
-//										select unitid into vUnitid from affiliation_units where name = cUnitName;
-//
-//										if vUid is null then raise 'User does not exist.'; end if;
-//										if vUnitid is null then raise 'Experiment does not exist.'; end if;
-//										
-//										if (vUid, vUnitid) not in
-//										(select uid, unitid from compute_access as ca left join compute_resources as cr on ca.compid = cr.compid)
-//										then raise 'User does not have access to this resource.';
-//										end if;
-//
-//										update compute_access set shell = cShell, last_updated = NOW()
-//										where uid = vUid and compid in (
-//											select compid from compute_resources where unitid = vUnitid
-//										);
-//									end $$;`, aName, uName, shell))
-	_, err = DBtx.Exec(`update compute_access set shell = $1, last_updated = NOW()
-			    where uid = $2  and compid in (select compid from compute_resources where unitid = $3)`, shell, uid, unitid)
+	res, err := DBtx.Exec(`update compute_access set shell = $1, last_updated = NOW()
+			    where uid = $2 and compid in (select compid from compute_resources where unitid = $3)`, shell, uid, unitid)
 	if err == nil {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
-	} else {
-		if strings.Contains(err.Error(), `User does not exist.`) {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-		} else if strings.Contains(err.Error(), `Experiment does not exist.`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Experiment does not exist.\" }")
-		} else if strings.Contains(err.Error(), `User does not have access to this resource.`) {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not have access to this resource.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not have access to this resource.\" }")
+		aRows, _ := res.RowsAffected()
+		if aRows == 0 {
+			log.WithFields(QueryFields(r, startTime)).Info("User " + uName + " does not have access to resources owned by " + aName + ".")
+                        fmt.Fprintf(w, "{ \"ferry_error\": \"User does not have access to this resource.\" }")
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
+			log.WithFields(QueryFields(r, startTime)).Info("Success!")
+			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 		}
+	} else {	
+		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
 	}
-
-	DBtx.Commit(cKey)
+	
+	if cKey != 0 { DBtx.Commit(cKey) }
 }
 
 func getUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
@@ -1221,14 +1197,14 @@ func getUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
 	}
 	if idx == 0 {
 		if !compExists {
-			output += `"ferry_error": "Resource does not exist.",`
+			output += `{"ferry_error": "Resource does not exist."},`
 			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
 		}
 		if !userExists {
-			output += `"ferry_error": "User does not exist.",`
+			output += `{"ferry_error": "User does not exist."},`
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 		}
-		output += `"ferry_error": "User doesn't have access to resource."`
+		output += `{"ferry_error": "User doesn't have access to resource."}`
 		log.WithFields(QueryFields(r, startTime)).Error("No super users found.")
 	} else {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
