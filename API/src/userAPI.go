@@ -27,13 +27,6 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 		expt = "%"
 	}
 
-	authorized, authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
-		return
-	}
-
 	rows, err := DBptr.Query(`select uname, dn, user_exists, unit_exists from (
 								select distinct 1 as key, uname, dn
 								from affiliation_unit_user_certificate as ac
@@ -153,13 +146,6 @@ func getAllUsersCertificateDNs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	authorized, authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
-		return
-	}
-
 	rows, err := DBptr.Query(`select uname, name, dn, unit_exists from (
 								select 1 as key, uname, name, uc.dn from affiliation_unit_user_certificate as ac
 								left join user_certificates as uc on ac.dnid = uc.dnid
