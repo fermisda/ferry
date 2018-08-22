@@ -1923,11 +1923,26 @@ func removeUserCertificateDN(w http.ResponseWriter, r *http.Request) {
 	_, err = DBtx.Exec(fmt.Sprintf(`do $$ 	
 										declare  u_uid constant int := %d;
 										declare  u_dnid constant int := %d;
+										declare  v_count int;
 									
 									begin
 
 										if (u_dnid, u_uid) not in (select dnid, uid from user_certificates) then
 											raise 'dnid uid association does not exist';
+										end if;
+
+										select count(*) into v_count from
+											 (select uid, unitid, count(unitid)
+											  from affiliation_unit_user_certificate as ac
+											  join user_certificates as uc on ac.dnid = uc.dnid
+											  where uid = u_uid and unitid in (select unitid
+																			   from affiliation_unit_user_certificate
+																			   where dnid = u_dnid)
+											  group by unitid, uid order by uid, unitid, count) as c
+										where c.count = 1;
+
+										if v_count > 0 then
+											raise 'unique dnid unitid association';
 										end if;
 
 										delete from affiliation_unit_user_certificate where dnid=u_dnid;
@@ -1940,6 +1955,9 @@ func removeUserCertificateDN(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(err.Error(), `dnid uid association does not exist`) {
 			log.WithFields(QueryFields(r, startTime)).Error("USER DN association does not exist.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"USER DN association does not exist.\" }")
+		} else if strings.Contains(err.Error(), `unique dnid unitid association`) {
+			log.WithFields(QueryFields(r, startTime)).Error("This certificate is unique for the user in one or more affiliation units.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"This certificate is unique for the user in one or more affiliation units.\" }")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
