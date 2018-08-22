@@ -90,7 +90,9 @@ func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 				DBtx.Commit(cKey)
 			}
 			log.WithFields(QueryFields(r, startTime)).Info("Successfully added " + unitName + " to affiliation_units.")
-			fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
+			if cKey != 0 {
+				fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
+			}
 		}
 //	stmt.Close()
 		return

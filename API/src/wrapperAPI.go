@@ -465,7 +465,7 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 		duplicateCount ++	
 	} else {
 			log.WithFields(QueryFields(r, startTime)).Info("Successfully created affiliation_unit " + unitName + "." )
-		}
+	}
 
 	//OK, we made the unit. Now, create the compute resource. By default its name is the same as the unit name.
 	q.Set("unitname", unitName)
@@ -537,12 +537,16 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 
 		if role == "Production" && unitName != "cms" {
 			var tmpuid,tmpgid int
+			DBtx.Savepoint("QuerryRow")
 			queryerr := DBtx.QueryRow(`select uid, groupid from user_group ug join groups g using (groupid) join users u using(uid) where u.uname=$1 and g.name=$2`,unitName + "pro", unitName).Scan(&tmpuid, &tmpgid)
 			if queryerr == sql.ErrNoRows {
+				DBtx.RollbackToSavepoint("QuerryRow")
 				DBtx.Savepoint("addUserToGroup_" + role)
 				addUserToGroup(w,R)
 				if !DBtx.Complete() {
-					log.WithFields(QueryFields(r, startTime)).Error("Error in addUserToGroup for " + unitName + "pro: " + DBtx.Error().Error())	
+					log.WithFields(QueryFields(r, startTime)).Error("Error in addUserToGroup for " + unitName + "pro: " + DBtx.Error().Error())
+					fmt.Fprintf(w,"{ \"ferry_error\": \"Error in addUserToGroup: " + strings.Replace(DBtx.Error().Error(), "\"", "'", -1) + ". Rolling back transaction.\" }")
+					return
 				}
 			}
 		}
@@ -562,5 +566,8 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	// If everything worked
+	log.WithFields(QueryFields(r, startTime)).Info("Success!")
+	fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+	
 	DBtx.Commit(key)
 }
