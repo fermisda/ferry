@@ -1084,7 +1084,7 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
                 break
 
         fd.write("insert into grid_fqan (unitid,fqan,mapped_user,mapped_group) values(%s,\'%s/Role=%s/Capability=NULL\', (select uid from users where uname = %s), (select groupid from groups where name = \'%s\' and type = 'UnixGroup'));\n"
-        % (exp_id,gmap.group,gmap.role,un,gname))
+        % (exp_id, gmap.group, str(gmap.role).replace('None', 'NULL'), un, gname))
         gmap.set_id(fqan_counter)
     fd.flush()
 
