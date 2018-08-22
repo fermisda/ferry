@@ -140,7 +140,7 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 		duplicateCount ++
 	}
 
-	for _, fqan := range []string{"Analysis", "None"} {
+	for _, fqan := range []string{"Analysis", "NULL"} {
 		rows, err := DBtx.Query(`select fqan from grid_fqan
 								 where fqan like $1 and lower(fqan) like lower($2);`, "%" + fqan + "%", "%" + unit + "%")
 		if err != nil {
@@ -512,7 +512,7 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	for _, role := range []string{"Analysis", "None", "Production"} {
+	for _, role := range []string{"Analysis", "NULL", "Production"} {
 		//createFQAN
 		// if standalone VO, change the string a bit
 		fqan := "/Role=" + role  + "/Capability=NULL"
