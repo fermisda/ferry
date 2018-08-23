@@ -33,7 +33,7 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 								join affiliation_units as au on ac.unitid = au.unitid
 								join user_certificates as uc on ac.dnid = uc.dnid
 								join users as u on uc.uid = u.uid 
-								where u.uname like $1 and ac.unitid in (select unitid from grid_fqan where fqan like $3)
+								where u.uname like $1 and (ac.unitid in (select unitid from grid_fqan where fqan like $3) or '%' = $2)
 								order by uname
 							) as t right join (
 								select 1 as key,
