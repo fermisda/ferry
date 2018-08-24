@@ -142,7 +142,8 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 
 	for _, fqan := range []string{"Analysis", "NULL"} {
 		rows, err := DBtx.Query(`select fqan from grid_fqan
-								 where fqan like $1 and lower(fqan) like lower($2);`, "%" + fqan + "%", "%" + unit + "%")
+								 where fqan like $1 and (lower(fqan) like lower($2) or lower(fqan) like lower($3));`,
+								 "%Role=" + fqan + "%", "/" + unit + "%", "/fermilab/" + unit + "%")
 		if err != nil {
 			defer log.WithFields(QueryFields(r, startTime)).Error(err)
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
@@ -156,6 +157,14 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 
 		var fullFqan string
 		rows.Scan(&fullFqan)
+
+		if rows.Next() {
+			rows.Scan(&fullFqan)
+			log.WithFields(QueryFields(r, startTime)).Error("Found ambiguous FQANs.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Found ambiguous FQANs.\" }")
+			return
+		}
+
 		rows.Close()
 
 		q.Set("fqan", fullFqan)
