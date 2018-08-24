@@ -87,7 +87,7 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var tmpAname, tmpRname, tmpUname, tmpUid, tmpGid, tmpGecos, tmpHdir, tmpShell,tmpTime sql.NullString
 		rows.Scan(&tmpAname, &tmpRname, &tmpUname, &tmpUid, &tmpGid, &tmpGecos, &tmpHdir, &tmpShell, &unitExists, &compExists, &tmpTime)
-		log.WithFields(QueryFields(r, startTime)).Println(tmpAname.String  + " " + tmpRname.String + " " + tmpUname.String)
+		log.WithFields(QueryFields(r, startTime)).Debugln(tmpAname.String  + " " + tmpRname.String + " " + tmpUname.String)
 		
 		if ! tmpAname.Valid {
 			tmpAname.Valid = true
@@ -118,7 +118,7 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 				
 			}
 			if tmpTime.Valid {
-				log.WithFields(QueryFields(r, startTime)).Println("tmpTime is valid" + tmpTime.String)
+				log.WithFields(QueryFields(r, startTime)).Debugln("tmpTime is valid" + tmpTime.String)
 				
 				parseTime,parserr := time.Parse(time.RFC3339,tmpTime.String)
 				if parserr != nil {
@@ -129,7 +129,7 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 			} else {
-				log.WithFields(QueryFields(r, startTime)).Println("tmpTime is not valid")
+				log.WithFields(QueryFields(r, startTime)).Debugln("tmpTime is not valid")
 			}
 			tmpUsers = append(tmpUsers, jsonuser{tmpUname.String, tmpUid.String, tmpGid.String, tmpGecos.String, tmpHdir.String, tmpShell.String})
 		}
@@ -270,7 +270,7 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 			}
 			prevGname = tmpGname.String
 			if tmpTime.Valid {
-				log.WithFields(QueryFields(r, startTime)).Println("tmpTime is valid" + tmpTime.String)
+				log.WithFields(QueryFields(r, startTime)).Debugln("tmpTime is valid" + tmpTime.String)
 				
 				parseTime,parserr := time.Parse(time.RFC3339,tmpTime.String)
 				lasttime := &Entry.Lasttime
@@ -282,12 +282,12 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 			} else {
-				log.WithFields(QueryFields(r, startTime)).Println("tmpTime is not valid")
+				log.WithFields(QueryFields(r, startTime)).Debugln("tmpTime is not valid")
 			}
 		}
 	}
 	Out = append(Out, Entry)
-	log.WithFields(QueryFields(r, startTime)).Println("Length: " + fmt.Sprintf("%d",len(Out)))	
+	log.WithFields(QueryFields(r, startTime)).Debugln("Length: " + fmt.Sprintf("%d",len(Out)))	
 	var output interface{}
 	if prevGname == "" {
 		type jsonerror struct {Error string `json:"ferry_error"`}
