@@ -1577,7 +1577,9 @@ func setUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Request)
 	if att.Valid {
 		execstr = `update external_affiliation_attribute set value = $3, last_updated = NOW() where uid = $1  and attribute = $2`
 	} else {
-		execstr = `insert into external_affiliation_attribute (uid, attribute, value) values ($1, $2, $3)`	
+		execstr = `insert into external_affiliation_attribute (uid, attribute, value) values ($1, $2, $3)`
+		att.String = attribute
+		att.Valid = true
 	}
 	_, err = DBtx.Exec(execstr, uid, att.String, value)
 	
