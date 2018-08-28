@@ -1562,7 +1562,7 @@ func setUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Request)
 	execstr := ""
 	var uid int
 	var att sql.NullString
-	queryerr := DBtx.tx.QueryRow(`select us.uid,eaa.attribute from (select uid from users where uname = $1) as us left join (select uid, attribute from external_affiliation_attribute where attribute = $2) as eaa on us.uid=eaa.uid`).Scan(&uid,&att)
+	queryerr := DBtx.tx.QueryRow(`select us.uid,eaa.attribute from (select uid from users where uname = $1) as us left join (select uid, attribute from external_affiliation_attribute where attribute = $2) as eaa on us.uid=eaa.uid`, uName, attribute).Scan(&uid,&att)
 	if queryerr == sql.ErrNoRows {
 		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
