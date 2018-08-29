@@ -1601,7 +1601,7 @@ func removeUserAccessFromResource(w http.ResponseWriter, r *http.Request) {
 	}
 	rows.Close()
 
-	query = `delete from compute_access where
+	query = `delete from compute_access_group where
 				uid = (select uid from users where uname = $1) and
 				groupid = (select groupid from groups where name = $2 and type = 'UnixGroup') and
 				compid = (select compid from compute_resources where name = $3);`
@@ -1614,12 +1614,28 @@ func removeUserAccessFromResource(w http.ResponseWriter, r *http.Request) {
 		nRows, _ = res.RowsAffected()
 	}
 
+	if err == nil && nRows > 0 {
+		query = `select * from compute_access_group where
+				uid = (select uid from users where uname = $1) and
+				compid = (select compid from compute_resources where name = $2);`
+		log.Debug(re.ReplaceAllString(query, " "))
+		rows, err = DBtx.Query(query, uName, rName)
+		
+		if !rows.Next() {
+			query = `delete from compute_access where
+					uid = (select uid from users where uname = $1) and
+					compid = (select compid from compute_resources where name = $2);`
+			log.Debug(re.ReplaceAllString(query, " "))
+			_, err = DBtx.Exec(query, uName, rName)
+		}
+	}
+
 	var output interface{}
 	if err != nil || nRows == 0 {
 		var queryStatus []jsonstatus
 		if userExists && groupExists && resourceExists {
-			queryStatus = append(queryStatus, jsonstatus{"", "User does not have access to compute resource."})
-			log.WithFields(QueryFields(r, startTime)).Error("User does not have access to compute resource.")
+			queryStatus = append(queryStatus, jsonstatus{"", "User does not have access to this group in the compute resource."})
+			log.WithFields(QueryFields(r, startTime)).Error("User does not have access to this group in the compute resource.")
 		}
 		if !userExists {
 			queryStatus = append(queryStatus, jsonstatus{"", "User does not exist."})
