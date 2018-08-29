@@ -2762,17 +2762,9 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 		}
 		return		
 		
-	default: // OK, we already have this user/group/resource combo. We just need to check if the call is trying to change the shell or home dir. If neither option was provided, that implies we're just keeping what is already there, so just log that nothing is changing and return success.
+	default: // OK, we already have this resource. We now need to check if the call is trying to change the shell or home dir.
 		
-		if "" == shell && "" == homedir {
-			// everything in the DB is already the same as the request, so don't do anything
-			log.WithFields(QueryFields(r, startTime)).Print("The request already exists in the database. Nothing to do.")
-			if cKey != 0 {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"The request already exists in the database.\" }")
-			}
-			DBtx.Report("The request already exists in the database.")
-			return
-		} else {
+		if "" != shell || "" != homedir {
 			_, moderr := DBtx.Exec(`update compute_access set shell=$1,home_dir=$2,last_updated=NOW() where uid=$3 and compid=$4`,defShell,defhome,uid,compid)
 			if moderr != nil {
 				log.WithFields(QueryFields(r, startTime)).Error("Error in DB update: " + err.Error()) 
@@ -2781,7 +2773,6 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 				}
 				return		
 			} else {
-				
 				log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully updated (%s,%s,%s,%s) in compute_access.",rName, uname, defShell, defhome))			
 			}
 		}
@@ -2859,13 +2850,14 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 		
 	default: // OK, we already have this user/group/resource combo. We just need to check if the call is trying to change is_primary from what it is. If is_primary was not provided, that implies we're just keeping what is already there, so just log that nothing is changing and return success.
 		
-		if (cagPrimary.Valid && cagPrimary.Bool == ispri) || is_primary == "" {
+		if ((cagPrimary.Valid && cagPrimary.Bool == ispri) || is_primary == "") && "" == shell && "" == homedir {
 			// everything in the DB is already the same as the request, so don't do anything
 			log.WithFields(QueryFields(r, startTime)).Print("The request already exists in the database. Nothing to do.")
 			if cKey != 0 {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"The request already exists in the database.\" }")
 			}
 			DBtx.Report("The request already exists in the database.")
+			return
 		} else {
 			if is_primary != "" {
 				//change the value stored in cagPrimary.Bool to be that of ispri, which is the new value
