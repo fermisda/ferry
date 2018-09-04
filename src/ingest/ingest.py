@@ -454,7 +454,7 @@ def read_vulcan_certificates(config, users, vomss):
                     users[row["uname"]].add_cert(Certificate(len(vomss), row["auth_string"], CA["subjectdn"]))
                 cernUser = re.findall(r"/DC=ch/DC=cern/OU=Organic Units/OU=Users/CN=(\w*)/CN=\d+/CN=[A-z\s]+", row["auth_string"])
                 if len(cernUser) > 0:
-                    users[row["uname"]].add_external_affiliation("cern", cernUser[0])
+                    users[row["uname"]].add_external_affiliation("cern_username", cernUser[0])
 
 def build_collaborations(vomss, nis, groups):
     """

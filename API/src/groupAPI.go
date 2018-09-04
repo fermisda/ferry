@@ -1978,17 +1978,46 @@ func addLPCCollaborationGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	var grpid int
-	err := DBptr.QueryRow(`select distinct aug.groupid from affiliation_unit_group as aug join groups as g on g.groupid=aug.groupid join affiliation_units as au on au.unitid=aug.unitid where au.name='cms' and g.name=$1 and g.type='UnixGroup'`,gName).Scan(&grpid)
+	var usrid, grpid, unitid, compid sql.NullInt64
+	err := DBptr.QueryRow(`select (select uid from users where uname = $1),
+								  (select groupid from groups where name = $1 and type = 'UnixGroup'),
+								  (select unitid from affiliation_units where name = 'cms'),
+								  (select compid from compute_resources where name = 'lpcinteractive');`,
+						  gName).Scan(&usrid, &grpid, &unitid, &compid)
 	switch {
-	case err == sql.ErrNoRows:
-		log.WithFields(QueryFields(r, startTime)).Print("Adding " + gName + " to affiliation_unit_groups.")
 	case err != nil:
 		log.WithFields(QueryFields(r, startTime)).Print("Error in affiliation_unit_group DB query: "+err.Error())
 		fmt.Fprintf(w,"{ \"ferry_error\": \"DB query error.\" }")
 		return
+
+	case !usrid.Valid:
+		log.WithFields(QueryFields(r, startTime)).Print("No group user.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No group user.\" }")
+		return
+
+	case !grpid.Valid:
+		log.WithFields(QueryFields(r, startTime)).Print("Group does not exist.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Group does not exist.\" }")
+		return
+
+	case !unitid.Valid:
+		log.WithFields(QueryFields(r, startTime)).Print("Affiliation unit does not exist.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Affiliation unit does not exist.\" }")
+		return
+
+	case !compid.Valid:
+		log.WithFields(QueryFields(r, startTime)).Print("Compute resource does not exist.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Compute resource does not exist.\" }")
+		return
+	}
+
+	var inUsrCompRes, inGrpCompRes, inAffUnit bool
+	err = DBptr.QueryRow(`select ($1, $2)     in (select compid, uid from compute_access),
+								 ($1, $2, $3) in (select compid, uid, groupid from compute_access_group),
+								 ($4, $3)     in (select unitid, groupid from affiliation_unit_group);`,
+						  compid, usrid, grpid, unitid).Scan(&inUsrCompRes, &inGrpCompRes, &inAffUnit)
 		
-	default:
+	if inGrpCompRes && inAffUnit {
 		log.WithFields(QueryFields(r, startTime)).Print("Group "+ gName + " is already associated with CMS.")	
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Group already associated to CMS.\" }")
 		return
@@ -2008,23 +2037,45 @@ func addLPCCollaborationGroup(w http.ResponseWriter, r *http.Request) {
 	r.URL.RawQuery = r.URL.RawQuery + "&" + "unitname=cms"
 	
 //	var w2 http.ResponseWriter
-	adderr := addGroupToUnitDB(&DBtx, gName, "UnixGroup", "cms", is_primary)
+	if !inAffUnit {
+		adderr := addGroupToUnitDB(&DBtx, gName, "UnixGroup", "cms", is_primary)
+		if adderr != nil {
+			log.WithFields(QueryFields(r, startTime)).Print("Error adding group to unit: " + adderr.Error() + ". Not continuing.")
+			if adderr == sql.ErrNoRows {
+				fmt.Fprintf(w,"{ \"ferry_error\": \"group does not exist in groups table.\" }")
+				return
+					} else {
+				fmt.Fprintf(w,"{ \"ferry_error\": \"" + adderr.Error() + "\"}")
+				return
+			}
+		}
+	}
 
-
-	if adderr != nil {
-		log.WithFields(QueryFields(r, startTime)).Print("Error adding group to unit: " + adderr.Error() + ". Not continuing.")
-		if adderr == sql.ErrNoRows {
-			fmt.Fprintf(w,"{ \"ferry_error\": \"group does not exist in groups table.\" }")
-			return
-                } else {
-			fmt.Fprintf(w,"{ \"ferry_error\": \"" + adderr.Error() + "\"}")
+	if !inUsrCompRes {
+		_, adderr := DBtx.Exec(`insert into compute_access (compid, uid, shell, home_dir, last_updated)
+								values ($1, $2,
+										(select default_shell from compute_resources where name = 'lpcinteractive'),
+										(select default_home_dir from compute_resources where name = 'lpcinteractive') || '/' || $3,
+									    NOW());`, compid, usrid, gName)
+		if adderr != nil {
+			log.WithFields(QueryFields(r, startTime)).Print("Error adding group to lpcinteractive: " + adderr.Error() + ". Not continuing.")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error adding group to lpcinteractive.\" }")
 			return
 		}
-	} 
+	}
+
+	if !inGrpCompRes {
+		_, adderr := DBtx.Exec("insert into compute_access_group (compid, uid, groupid, is_primary, last_updated) values ($1, $2, $3, true, NOW());", compid, usrid, grpid)
+		if adderr != nil {
+			log.WithFields(QueryFields(r, startTime)).Print("Error adding group to lpcinteractive: " + adderr.Error() + ". Not continuing.")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error adding group to lpcinteractive.\" }")
+			return
+		}
+	}
 	
 	quotaerr := setGroupStorageQuotaDB(&DBtx, gName, "cms", "EOS", quota, "B", "NULL")
 	if quotaerr != nil {
-		//print out the error
+		// print out the error
 		// roll back transaction
 		log.WithFields(QueryFields(r, startTime)).Print("Error adjusting quota for " + gName + ". Rolling back addition of " + gName + " to cms.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + quotaerr.Error() + "\"}")
