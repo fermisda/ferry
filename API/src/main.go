@@ -256,6 +256,7 @@ func main() {
 	grouter.HandleFunc("/setLPCStorageAccess", setLPCStorageAccess)
 	grouter.HandleFunc("/createExperiment", createExperiment)
 	grouter.HandleFunc("/addLPCConvener", addLPCConvener)
+	grouter.HandleFunc("/removeLPCConvener", removeLPCConvener)
 
 	srvConfig := viper.GetStringMapString("server")
 	Mainsrv = &http.Server{

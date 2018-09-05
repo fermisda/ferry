@@ -637,3 +637,66 @@ func addLPCConvener(w http.ResponseWriter, r *http.Request) {
 
 	DBtx.Commit(key)
 }
+
+func removeLPCConvener(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	
+	authorized,authout := authorize(r)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
+		return
+	}
+	
+	var DBtx Transaction
+	R := WithTransaction(r, &DBtx)
+
+	key, err := DBtx.Start(DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error starting database transaction: " + err.Error())
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
+		return
+	}
+	defer DBtx.Rollback(key)
+
+	if q.Get("groupname") != "" && q.Get("groupname")[0:3] != "lpc" {
+		log.WithFields(QueryFields(r, startTime)).Error("LPC groupnames must begin with \"lpc\".")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"groupname must begin with lpc.\" }")
+		return
+	}
+
+	q.Set("grouptype", "UnixGroup")
+	R.URL.RawQuery = q.Encode()
+
+	DBtx.Savepoint("removeGroupLeader")
+	DBtx.Continue()
+	removeGroupLeader(w, R)
+	if !DBtx.Complete() {
+		if !strings.Contains(DBtx.Error().Error(), `User is not a leader of this group.`) {
+			log.WithFields(QueryFields(r, startTime)).Error("removeGroupLeader failed.")
+			return
+		}
+		DBtx.RollbackToSavepoint("removeGroupLeader")
+	}
+
+	if strings.ToLower(q.Get("removegroup")) == "true" {
+		q.Set("resourcename", "lpcinteractive")
+		R.URL.RawQuery = q.Encode()
+
+		DBtx.Continue()
+		removeUserAccessFromResource(w, R)
+		if !DBtx.Complete() {
+			if !strings.Contains(DBtx.Error().Error(), `The request already exists in the database`) {
+				log.WithFields(QueryFields(r, startTime)).Error("setUserAccessToComputeResource failed.")
+				return
+			}
+		}
+	}
+
+	log.WithFields(QueryFields(r, startTime)).Info("Success!")
+	fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+
+	DBtx.Commit(key)
+}

@@ -888,10 +888,13 @@ func removeGroupLeader(w http.ResponseWriter, r *http.Request) {
 			}
 			//run said statement and check errors
 			_, err = stmt.Exec()
+			DBtx.err = err
 			if err != nil {
 				if strings.Contains(err.Error(), "User is not a leader of this group.") {
 					log.WithFields(QueryFields(r, startTime)).Error("User is not a leader of this group.")
-					fmt.Fprintf(w,"{ \"ferry_error\": \"User is not a leader of this group.\" }")
+					if cKey != 0 {
+						fmt.Fprintf(w,"{ \"ferry_error\": \"User is not a leader of this group.\" }")
+					}
 				} else {
 					w.WriteHeader(http.StatusNotFound)
 					log.WithFields(QueryFields(r, startTime)).Print("Error setting " + uName + " leader of " + groupname + ": " + err.Error())
@@ -903,7 +906,9 @@ func removeGroupLeader(w http.ResponseWriter, r *http.Request) {
 				DBtx.Commit(cKey)
 				w.WriteHeader(http.StatusOK)
 				log.WithFields(QueryFields(r, startTime)).Print("Successfully set " + uName + " as leader of " + groupname + ".")
-				fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
+				if cKey != 0 {
+					fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
+				}
 			}
 			return
 		}
@@ -1665,7 +1670,9 @@ func removeUserAccessFromResource(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 	}
-	fmt.Fprintf(w, string(jsonoutput))
+	if cKey != 0 {
+		fmt.Fprintf(w, string(jsonoutput))
+	}
 }
 
 func setGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
