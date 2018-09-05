@@ -788,7 +788,9 @@ func setGroupLeader(w http.ResponseWriter, r *http.Request) {
 				DBtx.Commit(cKey)
 				w.WriteHeader(http.StatusOK)
 				log.WithFields(QueryFields(r, startTime)).Print("Successfully set " + uName + " as leader of " + groupname + ".")
-				fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
+				if cKey != 0 {
+					fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
+				}
 			}
 			return
 		}
