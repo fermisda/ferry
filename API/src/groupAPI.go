@@ -1960,6 +1960,7 @@ func addLPCCollaborationGroup(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 	quota := strings.TrimSpace(q.Get("quota"))
+	quotaunit := strings.TrimSpace(q.Get("quota_unit"))
 	gName := strings.TrimSpace(q.Get("groupname"))
 	//We are not going to allow this API call to set a new primary group for CMS
 	is_primary := false
@@ -1978,6 +1979,9 @@ func addLPCCollaborationGroup(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error("No quota specified in http query.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No quota specified.\" }")
 		return
+	}
+	if quotaunit == "" {
+		quotaunit = "B"
 	}
 
 	authorized,authout := authorize(r)
@@ -2081,8 +2085,16 @@ func addLPCCollaborationGroup(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+
+	// We want to store the value in the DB in bytes, no matter what the input unit is. Convert the value here and then set the unit of "B" for bytes	
+	newquota, converr := convertValue(quota, quotaunit, "B")
+	if converr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(converr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error converting unit value. It must be a number.\" }")
+		return	
+	}
 	
-	quotaerr := setGroupStorageQuotaDB(&DBtx, gName, "cms", "EOS", quota, "B", "NULL")
+	quotaerr := setGroupStorageQuotaDB(&DBtx, gName, "cms", "EOS", strconv.FormatFloat(newquota, 'f', 0, 64), "B", "NULL")
 	if quotaerr != nil {
 		// print out the error
 		// roll back transaction
