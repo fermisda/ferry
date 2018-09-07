@@ -1298,7 +1298,7 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	quota := strings.TrimSpace(q.Get("quota"))
 	uName := strings.TrimSpace(q.Get("username"))
 	unitName := strings.TrimSpace(q.Get("unitname"))
-	unit := strings.TrimSpace(q.Get("unit"))
+	unit := strings.TrimSpace(q.Get("quota_unit"))
 	rName := strings.TrimSpace(strings.ToUpper(q.Get("resourcename")))
 	isgrp := strings.TrimSpace( strings.ToLower(q.Get("isGroup")))
 	validtime := strings.TrimSpace(q.Get("valid_until"))
