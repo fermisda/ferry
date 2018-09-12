@@ -16,6 +16,11 @@ services:
     restart: always
     ports:
     - "8443:8443"
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "5"
   postgres-exporter:
     image: wrouesnel/postgres_exporter
     network_mode: "bridge"
@@ -25,6 +30,11 @@ services:
     - DATA_SOURCE_PASS=${FERRY_DB_PASS}
     ports:
     - "9187:9187"
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "5"
   ferry-ingest:
     build:
       context: .
@@ -34,4 +44,9 @@ services:
     - ~/certs/ferry_key.pem:/home/ferry/hostkey.pem
     - /etc/grid-security/certificates/cilogon-osg.pem:/home/ferry/cilogon-osg.pem
     network_mode: "host"
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "5"
 
