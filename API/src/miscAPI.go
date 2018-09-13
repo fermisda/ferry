@@ -818,9 +818,9 @@ func getStorageAuthzDBFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := DBptr.Query(`select u.uname, u.uid, g.gid from users as u
-							  right join user_group as ug on u.uid = ug.uid
-							  left join groups as g on ug.groupid = g.groupid
-                                                          where g.type = 'UnixGroup' and ug.last_updated>=$1 or $1 is null
+							  join user_group as ug on u.uid = ug.uid
+							  join groups as g on ug.groupid = g.groupid
+                              where g.type = 'UnixGroup' and (ug.last_updated>=$1 or $1 is null)
 							  order by u.uname;`, lastupdate)
 
 	if err != nil {
@@ -849,7 +849,7 @@ func getStorageAuthzDBFile(w http.ResponseWriter, r *http.Request) {
 		var tmpUser, tmpUid, tmpGid sql.NullString
 		rows.Scan(&tmpUser, &tmpUid, &tmpGid)
 
-		if tmpUser.Valid {
+		if tmpGid.Valid {
 			if prevUser == "" {
 				Entry.Decision = "authorize"
 				Entry.User = tmpUser.String
