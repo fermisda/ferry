@@ -15,7 +15,7 @@ services:
     network_mode: "bridge"
     restart: always
     ports:
-    - "8443:8443"
+    - "${FERRY_API_PORT}:8443"
   postgres-exporter:
     image: wrouesnel/postgres_exporter
     network_mode: "bridge"
