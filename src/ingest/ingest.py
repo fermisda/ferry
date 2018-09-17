@@ -589,8 +589,8 @@ def read_nis(primary_groups, dir_path, exclude_list, altnames, users, groups):
                 user_list = tmp[3].split(",")
 
             if gid not in groups.values():
-                print("Domain: %s group %s from group file doesn\'t exist  in userdb!" % \
-                                     (dir,gid,), file=sys.stderr)
+                print("Domain: %s group %s %s from group file doesn\'t exist  in userdb!" % \
+                                     (dir,gid,gname), file=sys.stderr)
                 continue
             if gname not in groups.keys():
                 print("Domain: %s group name %s, %s from group file doesn\'t exist  in userdb!" % \
@@ -900,18 +900,26 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
     #mysql_client_cfg = MySQLUtils.createClientConfig("main_db", config)
     #connect_str = MySQLUtils.getDbConnection("main_db", mysql_client_cfg, config)
 
-    # rebuild database and schema
+    if config.has_option("main_db", "update"):
+        update = True
+        updateList = config._sections["main_db"]["update"].splitlines()
+    else:
+        update = False
+
     fd = open(config._sections["path"]["output"], "w")
-    fd.write("\\connect ferry_test\n")
-    fd.write("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'ferry';\n")
-    fd.write("DROP DATABASE ferry;\n")
-    fd.write("CREATE DATABASE ferry OWNER ferry;\n")
-    fd.write("\\connect ferry\n")
-    fd.write("GRANT ALL ON SCHEMA public TO ferry;\n")
-    fd.write("GRANT ALL ON SCHEMA public TO public;\n")
-    for line in open(config._sections["main_db"]["schemadump"]):
-        fd.write(line)
-    fd.flush()
+
+    if not update:
+        # rebuild database and schema
+        fd.write("\\connect ferry_test\n")
+        fd.write("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'ferry';\n")
+        fd.write("DROP DATABASE ferry;\n")
+        fd.write("CREATE DATABASE ferry OWNER ferry;\n")
+        fd.write("\\connect ferry\n")
+        fd.write("GRANT ALL ON SCHEMA public TO ferry;\n")
+        fd.write("GRANT ALL ON SCHEMA public TO public;\n")
+        for line in open(config._sections["main_db"]["schemadump"]):
+            fd.write(line)
+        fd.flush()
 
     # populate users table
     #command = ""
@@ -929,9 +937,16 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
         status = "False"
         if user.status:
             status = "True"
-        fd.write("insert into users (uid, uname, full_name, status, expiration_date, last_updated) values (%d,\'%s\',\'%s\',%s,%s, NOW());\n"
-                 % (int(user.uid), user.uname, user.full_name.strip().replace("'", "''"), status,
-                    user.expiration_date))
+        if update:
+            if "users" in updateList:
+                update_string = " on conflict (uname) do update set full_name = \'%s\', status = %s, expiration_date = %s, last_updated = NOW()" \
+                % (user.full_name.strip().replace("'", "''"), status, user.expiration_date)
+            else:
+                update_string = " on conflict do nothing"
+        else:
+            update_string = ""
+        fd.write("insert into users (uid, uname, full_name, status, expiration_date, last_updated) values (%d,\'%s\',\'%s\',%s,%s, NOW())%s;\n"
+              % (int(user.uid), user.uname, user.full_name.strip().replace("'", "''"), status, user.expiration_date, update_string))
         # for now will just create ferry.sql file
         # results,return_code=MySQLUtils.RunQuery(command,connect_str)
         # if return_code!=0:
@@ -942,8 +957,12 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
     group_counter = 1
     gid_map = {}
     for gname, index in gids.items():
-        fd.write("insert into groups (gid,name,type,last_updated) values (%d,\'%s\','UnixGroup',NOW());\n"
-                 % (int(index), gname))
+        if update:
+            update_string = " on conflict do nothing"
+        else:
+            update_string = ""
+        fd.write("insert into groups (gid,name,type,last_updated) values (%d,\'%s\','UnixGroup',NOW())%s;\n"
+              % (int(index), gname, update_string))
         gid_map[index] = group_counter
         group_counter += 1
         # results,return_code=MySQLUtils.RunQuery(command,connect_str)
@@ -957,7 +976,14 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
         #    continue
         for gid in user.groups:
             groupid = gid_map[gid]
-            fd.write("insert into user_group values (%d,%d,%s);\n" % (int(user.uid), groupid, user.groups[gid].is_leader))
+            if update:
+                if "user_group" in updateList:
+                    update_string = " on conflict (uid, groupid) do update set is_leader = %s" % (user.groups[gid].is_leader)
+                else:
+                    update_string = " on conflict do nothing"
+            else:
+                update_string = ""
+            fd.write("insert into user_group values (%d,(select groupid from groups where gid = %s),%s)%s;\n" % (int(user.uid), gid, user.groups[gid].is_leader, update_string))
 
     # populate collaborative_unit
     for cu in collaborations:
@@ -965,26 +991,43 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
             alt_name = "\'%s\'" % (cu.alt_name)
         else:
             alt_name = "NULL"
+        if update:
+            if "affiliation_units" in updateList:
+                update_string = " on conflict (name) do update set alternative_name = %s, last_updated = NOW()" \
+                % (alt_name)
+            else:
+                update_string = " on conflict do nothing"
+        else:
+            update_string = ""
         fd.write("insert into affiliation_units (name, alternative_name, last_updated) " +\
-            "values (\'%s\',%s,NOW());\n" % (cu.name, alt_name))
+            "values (\'%s\',%s,NOW())%s;\n" % (cu.name, alt_name, update_string))
 
         # populate voms_url
+        if update:
+            update_string = " on conflict do nothing"
+        else:
+            update_string = ""
         if isinstance(cu,VOMS):
             if type(cu.url) is list:
                 urls = cu.url
             else:
                 urls = [cu.url]
             for link in urls:
-                fd.write("insert into voms_url (unitid, url, last_updated) values (%d,\'%s\',NOW());\n"
-                % (cu.unitid, link))
+                fd.write("insert into voms_url (unitid, url, last_updated) values ((select unitid from affiliation_units where name = '%s'),\'%s\',NOW())%s;\n"
+                % (cu.name, link, update_string))
 
         # populate collaboration unit groups
+        if update:
+            update_string = " on conflict do nothing"
+        else:
+            update_string = ""
         for gid in cu.groups.values():
             index = gid_map[gid]
             is_primary = 'false'
             if (cu.name in nis.keys() and gid in nis[cu.name].primary_gid) or (cu.alt_name in nis.keys() and gid in nis[cu.alt_name].primary_gid):
                 is_primary = 'true'
-            fd.write("insert into affiliation_unit_group values(%d,%d,%s,NOW());\n" % (cu.unitid,index,is_primary))
+            fd.write("insert into affiliation_unit_group values((select unitid from affiliation_units where name = '%s'),%d,%s,NOW())%s;\n" \
+            % (cu.name,index,is_primary,update_string))
     fd.flush()
 
     #populate compute_resource
@@ -998,40 +1041,83 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
             print("Neither %s not %s found in NIS" % (cu.name,cu.alt_name), file=sys.stderr)
             continue
         res_counter += 1
+        if update:
+            if "compute_resources" in updateList:
+                update_string = " on conflict (name) do update set default_shell = \'%s\', default_home_dir = \'%s\', last_updated = NOW()" \
+                % (nis_info.cshell, nis_info.chome)
+            else:
+                update_string = " on conflict do nothing"
+        else:
+            update_string = ""
         fd.write("insert into compute_resources (name, default_shell, default_home_dir, type, unitid, last_updated)" +\
-                 " values (\'%s\', \'%s\', \'%s\', \'%s\', %s, NOW());\n" % (nis_info.cresource, nis_info.cshell,
-                                                                             nis_info.chome,nis_info.ctype,cu.unitid))
+                 " values (\'%s\', \'%s\', \'%s\', \'%s\', (select unitid from affiliation_units where name = '%s'), NOW())%s;\n" % (nis_info.cresource, nis_info.cshell,
+                                                                             nis_info.chome,nis_info.ctype,cu.name,update_string))
 
         for _, user in nis_info.users.items():
             comp = user.compute_access[nis_info.cresource]
             groupid = gid_map[comp.gid]
+            if update:
+                if "compute_access" in updateList:
+                    update_string = " on conflict (compid, uid) do update set shell = \'%s\', home_dir = \'%s\', last_updated = NOW()" \
+                    % (comp.shell, comp.home_dir)
+                else:
+                    update_string = " on conflict do nothing"
+            else:
+                update_string = ""
             fd.write("insert into compute_access (compid, uid, shell, home_dir, last_updated)" + \
-                     " values (%s, %s, \'%s\', \'%s\', NOW());\n" % (res_counter, user.uid, comp.shell, comp.home_dir))
+                     " values ((select compid from compute_resources where name = '%s'), %s, \'%s\', \'%s\', NOW())%s;\n" % (nis_info.cresource, user.uid, comp.shell, comp.home_dir, update_string))
+            if update:
+                update_string = " on conflict do nothing"
+            else:
+                update_string = ""
             fd.write("insert into compute_access_group (compid, uid, groupid, is_primary)" + \
-                     " values (%s, %s, %s, true);\n" % (res_counter, user.uid, groupid))
+                     " values ((select compid from compute_resources where name = '%s'), %s, (select groupid from groups where gid = %s), true)%s;\n" % (nis_info.cresource, user.uid, comp.gid, update_string))
             for gid in user.compute_access[nis_info.cresource].secondary_groups:
                 fd.write("insert into compute_access_group (compid, uid, groupid, is_primary)" + \
-                         " values (%s, %s, %s, false);\n" % (res_counter, user.uid, gid_map[gid]))
+                         " values ((select compid from compute_resources where name = '%s'), %s, (select groupid from groups where gid = %s), false)%s;\n" % (nis_info.cresource, user.uid, gid, update_string))
 
     for res in compute_resources.values():
         if res.cunit:
-            unit = res.unitid
+            unit = res.cunit
         else:
             unit = "Null"
         res_counter += 1
+        if update:
+            if "compute_resources" in updateList:
+                update_string = " on conflict (name) do update set default_shell = \'%s\', default_home_dir = \'%s\', last_updated = NOW()" \
+                % (res.cshell, res.chome)
+            else:
+                update_string = " on conflict do nothing"
+        else:
+            update_string = ""
         fd.write("insert into compute_resources (name, default_shell, default_home_dir, type, unitid, last_updated)" +\
-                 " values (\'%s\', \'%s\', \'%s\', \'%s\', %s, NOW());\n" % (res.cresource, res.cshell,
-                                                                             res.chome,res.ctype,unit))
+                 " values (\'%s\', \'%s\', \'%s\', \'%s\', (select unitid from affiliation_units where name = '%s'), NOW())%s;\n" \
+                 % (res.cresource, res.cshell, res.chome,res.ctype,unit,update_string))
         for _, user in res.users.items():
             comp = user.compute_access[res.cresource]
             groupid = gid_map[comp.gid]
+            if update:
+                if "compute_access" in updateList:
+                    update_string = " on conflict (compid, uid) do update set shell = \'%s\', home_dir = \'%s\', last_updated = NOW()" \
+                    % (comp.shell, comp.home_dir)
+                else:
+                    update_string = " on conflict do nothing"
+            else:
+                update_string = ""
             fd.write("insert into compute_access (compid, uid, shell, home_dir, last_updated)" + \
-                     " values (%s, %s, \'%s\', \'%s\', NOW());\n" % (res_counter, user.uid, comp.shell, comp.home_dir))
+                     " values ((select compid from compute_resources where name = '%s'), %s, \'%s\', \'%s\', NOW())%s;\n" \
+                     % (res.cresource, user.uid, comp.shell, comp.home_dir, update_string))
+            if update:
+                update_string = " on conflict do nothing"
+            else:
+                update_string = ""
             fd.write("insert into compute_access_group (compid, uid, groupid, is_primary)" + \
-                     " values (%s, %s, %s, true);\n" % (res_counter, user.uid, groupid))
+                     " values ((select compid from compute_resources where name = '%s'), %s, (select groupid from groups where gid = %s), true)%s;\n" \
+                     % (res.cresource, user.uid, comp.gid, update_string))
             for gid in user.compute_access[res.cresource].secondary_groups:
                 fd.write("insert into compute_access_group (compid, uid, groupid, is_primary)" + \
-                         " values (%s, %s, %s, false);\n" % (res_counter, user.uid, gid_map[gid]))
+                         " values ((select compid from compute_resources where name = '%s'), %s, (select groupid from groups where gid = %s), false)%s;\n" \
+                         % (res.cresource, user.uid, gid, update_string))
 
     fd.flush()
     
@@ -1039,19 +1125,38 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
     storage_counter = 0
     for storage in storages.values():
         storage_counter += 1
+        if update:
+            if "storage_resources" in updateList:
+                update_string = " on conflict (name) do update set type = \'%s\', default_path = \'%s\', default_quota = \'%s\', default_unit = \'%s\', last_updated = NOW()" \
+                % (storage.stype, storage.spath, storage.squota, storage.sunit)
+            else:
+                update_string = " on conflict do nothing"
+        else:
+            update_string = ""
         fd.write("insert into storage_resources (name, type, default_path, default_quota, default_unit, last_updated)" + \
-                 " values (\'%s\', \'%s\', \'%s\', \'%s\', \'%s\', NOW());\n" % (storage.sresource, storage.stype, storage.spath, storage.squota, storage.sunit))
+                 " values (\'%s\', \'%s\', \'%s\', \'%s\', \'%s\', NOW())%s;\n" \
+                 % (storage.sresource, storage.stype, storage.spath, storage.squota, storage.sunit, update_string))
         for quota in storage.quotas:
             for cu in collaborations:
                 if cu.name != quota.qcunit:
                     continue
                 if quota.qgid != 'null':
-                    groupid = gid_map[quota.qgid]
+                    gid = quota.qgid
+                    target = "(storageid, groupid) where valid_until is null"
                 else:
-                    groupid = 'null'
+                    gid = 'null'
+                    target = "(storageid, uid) where valid_until is null"
+                if update:
+                    if "storage_quota" in updateList:
+                        update_string = " on conflict %s do update set path = \'%s\', value = %s, unit = \'%s\', last_updated = NOW()" \
+                        % (target, quota.qpath, quota.qvalue, quota.qunit)
+                    else:
+                        update_string = " on conflict do nothing"
+                else:
+                    update_string = ""
                 query = "insert into storage_quota (storageid, uid, groupid, unitid, path, value, unit, valid_until, last_updated)" + \
-                        " values (%s, %s, %s, %s, \'%s\', %s, \'%s\', \'%s\', NOW());\n" % (storage_counter, quota.quid, groupid, cu.unitid, quota.qpath, 
-                                                                                             quota.qvalue, quota.qunit, quota.quntil)
+                        " values (%s, %s, (select groupid from groups where gid = %s), (select unitid from affiliation_units where name = '%s'), \'%s\', %s, \'%s\', \'%s\', NOW())%s;\n" \
+                        % (storage_counter, quota.quid, gid, cu.name, quota.qpath, quota.qvalue, quota.qunit, quota.quntil, update_string)
                 fd.write(query.replace("'null'", "null"))
                 break
 
@@ -1065,8 +1170,10 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
         #and gmap.uname in users.keys()
         if gmap.uname:
             un = "\'%s\'" % (gmap.uname)
+            target = "(fqan, mapped_user, mapped_group)"
         else:
             un='NULL'
+            target = "(fqan, mapped_group) WHERE (mapped_user IS NULL)"
 
         exp = gmap.group[1:].strip().split('/')
         if exp[0] == 'fermilab':
@@ -1077,17 +1184,29 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
         else:
             exp_name = exp[0]
 
-        exp_id = 'NULL'
+        exp = 'NULL'
         for cu in collaborations:
             if exp_name.lower() == cu.name.lower():
-                exp_id = str(cu.unitid)
+                exp = cu.name
                 break
 
-        fd.write("insert into grid_fqan (unitid,fqan,mapped_user,mapped_group) values(%s,\'%s/Role=%s/Capability=NULL\', (select uid from users where uname = %s), (select groupid from groups where name = \'%s\' and type = 'UnixGroup'));\n"
-        % (exp_id, gmap.group, str(gmap.role).replace('None', 'NULL'), un, gname))
+        if update:
+            if "grid_fqan" in updateList:
+                update_string = " on conflict %s do update set mapped_user = (select uid from users where uname = %s), mapped_group = (select groupid from groups where name = \'%s\' and type = 'UnixGroup'), last_updated = NOW()" \
+                % (target, un, gname)
+            else:
+                update_string = " on conflict do nothing"
+        else:
+            update_string = ""
+        fd.write("insert into grid_fqan (unitid,fqan,mapped_user,mapped_group) values((select unitid from affiliation_units where name = '%s'),\'%s/Role=%s/Capability=NULL\', (select uid from users where uname = %s), (select groupid from groups where name = \'%s\' and type = 'UnixGroup'))%s;\n"
+        % (exp, gmap.group, str(gmap.role).replace('None', 'NULL'), un, gname, update_string))
         gmap.set_id(fqan_counter)
     fd.flush()
 
+    if update:
+        update_string = " on conflict do nothing"
+    else:
+        update_string = ""
     experiment_counter = 0
     for cu in collaborations:
         experiment_counter += 1
@@ -1109,54 +1228,100 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
                             if  umap.group == gmap.group and umap.role == gmap.role:
                                 fqanid = gmap.fqanid
                                 break
-                        fd.write("insert into grid_access values  (%d,%d,False,False,NOW());\n" % \
-                                (int(user.uid), fqanid ))
+                        fqan = "\'%s/Role=%s/Capability=NULL\'" % (umap.group, str(umap.role).replace('None', 'NULL'))
+                        fd.write("insert into grid_access values  (%d,(select fqanid from grid_fqan where fqan = %s),False,False,NOW())%s;\n" % \
+                                (int(user.uid), fqan, update_string))
 
                     fd.flush()
 
     # populating user_certificates table
+    if update:
+        update_string = " on conflict do nothing"
+    else:
+        update_string = ""
     for user in users.values():
         for dn, details in user.certificates.items():
             fd.write("insert into user_certificates (dn,uid,last_updated) "
-                     "values (\'%s\',%d,NOW());\n" % (dn, int(user.uid)))
+                     "values (\'%s\',%d,NOW())%s;\n" % (dn, int(user.uid), update_string))
             for experiment in details['experiments']:
                 fd.write("insert into affiliation_unit_user_certificate (unitid,dnid,last_updated) "
-                         "values (%d,(select dnid from user_certificates where dn = \'%s\'),NOW());\n" % (experiment, dn))
+                         "values ((select unitid from affiliation_units where name = \'%s\'),(select dnid from user_certificates where dn = \'%s\'),NOW())%s;\n" % (collaborations[experiment - 1].name, dn, update_string))
 
     # populating external_affiliation_attribute
+    if update:
+        update_string = " on conflict do nothing"
+    else:
+        update_string = ""
     for _, user in users.items():
         for external_affiliation in user.external_affiliations:
             fd.write("insert into external_affiliation_attribute (uid,attribute,value,last_updated) values (%d,\'%s\',"
-                     "\'%s\',NOW());\n" % (int(user.uid), external_affiliation[0], external_affiliation[1]))
+                     "\'%s\',NOW())%s;\n" % (int(user.uid), external_affiliation[0], external_affiliation[1], update_string))
 
     # populating compute_batch
     for cr_name, cr_data in batch_structure.items():
         res_counter += 1
+        if update:
+            if "compute_resources" in updateList:
+                update_string = " on conflict (name) do update set default_shell = \'%s\', default_home_dir = \'%s\', last_updated = NOW()" \
+                % (str(cr_data.cshell).replace("None", "default"), str(cr_data.chome).replace("None", "default"))
+            else:
+                update_string = " on conflict do nothing"
+        else:
+            update_string = ""
+        if cr_data.cunit:
+            aunit = collaborations[cr_data.cunit - 1].name
+        else:
+            aunit = cr_data.cunit
         query = ("insert into compute_resources (name, default_shell, default_home_dir, type, unitid, last_updated) " + 
-                 "values (\'%s\', \'%s\', \'%s\', \'%s\', %s, NOW());\n"
-              % (cr_name, cr_data.cshell, cr_data.chome, cr_data.ctype, cr_data.cunit))
-        fd.write(query.replace("'None'", "default").replace("None", "default"))
+                 "values (\'%s\', \'%s\', \'%s\', \'%s\', (select unitid from affiliation_units where name = %s), NOW())%s;\n"
+              % (cr_name, str(cr_data.cshell).replace("None", "default"),
+              str(cr_data.chome).replace("None", "default"), cr_data.ctype, aunit, update_string))
+        fd.write(query.replace("'None'", "NULL"))
         for batch in cr_data.batch:
+            if update:
+                if "compute_batch" in updateList:
+                    update_string = " on conflict (compid, name) do update set value = %s, type = \'%s\', last_updated = NOW()" \
+                    % (cr_data.cshell, cr_data.chome)
+                else:
+                    update_string = " on conflict do nothing"
+            else:
+                update_string = ""
             query = ("insert into compute_batch (compid, name, value, type, unitid, last_updated) " +
-                     "values (%s, \'%s\', %s, \'%s\', (select unitid from affiliation_units where name = '%s'), NOW());\n"
-                  % (res_counter, batch.name, batch.value, batch.type, batch.experiment))
+                     "values ((select compid from compute_resources where name = '%s'), \'%s\', %s, \'%s\', (select unitid from affiliation_units where name = '%s'), NOW())%s;\n"
+                  % (cr_name, batch.name, batch.value, batch.type, batch.experiment, update_string))
             fd.write(query.replace("'None'", "Null").replace("None", "Null"))
         for _, user in cr_data.users.items():
             comp = user.compute_access[res.cresource]
             groupid = gid_map[comp.gid]
+            if update:
+                if "compute_access" in updateList:
+                    update_string = " on conflict (compid, uid) do update set shell = \'%s\', home_dir = \'%s\', last_updated = NOW()" \
+                    % (comp.shell, comp.home_dir)
+                else:
+                    update_string = " on conflict do nothing"
+            else:
+                update_string = ""
             fd.write("insert into compute_access (compid, uid, shell, home_dir, last_updated)" + \
-                     " values (%s, %s, \'%s\', \'%s\', NOW());\n" % (res_counter, user.uid, comp.shell, comp.home_dir))
+                     " values ((select compid from compute_resources where name = \'%s\'), %s, \'%s\', \'%s\', NOW())%s;\n" % (comp.comp_name, user.uid, comp.shell, comp.home_dir, update_string))
+            if update:
+                update_string = " on conflict do nothing"
+            else:
+                update_string = ""
             fd.write("insert into compute_access_group (compid, uid, groupid, is_primary)" + \
-                     " values (%s, %s, %s, true);\n" % (res_counter, user.uid, groupid))
+                     " values ((select compid from compute_resources where name = \'%s\'), %s, (select groupid from groups where gid = %s), true)%s;\n" % (comp.comp_name, user.uid, comp.gid, update_string))
             for gid in user.compute_access[res.cresource].secondary_groups:
                 fd.write("insert into compute_access_group (compid, uid, groupid, is_primary)" + \
-                         " values (%s, %s, %s, false);\n" % (res_counter, user.uid, gid_map[gid]))
+                         " values ((select compid from compute_resources where name = \'%s\'), %s, (select groupid from groups where gid = %s), false)%s;\n" % (comp.comp_name, user.uid, gid, update_string))
 
 
     # populating nas_storage
+    if update:
+        update_string = " on conflict do nothing"
+    else:
+        update_string = ""
     for nas in nas_structure:
-        fd.write("insert into nas_storage (server, volume, access_level, host) values ('%s', '%s', '%s', '%s');\n"
-              % (nas.server, nas.volume, nas.access_level, nas.host))
+        fd.write("insert into nas_storage (server, volume, access_level, host) values ('%s', '%s', '%s', '%s')%s;\n"
+              % (nas.server, nas.volume, nas.access_level, nas.host, update_string))
     fd.flush()
 
     # add post ingest script
@@ -1166,112 +1331,6 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
     fd.flush()
 
     fd.close()
-
-def update_db(config, users, gids, vomss, gums, roles, collaborations, nis, storages, batch_structure, nas_structure):
-    """
-    create mysql dump for ferry database
-    Args:
-        config:
-        users:
-        gids:
-        vomss:
-        roles:
-
-    Returns:
-
-    """
-    fd = open(config._sections["path"]["output"], "w")
-
-    config = config._sections["main_db"]
-    conn_string = "host='%s' dbname='%s' user='%s' password='%s'" % \
-                  (config["hostname"], config["database"], config["username"], config["password"])
-    conn = pg.connect(conn_string)
-    cursor = conn.cursor()
-
-    append = config["append"].split(",")
-
-    def fetchData(query):
-        cursor.execute(query)
-        lines = cursor.fetchall()
-        data = {}
-        for line in lines:
-            if line[0] not in data:
-                data[line[0]] = []
-            data[line[0]].append(tuple(line[1:]))
-        return data
-
-    def checkData(entry, data):
-        idx = entry[0]
-        value = [tuple(entry[1:])]
-        if idx in data:
-            if value.sort() == data[idx].sort():
-                return "present"
-            else:
-                return "modified"
-        else:
-            return "new"
-    
-    if "affiliation_units" in append:
-        existingUnits = fetchData("select name, alternative_name from affiliation_units")
-        existingVoms = fetchData("select name, url from voms_url as vu \
-                                  left join affiliation_units as au on vu.unitid = au.unitid")
-        existinGroups = fetchData("select au.name, gid, is_primary from affiliation_units as au \
-                                   left join affiliation_unit_group as ag on au.unitid = ag.unitid \
-                                   left join groups as g on ag.groupid = g.groupid")
-
-        # update affiliation_units
-        for cu in collaborations:
-            state = checkData((cu.name, cu.alt_name), existingUnits)
-
-            if state != "present":
-                if cu.alt_name:
-                    alt_name = "\'%s\'" % (cu.alt_name)
-                else:
-                    alt_name = "NULL"
-            
-                if state == "new":
-                    fd.write("insert into affiliation_units (name, alternative_name, last_updated) " +\
-                             "values (\'%s\',%s,NOW());\n" % (cu.name, alt_name))
-                else:
-                    fd.write("update affiliation_units set alternative_name = %s, last_updated = NOW() where name = \'%s\';\n" %
-                            (alt_name, cu.name))
-
-            # update voms_url
-            if "voms_url" in append:
-                if isinstance(cu,VOMS):
-                    if type(cu.url) is list:
-                        urls = cu.url
-                    else:
-                        urls = [cu.url]
-                    for link in urls:
-                        if tuple([link]) not in existingVoms[cu.name]:
-                            fd.write("insert into voms_url (unitid, url, last_updated) " +
-                                     "values ((select unitid from affiliation_units where name = \'%s\'),\'%s\',NOW());\n"
-                            % (cu.name, link))
-
-            # update affiliation_unit_group
-            if "affiliation_unit_group" in append:
-                for gid in cu.groups.values():
-                    is_primary = 0
-                    if cu.name in nis.keys() and gid in nis[cu.name].primary_gid:
-                        is_primary = 1
-                    if (int(gid), is_primary) not in existinGroups[cu.name]:
-                        if (int(gid), not is_primary) not in existinGroups[cu.name]:
-                            fd.write(("insert into affiliation_unit_group values(" + 
-                                      "(select unitid from affiliation_units where name = \'%s\')," +
-                                      "(select groupid from groups where gid = %d)," +
-                                      "%d,NOW());\n") % (cu.name, int(gid), is_primary))
-                        else:
-                            fd.write(("update affiliation_unit_group set " +
-                                      "is_primary = %d, last_updated = NOW() " +
-                                      "where unitid = (select unitid from affiliation_units where name = \'%s\') " +
-                                      "and groupid = (select groupid from groups where gid = %d)" +
-                                      ";\n") % (is_primary, cu.name, int(gid)))
-
-        del existingUnits
-        del existingVoms
-        fd.flush()
-
 
 if __name__ == "__main__":
     import os
@@ -1365,8 +1424,5 @@ if __name__ == "__main__":
     #            for k,v in user.vo_membership.items():
     #                for l in v:
     #                    print k, l.__dict__
-    if not config.config.has_option("main_db", "append"):
-        populate_db(config.config, users, gids, vomss, gums, roles,collaborations, nis_structure, storages, batch_structure, nas_structure, compute_resources)
-    else:
-        update_db(config.config, users, gids, vomss, gums, roles,collaborations, nis_structure, storages, batch_structure, nas_structure)
+    populate_db(config.config, users, gids, vomss, gums, roles,collaborations, nis_structure, storages, batch_structure, nas_structure, compute_resources)
     print("Done!")
