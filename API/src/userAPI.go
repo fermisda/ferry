@@ -2842,7 +2842,7 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 			// everything in the DB is already the same as the request, so don't do anything
 			log.WithFields(QueryFields(r, startTime)).Print("The request already exists in the database. Nothing to do.")
 			if cKey != 0 {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"The request already exists in the database.\" }")
+				fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 			}
 			DBtx.Report("The request already exists in the database.")
 			return
