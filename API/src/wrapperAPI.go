@@ -346,6 +346,9 @@ func setLPCStorageAccess(w http.ResponseWriter, r *http.Request) {
 	if !DBtx.Complete() {
 		if !strings.Contains(DBtx.Error().Error(), `pk_affiliation_unit_user_certificate`) {
 			log.WithFields(QueryFields(r, startTime)).Error("addCertificateDNToUser failed.")
+			if DBtx.Error().Error() == "User does not exist." {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+			}
 			return
 		}
 		DBtx.RollbackToSavepoint("addCertificateDNToUser")
@@ -372,7 +375,7 @@ func setLPCStorageAccess(w http.ResponseWriter, r *http.Request) {
 	q.Set("groupname", "us_cms")
 	q.Set("unitname", "cms")
 	q.Set("quota", "100")
-	q.Set("unit", "B")
+	q.Set("quota_unit", "B")
 	q.Set("path", fmt.Sprintf("/eos/uscms/store/user/%s", uname))
 	R.URL.RawQuery = q.Encode()
 

@@ -1347,7 +1347,7 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	}
 	if unit == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No unit given.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No unit provided.\" }")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No quota_unit provided.\" }")
 		return
 	}
 
@@ -1807,6 +1807,7 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 		if cKey != 0 {
 			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
 		}
+		DBtx.Report("User does not exist.")
 		return
 	} else if queryerr != nil {
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
@@ -1820,6 +1821,7 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 		if cKey != 0 {
 			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
 		}
+		DBtx.Report("User does not exist.")
 		return		
 	}
 	if ! dnid.Valid {
