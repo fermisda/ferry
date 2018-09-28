@@ -142,8 +142,8 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 
 	for _, fqan := range []string{"Analysis", "NULL"} {
 		rows, err := DBtx.Query(`select fqan from grid_fqan
-								 where fqan like $1 and (lower(fqan) like lower($2) or lower(fqan) like lower($3)) and unitid is not null;`,
-								 "%Role=" + fqan + "%", "/" + unit + "%", "/fermilab/" + unit + "%")
+								 where (lower(fqan) like lower($1) or lower(fqan) like lower($2)) and mapped_user is null;`,
+								 "/" + unit + "/Role=" + fqan + "%", "/fermilab/" + unit + "/Role=" + fqan + "%")
 		if err != nil {
 			defer log.WithFields(QueryFields(r, startTime)).Error(err)
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
