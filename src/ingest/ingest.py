@@ -1276,12 +1276,12 @@ def populate_db(config, users, gids, vomss, gums, roles, collaborations, nis, st
                  "values (\'%s\', \'%s\', \'%s\', \'%s\', (select unitid from affiliation_units where name = %s), NOW())%s;\n"
               % (cr_name, str(cr_data.cshell).replace("None", "default"),
               str(cr_data.chome).replace("None", "default"), cr_data.ctype, aunit, update_string))
-        fd.write(query.replace("'None'", "NULL"))
+        fd.write(query.replace("'None'", "NULL").replace("None", "NULL"))
         for batch in cr_data.batch:
             if update:
                 if "compute_batch" in updateList:
-                    update_string = " on conflict (compid, name) do update set value = %s, type = \'%s\', last_updated = NOW()" \
-                    % (cr_data.cshell, cr_data.chome)
+                    update_string = " on conflict (compid, name) where valid_until is null do update set value = %s, type = \'%s\', last_updated = NOW()" \
+                    % (batch.value, batch.type)
                 else:
                     update_string = " on conflict do nothing"
             else:

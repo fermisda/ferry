@@ -1125,7 +1125,8 @@ func getCondorQuotas(w http.ResponseWriter, r *http.Request) {
 				from compute_batch as cb
 				left join affiliation_units as au on cb.unitid = au.unitid
 				join compute_resources as cr on cb.compid = cr.compid
-				where cb.type in ('static', 'dynamic') and (au.name like $1 or $1 = '%' and au.name is null) and cr.name like $2
+				where cb.type in ('static', 'dynamic') and (au.name like $1 or $1 = '%' and au.name is null) and cr.name like $2 and (valid_until is null or valid_until >= NOW())
+				order by condorgroup, valid_until desc
 			  ) as T right join (
 				select 1 as key,
 				$1 in (select name from affiliation_units) as unit_exists,
@@ -1156,11 +1157,17 @@ func getCondorQuotas(w http.ResponseWriter, r *http.Request) {
 	var tmpValue sql.NullFloat64
 	var unitExists, resourceExists bool
 
+	prevGroup := ""
 	for rows.Next() {
 		rows.Scan(&tmpRname, &tmpUname, &tmpGroup, &tmpValue, &tmpType, &tmpValid, &unitExists, &resourceExists)
 		if tmpGroup.Valid {
-			out[tmpRname.String] = append(out[tmpRname.String], jsonquota{tmpGroup.String, tmpValue.Float64, tmpType.String, tmpUname.String, tmpValid.String})
+			if tmpGroup.String != prevGroup {
+				out[tmpRname.String] = append(out[tmpRname.String], jsonquota{tmpGroup.String, tmpValue.Float64, tmpType.String, tmpUname.String, tmpValid.String})
+			} else {
+				out[tmpRname.String][len(out[tmpRname.String]) - 1] = jsonquota{tmpGroup.String, tmpValue.Float64, tmpType.String, tmpUname.String, tmpValid.String}
+			}
 		}
+		prevGroup = tmpGroup.String
 	}
 
 	var output interface{}
@@ -1268,8 +1275,9 @@ func setCondorQuota(w http.ResponseWriter, r *http.Request) {
 
 	_, err = DBtx.Exec(fmt.Sprintf(`do $$
 									declare 
-									    v_unitid int;
-										v_compid int;
+									    v_unitid 	int;
+										v_compid 	int;
+										v_permanet	bool;
 											
 										c_uname constant text := '%s';
 										c_compres constant text := '%s';
@@ -1280,15 +1288,16 @@ func setCondorQuota(w http.ResponseWriter, r *http.Request) {
 									begin
 										select unitid into v_unitid from affiliation_units where name = c_uname;
 										select compid into v_compid from compute_resources where name = c_compres;
+										select c_valid is null into v_permanet;
 
 										if v_compid is null then raise 'null value in column "compid"'; end if;
 										
-										if (v_compid, c_qname) not in (select compid, name from compute_batch) then
+										if (v_compid, c_qname) not in (select compid, name from compute_batch where (valid_until is null = v_permanet)) then
 										    insert into compute_batch (compid, name, value, type, unitid, valid_until, last_updated)
 															   values (v_compid, c_qname, c_qvalue, c_qtype, v_unitid, c_valid, NOW());
 										else
 											update compute_batch set value = c_qvalue, valid_until = c_valid, last_updated = NOW()
-											where compid = v_compid and name = c_qname;
+											where compid = v_compid and name = c_qname and (valid_until is null = v_permanet);
 										end if;
 									end $$;`, uName, comp, name, quota, qType, until))
 
@@ -1315,7 +1324,7 @@ func setCondorQuota(w http.ResponseWriter, r *http.Request) {
 	DBtx.Commit(cKey)
 }
 
-func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
+func getGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
@@ -1369,7 +1378,9 @@ func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 							  	join affiliation_units on affiliation_units.unitid = sq.unitid
 							  	join storage_resources on storage_resources.storageid = sq.storageid
 							  	join groups on groups.groupid = sq.groupid
-								where affiliation_units.name = $4 AND storage_resources.name = $3 and (groups.name, groups.type) = ($1, $2) and (sq.last_updated>=$5 or $5 is null)
+								where affiliation_units.name = $4 AND storage_resources.name = $3 and (groups.name, groups.type) = ($1, $2)
+								and (valid_until is null or valid_until >= NOW()) and (sq.last_updated>=$5 or $5 is null)
+								order by valid_until desc
 							) as t right join (
 								select 1 as key, 
 								($1, $2) in (select name, type from groups) as group_exists,
@@ -1390,7 +1401,7 @@ func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 		Unit string `json:"quota_unit"`
 		ValidUntil string `json:"valid_until"`
 	}
-	var Out []jsonentry
+	var Out jsonentry
 	var groupExists, resourceExists, unitExists bool
 	
 	for rows.Next() {
@@ -1407,12 +1418,12 @@ func getGroupStorageQuotas(w http.ResponseWriter, r *http.Request) {
 					tmpValue.String = strconv.FormatFloat(newval, 'f', -1, 64)
 				}
 			}
-			Out = append(Out, jsonentry{tmpValue.String, tmpUnit.String, tmpValid.String})
+			Out = jsonentry{tmpValue.String, tmpUnit.String, tmpValid.String}
 		}
 		}
 	
 	var output interface{}
-	if len(Out) == 0 {
+	if Out.Value == "" {
 		type jsonerror struct {
 			Error string `json:"ferry_error"`
 		}
@@ -2194,7 +2205,10 @@ func setGroupStorageQuotaDB(tx *Transaction, gName, unitname, rName, groupquota,
 	
 	reterr = nil
 	
-	queryerr := tx.tx.QueryRow(`select storageid, groupid, unitid from (select 1 as key, storageid from storage_resources where name = $1) as sr full outer join (select 1as key, groupid from groups where name = $2 and type = 'UnixGroup') as g on g.key=sr.key right join (select 1as key, unitid from affiliation_units where name = $3) as au on au.key=sr.key`, rName, gName, unitname).Scan(&vSid, &vGid, &vUnitid)
+	queryerr := tx.tx.QueryRow(`select	(select storageid from storage_resources where name = $1),
+										(select groupid from groups where name = $2 and type = 'UnixGroup'),
+										(select unitid from affiliation_units where name = $3)`,
+								rName, gName, unitname).Scan(&vSid, &vGid, &vUnitid)
 	if queryerr != nil && queryerr != sql.ErrNoRows {
 		return queryerr	
 	}
@@ -2215,7 +2229,7 @@ func setGroupStorageQuotaDB(tx *Transaction, gName, unitname, rName, groupquota,
 	
 	var vValid sql.NullString
 	if valid_until != "" && strings.ToUpper(valid_until) != "NULL" {
-		queryerr = tx.tx.QueryRow(`select valid_until from storage_quota where storageid = $1 and unitid = $2 and groupid = $3 and valid_until = $4`,vSid, vUnitid, vGid, valid_until).Scan(&vValid)
+		queryerr = tx.tx.QueryRow(`select valid_until from storage_quota where storageid = $1 and unitid = $2 and groupid = $3 and valid_until is not null`,vSid, vUnitid, vGid).Scan(&vValid)
 	} else {
 		queryerr = tx.tx.QueryRow(`select valid_until from storage_quota where storageid = $1 and unitid = $2 and groupid = $3 and valid_until is null`,vSid, vUnitid, vGid).Scan(&vValid)		
 	}
@@ -2241,8 +2255,8 @@ func setGroupStorageQuotaDB(tx *Transaction, gName, unitname, rName, groupquota,
 			vValid.Valid = true
 			vValid.String = valid_until
 			
-			_, reterr = tx.Exec(`update storage_quota set value = $1, unit = $2, last_updated = NOW()
-				   where storageid = $3 and groupid = $4 and unitid = $5 and valid_until = $6`, groupquota, quotaunit, vSid, vGid, vUnitid, vValid)
+			_, reterr = tx.Exec(`update storage_quota set value = $1, unit = $2, valid_until = $6, last_updated = NOW()
+				   where storageid = $3 and groupid = $4 and unitid = $5 and valid_until is not null`, groupquota, quotaunit, vSid, vGid, vUnitid, vValid)
 		} else {
 
 	_, reterr = tx.Exec(`update storage_quota set value = $1, unit = $2, last_updated = NOW()

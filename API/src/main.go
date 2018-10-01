@@ -206,7 +206,7 @@ func main() {
 	grouter.HandleFunc("/getCondorQuotas", getCondorQuotas)
 	grouter.HandleFunc("/setGroupBatchPriority", setGroupBatchPriority)
 	grouter.HandleFunc("/setCondorQuota", setCondorQuota)
-	grouter.HandleFunc("/getGroupStorageQuotas", getGroupStorageQuotas)
+	grouter.HandleFunc("/getGroupStorageQuota", getGroupStorageQuota)
 	grouter.HandleFunc("/setGroupStorageQuota", setGroupStorageQuota)
 	grouter.HandleFunc("/getAllGroups",  getAllGroups)
 	grouter.HandleFunc("/getAllGroupsMembers",  getAllGroupsMembers)

@@ -1238,7 +1238,12 @@ func getUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := DBptr.Query(`select sq.path,sq.value, sq.unit, sq.valid_until from storage_quota sq INNER JOIN affiliation_units on affiliation_units.unitid = sq.unitid INNER JOIN storage_resources on storage_resources.storageid = sq.storageid INNER JOIN users on users.uid = sq.uid where affiliation_units.name=$1 AND storage_resources.type=$2 and users.uname=$3`, unitName, rName, uName)
+	rows, err := DBptr.Query(`select sq.path,sq.value, sq.unit, sq.valid_until from storage_quota sq
+							  INNER JOIN affiliation_units on affiliation_units.unitid = sq.unitid
+							  INNER JOIN storage_resources on storage_resources.storageid = sq.storageid
+							  INNER JOIN users on users.uid = sq.uid
+							  where affiliation_units.name=$1 AND storage_resources.type=$2 and users.uname=$3 and (valid_until is null or valid_until >= NOW())
+							  order by valid_until desc`, unitName, rName, uName)
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
@@ -1246,40 +1251,41 @@ func getUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
-
 	defer rows.Close()
-	idx := 0
-	output := ""
-	type jsonout struct {
+
+	type jsonentry struct {
 		Path       string `json:"path"`
 		Value      string `json:"value"`
 		Unit       string `json:"unit"`
 		ValidUntil string `json:"valid_until"`
 	}
-	var Out jsonout
+	var Out jsonentry
 	for rows.Next() {
-		if idx != 0 {
-			output += ","
-		}
 		var tmpPath, tmpUnit, tmpValue, tmpValid sql.NullString
 		rows.Scan(&tmpPath, &tmpValue, &tmpUnit, &tmpValid)
 		if tmpValue.Valid {
-			Out.Path, Out.Value, Out.Unit, Out.ValidUntil = tmpPath.String, tmpValue.String, tmpUnit.String, tmpValid.String
-			outline, jsonerr := json.Marshal(Out)
-			if jsonerr != nil {
-				log.WithFields(QueryFields(r, startTime)).Error(jsonerr)
-			}
-			output += string(outline)
-			idx++
+			Out = jsonentry{tmpPath.String, tmpValue.String, tmpUnit.String, tmpValid.String}
 		}
 	}
-	if idx == 0 {
-		output += `{"ferry_error": "User has no quotas registered."}`
+
+	var output interface{}	
+	if Out.Value == "" {
+		type jsonerror struct {
+			Error string `json:"ferry_error"`
+		}
+		var queryErr []jsonerror
+		queryErr = append(queryErr, jsonerror{"User has no quotas registered."})
 		log.WithFields(QueryFields(r, startTime)).Error("User has no quotas registered.")
+		output = queryErr
 	} else {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
 	}
-	fmt.Fprintf(w, output)
+	jsonoutput, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+	}
+	fmt.Fprintf(w, string(jsonoutput))
 }
 
 func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
@@ -2515,7 +2521,8 @@ func getUserAllStorageQuotas(w http.ResponseWriter, r *http.Request) {
 								storage_quota as sq left join
 								users as u on sq.uid = u.uid left join
 								storage_resources as sr on sq.storageid = sr.storageid
-								where u.uname = $1 and (sq.last_updated >= $2 or $2 is null)
+								where u.uname = $1 and (valid_until is null or valid_until >= NOW()) and (sq.last_updated >= $2 or $2 is null)
+							  	order by name asc, valid_until desc
 							) as t 
 							right join (
 								select 1 as key, $1 in (select uname from users) as user_exists
@@ -2541,17 +2548,27 @@ func getUserAllStorageQuotas(w http.ResponseWriter, r *http.Request) {
 	var Entry jsonentry
 	var Out []jsonentry
 
+	prevRname := ""
 	for rows.Next() {
 		var tmpRname, tmpPath, tmpValue, tmpUnit, tmpUntil sql.NullString
 		rows.Scan(&tmpRname, &tmpPath, &tmpValue, &tmpUnit, &tmpUntil, &userExists)
 
 		if tmpRname.Valid {
-			Entry.Rname = tmpRname.String
-			Entry.Path = tmpPath.String
-			Entry.Value = tmpValue.String
-			Entry.Unit  = tmpUnit.String
-			Entry.Until  = tmpUntil.String
-			Out = append(Out, Entry)
+			if prevRname != tmpRname.String {
+				Entry.Rname = tmpRname.String
+				Entry.Path = tmpPath.String
+				Entry.Value = tmpValue.String
+				Entry.Unit  = tmpUnit.String
+				Entry.Until  = tmpUntil.String
+				Out = append(Out, Entry)
+			} else {
+				Out[len(Out) - 1].Rname = tmpRname.String
+				Out[len(Out) - 1].Path = tmpPath.String
+				Out[len(Out) - 1].Value = tmpValue.String
+				Out[len(Out) - 1].Unit  = tmpUnit.String
+				Out[len(Out) - 1].Until  = tmpUntil.String
+			}
+			prevRname = tmpRname.String
 		}
 	}
 
