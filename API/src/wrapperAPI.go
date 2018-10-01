@@ -37,7 +37,7 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 
-	var duplicateCount int
+	var duplicateCount, duplicateCountRef int
 
 	var compResource string
 	var compGroup string
@@ -124,6 +124,7 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 	q.Set("dn", fmt.Sprintf(dnTemplate, fullName, uName))
 	R.URL.RawQuery = q.Encode()
 
+	duplicateCountRef ++
 	DBtx.Savepoint("addCertificateDNToUser")
 	addCertificateDNToUser(w, R)
 	if !DBtx.Complete() {
@@ -170,7 +171,7 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 		q.Set("fqan", fullFqan)
 		R.URL.RawQuery = q.Encode()
 
-//		DBtx.Continue()
+		duplicateCountRef ++
 		DBtx.Savepoint("setUserExperimentFQAN_" + fqan)
 		setUserExperimentFQAN(w, R)
 		if !DBtx.Complete() {
@@ -225,7 +226,7 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 	q.Set("is_primary", "true")
 	R.URL.RawQuery = q.Encode()
 
-//	DBtx.Continue()
+	duplicateCountRef ++
 	DBtx.Savepoint("setUserAccessToComputeResource_" + compResource)
 	setUserAccessToComputeResource(w, R)
 	if !DBtx.Complete() {
@@ -293,18 +294,31 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 			q.Set("quota", strconv.FormatInt(sr[isr].SrQuota, 10))
 			q.Set("quota_unit", sr[isr].SrUnit)
 			R.URL.RawQuery = q.Encode()
-			DBtx.Savepoint("setUserStorageQuota_" + sr[isr].SrName)
-			setUserStorageQuota(w,R)
-			if !DBtx.Complete() {
-				log.WithFields(QueryFields(r, startTime)).Error("setUserStorageQuota on  " + sr[isr].SrName + "  failed: " + DBtx.Error().Error() )
-				fmt.Fprintf(w, "{ \"ferry_error\": \"setUserStorageQuota for " + sr[isr].SrName + " failed. Last DB error: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
+
+			duplicateCountRef ++
+			var quotaCount int
+			err = DBtx.QueryRow("select count(*) from storage_quota where path = $1", q["path"][0]).Scan(&quotaCount)
+			if err != nil {
+				defer log.WithFields(QueryFields(r, startTime)).Error(err)
+				fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 				return
-			}	
+			}
+			if quotaCount == 0 {
+				DBtx.Savepoint("setUserStorageQuota_" + sr[isr].SrName)
+				setUserStorageQuota(w,R)
+				if !DBtx.Complete() {
+					log.WithFields(QueryFields(r, startTime)).Error("setUserStorageQuota on  " + sr[isr].SrName + "  failed: " + DBtx.Error().Error() )
+					fmt.Fprintf(w, "{ \"ferry_error\": \"setUserStorageQuota for " + sr[isr].SrName + " failed. Last DB error: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
+					return
+				}
+			} else {
+				duplicateCount ++
+			}
 		}
 	}
 	//
 	
-	if duplicateCount == 4 {
+	if duplicateCount == duplicateCountRef {
 		fmt.Fprintf(w, "{ \"ferry_error\": \"User already belongs to the experiment.\" }")
 	} else {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
