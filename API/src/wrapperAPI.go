@@ -291,7 +291,7 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 			q.Set("isGroup", "false")
 			q.Set("valid_until", "")
 			q.Set("quota", strconv.FormatInt(sr[isr].SrQuota, 10))
-			q.Set("unit", sr[isr].SrUnit)
+			q.Set("quota_unit", sr[isr].SrUnit)
 			R.URL.RawQuery = q.Encode()
 			DBtx.Savepoint("setUserStorageQuota_" + sr[isr].SrName)
 			setUserStorageQuota(w,R)
