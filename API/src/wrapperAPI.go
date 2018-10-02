@@ -319,7 +319,7 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 	//
 	
 	if duplicateCount == duplicateCountRef {
-		fmt.Fprintf(w, "{ \"ferry_error\": \"User already belongs to the experiment.\" }")
+		fmt.Fprintf(w, "{ \"ferry_status\": \"User already belongs to the experiment.\" }")
 	} else {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
