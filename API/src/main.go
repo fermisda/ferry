@@ -79,7 +79,7 @@ func main() {
 	}
 	viper.WatchConfig()
 	viper.OnConfigChange(func(e fsnotify.Event) {
-		log.WithFields(log.Fields{"file": e.Name}).Debug("Config file changed.")
+		log.WithFields(log.Fields{"file": e.Name}).Info("Config file changed.")
 	})
 
 	//Setup log file
