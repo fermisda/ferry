@@ -644,7 +644,7 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User already belongs to this group.")
 			if cKey != 0 {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"User already belongs to this group.\" }")
+				fmt.Fprintf(w, "{ \"ferry_status\": \"User already belongs to this group.\" }")
 			}
 		} else if strings.Contains(err.Error(), `null value in column "uid" violates not-null constraint`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
