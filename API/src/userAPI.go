@@ -1718,7 +1718,7 @@ func getUserExternalAffiliationAttributes(w http.ResponseWriter, r *http.Request
 	rows, err := DBptr.Query(`select attribute, value, user_exists from
 							 (select 1 as key, a.attribute, a.value, u.uname, a.last_updated from external_affiliation_attribute as a 
 							  left join users as u on a.uid = u.uid where uname = $1) as t right join
-							 (select 1 as key, $1 in (select uname from users) as user_exists) as c on t.key = c.key where a.last_updated>=$3 or $3 is null;`, user, lastupdate)
+							 (select 1 as key, $1 in (select uname from users) as user_exists) as c on t.key = c.key where t.last_updated>=$2 or $2 is null;`, user, lastupdate)
 
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
