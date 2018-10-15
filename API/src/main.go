@@ -174,6 +174,7 @@ func main() {
 	grouter.HandleFunc("/getUserExternalAffiliationAttributes", getUserExternalAffiliationAttributes)
 	grouter.HandleFunc("/addCertificateDNToUser", addCertificateDNToUser)
 	grouter.HandleFunc("/setSuperUser", setSuperUser)
+	grouter.HandleFunc("/removeSuperUser", removeSuperUser)
 	grouter.HandleFunc("/removeUserCertificateDN", removeUserCertificateDN)
 	grouter.HandleFunc("/setUserInfo", setUserInfo)
 	grouter.HandleFunc("/setUserExternalAffiliationAttribute", setUserExternalAffiliationAttribute)
