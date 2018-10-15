@@ -1,21 +1,23 @@
 package main
 
 import (
-	"flag"
-	"github.com/fsnotify/fsnotify"
-	"net"
 	"database/sql"
+	"flag"
 	"fmt"
+	"net"
+
+	"github.com/fsnotify/fsnotify"
 
 	"crypto/tls"
 	"net/http"
 	"os"
 	"time"
 
+	golog "log"
+
 	"github.com/gorilla/mux"
 	_ "github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
-	golog "log"
 	"github.com/spf13/viper"
 )
 
@@ -56,7 +58,6 @@ func gatekeeper(c net.Conn, s http.ConnState) {
 		log.WithFields(fields).Debug("Connection status changed.")
 	}
 }
-
 
 func main() {
 	//Read command-line arguments
@@ -168,24 +169,24 @@ func main() {
 	grouter.HandleFunc("/setUserShell", setUserShell)
 	grouter.HandleFunc("/setUserAccessToComputeResource", setUserAccessToComputeResource)
 	grouter.HandleFunc("/removeUserAccessFromResource", removeUserAccessFromResource)
-	grouter.HandleFunc("/getUserStorageQuota", 	    getUserStorageQuota)
-	grouter.HandleFunc("/setUserStorageQuota", 	    setUserStorageQuota)
-	grouter.HandleFunc("/getUserExternalAffiliationAttributes", 	    getUserExternalAffiliationAttributes)
-	grouter.HandleFunc("/addCertificateDNToUser"    ,    addCertificateDNToUser)
-	grouter.HandleFunc("/setSuperUser"    ,    setSuperUser)
-	grouter.HandleFunc("/removeUserCertificateDN"    ,    removeUserCertificateDN)
-	grouter.HandleFunc("/setUserInfo"    ,    setUserInfo)
-	grouter.HandleFunc("/setUserExternalAffiliationAttribute",    setUserExternalAffiliationAttribute)
-	grouter.HandleFunc("/removeUserExternalAffiliationAttribute",    removeUserExternalAffiliationAttribute)
-	grouter.HandleFunc("/createUser"    ,    createUser)
-	grouter.HandleFunc("/deleteUser"    ,    deleteUser)
-	grouter.HandleFunc("/getUserUname"    ,    getUserUname)
-	grouter.HandleFunc("/getMemberAffiliations",    getMemberAffiliations)
-	grouter.HandleFunc("/getUserAccessToComputeResources",    getUserAccessToComputeResources)
-	grouter.HandleFunc("/getUserAllStorageQuotas",    getUserAllStorageQuotas)
-	grouter.HandleFunc("/getAllUsers",  getAllUsers)
-	grouter.HandleFunc("/getAllUsersFQANs",  getAllUsersFQANs)
-	grouter.HandleFunc("/getAllUsersCertificateDNs",  getAllUsersCertificateDNs)
+	grouter.HandleFunc("/getUserStorageQuota", getUserStorageQuota)
+	grouter.HandleFunc("/setUserStorageQuota", setUserStorageQuota)
+	grouter.HandleFunc("/getUserExternalAffiliationAttributes", getUserExternalAffiliationAttributes)
+	grouter.HandleFunc("/addCertificateDNToUser", addCertificateDNToUser)
+	grouter.HandleFunc("/setSuperUser", setSuperUser)
+	grouter.HandleFunc("/removeUserCertificateDN", removeUserCertificateDN)
+	grouter.HandleFunc("/setUserInfo", setUserInfo)
+	grouter.HandleFunc("/setUserExternalAffiliationAttribute", setUserExternalAffiliationAttribute)
+	grouter.HandleFunc("/removeUserExternalAffiliationAttribute", removeUserExternalAffiliationAttribute)
+	grouter.HandleFunc("/createUser", createUser)
+	grouter.HandleFunc("/deleteUser", deleteUser)
+	grouter.HandleFunc("/getUserUname", getUserUname)
+	grouter.HandleFunc("/getMemberAffiliations", getMemberAffiliations)
+	grouter.HandleFunc("/getUserAccessToComputeResources", getUserAccessToComputeResources)
+	grouter.HandleFunc("/getUserAllStorageQuotas", getUserAllStorageQuotas)
+	grouter.HandleFunc("/getAllUsers", getAllUsers)
+	grouter.HandleFunc("/getAllUsersFQANs", getAllUsersFQANs)
+	grouter.HandleFunc("/getAllUsersCertificateDNs", getAllUsersCertificateDNs)
 
 	//group API calls
 	grouter.HandleFunc("/getgroupmembers", getGroupMembers)
@@ -199,17 +200,17 @@ func main() {
 	grouter.HandleFunc("/getGroupMembers", getGroupMembers)
 	grouter.HandleFunc("/IsUserLeaderOfGroup", IsUserLeaderOfGroup)
 	grouter.HandleFunc("/IsUserMemberOfGroup", IsUserMemberOfGroup)
-	grouter.HandleFunc("/setGroupLeader", setGroupLeader)	//add user to group
+	grouter.HandleFunc("/setGroupLeader", setGroupLeader) //add user to group
 	grouter.HandleFunc("/removeGroupLeader", removeGroupLeader)
-	grouter.HandleFunc("/getGroupUnits", getGroupUnits)		//don't remove the last leader
+	grouter.HandleFunc("/getGroupUnits", getGroupUnits) //don't remove the last leader
 	grouter.HandleFunc("/getBatchPriorities", getBatchPriorities)
 	grouter.HandleFunc("/getCondorQuotas", getCondorQuotas)
 	grouter.HandleFunc("/setGroupBatchPriority", setGroupBatchPriority)
 	grouter.HandleFunc("/setCondorQuota", setCondorQuota)
 	grouter.HandleFunc("/getGroupStorageQuota", getGroupStorageQuota)
 	grouter.HandleFunc("/setGroupStorageQuota", setGroupStorageQuota)
-	grouter.HandleFunc("/getAllGroups",  getAllGroups)
-	grouter.HandleFunc("/getAllGroupsMembers",  getAllGroupsMembers)
+	grouter.HandleFunc("/getAllGroups", getAllGroups)
+	grouter.HandleFunc("/getAllGroupsMembers", getAllGroupsMembers)
 	grouter.HandleFunc("/addLPCCollaborationGroup", addLPCCollaborationGroup)
 	grouter.HandleFunc("/getGroupAccessToResource", getGroupAccessToResource)
 
@@ -237,18 +238,18 @@ func main() {
 	grouter.HandleFunc("/ping", ping)
 
 	//affiliation unit API calls
-	grouter.HandleFunc("/createAffiliationUnit",             createAffiliationUnit)           
-	grouter.HandleFunc("/removeAffiliationUnit", 		   removeAffiliationUnit)           
-	grouter.HandleFunc("/setAffiliationUnitInfo", 	   setAffiliationUnitInfo)          
-	grouter.HandleFunc("/getAffiliationUnitMembers",	   getAffiliationUnitMembers)       
-	grouter.HandleFunc("/getGroupsInAffiliationUnit", 	   getGroupsInAffiliationUnit)      
-	grouter.HandleFunc("/getGroupLeadersinAffiliationUnit",  getGroupLeadersinAffiliationUnit)
-	grouter.HandleFunc("/getAffiliationUnitStorageResources",getAffiliationUnitStorageResources)
-	grouter.HandleFunc("/getAffiliationUnitComputeResources",getAffiliationUnitComputeResources)
-	grouter.HandleFunc("/createFQAN",			   createFQAN)                        
-	grouter.HandleFunc("/removeFQAN",			   removeFQAN)                        
-	grouter.HandleFunc("/setFQANMappings",                     setFQANMappings)                    
-	grouter.HandleFunc("/getAllAffiliationUnits",                     getAllAffiliationUnits)
+	grouter.HandleFunc("/createAffiliationUnit", createAffiliationUnit)
+	grouter.HandleFunc("/removeAffiliationUnit", removeAffiliationUnit)
+	grouter.HandleFunc("/setAffiliationUnitInfo", setAffiliationUnitInfo)
+	grouter.HandleFunc("/getAffiliationUnitMembers", getAffiliationUnitMembers)
+	grouter.HandleFunc("/getGroupsInAffiliationUnit", getGroupsInAffiliationUnit)
+	grouter.HandleFunc("/getGroupLeadersinAffiliationUnit", getGroupLeadersinAffiliationUnit)
+	grouter.HandleFunc("/getAffiliationUnitStorageResources", getAffiliationUnitStorageResources)
+	grouter.HandleFunc("/getAffiliationUnitComputeResources", getAffiliationUnitComputeResources)
+	grouter.HandleFunc("/createFQAN", createFQAN)
+	grouter.HandleFunc("/removeFQAN", removeFQAN)
+	grouter.HandleFunc("/setFQANMappings", setFQANMappings)
+	grouter.HandleFunc("/getAllAffiliationUnits", getAllAffiliationUnits)
 
 	//wrapper API calls
 	grouter.HandleFunc("/testWrapper", testWrapper)
@@ -263,8 +264,8 @@ func main() {
 		Addr:        fmt.Sprintf(":%s", srvConfig["port"]),
 		ReadTimeout: 10 * time.Second,
 		Handler:     grouter,
-		ConnState:	 gatekeeper,
-		ErrorLog:	 golog.New(log.StandardLogger().Writer(), "", 0),
+		ConnState:   gatekeeper,
+		ErrorLog:    golog.New(log.StandardLogger().Writer(), "", 0),
 	}
 
 	certslice := viper.GetStringSlice("certificates")
@@ -287,7 +288,7 @@ func main() {
 		tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
 		tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
 		tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA}
-	
+
 	Mainsrv.TLSConfig = &tls.Config{
 		ClientAuth:               tls.RequireAndVerifyClientCert,
 		ClientCAs:                Certpool,
