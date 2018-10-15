@@ -1155,7 +1155,7 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 			}
 			log.WithFields(QueryFields(r, startTime)).Error("Added " + rName + " to compute_resources.")
 			if cKey != 0 {
-				fmt.Fprintf(w,"{ \"result\": \"success.\" }")
+				fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
 			}
 			return
 		}
