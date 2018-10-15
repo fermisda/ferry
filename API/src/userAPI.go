@@ -908,9 +908,9 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case queryerr == nil:
 		if !hasCert {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			log.WithFields(QueryFields(r, startTime)).Error("User is not member of affiliation unit.")
 			if cKey != 0 {
-				fmt.Fprintf(w,"{ \"ferry_error\": \"User does not exist.\" }")
+				fmt.Fprintf(w,"{ \"ferry_error\": \"User is not member of affiliation unit.\" }")
 			}
 			return
 		}
