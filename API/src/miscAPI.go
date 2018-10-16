@@ -1605,3 +1605,120 @@ func ping(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w,`[{ "ferry_status": "success."}, { "release_version" : "` + release_ver + `"}, {"build_date" : "` + build_date + `"}]`)
 	return
 }
+
+func getVOUserMap(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	user := strings.TrimSpace(q.Get("username"))
+	unit := strings.TrimSpace(q.Get("unitname"))
+	fqan := strings.TrimSpace(q.Get("fqan"))
+
+	if user == "" {
+		user = "%"
+	}
+	if unit == "" {
+		unit = "%"
+	}
+	if fqan == "" {
+		fqan = "%"
+	}
+
+	var userExists, unitExists, fqanExists bool
+	err := DBptr.QueryRow(`SELECT
+							$1 IN (SELECT uname FROM users),
+							$2 IN (SELECT name FROM affiliation_units),
+							$3 IN (SELECT fqan FROM grid_fqan)`,
+						  user, unit, fqan).Scan(&userExists, &unitExists, &fqanExists)
+	if err != nil {	
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	}
+
+	type jsonerror struct {
+		Error string `json:"ferry_error"`
+	}
+	var inputErr []jsonerror
+
+	if !userExists && user != "%" {
+		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		inputErr = append(inputErr, jsonerror{"User does not exist."})
+	}
+	if !unitExists && unit != "%" {
+		log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
+		inputErr = append(inputErr, jsonerror{"Affiliation unit does not exist."})
+	}
+	if !fqanExists && fqan != "%" {
+		log.WithFields(QueryFields(r, startTime)).Error("FQAN does not exist.")
+		inputErr = append(inputErr, jsonerror{"FQAN does not exist."})
+	}
+
+	if len(inputErr) > 0 {
+		jsonout, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err)
+		}
+		fmt.Fprintf(w, string(jsonout))
+		return
+	}
+
+	rows, err := DBptr.Query(`SELECT DISTINCT
+								u1.uname AS username,
+								au.name AS unitname,
+								gf.fqan AS fqan,
+								COALESCE(u2.uname, u1.uname) AS mapped_user
+							  FROM     
+								grid_access g 
+								INNER JOIN users u1 ON g.uid = u1.uid 
+								INNER JOIN grid_fqan gf ON gf.fqanid = g.fqanid 
+								INNER JOIN affiliation_units au ON au.unitid = gf.unitid
+								LEFT OUTER JOIN users u2 ON gf.mapped_user = u2.uid 
+							  WHERE 
+								u1.uname like $1 
+								AND au.name like $2
+								AND gf.fqan like $3
+							  ORDER BY u1.uname`, user, unit, fqan)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	voUserMap := make(map[string]map[string]map[string]string)
+
+	for rows.Next() {
+		var tmpUser, tmpUnit, tmpFQAN, tmpMappedUser sql.NullString
+		rows.Scan(&tmpUser, &tmpUnit, &tmpFQAN, &tmpMappedUser)
+
+		if tmpUser.Valid {
+			if _, ok := voUserMap[tmpUser.String]; !ok {
+				voUserMap[tmpUser.String] = make(map[string]map[string]string)
+			}
+			if _, ok := voUserMap[tmpUser.String][tmpUnit.String]; !ok {
+				voUserMap[tmpUser.String][tmpUnit.String] = make(map[string]string)
+			}
+			voUserMap[tmpUser.String][tmpUnit.String][tmpFQAN.String] = tmpMappedUser.String
+		}
+	}
+
+	var output interface{}
+	if len(voUserMap) == 0 {
+		var queryErr []jsonerror
+		log.WithFields(QueryFields(r, startTime)).Error("No mappings found.")
+		queryErr = append(queryErr, jsonerror{"No mappings found."})
+		output = queryErr
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = voUserMap
+	}
+	jsonout, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	fmt.Fprintf(w, string(jsonout))
+}
