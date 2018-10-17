@@ -2682,7 +2682,7 @@ func getStorageQuotas(w http.ResponseWriter, r *http.Request) {
 			queryErr.Error = append(queryErr.Error, "User does not exist.")
 		} else if !resourceExists {
 			log.WithFields(QueryFields(r, startTime)).Error("Storage resource does not exist.")
-			queryErr.Error = append(queryErr.Error, "User does not exist.")
+			queryErr.Error = append(queryErr.Error, "Storage resource does not exist.")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not have any assigned storage quotas.")
 			queryErr.Error = append(queryErr.Error, "User does not have any assigned storage quotas.")
