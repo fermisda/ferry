@@ -1,0 +1,4 @@
+ca_path : /etc/grid-security/certificates
+cert : /etc/grid-security/hostcert.pem 
+key : /etc/grid-security/hostkey.pem 
+ferry_url : "https://ferry.fnal.gov:8443"
