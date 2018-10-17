@@ -184,7 +184,7 @@ func main() {
 	grouter.HandleFunc("/getUserUname", getUserUname)
 	grouter.HandleFunc("/getMemberAffiliations", getMemberAffiliations)
 	grouter.HandleFunc("/getUserAccessToComputeResources", getUserAccessToComputeResources)
-	grouter.HandleFunc("/getUserAllStorageQuotas", getUserAllStorageQuotas)
+	grouter.HandleFunc("/getStorageQuotas", getStorageQuotas)
 	grouter.HandleFunc("/getAllUsers", getAllUsers)
 	grouter.HandleFunc("/getAllUsersFQANs", getAllUsersFQANs)
 	grouter.HandleFunc("/getAllUsersCertificateDNs", getAllUsersCertificateDNs)

@@ -2591,30 +2591,33 @@ func getUserAccessToComputeResources(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, string(jsonout))
 }
 
-func getUserAllStorageQuotas(w http.ResponseWriter, r *http.Request) {
+func getStorageQuotas(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 
 	type jsonerror struct {
-		Error string `json:"ferry_error"`
+		Error []string `json:"ferry_error"`
 	}
-	var inputErr []jsonerror
+	var inputErr jsonerror
 
 	user := q.Get("username")
+	resource := q.Get("resourcename")
 
 	if user == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
-		inputErr = append(inputErr, jsonerror{"No username specified."})
+		user = "%"
+	}
+	if resource == "" {
+		resource = "%"
 	}
 	
 	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
 		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
-		inputErr = append(inputErr, jsonerror{"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time."})
+		inputErr.Error = append(inputErr.Error, "Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.")
 	}
 	
-	if len(inputErr) > 0 {
+	if len(inputErr.Error) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error(err)
@@ -2623,17 +2626,20 @@ func getUserAllStorageQuotas(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := DBptr.Query(`select  name, path, value, unit, valid_until, user_exists from
+	rows, err := DBptr.Query(`select  uname, name, path, value, unit, valid_until, user_exists, resource_exists from
 							(select 1 as key, u.uname, sr.name, sr.type, sq.* from
 								storage_quota as sq left join
 								users as u on sq.uid = u.uid left join
 								storage_resources as sr on sq.storageid = sr.storageid
-								where u.uname = $1 and (valid_until is null or valid_until >= NOW()) and (sq.last_updated >= $2 or $2 is null)
-							  	order by name asc, valid_until desc
+								where u.uname like $1 and sr.name like $2
+								and (valid_until is null or valid_until >= NOW()) and (sq.last_updated >= $3 or $3 is null)
+							  	order by uname asc, name asc, valid_until desc
 							) as t 
 							right join (
-								select 1 as key, $1 in (select uname from users) as user_exists
-							) as c on t.key = c.key;`, user, lastupdate)
+								select 1 as key,
+								$1 in (select uname from users) as user_exists,
+								$2 in (select name from storage_resources) as resource_exists
+							) as c on t.key = c.key;`, user, resource, lastupdate)
 
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
@@ -2644,55 +2650,47 @@ func getUserAllStorageQuotas(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	var userExists bool
+	var resourceExists bool
 
-	type jsonentry struct {
-		Rname string `json:"resourcename"`
+	type jsonquota struct {
 		Path  string `json:"path"`
 		Value string `json:"value"`
 		Unit  string `json:"unit"`
 		Until string `json:"validuntil"`
 	}
-	var Entry jsonentry
-	var Out []jsonentry
+	quotaMap := make(map[string]map[string]jsonquota)
 
-	prevRname := ""
 	for rows.Next() {
-		var tmpRname, tmpPath, tmpValue, tmpUnit, tmpUntil sql.NullString
-		rows.Scan(&tmpRname, &tmpPath, &tmpValue, &tmpUnit, &tmpUntil, &userExists)
+		var tmpUname, tmpRname, tmpPath, tmpValue, tmpUnit, tmpUntil sql.NullString
+		rows.Scan(&tmpUname, &tmpRname, &tmpPath, &tmpValue, &tmpUnit, &tmpUntil, &userExists, &resourceExists)
 
-		if tmpRname.Valid {
-			if prevRname != tmpRname.String {
-				Entry.Rname = tmpRname.String
-				Entry.Path = tmpPath.String
-				Entry.Value = tmpValue.String
-				Entry.Unit  = tmpUnit.String
-				Entry.Until  = tmpUntil.String
-				Out = append(Out, Entry)
-			} else {
-				Out[len(Out) - 1].Rname = tmpRname.String
-				Out[len(Out) - 1].Path = tmpPath.String
-				Out[len(Out) - 1].Value = tmpValue.String
-				Out[len(Out) - 1].Unit  = tmpUnit.String
-				Out[len(Out) - 1].Until  = tmpUntil.String
+		if tmpUname.Valid {
+			if _, ok := quotaMap[tmpUname.String]; !ok {
+				quotaMap[tmpUname.String] = make(map[string]jsonquota)
 			}
-			prevRname = tmpRname.String
+
+			quotaMap[tmpUname.String][tmpRname.String] =
+			jsonquota{tmpPath.String, tmpValue.String, tmpUnit.String, tmpUntil.String}
 		}
 	}
 
 	var output interface{}
-	if len(Out) == 0 {
-		var queryErr []jsonerror
+	if len(quotaMap) == 0 {
+		var queryErr jsonerror
 		if !userExists {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-			queryErr = append(queryErr, jsonerror{"User does not exist."})
+			queryErr.Error = append(queryErr.Error, "User does not exist.")
+		} else if !resourceExists {
+			log.WithFields(QueryFields(r, startTime)).Error("Storage resource does not exist.")
+			queryErr.Error = append(queryErr.Error, "User does not exist.")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not have any assigned storage quotas.")
-			queryErr = append(queryErr, jsonerror{"User does not have any assigned storage quotas."})
+			queryErr.Error = append(queryErr.Error, "User does not have any assigned storage quotas.")
 		}
 		output = queryErr
 	} else {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = Out
+		output = quotaMap
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
