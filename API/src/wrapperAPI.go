@@ -445,6 +445,7 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	duplicateCount := 0
+	duplicateCountRef := 0
 	var DBtx Transaction
 	R := WithTransaction(r, &DBtx)
 	key, err := DBtx.Start(DBptr)
@@ -479,10 +480,12 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 
 	DBtx.Savepoint("createAffiliationUnit")
 //	DBtx.Continue()
+	duplicateCountRef ++
 	createAffiliationUnit(w,R)
 	if ! DBtx.Complete() {
 		// ERROR HANDLING AND ROLLBACK		
-		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") {
+		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") &&
+		   !strings.Contains(DBtx.Error().Error(), "already exists") {
 			log.WithFields(QueryFields(r, startTime)).Error("Unit already exists.")
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in createAffiliationUnit: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
 			return
@@ -503,15 +506,17 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 	R.URL.RawQuery = q.Encode()
 	DBtx.Savepoint("createComputeResource")
 //	DBtx.Continue()
+	duplicateCountRef ++
 	createComputeResource(w,R)
 	if !DBtx.Complete() {
-		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") {
+		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") &&
+		   !strings.Contains(DBtx.Error().Error(), "already exists") {
 			log.WithFields(QueryFields(r, startTime)).Error("createComputeResource failed.")
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in createComputeResource: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
 			return
 		} else {
 			DBtx.RollbackToSavepoint("createComputeResource")
-			duplicateCount++
+			duplicateCount ++
 		}
 	}
 	
@@ -524,9 +529,11 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 	R.URL.RawQuery = q.Encode()
 	DBtx.Savepoint("addGroupToUnit")
 //	DBtx.Continue()
+	duplicateCountRef ++
 	addGroupToUnit(w,R)
 	if !DBtx.Complete() {
-		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") && !strings.Contains(DBtx.Error().Error(), "Group and unit combination already in DB") {
+		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") &&
+		   !strings.Contains(DBtx.Error().Error(), "Group and unit combination already in DB") {
 			log.WithFields(QueryFields(r, startTime)).Error("addGroupToUnit failed.")
 			log.WithFields(QueryFields(r, startTime)).Error("actual error: " + DBtx.Error().Error() )
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in addGroupToUnit: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
@@ -534,7 +541,7 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error("actual error: " + DBtx.Error().Error() )
 			DBtx.RollbackToSavepoint("addGroupToUnit")
-			duplicateCount++
+			duplicateCount ++
 		}
 	}
 
@@ -578,6 +585,7 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 		}
 		//		DBtx.Continue()
 		DBtx.Savepoint("createFQAN_" + role)
+		duplicateCountRef ++
 		createFQAN(w, R)
 		if !DBtx.Complete() {
 			// do some error handling and rollback 
@@ -587,13 +595,19 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 				log.WithFields(QueryFields(r, startTime)).Error("Error in createFQAN for role " + role + ": " +  DBtx.Error().Error())
 				return
 			}
-			DBtx.RollbackToSavepoint("crateFQAN_"+role)
+			DBtx.RollbackToSavepoint("createFQAN_" + role)
+			duplicateCount ++
 		}
 	}
 	
 	// If everything worked
-	log.WithFields(QueryFields(r, startTime)).Info("Success!")
-	fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+	if duplicateCount < duplicateCountRef {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Experiment already exists.")
+		fmt.Fprintf(w, "{ \"ferry_status\": \"Experiment already exists.\" }")
+	}
 	
 	DBtx.Commit(key)
 }

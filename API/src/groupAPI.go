@@ -156,6 +156,7 @@ func addGroupToUnit(w http.ResponseWriter, r *http.Request) {
 	err = addGroupToUnitDB(DBtx, groupname, grouptype, unitName, isPrimary)
 	
 	if err != nil {
+		DBtx.Report(err.Error())
 		if strings.Contains(err.Error(), `Group and unit combination already in DB`) {
 			log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
 			if cKey != 0 {

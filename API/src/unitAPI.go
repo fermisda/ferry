@@ -104,6 +104,7 @@ func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 	default:
 		log.WithFields(QueryFields(r, startTime)).Error("Cannot create affiliation unit " + unitName + "; another unit with that name already exists.")
 		if cKey != 0 { fmt.Fprintf(w,"{ \"ferry_error\": \"Unit %s already exists.\" }",unitName) }
+		DBtx.Report("Unit %s already exists.")
 		return
 	} 
 }

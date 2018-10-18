@@ -1174,6 +1174,7 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 		if cKey != 0 {
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Resource already exists.\" }")
 		}
+		DBtx.Report("Resource already exists.")
 		return	
 	}
 
