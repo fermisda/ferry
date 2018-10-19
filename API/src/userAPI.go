@@ -2762,6 +2762,21 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 	defer DBtx.Rollback(cKey)
+
+	// Check if the user has a primary group in the resource. Set is_primary=true if it's not the case.
+	var priCount int
+	err = DBtx.tx.QueryRow(`select count(*) from compute_access_group as cg
+							join users as u on cg.uid = u.uid
+							join compute_resources as cr on cg.compid = cr.compid
+							where u.uname = $1 and cr.name = $2 and cg.is_primary`,
+	uname, rName).Scan(&priCount)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+		return
+	}
+	if priCount == 0 {
+		ispri = true
+	}
 	
 	var (
 		defShell,defhome sql.NullString
@@ -2962,7 +2977,7 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 		
 	default: // OK, we already have this user/group/resource combo. We just need to check if the call is trying to change is_primary from what it is. If is_primary was not provided, that implies we're just keeping what is already there, so just log that nothing is changing and return success.
 		
-		if ((cagPrimary.Valid && cagPrimary.Bool == ispri) || is_primary == "") && "" == shell && "" == homedir {
+		if ((cagPrimary.Valid && cagPrimary.Bool == ispri) || is_primary == "" && !ispri) && "" == shell && "" == homedir {
 			// everything in the DB is already the same as the request, so don't do anything
 			log.WithFields(QueryFields(r, startTime)).Print("The request already exists in the database. Nothing to do.")
 			if cKey != 0 {
@@ -2971,7 +2986,7 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 			DBtx.Report("The request already exists in the database.")
 			return
 		} else {
-			if is_primary != "" {
+			if is_primary != "" || ispri {
 				//change the value stored in cagPrimary.Bool to be that of ispri, which is the new value
 				cagPrimary.Valid = true
 				cagPrimary.Bool = ispri
