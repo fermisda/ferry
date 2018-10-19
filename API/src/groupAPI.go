@@ -1603,7 +1603,17 @@ func removeUserAccessFromResource(w http.ResponseWriter, r *http.Request) {
 
 	query := `select $1 in (select uname from users),
 					 $2 in (select name from groups),
-					 $3 in (select name from compute_resources);`
+					 $3 in (select name from compute_resources),
+					 (select is_primary from compute_access_group as cg
+										join users as u on cg.uid = u.uid
+										join groups as g on cg.groupid = g.groupid
+										join compute_resources as cr on cg.compid = cr.compid
+										where u.uname = $1 and g.name = $2 and cr.name = $3),
+					 (select count(*) from compute_access_group as cg
+										join users as u on cg.uid = u.uid
+										join compute_resources as cr on cg.compid = cr.compid
+										where u.uname = $1 and cr.name = $3)`
+
 	re := regexp.MustCompile(`[\s\t\n]+`)
 	log.Debug(re.ReplaceAllString(query, " "))
 	var rows *sql.Rows
@@ -1614,11 +1624,18 @@ func removeUserAccessFromResource(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
-	var userExists, groupExists, resourceExists bool
+	var userExists, groupExists, resourceExists, isPrimary bool
+	var groupCount int
 	if rows.Next() {
-		rows.Scan(&userExists, &groupExists, &resourceExists)
+		rows.Scan(&userExists, &groupExists, &resourceExists, &isPrimary, &groupCount)
 	}
 	rows.Close()
+
+	if isPrimary && groupCount > 1 {
+		log.Error("Trying to remove a primary group.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Trying to remove a primary group. Set another group as primary or remove other groups prior to this one.\" }")
+		return
+	}
 
 	query = `delete from compute_access_group where
 				uid = (select uid from users where uname = $1) and
