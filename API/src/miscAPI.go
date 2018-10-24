@@ -479,7 +479,6 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 	type jsonerror struct {Error []string `json:"ferry_error"`}
 	var inputErr jsonerror
 	
-	unit := strings.TrimSpace(q.Get("unitname"))
 	rName := strings.TrimSpace(q.Get("resourcename"))
 
 	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
@@ -498,17 +497,17 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := DBptr.Query(`select distinct t.fqan, t.uname, t.name, c.unit_exists, c.resource_exists from
+	rows, err := DBptr.Query(`select distinct t.fqan, t.uname, t.name, c.resource_exists from
 							  (select 1 as key, fqan, uname, au.name from grid_fqan as gf
 							   join users as u on gf.mapped_user = u.uid
 							   join compute_access_group as cag on (cag.groupid=gf.mapped_group and gf.mapped_user=cag.uid)
 							   join compute_resources as cr on cag.compid=cr.compid
 							   left join affiliation_units as au on gf.unitid = au.unitid
-							   where (au.name like $1 or $2 ) and fqan like $3 and (gf.last_updated >= $4 or u.last_updated >= $4 or $4 is null) and ($5 or cr.name=$6)
+							   where ($1 or cr.name=$2) and (gf.last_updated >= $3 or u.last_updated >= $3 or $3 is null)
 							  ) as t
 							  right join (
-							   select 1 as key, ($1 in (select name from affiliation_units) or $2) as unit_exists, $6 in (select name from compute_resources) as resource_exists
-							  ) as c on t.key = c.key order by t.fqan`, unit, unit == "",  "%" + unit + "%", lastupdate, rName == "",rName)
+							   select 1 as key, $2 in (select name from compute_resources) as resource_exists
+							  ) as c on t.key = c.key order by t.fqan`, rName == "", rName, lastupdate)
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
@@ -517,7 +516,7 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var unitExists,resourceExists bool
+	var resourceExists bool
 
 	type jsonentry struct {
 		DN string `json:"fqan"`
@@ -528,19 +527,16 @@ func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
 
 	for rows.Next() {
 		var tmpFQAN, tmpUname, tmpAname sql.NullString
-		rows.Scan(&tmpFQAN, &tmpUname, &tmpAname, &unitExists,&resourceExists)
+		rows.Scan(&tmpFQAN, &tmpUname, &tmpAname, &resourceExists)
 		if tmpFQAN.Valid {
 			Out = append(Out, jsonentry{tmpFQAN.String, tmpUname.String, tmpAname.String})
 		}
 	}
 
 	var output interface{}
-	if len(Out) == 0 || (!unitExists && unit != "%") || (!resourceExists && rName != "" ) {
+	if len(Out) == 0 || (!resourceExists && rName != "" ) {
 		var queryErr jsonerror
-		if !unitExists && unit != "%" {
-			queryErr.Error = append(queryErr.Error, "Experiment does not exist.")
-			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
-		} else if !resourceExists && rName != "" {
+		if !resourceExists && rName != "" {
 			queryErr.Error = append(queryErr.Error, "Resource does not exist.")
 			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
 		} else {

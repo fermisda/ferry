@@ -925,23 +925,27 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
 	uName := strings.TrimSpace(q.Get("username"))
-	fqan := strings.TrimSpace(q.Get("fqan"))
 	unitName := strings.TrimSpace(q.Get("unitname"))
+	fqan := strings.TrimSpace(q.Get("fqan"))
 
 	if uName == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
 		return
 	}
-	if fqan == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No fqan specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No fqan specified.\" }")
-		return
-	}
 	if unitName == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
 		return
+	}
+	if fqan == "" {
+		if strings.TrimSpace(q.Get("role")) != "" {
+			fqan = "%Role=" + strings.TrimSpace(q.Get("role")) + "%"
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Error("No role or fqan specified in http query.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"No role or fqan specified.\" }")
+			return
+		}
 	}
 
 	authorized, authout := authorize(r)
@@ -957,7 +961,7 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 	}
 	defer DBtx.Rollback(cKey)
 
-	var uid, unitid, fqanid int
+	var uid, unitid int
 	queryerr := DBtx.QueryRow(`select uid from users where uname=$1 for update`, uName).Scan(&uid)
 	switch {
 	case queryerr == sql.ErrNoRows:
@@ -989,24 +993,6 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 		}
 		return	
 	}
-	
-	queryerr = DBtx.QueryRow(`select fqanid from grid_fqan as gf join affiliation_units as au on gf.unitid=au.unitid where au.name=$1 and gf.fqan=$2`,unitName, fqan).Scan(&fqanid)
-	switch {
-	case queryerr == sql.ErrNoRows:
-		log.WithFields(QueryFields(r, startTime)).Error("FQAN " + fqan + " not assigned to affiliation unit " + unitName + ".")
-		if cKey != 0 {
-			fmt.Fprintf(w,"{ \"ferry_error\": \"FQAN not assigned to specified unit.\" }")
-		} else {
-			DBtx.Report("FQAN not assigned to specified unit")	
-		}
-		return
-	case queryerr != nil:
-		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
-		if cKey != 0 {
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
-		}
-		return
-	}
 
 	var hasCert bool
 	queryerr = DBtx.QueryRow(`select count(*) > 0 from affiliation_unit_user_certificate as ac
@@ -1029,37 +1015,74 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 		return	
 	}
 
-	_, err = DBtx.Exec(`insert into grid_access (uid, fqanid, is_superuser, is_banned, last_updated) values ($1, $2, false, false, NOW())`, uid, fqanid)
-	if err == nil {
+	rows, queryerr := DBtx.Query(`select fqanid from 
+								  grid_fqan as gf join
+								  affiliation_units as au on gf.unitid=au.unitid
+								  where au.name=$1 and gf.fqan like $2`,unitName, fqan)
+	if queryerr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
+		if cKey != 0 {
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
+		}
+		return
+	}
+
+	var fqanids []int
+	for rows.Next() {
+		var fqanid int
+		err = rows.Scan(&fqanid)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
+			return
+		}
+		fqanids = append(fqanids, fqanid)
+	}
+	rows.Close()
+
+	var duplicate int
+	for _, fqanid := range fqanids {
+		DBtx.Savepoint("INSERT_" + string(fqanid))
+		_, err = DBtx.Exec(`insert into grid_access (uid, fqanid, is_superuser, is_banned, last_updated) values($1, $2, false, false, NOW())`, uid, fqanid)
+		if err != nil {
+			if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
+				DBtx.RollbackToSavepoint("INSERT_" + string(fqanid))
+				duplicate ++
+			} else {
+				if strings.Contains(err.Error(), `null value in column "uid" violates not-null constraint`) {
+					log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+					if cKey != 0 {
+						fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+					}
+				} else if strings.Contains(err.Error(), `null value in column "fqanid" violates not-null constraint`) {
+					log.WithFields(QueryFields(r, startTime)).Error("FQAN does not exist.")
+					if cKey != 0 {
+						fmt.Fprintf(w, "{ \"ferry_error\": \"FQAN does not exist.\" }")
+					} else {
+						DBtx.Report("FQAN does not exist.")
+					}
+				} else {
+					log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+					if cKey != 0 {
+						fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
+					}
+				}
+				return
+			}
+		}
+	}
+
+	if len(fqanids) == duplicate {
+		if cKey != 0 {
+			log.WithFields(QueryFields(r, startTime)).Error("This association already exists.")
+			fmt.Fprintf(w, "{ \"ferry_status\": \"This association already exists.\" }")
+		}
+		return
+	} else {
 		if cKey != 0 {
 			log.WithFields(QueryFields(r, startTime)).Info("Success!")
 			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 		}
-	} else {
-		if strings.Contains(err.Error(), `null value in column "uid" violates not-null constraint`) {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-			if cKey != 0 {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-			}
-		} else if strings.Contains(err.Error(), `null value in column "fqanid" violates not-null constraint`) {
-			log.WithFields(QueryFields(r, startTime)).Error("FQAN does not exist.")
-			if cKey != 0 {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"FQAN does not exist.\" }")
-			} else {
-				DBtx.Report("FQAN does not exist.")
-			}
-		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
-			if cKey != 0 {
-				log.WithFields(QueryFields(r, startTime)).Error("This association already exists.")
-				fmt.Fprintf(w, "{ \"ferry_error\": \"This association already exists.\" }")
-			}
-		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			if cKey != 0 {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
-			}
-		}
-		return
 	}
 	
 	DBtx.Commit(cKey)
