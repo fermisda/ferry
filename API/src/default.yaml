@@ -46,7 +46,6 @@ dn_whitelist:
  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Bruno Coimbra/CN=UID:coimbra
  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Jeny Teheran/CN=UID:jteheran
  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Mine Altunay/CN=UID:maltunay
- - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Joe Boyd/CN=UID:boyd
  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Steven Timm/CN=UID:timm
  - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=fermicloud044.fnal.gov
  - /DC=ch/DC=cern/OU=Organic Units/OU=Users/CN=fakhan/CN=762000/CN=Farrukh Aftab Khan
@@ -64,3 +63,4 @@ dn_whitelist:
  - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=jobsub-dev.fnal.gov
  - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=fifebatch.fnal.gov
  - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=scsgpvm01.fnal.gov
+ - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Joe Boyd/CN=UID:boyd
