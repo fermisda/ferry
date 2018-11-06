@@ -1047,7 +1047,7 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 		_, err = DBtx.Exec(`insert into grid_access (uid, fqanid, is_superuser, is_banned, last_updated) values($1, $2, false, false, NOW())`, uid, fqanid)
 		if err != nil {
 			if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
-				DBtx.RollbackToSavepoint("INSERT_" + string(fqanid))
+				DBtx.RollbackToSavepoint("INSERT_" + strconv.Itoa(fqanid))
 				duplicate ++
 			} else {
 				if strings.Contains(err.Error(), `null value in column "uid" violates not-null constraint`) {
