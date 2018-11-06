@@ -1043,7 +1043,7 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 
 	var duplicate int
 	for _, fqanid := range fqanids {
-		DBtx.Savepoint("INSERT_" + string(fqanid))
+		DBtx.Savepoint("INSERT_" + strconv.Itoa(fqanid))
 		_, err = DBtx.Exec(`insert into grid_access (uid, fqanid, is_superuser, is_banned, last_updated) values($1, $2, false, false, NOW())`, uid, fqanid)
 		if err != nil {
 			if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
