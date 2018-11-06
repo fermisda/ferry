@@ -633,7 +633,7 @@ func getUserInfo(w http.ResponseWriter, r *http.Request) {
 	if pingerr != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(pingerr)
 	}
-	rows, err := DBptr.Query(`select full_name, uid, status, expiration_date from users where uname=$1`, uname)
+	rows, err := DBptr.Query(`select full_name, uid, status, is_groupaccount, expiration_date from users where uname=$1`, uname)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
@@ -647,6 +647,7 @@ func getUserInfo(w http.ResponseWriter, r *http.Request) {
 			FullName string    `json:"full_name"`
 			Uid      int       `json:"uid"`
 			Status   bool      `json:"status"`
+			GrpAcct  bool      `json:"groupaccount"`
 			ExpDate  time.Time `json:"expiration_date"`
 		}
 
@@ -658,7 +659,7 @@ func getUserInfo(w http.ResponseWriter, r *http.Request) {
 			} else {
 				fmt.Fprintf(w, ",")
 			}
-			rows.Scan(&Out.FullName, &Out.Uid, &Out.Status, &Out.ExpDate)
+			rows.Scan(&Out.FullName, &Out.Uid, &Out.Status, &Out.GrpAcct, &Out.ExpDate)
 			outline, jsonerr := json.Marshal(Out)
 			if jsonerr != nil {
 				log.WithFields(QueryFields(r, startTime)).Error(jsonerr)
@@ -2113,11 +2114,12 @@ func setUserInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 
-	var fName, status, eDate sql.NullString
+	var fName, status, gAccount, eDate sql.NullString
 
 	uName := strings.TrimSpace(q.Get("username"))
 	fName.String = strings.TrimSpace(q.Get("fullname"))
 	status.String = strings.TrimSpace(q.Get("status"))
+	gAccount.String = strings.TrimSpace(q.Get("groupaccount"))
 	eDate.String =strings.TrimSpace( q.Get("expiration_date"))
 
 	if uName == "" {
@@ -2141,7 +2143,17 @@ func setUserInfo(w http.ResponseWriter, r *http.Request) {
 		}
 		status.Valid = true
 	}
-
+	if gAccount.String == "" {
+		gAccount.Valid = false
+	} else {
+		_, err := strconv.ParseBool(gAccount.String)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid groupaccount specified in http query.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid groupaccount specified. Should be true or false.\" }")
+			return
+		}
+		gAccount.Valid = true
+	}
 	if eDate.String == "" {
 		eDate.Valid = false
 	} else if strings.ToLower(eDate.String) == "null" {
@@ -2149,6 +2161,12 @@ func setUserInfo(w http.ResponseWriter, r *http.Request) {
 	} else {
 		eDate.String = fmt.Sprintf("'%s'", eDate.String)
 		eDate.Valid = true
+	}
+
+	if !fName.Valid && !status.Valid && !gAccount.Valid && !eDate.Valid {
+		log.WithFields(QueryFields(r, startTime)).Error("Not enough arguments.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Not enough arguments.\" }")
+		return
 	}
 
 	authorized, authout := authorize(r)
@@ -2177,12 +2195,17 @@ func setUserInfo(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "{ \"ferry_error\": \"DB error determining uid.\" }")
 		return
 	}
-	query := `update users set full_name = coalesce($2, full_name), status = coalesce($3, status), expiration_date = coalesce($4, expiration_date), last_updated = NOW() where uid = $1`
+	query := `update users set 	full_name = coalesce($2, full_name),
+								status = coalesce($3, status),
+								is_groupaccount = coalesce($4, is_groupaccount),
+								expiration_date = coalesce($5, expiration_date),
+								last_updated = NOW()
+			  where uid = $1`
 	if strings.ToLower(eDate.String) == "null" {
 		query = strings.Replace(query, "coalesce($4, expiration_date)", "$4", 1)
 	}
 	print(query)
-	_, err = DBtx.Exec(query, uidint, fName, status, eDate)
+	_, err = DBtx.Exec(query, uidint, fName, status, gAccount, eDate)
 
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
