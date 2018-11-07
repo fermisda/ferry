@@ -1,6 +1,7 @@
 package main
 
 import (
+	"regexp"
 	"fmt"
 	"context"
 	"net/http"
@@ -65,6 +66,8 @@ func (t *Transaction) Rollback(key int64) error {
 // Savepoint creates a Transaction savepoint
 func (t *Transaction) Savepoint(savepoint string) error {
 	if t.commitKey != 0 {
+		re := regexp.MustCompile("[-]")
+		savepoint = re.ReplaceAllLiteralString(savepoint, "_")
 		_, t.err = t.tx.Exec(fmt.Sprintf("SAVEPOINT %s;", savepoint))
 		return t.err
 	}
