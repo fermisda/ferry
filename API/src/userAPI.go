@@ -1835,9 +1835,7 @@ func getUserExternalAffiliationAttributes(w http.ResponseWriter, r *http.Request
 	user := strings.TrimSpace(q.Get("username"))
 
 	if user == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
-		return
+		user = "%"
 	}
 	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
@@ -1846,9 +1844,9 @@ func getUserExternalAffiliationAttributes(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	rows, err := DBptr.Query(`select attribute, value, user_exists from
+	rows, err := DBptr.Query(`select uname, attribute, value, user_exists from
 							 (select 1 as key, a.attribute, a.value, u.uname, a.last_updated from external_affiliation_attribute as a 
-							  left join users as u on a.uid = u.uid where uname = $1) as t right join
+							  left join users as u on a.uid = u.uid where uname like $1) as t right join
 							 (select 1 as key, $1 in (select uname from users) as user_exists) as c on t.key = c.key where t.last_updated>=$2 or $2 is null;`, user, lastupdate)
 
 	if err != nil {
@@ -1866,16 +1864,16 @@ func getUserExternalAffiliationAttributes(w http.ResponseWriter, r *http.Request
 		Value     string `json:"value"`
 	}
 	var Entry jsonentry
-	var Out []jsonentry
+	Out := make(map[string][]jsonentry)
 
 	for rows.Next() {
-		var tmpAttribute, tmpValue sql.NullString
-		rows.Scan(&tmpAttribute, &tmpValue, &userExists)
+		var tmpUname, tmpAttribute, tmpValue sql.NullString
+		rows.Scan(&tmpUname, &tmpAttribute, &tmpValue, &userExists)
 
 		if tmpAttribute.Valid {
 			Entry.Attribute = tmpAttribute.String
 			Entry.Value = tmpValue.String
-			Out = append(Out, Entry)
+			Out[tmpUname.String] = append(Out[tmpUname.String], Entry)
 		}
 	}
 
