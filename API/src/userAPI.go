@@ -2161,7 +2161,7 @@ func setUserInfo(w http.ResponseWriter, r *http.Request) {
 		eDate.Valid = true
 	}
 
-	if !fName.Valid && !status.Valid && !gAccount.Valid && !eDate.Valid {
+	if fName.String == "" && status.String == "" && gAccount.String == "" && eDate.String == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("Not enough arguments.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Not enough arguments.\" }")
 		return
