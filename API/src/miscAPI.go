@@ -918,6 +918,7 @@ func getStorageAuthzDBFile(w http.ResponseWriter, r *http.Request) {
 
 		tmpMap := make(map[string][]jsonuser)
 		lasttime := int64(0)
+		prevUname := ""
 		for rows.Next() {
 			var tmpName, tmpUser, tmpUid, tmpGid, tmpTime sql.NullString
 			rows.Scan(&tmpName, &tmpUser, &tmpUid, &tmpGid, &tmpTime)
@@ -935,14 +936,17 @@ func getStorageAuthzDBFile(w http.ResponseWriter, r *http.Request) {
 				log.WithFields(QueryFields(r, startTime)).Debugln("tmpTime is not valid")
 			}
 
-			tmpMap["all"] = append(tmpMap["all"], jsonuser{
-				tmpUser.String,
-				tmpUid.String,
-				tmpGid.String,
-				tmpName.String,
-				"/home/" + tmpUser.String,
-				"/sbin/nologin",
-			})
+			if tmpUser.String != prevUname {
+				tmpMap["all"] = append(tmpMap["all"], jsonuser{
+					tmpUser.String,
+					tmpUid.String,
+					tmpGid.String,
+					tmpName.String,
+					"/home/" + tmpUser.String,
+					"/sbin/nologin",
+				})
+				prevUname = tmpUser.String
+			}
 		}
 		Out["fermilab"] = jsonunit{tmpMap, lasttime}
 
