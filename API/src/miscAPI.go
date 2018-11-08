@@ -781,7 +781,9 @@ func getMappedGidFile(w http.ResponseWriter, r *http.Request) {
 
 		if tmpFqan.Valid {
 			Entry = jsonentry{tmpFqan.String, tmpUser.String, tmpGid.String}
-			Out = append(Out, Entry)
+			if !(strings.Contains(tmpFqan.String, "Role=Analysis") && tmpUser.String != "") {
+				Out = append(Out, Entry)
+			}
 		}
 	}
 
