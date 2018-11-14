@@ -2200,7 +2200,7 @@ func setUserInfo(w http.ResponseWriter, r *http.Request) {
 								last_updated = NOW()
 			  where uid = $1`
 	if strings.ToLower(eDate.String) == "null" {
-		query = strings.Replace(query, "coalesce($4, expiration_date)", "$4", 1)
+		query = strings.Replace(query, "coalesce($5, expiration_date)", "$5", 1)
 	}
 	print(query)
 	_, err = DBtx.Exec(query, uidint, fName, status, gAccount, eDate)
