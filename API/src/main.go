@@ -237,6 +237,7 @@ func main() {
 	grouter.HandleFunc("/setStorageResourceInfo", setStorageResourceInfo)
 	grouter.HandleFunc("/getAllComputeResources", getAllComputeResources)
 	grouter.HandleFunc("/getVOUserMap", getVOUserMap)
+	grouter.HandleFunc("/cleanStorageQuotas", cleanStorageQuotas)
 	grouter.HandleFunc("/ping", ping)
 
 	//affiliation unit API calls
