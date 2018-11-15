@@ -103,18 +103,22 @@ def resources(resourcesString):
         resoruces.append(resource)
     return resoruces
 
-def writeToFerry(action, params):
+def writeToFerry(action, params = None):
     target = dict(config.items("ferry"))
-    urlParams = {}
-    for key, value in params.items():
-        urlParams[key] = value.replace("'", "''")
-    urlParams = urllib.parse.urlencode(urlParams)
-    url = target["hostname"] + target[action] + "?" + urlParams
+    url = target["hostname"] + target[action]
+    if params:
+        urlParams = {}
+        for key, value in params.items():
+            urlParams[key] = value.replace("'", "''")
+        urlParams = urllib.parse.urlencode(urlParams)
+        url += "?" + urlParams
     if not opts.dry_run:
         logging.debug(url)
         jOut = json.loads(urllib.request.urlopen(url, context=ferryContext).read().decode())
         logging.debug(jOut)
         if not "ferry_error" in jOut:
+            if not params:
+                params = ""
             logging.info("action: %s(%s)" % (action, params))
             return True
         logging.error(jOut["ferry_error"])
@@ -409,6 +413,11 @@ def update_compute_access():
     if not changes:
         logging.info("Compute access is up to date")
 
+# Cleans expired storage quotas
+def clean_storage_quotas():
+    if writeToFerry("api_clean_storage_quotas"):
+        logging.info("Done")
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = "Script to update Ferry with data from UserDB")
     parser.add_argument("-c", "--config", metavar = "PATH", action = "store", help = "path to configuration file")
@@ -468,3 +477,6 @@ if __name__ == "__main__":
 
     logging.info("Updating compute access...")
     update_compute_access()
+
+    logging.info("Cleaning storage quotas...")
+    clean_storage_quotas()
