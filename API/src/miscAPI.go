@@ -691,11 +691,18 @@ func lookupCertificateDN(w http.ResponseWriter, r *http.Request) {
 	}
 	var inputErr []jsonerror
 
-	certdn := strings.TrimSpace(q.Get("certificatedn"))
+	certdn := q.Get("certificatedn")
 
 	if certdn == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No certificatedn name specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No certificatedn name specified."})
+	} else {
+		dn, err := FormatValidDN(certdn)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			inputErr = append(inputErr, jsonerror{err.Error()})
+		}
+		certdn = dn
 	}
 
 	if len(inputErr) > 0 {

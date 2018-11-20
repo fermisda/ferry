@@ -16,6 +16,7 @@ server:
   port: 8443
   cert: /home/ferry/.cert/hostcert.pem
   key: /home/ferry/.cert/hostkey.pem
+  cas: /etc/grid-security/certificates/
 
 certificates:
   - /etc/grid-security/certificates/cilogon-osg.pem

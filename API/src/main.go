@@ -24,6 +24,7 @@ import (
 var DBptr *sql.DB
 var DBtx Transaction
 var Mainsrv *http.Server
+var ValidCAs CAs
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
@@ -273,6 +274,11 @@ func main() {
 
 	certslice := viper.GetStringSlice("certificates")
 	Certpool, err := loadCerts(certslice)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	ValidCAs, err = FetchCAs(srvConfig["cas"])
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -1,11 +1,14 @@
 package main
 
 import (
+	"fmt"
+	"regexp"
 	"database/sql"
 	"time"
 	"strings"
 	"strconv"
 	"errors"
+	log "github.com/sirupsen/logrus"
 )
 
 func stringToParsedTime( intime string ) (sql.NullString, error) {
@@ -119,4 +122,52 @@ func checkUnits(inunit string) bool {
 		}
 	}
 	return false
+}
+
+// FormatDN formats a DN string as an OpenSSL oneline DN.
+func FormatDN(dn string) (string, error) {
+	allowedSeparators := "/|,"
+	allowedAttributes := "CN|L|ST|O|OU|C|STREET|DC|UID"
+
+	validRE := regexp.MustCompile(fmt.Sprintf(`(?i)^(?:\s*(?:(?:%s)\s*)?(?:%s)\s*=\s*(?:\b[\w\s:-]+\b)?\s*)+$`, allowedSeparators, allowedAttributes))
+	splitRE := regexp.MustCompile(fmt.Sprintf(`(?i)\s*(?:(%s)\s*)?(%s)\s*=\s*(\b[\w\s:-]+\b)?\s*`, allowedSeparators, allowedAttributes))
+	
+	if !validRE.MatchString(dn) {
+		return "", errors.New("malformed dn")
+	}
+
+	attributes := splitRE.FindAllStringSubmatch(dn, -1)
+	if attributes[0][1] == "" {
+		attributes[0][1] = ","
+	}
+	
+	parsedDN := ""
+	separator := attributes[0][1]
+	for _, attribute := range attributes {
+		switch {
+		//RFC standard format
+		case attribute[1] == separator && separator == ",":
+			parsedDN = fmt.Sprintf(`/%s=%s`, attribute[2], attribute[3]) + parsedDN
+		//OpenSSL oneline format
+		case attribute[1] == separator && separator == "/":
+			parsedDN = parsedDN + fmt.Sprintf(`/%s=%s`, attribute[2], attribute[3])
+		default:
+			return "", errors.New("malformed dn")
+		}
+	}
+
+	return parsedDN, nil
+}
+// FormatValidDN formats a DN string as an OpenSSL oneline DN and validates it against a CA.
+func FormatValidDN(dn string) (string, error) {
+	formatedDN, err := FormatDN(dn)
+	if err != nil {
+		return formatedDN, err
+	}
+	ca, err := ValidCAs.MatchCA(formatedDN)
+	if err != nil {
+		return formatedDN, err
+	}
+	log.Debug(fmt.Printf("Matched DN \"%s\" to CA \"%s\"", formatedDN, ca["subjectdn"]))
+	return formatedDN, nil
 }

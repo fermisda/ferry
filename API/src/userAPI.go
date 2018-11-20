@@ -1927,6 +1927,14 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error("No DN specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No dn specified.\" }")
 		return
+	} else {
+		dn, err := FormatValidDN(subjDN)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			fmt.Fprintf(w, "{ \"ferry_error\": \"%s\" }", err.Error())
+			return
+		}
+		subjDN = dn
 	}
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
@@ -2030,6 +2038,14 @@ func removeUserCertificateDN(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error("No DN specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No dn specified.\" }")
 		return
+	} else {
+		dn, err := FormatValidDN(subjDN)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			fmt.Fprintf(w, "{ \"ferry_error\": \"%s\" }", err.Error())
+			return
+		}
+		subjDN = dn
 	}
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
