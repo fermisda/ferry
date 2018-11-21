@@ -126,11 +126,12 @@ func checkUnits(inunit string) bool {
 
 // FormatDN formats a DN string as an OpenSSL oneline DN.
 func FormatDN(dn string) (string, error) {
-	allowedSeparators := "/|,"
-	allowedAttributes := "CN|L|ST|O|OU|C|STREET|DC|UID"
+	allowedSeparators := `/|,`
+	allowedAttributes := `CN|L|ST|O|OU|C|STREET|DC|UID`
+	allowedCharacters := `\w\s\:\-\'`
 
-	validRE := regexp.MustCompile(fmt.Sprintf(`(?i)^(?:\s*(?:(?:%s)\s*)?(?:%s)\s*=\s*(?:\b[\w\s:-]+\b)?\s*)+$`, allowedSeparators, allowedAttributes))
-	splitRE := regexp.MustCompile(fmt.Sprintf(`(?i)\s*(?:(%s)\s*)?(%s)\s*=\s*(\b[\w\s:-]+\b)?\s*`, allowedSeparators, allowedAttributes))
+	validRE := regexp.MustCompile(fmt.Sprintf(`(?i)^(?:\s*(?:(?:%s)\s*)?(?:%s)\s*=\s*(?:\b[%s]+\b)?\s*)+$`, allowedSeparators, allowedAttributes, allowedCharacters))
+	splitRE := regexp.MustCompile(fmt.Sprintf(`(?i)\s*(?:(%s)\s*)?(%s)\s*=\s*(\b[%s]+\b)?\s*`, allowedSeparators, allowedAttributes, allowedCharacters))
 	
 	if !validRE.MatchString(dn) {
 		return "", errors.New("malformed dn")
