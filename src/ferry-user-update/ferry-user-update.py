@@ -107,11 +107,7 @@ def writeToFerry(action, params = None):
     target = dict(config.items("ferry"))
     url = target["hostname"] + target[action]
     if params:
-        urlParams = {}
-        for key, value in params.items():
-            urlParams[key] = value.replace("'", "''")
-        urlParams = urllib.parse.urlencode(urlParams)
-        url += "?" + urlParams
+        url += "?" + urllib.parse.urlencode(params)
     if not opts.dry_run:
         logging.debug(url)
         jOut = json.loads(urllib.request.urlopen(url, context=ferryContext).read().decode())
@@ -434,6 +430,9 @@ if __name__ == "__main__":
     except:
         logging.error("could not find configuration file")
         exit(1)
+
+    if "FERRY_API_HOST" in os.environ:
+        config.set("ferry", "hostname", os.environ["FERRY_API_HOST"])
 
     logArgs = {
         "format": "[%(asctime)s][%(levelname)s] %(message)s",
