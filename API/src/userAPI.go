@@ -2248,38 +2248,43 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var uid, uName, fullname, expdate, groupname sql.NullString
+	var status sql.NullBool
+
 	q := r.URL.Query()
-	uid := strings.TrimSpace(q.Get("uid"))
-	uName := strings.TrimSpace(q.Get("username"))
-	fullname :=strings.TrimSpace(q.Get("fullname"))
-	status, err := strconv.ParseBool(strings.TrimSpace(q.Get("status")))
-	expdate := strings.TrimSpace(q.Get("expirationdate"))
-	groupname := strings.TrimSpace(q.Get("groupname"))
+	uid.Scan(strings.TrimSpace(q.Get("uid")))
+	uName.Scan(strings.TrimSpace(q.Get("username")))
+	fullname.Scan(strings.TrimSpace(q.Get("fullname")))
+	expdate.Scan(strings.TrimSpace(q.Get("expirationdate")))
+	groupname.Scan(strings.TrimSpace(q.Get("groupname")))
+	tmpStatus, err := strconv.ParseBool(strings.TrimSpace(q.Get("status")))
 
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error("Invalid status specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid status value. Must be true or false.\" }")
 		return
+	} else {
+		status.Scan(tmpStatus)
 	}
-	if uName == "" {
+	if uName.String == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
 		return
 	}
-	if uid == "" {
+	if uid.String == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No UID specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No uid specified.\" }")
 		return
 	}
-	if fullname == "" {
+	if fullname.String == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No fullname specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No fullname specified.\" }")
 		return
 	}
-	if expdate == "" {
-		expdate = "2038-01-01"
+	if expdate.String == "" {
+		expdate.String = "2038-01-01"
 	}
-	if groupname == "" {
+	if groupname.String == "" {
 		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No groupname specified.\" }")
 		return
