@@ -1260,12 +1260,23 @@ func setCondorQuota(w http.ResponseWriter, r *http.Request) {
 	uName := strings.Split(group, ".")[0]
 
 	var name, qType string
-	if strings.Contains(quota, ".") {
+	if strings.Contains(group, ".") {
 		name = "GROUP_QUOTA_DYNAMIC_group_" + group
 		qType = "dynamic"
+		fQuota, err := strconv.ParseFloat(quota, 64)
+		if err != nil || fQuota < 0 || fQuota > 1 {
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Subgroup quota must be a float between 0 and 1.\" }")
+			return
+		}
+		quota = strconv.FormatFloat(fQuota, 'f', 2, 64)
 	} else {
 		name = "GROUP_QUOTA_group_" + group
 		qType = "static"
+		_, err := strconv.ParseInt(quota, 10, 64)
+		if err != nil {
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Top-level quota must be an integer.\" }")
+			return
+		}
 	}
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
