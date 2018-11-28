@@ -65,3 +65,8 @@ dn_whitelist:
  - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=fifebatch.fnal.gov
  - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=scsgpvm01.fnal.gov
  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Joe Boyd/CN=UID:boyd
+ - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Kevin Retzke/CN=UID:kretzke
+ - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Shreyas Bhat/CN=UID:sbhat
+ - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Nikolay Kuropatkin/CN=UID:kuropat
+ - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Vito Di Benedetto/CN=UID:vito
+ - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Lisa Goodenough/CN=UID:goodenou
