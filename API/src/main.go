@@ -240,6 +240,7 @@ func main() {
 	grouter.HandleFunc("/getAllComputeResources", getAllComputeResources)
 	grouter.HandleFunc("/getVOUserMap", getVOUserMap)
 	grouter.HandleFunc("/cleanStorageQuotas", cleanStorageQuotas)
+	grouter.HandleFunc("/cleanCondorQuotas", cleanCondorQuotas)
 	grouter.HandleFunc("/ping", ping)
 
 	//affiliation unit API calls

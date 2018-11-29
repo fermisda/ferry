@@ -414,6 +414,11 @@ def clean_storage_quotas():
     if writeToFerry("api_clean_storage_quotas"):
         logging.info("Done")
 
+# Cleans expired condor quotas
+def clean_condor_quotas():
+    if writeToFerry("api_clean_condor_quotas"):
+        logging.info("Done")
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = "Script to update Ferry with data from UserDB")
     parser.add_argument("-c", "--config", metavar = "PATH", action = "store", help = "path to configuration file")
@@ -479,3 +484,6 @@ if __name__ == "__main__":
 
     logging.info("Cleaning storage quotas...")
     clean_storage_quotas()
+
+    logging.info("Cleaning Condor quotas...")
+    clean_condor_quotas()
