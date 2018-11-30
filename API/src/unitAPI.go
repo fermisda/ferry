@@ -444,7 +444,11 @@ func getGroupsInAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 		return	
 	default:
 		
-		rows, err := DBptr.Query(`select gid, groups.name, groups.type from affiliation_unit_group as aug join groups on aug.groupid = groups.groupid where aug.unitid=$1 and (aug.last_updated>=$2 or $2 is null)`, unitId, lastupdate)
+		rows, err := DBptr.Query(`select gid, groups.name, groups.type, aug.is_primary 
+								  from affiliation_unit_group as aug
+								  join groups on aug.groupid = groups.groupid
+								  where aug.unitid=$1 and (aug.last_updated>=$2 or $2 is null)`,
+								unitId, lastupdate)
 		if err != nil {
 			defer log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 			w.WriteHeader(http.StatusNotFound)
@@ -457,6 +461,7 @@ func getGroupsInAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 			GId int  `json:"gid"`
 			GName string `json:"name"`
 			GType string `json:"type"`
+			GPrimary bool `json:"is_primary"`
 		}
 		var Entry jsonout
 		var Out []jsonout
@@ -464,10 +469,12 @@ func getGroupsInAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 		for rows.Next() {
 			var tmpGID int
 			var tmpGname, tmpGtype string
-			rows.Scan(&tmpGID, &tmpGname, &tmpGtype)
+			var tmpGprimary bool
+			rows.Scan(&tmpGID, &tmpGname, &tmpGtype, &tmpGprimary)
 			Entry.GId = tmpGID
 			Entry.GName = tmpGname
 			Entry.GType = tmpGtype
+			Entry.GPrimary = tmpGprimary
 			Out = append(Out, Entry)
 		}
 		var output interface{}
