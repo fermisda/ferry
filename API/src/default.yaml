@@ -70,3 +70,4 @@ dn_whitelist:
  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Nikolay Kuropatkin/CN=UID:kuropat
  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Vito Di Benedetto/CN=UID:vito
  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Lisa Goodenough/CN=UID:goodenou
+ - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=usdc/fifeutilgpvm01.fnal.gov
