@@ -4,6 +4,7 @@ import os
 import sys
 import configparser
 import argparse
+import difflib
 import re
 import urllib.request
 import ssl
@@ -135,16 +136,43 @@ def dateSwitcher(date):
 def fetch_userdb():
     # Parses dates to Ferry format
     files = {}
+    totalChangeRatio = 0
     for f, u in config.items("userdb"):
         if f not in ["uid.lis", "gid.lis", "services-users.csv"]:
             logging.error("invalid userdb file %s" % f)
             exit(2)
+        files[f] = "%s/%s" % (cacheDir, f)
+        if os.path.isfile(files[f] + ".error"):
+            logging.error("bad %s file detected on a previous cycle" % f)
+            exit(5)
         logging.debug("Downloading %s: %s" % (f, u))
-        files[f] = urllib.request.urlopen(u).read().decode()
+        if os.path.isfile(files[f]):
+            os.rename(files[f], files[f] + ".cache")
+        userdbFile = open(files[f], "w")
+        userdbFile.write(urllib.request.urlopen(u).read().decode())
+        userdbFile.close()
+        if os.path.isfile(files[f] + ".cache"):
+            userdbLines = open(files[f], "r").readlines()
+            cacheLines = open(files[f] + ".cache", "r").readlines()
+            s = difflib.SequenceMatcher(None, userdbLines, cacheLines)
+            changeRatio = 1 - s.ratio()
+            totalChangeRatio += changeRatio
+            if changeRatio > float(config.get("general", "cache_max_diff")):
+                logging.error("file %s has too many changes" % f)
+                os.rename(files[f], files[f] + ".error")
+                os.rename(files[f] + ".cache", files[f])
+                exit(4)
+            os.remove(files[f] + ".cache")
+        else:
+            totalChangeRatio += 1
 
     if len(files) < 3:
         logging.error("not enough userdb files")
         exit(3)
+
+    if totalChangeRatio == 0:
+        logging.info("No changes detected on UserDB")
+        exit(0)
 
     users = {}
     groups = {}
@@ -152,7 +180,7 @@ def fetch_userdb():
     unameUid = {}
 
     logging.debug("Reading gid.lis")
-    gidLines = re.findall(r"(\d+)\t(.+)\t\t.+", files["gid.lis"])
+    gidLines = re.findall(r"(\d+)\t(.+)\t\t.+", open(files["gid.lis"], "r").read())
     for line in gidLines:
         gid, name = line
         gid = gid
@@ -160,7 +188,7 @@ def fetch_userdb():
         groups[gid] = Group(gid, name)
 
     logging.debug("Reading uid.lis")
-    uidLines = re.findall(r"(\d+)\t\t(\d+)\t\t(.+)\t\t(.+)\t\t(.+)", files["uid.lis"])
+    uidLines = re.findall(r"(\d+)\t\t(\d+)\t\t(.+)\t\t(.+)\t\t(.+)", open(files["uid.lis"], "r").read())
     for line in uidLines:
         uid, gid, last_name, first_name, uname = line
         uid = uid
@@ -191,12 +219,12 @@ def fetch_userdb():
         unameUid.__delitem__(uname)
 
     logging.debug("Reading services-users.csv")
-    servicesUsersLines = re.findall(r"(\w+)\,(\".+\"),(No\sExpiration\sdate|\d{4}-\d{2}-\d{2}|EXPIRED)", files["services-users.csv"])
+    servicesUsersLines = re.findall(r"(\w+)\,(\".+\"),(No\sExpiration\sdate|\d{4}-\d{2}-\d{2}|EXPIRED)", open(files["services-users.csv"], "r").read())
     for line in servicesUsersLines:
         uname, full_name, expiration_date = line
         full_name = full_name.strip("\"")
         expiration_date = dateSwitcher(expiration_date)
-        dn = config.get("general", "dnTemplate") % (full_name, uname)
+        dn = config.get("general", "dn_template") % (full_name, uname)
         if uname in unameUid:
             users[unameUid[uname]].full_name = full_name
             users[unameUid[uname]].expiration_date = expiration_date
@@ -438,6 +466,14 @@ if __name__ == "__main__":
 
     if "FERRY_API_HOST" in os.environ:
         config.set("ferry", "hostname", os.environ["FERRY_API_HOST"])
+
+    rootDir = os.path.dirname(os.path.realpath(__file__))
+    if config.has_option("general", "cache_dir"):
+        cacheDir = config.get("general", "cache_dir")
+    else:
+        cacheDir = rootDir + "/cache"
+    os.makedirs(cacheDir, 0o755, True)
+
 
     logArgs = {
         "format": "[%(asctime)s][%(levelname)s] %(message)s",
