@@ -144,7 +144,7 @@ func FormatDN(dn string) (string, error) {
 		//OpenSSL oneline format
 		case match[2] == separator && separator == "/":
 			parsedDN = fmt.Sprintf(`/%s=%s`, match[3], match[4]) + parsedDN
-		case separator == "" && dn == match[0]:
+		case separator == "" && match[0] == match[1]:
 			parsedDN = fmt.Sprintf(`/%s=%s`, match[3], match[4])
 		default:
 			break loop
