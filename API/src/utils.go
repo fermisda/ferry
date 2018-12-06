@@ -126,35 +126,35 @@ func checkUnits(inunit string) bool {
 
 // FormatDN formats a DN string as an OpenSSL oneline DN.
 func FormatDN(dn string) (string, error) {
-	allowedSeparators := `/|,`
-	allowedAttributes := `CN|L|ST|O|OU|C|STREET|DC|UID`
-	allowedCharacters := `\w\s\:\-\'`
+	re := regexp.MustCompile(`(?U)((/|,)?\s*([A-z]+)\s*=\s*((?:[^\s]+\s*)*)\s*)+$`)
 
-	validRE := regexp.MustCompile(fmt.Sprintf(`(?i)^(?:\s*(?:(?:%s)\s*)?(?:%s)\s*=\s*(?:\b[%s]+\b)?\s*)+$`, allowedSeparators, allowedAttributes, allowedCharacters))
-	splitRE := regexp.MustCompile(fmt.Sprintf(`(?i)\s*(?:(%s)\s*)?(%s)\s*=\s*(\b[%s]+\b)?\s*`, allowedSeparators, allowedAttributes, allowedCharacters))
-	
-	if !validRE.MatchString(dn) {
-		return "", errors.New("malformed dn")
-	}
-
-	attributes := splitRE.FindAllStringSubmatch(dn, -1)
-	if attributes[0][1] == "" {
-		attributes[0][1] = ","
+	var parsedDN, separator string
+	if match := re.FindStringSubmatch(dn); len(match) > 0 {
+		separator = match[2]
 	}
 	
-	parsedDN := ""
-	separator := attributes[0][1]
-	for _, attribute := range attributes {
+	loop:
+	for match := re.FindStringSubmatch(dn); len(match) > 0; match = re.FindStringSubmatch(dn) {
+		index := re.FindStringSubmatchIndex(dn)
+
 		switch {
 		//RFC standard format
-		case attribute[1] == separator && separator == ",":
-			parsedDN = fmt.Sprintf(`/%s=%s`, attribute[2], attribute[3]) + parsedDN
+		case (match[2] == separator || match[2] == "") && separator == ",":
+			parsedDN = parsedDN + fmt.Sprintf(`/%s=%s`, match[3], match[4])
 		//OpenSSL oneline format
-		case attribute[1] == separator && separator == "/":
-			parsedDN = parsedDN + fmt.Sprintf(`/%s=%s`, attribute[2], attribute[3])
+		case match[2] == separator && separator == "/":
+			parsedDN = fmt.Sprintf(`/%s=%s`, match[3], match[4]) + parsedDN
+		case separator == "" && dn == match[0]:
+			parsedDN = fmt.Sprintf(`/%s=%s`, match[3], match[4])
 		default:
-			return "", errors.New("malformed dn")
+			break loop
 		}
+
+		dn = dn[:index[2]]
+	}
+
+	if len(dn) > 0 {
+		return "", errors.New("malformed dn")
 	}
 
 	return parsedDN, nil
