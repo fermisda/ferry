@@ -788,7 +788,11 @@ func getMappedGidFile(w http.ResponseWriter, r *http.Request) {
 
 		if tmpFqan.Valid {
 			Entry = jsonentry{tmpFqan.String, tmpUser.String, tmpGid.String}
-			if !(strings.Contains(tmpFqan.String, "Role=Analysis") && tmpUser.String != "") {
+			//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+			//!!REMOVE THIS EXCEPTION ONCE DCACHE RESOURCE EXISTS!!
+			//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+			if !((strings.Contains(tmpFqan.String, "Role=Analysis") && tmpUser.String != "") ||
+				 (tmpFqan.String == "/des/Role=Production/Capability=NULL" && tmpUser.String == "des")) {
 				Out = append(Out, Entry)
 			}
 		}
