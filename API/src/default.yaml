@@ -11,6 +11,8 @@ database:
   timeout: 60
   sslmode: disable 
   certificate: /etc/grid-security/certificates/cilogon-osg.pem
+  max_open_conns: 200
+  max_idle_conns: 0
 
 server:
   port: 8443
