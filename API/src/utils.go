@@ -126,7 +126,7 @@ func checkUnits(inunit string) bool {
 
 // FormatDN formats a DN string as an OpenSSL oneline DN.
 func FormatDN(dn string) (string, error) {
-	re := regexp.MustCompile(`(?U)((/|,)?\s*([A-z]+)\s*=\s*((?:[^\s]+\s*)*)\s*)+$`)
+	re := regexp.MustCompile(`(?U)((\/|\,?)\s*([A-z]+)\s*\=\s*((?:[^\s]+\s*)*)\s*)+$`)
 
 	var parsedDN, separator string
 	if match := re.FindStringSubmatch(dn); len(match) > 0 {
@@ -139,13 +139,13 @@ func FormatDN(dn string) (string, error) {
 
 		switch {
 		//RFC standard format
-		case (match[2] == separator || match[2] == "") && separator == ",":
+		case separator == "," && (match[2] == separator || match[2] == ""):
 			parsedDN = parsedDN + fmt.Sprintf(`/%s=%s`, match[3], match[4])
-		//OpenSSL oneline format
-		case match[2] == separator && separator == "/":
-			parsedDN = fmt.Sprintf(`/%s=%s`, match[3], match[4]) + parsedDN
-		case separator == "" && match[0] == match[1]:
+		case separator == ""  && match[0] == match[1]:
 			parsedDN = fmt.Sprintf(`/%s=%s`, match[3], match[4])
+		//OpenSSL oneline format
+		case separator == "/" && match[2] == separator:
+			parsedDN = fmt.Sprintf(`/%s=%s`, match[3], match[4]) + parsedDN
 		default:
 			break loop
 		}
