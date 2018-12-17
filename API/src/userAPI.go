@@ -80,7 +80,11 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 		type jsonerror struct {
 			Error []string `json:"ferry_error"`
 		}
+		type jsonstatus struct {
+			Status []string `json:"ferry_status"`
+		}
 		var queryErr jsonerror
+		var queryStatus jsonstatus
 		if !userExists && uname != "%" {
 			queryErr.Error = append(queryErr.Error, "User does not exist.")
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
@@ -90,10 +94,14 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
 		}
 		if userExists && exptExists {
-			queryErr.Error = append(queryErr.Error, "User does not have any certificates registered.")
-			log.WithFields(QueryFields(r, startTime)).Error("User does not have any certificates registered.")
+			queryStatus.Status = append(queryErr.Error, "User does not have any certificates registered.")
+			log.WithFields(QueryFields(r, startTime)).Info("User does not have any certificates registered.")
 		}
-		output = queryErr
+		if len(queryErr.Error) > 0 {
+			output = queryErr
+		} else {
+			output = queryStatus
+		}
 	} else {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		output = Out
