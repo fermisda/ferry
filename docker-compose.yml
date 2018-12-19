@@ -24,6 +24,7 @@ services:
   postgres-exporter:
     image: wrouesnel/postgres_exporter
     network_mode: "bridge"
+    restart: always
     environment:
     - DATA_SOURCE_URI=${FERRY_DB_HOST}:${FERRY_DB_PORT}/ferry_prd?sslmode=disable
     - DATA_SOURCE_USER=${FERRY_DB_USER}
@@ -46,6 +47,7 @@ services:
     - ~/certs/ferry_key.pem:/home/ferry/hostkey.pem
     - /etc/grid-security/certificates/cilogon-osg.pem:/home/ferry/cilogon-osg.pem
     network_mode: "host"
+    restart: always
     logging:
       driver: json-file
       options:
