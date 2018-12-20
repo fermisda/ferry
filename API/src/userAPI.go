@@ -1583,7 +1583,6 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	
 	var(
 		column string
-		quotaid sql.NullInt64
 		vPath sql.NullString
 	)
 	
@@ -1592,34 +1591,34 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	} else { 
 		column = `uid` 
 	}
-	
-	//	queryerr = DBtx.tx.QueryRow(`select quotaid,path from storage_quota where storageid = $1 and ` + column + ` = $2 and unitid = $3 and ((valid_until is NULL and not $4) or (valid_until is not null and (valid_until = $5 and $4)))`, vSid, vId, vUnitid, vUntil.Valid, vUntil).Scan(&quotaid,&vPath)
-	queryerr = DBtx.tx.QueryRow(`select quotaid,path from storage_quota where storageid = $1 and ` + column + ` = $2 and unitid = $3 and ((valid_until is NULL and not $4) or (valid_until is not null and $4))`, vSid, vId, vUnitid, vUntil.Valid).Scan(&quotaid,&vPath)
-	// if we did not specify a path in the API call, stick with the existing one
-	if vPath.Valid && ! spath.Valid && strings.ToUpper(path) != "NULL" {
-		spath.Valid = true
-		spath.String = vPath.String
-	}
-	if queryerr == sql.ErrNoRows {
-		if vUntil.Valid {
-			_, err = DBtx.Exec(`insert into storage_quota (storageid, ` + column + `, unitid, value, unit, valid_until, path, last_updated) values ($1, $2, $3, $4, $5, $6, $7, NOW())`,vSid, vId, vUnitid, quota, unit, vUntil.String, spath.String)
+
+	if !vUntil.Valid {
+		if spath.Valid || isGroup {
+			DBtx.Exec(`insert into storage_quota (storageid, ` + column + `, unitid, value, unit, path, last_updated)
+					   values ($1, $2, $3, $4, $5, $6, NOW())
+					   on conflict (storageid, ` + column + `) where valid_until is null
+					   do update set value = $4, unit = $5, path = $6, last_updated = NOW()`,
+					   vSid, vId, vUnitid, quota, unit, spath.String)
 		} else {
-			_, err = DBtx.Exec(`insert into storage_quota (storageid, ` + column + `, unitid, value, unit, path, last_updated) values ($1, $2, $3, $4, $5, $6, NOW())`,vSid, vId, vUnitid, quota, unit, spath.String)	
-			
+			DBtx.Report("Null path for user quota.")
 		}
-	} else if queryerr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error checking for existing quota: " + queryerr.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error checking for existing quota.\" }")
-		return
 	} else {
-		if vUntil.Valid {
-			_, err = DBtx.Exec(`update storage_quota set value = $1, unit = $2, valid_until = $3, last_updated = NOW(), path = $4 where quotaid = $5`, quota, unit, vUntil.String, spath.String, quotaid)
+		queryerr = DBtx.tx.QueryRow(`select path from storage_quota
+									 where storageid = $1 and ` + column + ` = $2 and
+									 unitid = $3 and valid_until is NULL`,
+									 vSid, vId, vUnitid).Scan(&vPath)
+		if queryerr == sql.ErrNoRows {
+			DBtx.Report("No permanent quota.")
 		} else {
-			_, err = DBtx.Exec(`update storage_quota set value = $1, unit = $2, last_updated = NOW(), path = $3 where quotaid = $4`, quota, unit, spath.String, quotaid)	
+			DBtx.Exec(`insert into storage_quota (storageid, ` + column + `, unitid, value, unit, valid_until, path, last_updated)
+					   values ($1, $2, $3, $4, $5, $6, $7, NOW())
+					   on conflict (storageid, ` + column + `) where valid_until is not null
+					   do update set value = $4, unit = $5, valid_until = $6, last_updated = NOW()`,
+					   vSid, vId, vUnitid, quota, unit, vUntil.String, vPath.String)
 		}
 	}
 	
-	if err == nil {
+	if DBtx.Error() == nil {
 		DBtx.Commit(cKey)
 		
 		if cKey != 0 {
@@ -1627,17 +1626,23 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 		}
 	} else {
-		if strings.Contains(err.Error(), `User does not exist.`) {
+		if strings.Contains(DBtx.Error().Error(), `User does not exist.`) {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-		} else if strings.Contains(err.Error(), `Resource does not exist.`) {
+		} else if strings.Contains(DBtx.Error().Error(), `Resource does not exist.`) {
 			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
-		} else if strings.Contains(err.Error(), `Group does not exist.`) {
+		} else if strings.Contains(DBtx.Error().Error(), `Group does not exist.`) {
 			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Group does not exist.\" }")
+		} else if strings.Contains(DBtx.Error().Error(), `Null path for user quota.`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Null path for user quota.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"No path given. It is required for permanent user quotas.\" }")
+		} else if strings.Contains(DBtx.Error().Error(), `No permanent quota.`) {
+			log.WithFields(QueryFields(r, startTime)).Error("No permanent quota.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"No permanent quota defined.\" }")
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			log.WithFields(QueryFields(r, startTime)).Error(DBtx.Error().Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
 		}
 	}
