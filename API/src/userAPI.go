@@ -1927,6 +1927,12 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	defer DBtx.Rollback(cKey)
+
 	q := r.URL.Query()
 	uName := strings.TrimSpace(q.Get("username"))
 	unitName := strings.TrimSpace(q.Get("unitname"))
@@ -1944,17 +1950,15 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 		dn, err := FormatValidDN(subjDN)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			fmt.Fprintf(w, "{ \"ferry_error\": \"%s\" }", err.Error())
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"%s\" }", err.Error())
+			} else {
+				DBtx.Report(err.Error())
+			}
 			return
 		}
 		subjDN = dn
 	}
-
-	DBtx, cKey, err := LoadTransaction(r, DBptr)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	defer DBtx.Rollback(cKey)
 
 	var uid, dnid sql.NullInt64
 	queryerr := DBtx.tx.QueryRow(`select us.uid, uc.dnid from (select 1 as key, uid from users where uname=$1 for update) as us full outer join (select 1 as key, dnid from user_certificates where dn=$2 for update) as uc on uc.key=us.key`,uName, subjDN).Scan(&uid,&dnid)
