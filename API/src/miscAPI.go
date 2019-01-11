@@ -208,7 +208,7 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 								left join affiliation_units as au on au.unitid=cr.unitid
 								join groups as g on cag.groupid=g.groupid		
 								join users as u on cag.uid=u.uid
-								where (au.name = $1 or $4) and g.type = 'UnixGroup' and (cr.name like $2) and (g.last_updated>=$3 or u.last_updated>=$3 or cag.last_updated>=$3 or au.last_updated>=$3 or $3 is null)
+								where (au.name = $1 or $4) and g.type = 'UnixGroup' and (cr.name like $2) and (cag.last_updated>=$3 or $3 is null)
                                                                 order by g.name,u.uname
 							) as t
 								right join (select 1 as key,
