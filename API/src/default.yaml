@@ -41,7 +41,9 @@ ip_whitelist:
   - 131.225.58.54       # dbweb6.fnal.gov
   - 131.225.65.26       # rexdb03.fnal.gov
   - 131.225.155.96      # fermicloud365.fnal.gov Tanya's test machine
+  - 131.225.155.96      # fermicloud360.fnal.gov Tanya's test machine
   - 131.225.205.240     # cmsvulcan.fnal.gov
+  - 131.225.240.187     # cmsgpvm01.fnal.gov
 
 dn_whitelist:
  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Kenneth Herner/CN=UID:kherner
