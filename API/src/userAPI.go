@@ -2684,10 +2684,14 @@ func getStorageQuotas(w http.ResponseWriter, r *http.Request) {
 	var inputErr jsonerror
 
 	user := q.Get("username")
+	group := q.Get("groupname")
 	resource := q.Get("resourcename")
 
 	if user == "" {
 		user = "%"
+	}
+	if group == "" {
+		group = "%"
 	}
 	if resource == "" {
 		resource = "%"
@@ -2708,20 +2712,22 @@ func getStorageQuotas(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := DBptr.Query(`select  uname, name, path, value, unit, valid_until, user_exists, resource_exists from
-							(select 1 as key, u.uname, sr.name, sr.type, sq.* from
+	rows, err := DBptr.Query(`select uname, gname, rname, path, value, unit, valid_until, user_exists, group_exists, resource_exists from
+							(select 1 as key, u.uname as uname, g.name as gname, sr.name as rname, sr.type, sq.* from
 								storage_quota as sq left join
 								users as u on sq.uid = u.uid left join
+								groups as g on sq.groupid = g.groupid left join
 								storage_resources as sr on sq.storageid = sr.storageid
-								where u.uname like $1 and sr.name like $2
-								and (valid_until is null or valid_until >= NOW()) and (sq.last_updated >= $3 or $3 is null)
-							  	order by uname asc, name asc, valid_until desc
+								where (u.uname like $1 or $1 = '%') and (g.name like $2 or $2 = '%') and (sr.name like $3 or $3 = '%')
+								and (valid_until is null or valid_until >= NOW()) and (sq.last_updated >= $4 or $4 is null)
+							  	order by uname asc, gname asc, rname asc, valid_until desc
 							) as t 
 							right join (
 								select 1 as key,
 								$1 in (select uname from users) as user_exists,
-								$2 in (select name from storage_resources) as resource_exists
-							) as c on t.key = c.key;`, user, resource, lastupdate)
+								$2 in (select name from groups) as group_exists,
+								$3 in (select name from storage_resources) as resource_exists
+							) as c on t.key = c.key;`, user, group, resource, lastupdate)
 
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
@@ -2732,6 +2738,7 @@ func getStorageQuotas(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	var userExists bool
+	var groupExists bool
 	var resourceExists bool
 
 	type jsonquota struct {
@@ -2740,39 +2747,52 @@ func getStorageQuotas(w http.ResponseWriter, r *http.Request) {
 		Unit  string `json:"unit"`
 		Until string `json:"validuntil"`
 	}
-	quotaMap := make(map[string]map[string]jsonquota)
+	type outmap struct {
+		Users  map[string]map[string]jsonquota `json:"user_quotas"`
+		Groups map[string]map[string]jsonquota `json:"group_quotas"`
+	}
+	outMap := outmap{make(map[string]map[string]jsonquota), make(map[string]map[string]jsonquota)}
 
 	for rows.Next() {
-		var tmpUname, tmpRname, tmpPath, tmpValue, tmpUnit, tmpUntil sql.NullString
-		rows.Scan(&tmpUname, &tmpRname, &tmpPath, &tmpValue, &tmpUnit, &tmpUntil, &userExists, &resourceExists)
+		var tmpUname, tmpGname, tmpRname, tmpPath, tmpValue, tmpUnit, tmpUntil sql.NullString
+		rows.Scan(&tmpUname, &tmpGname, &tmpRname, &tmpPath, &tmpValue, &tmpUnit, &tmpUntil, &userExists, &groupExists, &resourceExists)
 
 		if tmpUname.Valid {
-			if _, ok := quotaMap[tmpUname.String]; !ok {
-				quotaMap[tmpUname.String] = make(map[string]jsonquota)
+			if _, ok := outMap.Users[tmpUname.String]; !ok {
+				outMap.Users[tmpUname.String] = make(map[string]jsonquota)
 			}
-
-			quotaMap[tmpUname.String][tmpRname.String] =
+			outMap.Users[tmpUname.String][tmpRname.String] =
+			jsonquota{tmpPath.String, tmpValue.String, tmpUnit.String, tmpUntil.String}
+		}
+		if tmpGname.Valid {
+			if _, ok := outMap.Groups[tmpGname.String]; !ok {
+				outMap.Groups[tmpGname.String] = make(map[string]jsonquota)
+			}
+			outMap.Groups[tmpGname.String][tmpRname.String] =
 			jsonquota{tmpPath.String, tmpValue.String, tmpUnit.String, tmpUntil.String}
 		}
 	}
 
 	var output interface{}
-	if len(quotaMap) == 0 {
+	if len(outMap.Users) == 0 && len(outMap.Groups) == 0 {
 		var queryErr jsonerror
-		if !userExists {
+		if !userExists && user != "%" {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 			queryErr.Error = append(queryErr.Error, "User does not exist.")
-		} else if !resourceExists {
+		} else if !groupExists && group != "%" {
+			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+			queryErr.Error = append(queryErr.Error, "Group does not exist.")
+		} else if !resourceExists && resource != "%" {
 			log.WithFields(QueryFields(r, startTime)).Error("Storage resource does not exist.")
 			queryErr.Error = append(queryErr.Error, "Storage resource does not exist.")
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not have any assigned storage quotas.")
-			queryErr.Error = append(queryErr.Error, "User does not have any assigned storage quotas.")
+			log.WithFields(QueryFields(r, startTime)).Error("No storage quotas were found for this query.")
+			queryErr.Error = append(queryErr.Error, "No storage quotas were found for this query.")
 		}
 		output = queryErr
 	} else {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = quotaMap
+		output = outMap
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {

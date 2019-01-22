@@ -2413,8 +2413,8 @@ func getGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 
-	unitName := strings.TrimSpace(q.Get("unitname"))
 	rName := strings.TrimSpace(q.Get("resourcename"))
+	unitName := strings.TrimSpace(q.Get("unitname"))
 
 	type jsonerror struct {
 		Error string `json:"ferry_error"`
