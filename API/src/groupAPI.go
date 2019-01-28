@@ -2482,7 +2482,14 @@ func getGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
 		grouplist jsonout
 		scanname string
 	)
-	rows, dberr := DBptr.Query(`select groups.name from groups where groups.groupid in (select distinct ca.groupid from compute_access as ca join compute_resources as cr on cr.compid=ca.compid where ca.compid=$1 and cr.unitid=$2 and (ca.last_updated>=$3 or $3 is null)) order by groups.name`, compid, unitid, lastupdate)
+	rows, dberr := DBptr.Query(`select groups.name from groups
+								where groups.groupid in (
+									select distinct cg.groupid from compute_access as ca
+									join compute_access_group as cg on ca.compid = cg.compid and ca.uid = cg.uid
+									join compute_resources as cr on cr.compid=ca.compid
+									where ca.compid=$1 and cr.unitid=$2
+									and (ca.last_updated>=$3 or $3 is null)
+								) order by groups.name`, compid, unitid, lastupdate)
 	if dberr != nil {
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + dberr.Error())
 		inputErr = append(inputErr, jsonerror{dberr.Error()})
