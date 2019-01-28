@@ -91,7 +91,7 @@ func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 			}
 			log.WithFields(QueryFields(r, startTime)).Info("Successfully added " + unitName + " to affiliation_units.")
 			if cKey != 0 {
-				fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
+				fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 			}
 		}
 //	stmt.Close()
@@ -166,7 +166,7 @@ func removeAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 			// error is nil, so it's a success. Commit the transaction and return success.
 			if cKey != 0 { DBtx.Commit(cKey) }
 			log.WithFields(QueryFields(r, startTime)).Info("Successfully added " + unitName + " to affiliation_units.")
-			fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
+			fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 		}
 		return	
 	}
@@ -309,7 +309,7 @@ func setAffiliationUnitInfo(w http.ResponseWriter, r *http.Request) {
 			// error is nil, so it's a success. Commit the transaction and return success.
 			DBtx.Commit(cKey)
 			log.WithFields(QueryFields(r, startTime)).Info("Successfully set values for " + unitName + " in affiliation_units.")
-			fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
+			fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 		}
 //		stmt.Close()
 		return

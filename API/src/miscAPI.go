@@ -1249,7 +1249,7 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 			}
 			log.WithFields(QueryFields(r, startTime)).Error("Added " + rName + " to compute_resources.")
 			if cKey != 0 {
-				fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
+				fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 			}
 			return
 		}
@@ -1392,7 +1392,7 @@ func setComputeResourceInfo(w http.ResponseWriter, r *http.Request) {
 			// if no error, commit and all that. If this is being called as part of a wrapper, however, cKey will be 0. So only commit if cKey is non-zero
 		if cKey != 0 {	DBtx.Commit(cKey) }
 			log.WithFields(QueryFields(r, startTime)).Info("Successfully updated " + unitName + ".")
-			fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
+			fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 		}
 	} //end switch
 }
@@ -1631,7 +1631,7 @@ func setStorageResourceInfo(w http.ResponseWriter, r *http.Request) {
 			// if no error, commit and all that
 			DBtx.Commit(cKey)
 			log.WithFields(QueryFields(r, startTime)).Info("Successfully updated " + rName + ".")
-			fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
+			fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 		}
 	} //end switch
 
@@ -1697,7 +1697,7 @@ func getAllComputeResources(w http.ResponseWriter, r *http.Request) {
 
 func ping(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	fmt.Fprintf(w,`[{ "ferry_status": "success."}, { "release_version" : "` + release_ver + `"}, {"build_date" : "` + build_date + `"}]`)
+	fmt.Fprintf(w,`[{ "ferry_status": "success"}, { "release_version" : "` + release_ver + `"}, {"build_date" : "` + build_date + `"}]`)
 	return
 }
 
@@ -1861,7 +1861,7 @@ func cleanStorageQuotas(w http.ResponseWriter, r *http.Request) {
 	DBtx.Commit(cKey)
 
 	log.WithFields(QueryFields(r, startTime)).Info("Success!")
-	fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
+	fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 }
 
 func cleanCondorQuotas(w http.ResponseWriter, r *http.Request) {
@@ -1906,5 +1906,5 @@ func cleanCondorQuotas(w http.ResponseWriter, r *http.Request) {
 	DBtx.Commit(cKey)
 
 	log.WithFields(QueryFields(r, startTime)).Info("Success!")
-	fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
+	fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 }

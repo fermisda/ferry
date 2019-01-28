@@ -185,7 +185,7 @@ func addGroupToUnit(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Print("Successfully added " + groupname + " to affiliation_unit_groups.")
 		if cKey != 0 {
 			DBtx.Commit(cKey)
-			fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
+			fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 		}
 	}
 	return	
@@ -388,7 +388,7 @@ func setPrimaryStatusGroup(w http.ResponseWriter, r *http.Request) {
 		DBtx.Commit(cKey)
 		w.WriteHeader(http.StatusOK)
 		log.WithFields(QueryFields(r, startTime)).Print("Successfully added " + groupname + " to affiliation_unit_groups.")
-		fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
+		fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 	}
 	stmt.Close()
 	return
@@ -790,7 +790,7 @@ func setGroupLeader(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 				log.WithFields(QueryFields(r, startTime)).Print("Successfully set " + uName + " as leader of " + groupname + ".")
 				if cKey != 0 {
-					fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
+					fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 				}
 			}
 			return
@@ -908,7 +908,7 @@ func removeGroupLeader(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 				log.WithFields(QueryFields(r, startTime)).Print("Successfully set " + uName + " as leader of " + groupname + ".")
 				if cKey != 0 {
-					fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
+					fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 				}
 			}
 			return
@@ -1780,7 +1780,7 @@ func removeUserAccessFromResource(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully deleted (%s,%s,%s) from compute_access.", uName, gName, rName))
 		if cKey != 0 {
 			log.WithFields(QueryFields(r, startTime)).Info("Success!")
-			output = jsonstatus{"Success!", ""}
+			output = jsonstatus{"success", ""}
 		}
 		DBtx.Commit(cKey)
 	}
