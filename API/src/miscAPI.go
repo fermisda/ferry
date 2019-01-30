@@ -1403,9 +1403,9 @@ func createStorageResource(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 	
-	rName := strings.TrimSpace(strings.ToUpper(q.Get("resourcename")))
-	defunit := strings.TrimSpace(strings.ToUpper(q.Get("default_unit")))
-	rType := strings.TrimSpace(strings.ToLower(q.Get("type")))
+	rName := strings.TrimSpace(q.Get("resourcename"))
+	defunit := strings.TrimSpace(q.Get("default_unit"))
+	rType := strings.TrimSpace(q.Get("type"))
 	
 	defpath := strings.TrimSpace(q.Get("default_path"))
 	defquota := strings.TrimSpace(q.Get("default_quota"))
@@ -1480,7 +1480,10 @@ func createStorageResource(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		defer DBtx.Rollback(cKey)
-		_, inserterr := DBtx.tx.Exec(`insert into storage_resources (name, default_path, default_quota, last_updated, default_unit, type) values ($1,$2,$3,NOW(),$4,$5)`, rName, nullpath, nullquota, nullunit, rType)
+		_, inserterr := DBtx.tx.Exec(`insert into storage_resources (
+										name, default_path, default_quota, last_updated, default_unit, type
+									  ) values ($1,$2,$3,NOW(),$4,$5)`,
+									  rName, nullpath, nullquota, nullunit, rType)
 		
 		if inserterr != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insertionn: " + inserterr.Error())
