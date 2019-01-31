@@ -1258,10 +1258,10 @@ func setCondorQuota(w http.ResponseWriter, r *http.Request) {
 	}
 
 	uName := strings.Split(group, ".")[0]
+	name := group
 
-	var name, qType string
+	var qType string
 	if strings.Contains(group, ".") {
-		name = "GROUP_QUOTA_DYNAMIC_group_" + group
 		qType = "dynamic"
 		fQuota, err := strconv.ParseFloat(quota, 64)
 		if err != nil || fQuota < 0 || fQuota > 1 {
@@ -1270,7 +1270,6 @@ func setCondorQuota(w http.ResponseWriter, r *http.Request) {
 		}
 		quota = strconv.FormatFloat(fQuota, 'f', 2, 64)
 	} else {
-		name = "GROUP_QUOTA_group_" + group
 		qType = "static"
 		_, err := strconv.ParseInt(quota, 10, 64)
 		if err != nil {
@@ -1375,13 +1374,6 @@ func removeCondorQuota(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var name string
-	if strings.Contains(group, ".") {
-		name = "GROUP_QUOTA_DYNAMIC_group_" + group
-	} else {
-		name = "GROUP_QUOTA_group_" + group
-	}
-
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
@@ -1390,7 +1382,7 @@ func removeCondorQuota(w http.ResponseWriter, r *http.Request) {
 
 	res, err := DBtx.Exec(`DELETE FROM compute_batch
 						   WHERE compid = (SELECT compid FROM compute_resources WHERE name = $1)
-						   AND name = $2;`, comp, name)
+						   AND name = $2;`, comp, group)
 
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
