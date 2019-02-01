@@ -88,8 +88,12 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 		var tmpAname, tmpRname, tmpUname, tmpUid, tmpGid, tmpGecos, tmpHdir, tmpShell,tmpTime sql.NullString
 		rows.Scan(&tmpAname, &tmpRname, &tmpUname, &tmpUid, &tmpGid, &tmpGecos, &tmpHdir, &tmpShell, &unitExists, &compExists, &tmpTime)
 		log.WithFields(QueryFields(r, startTime)).Debugln(tmpAname.String  + " " + tmpRname.String + " " + tmpUname.String)
+
+		if !tmpRname.Valid {
+			continue
+		}
 		
-		if ! tmpAname.Valid {
+		if !tmpAname.Valid {
 			tmpAname.Valid = true
 			tmpAname.String = "null"
 		}		
@@ -147,13 +151,13 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 			Err = append(Err, jsonerror{"Affiliation unit does not exist."})
 			log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
 		}
-		if !compExists && comp != "%" {
+		if !compExists && comp != "" {
 			Err = append(Err, jsonerror{"Resource does not exist."})
 			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
 		}
 		if len(Err) == 0 {
-			Err = append(Err, jsonerror{"Something went wrong."})
-			log.WithFields(QueryFields(r, startTime)).Error("Something went wrong.")
+			Err = append(Err, jsonerror{"No entries were found for this query."})
+			log.WithFields(QueryFields(r, startTime)).Error("No entries were found for this query.")
 		}
 		output = Err
 	} else {
