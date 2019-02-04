@@ -2115,8 +2115,8 @@ func addLPCCollaborationGroup(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case !usrid.Valid:
-		log.WithFields(QueryFields(r, startTime)).Print("No group user.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No group user.\" }")
+		log.WithFields(QueryFields(r, startTime)).Print("LPC groups require a user with the same name.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"LPC groups require a user with the same name.\" }")
 		return
 
 	case !grpid.Valid:
