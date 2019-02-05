@@ -1302,6 +1302,10 @@ func setCondorQuota(w http.ResponseWriter, r *http.Request) {
 										select c_valid is null into v_permanet;
 
 										if v_compid is null then raise 'null value in column "compid"'; end if;
+
+										if c_qtype = 'dynamic' and c_uname not in (select name from compute_batch) then
+											raise 'no base level quota';
+										end if;
 										
 										if (v_compid, c_qname) not in (select compid, name from compute_batch where (valid_until is null = v_permanet)) then
 										    insert into compute_batch (compid, name, value, type, unitid, valid_until, last_updated)
@@ -1309,6 +1313,10 @@ func setCondorQuota(w http.ResponseWriter, r *http.Request) {
 										else
 											update compute_batch set value = c_qvalue, valid_until = c_valid, last_updated = NOW()
 											where compid = v_compid and name = c_qname and (valid_until is null = v_permanet);
+										end if;
+
+										if v_permanet then
+											delete from compute_batch where compid = v_compid and name = c_qname and valid_until is not null;
 										end if;
 									end $$;`, uName, comp, name, quota, qType, until))
 
@@ -1326,6 +1334,9 @@ func setCondorQuota(w http.ResponseWriter, r *http.Request) {
 				  strings.Contains(err.Error(), `date/time field value out of range`) {
 			log.WithFields(QueryFields(r, startTime)).Error("Invalid expiration date.")
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid expiration date.\" }")
+		} else if strings.Contains(err.Error(), `no base level quota`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Base level quota does not exist.")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Base level quota does not exist.\" }")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Something went wrong.\" }")
