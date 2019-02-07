@@ -439,7 +439,10 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 	unitName := strings.TrimSpace(q.Get("unitname"))
 	voms_url := strings.TrimSpace(q.Get("voms_url"))
 	homedir := strings.TrimSpace(q.Get("defaulthomedir"))
+	userName := strings.TrimSpace(q.Get("username"))
+	groupName := strings.TrimSpace(q.Get("groupname"))
 	standalone := strings.TrimSpace(q.Get("standalone")) // it is a standalone VO, i.e. not a subgroup of the Fermilab VO.
+
 	saVO, parserr := strconv.ParseBool(standalone)
 	if standalone == "" {
 		saVO = false
@@ -461,6 +464,14 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 	//Set the default home directory to /nashome if it was not provided.
 	if homedir == "" {
 		homedir = "/nashome"
+	}
+	//Use experimentpro if username was not provided.
+	if userName == "" {
+		userName = unitName + "pro"
+	}
+	//Use unitname as groupname if it was not provided.
+	if groupName == "" {
+		groupName = unitName
 	}
 	authorized,authout := authorize(r)
 	if authorized == false {
@@ -549,8 +560,8 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 // Set that group to be the primary group
 
 	q.Set("is_primary", "true")
-	q.Set("grouptype","UnixGroup")
-	q.Set("groupname",unitName)
+	q.Set("grouptype", "UnixGroup")
+	q.Set("groupname", groupName)
 	R.URL.RawQuery = q.Encode()
 	DBtx.Savepoint("addGroupToUnit")
 //	DBtx.Continue()
@@ -580,11 +591,11 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 			fqan = "/fermilab/" + unitName + fqan
 		}
 		q.Set("fqan",fqan)
-		q.Set("mapped_group",unitName)
+		q.Set("mapped_group", groupName)
 		if role == "Production" {
-			q.Set("mapped_user", unitName + "pro")
+			q.Set("mapped_user", userName)
 			q.Set("is_leader", "false")
-			q.Set("username", unitName + "pro")
+			q.Set("username", userName)
 		} else {
 			q.Set("mapped_user","")
 		}
