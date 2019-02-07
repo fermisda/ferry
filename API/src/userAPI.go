@@ -739,6 +739,7 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 //									end $$;`, uName, gName, gType, isLeader))
 //
 
+	DBtx.Savepoint("duplicateUser")
 	_, err = DBtx.Exec(`insert into user_group (uid, groupid, is_leader, last_updated) values
                             ((select uid from users where uname=$1),
                              (select groupid from groups where name=$2 and type=$3),
@@ -750,6 +751,7 @@ func addUserToGroup(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
+			DBtx.RollbackToSavepoint("duplicateUser")
 			log.WithFields(QueryFields(r, startTime)).Error("User already belongs to this group.")
 			if cKey != 0 {
 				fmt.Fprintf(w, "{ \"ferry_status\": \"User already belongs to this group.\" }")
