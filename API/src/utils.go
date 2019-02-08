@@ -124,44 +124,21 @@ func checkUnits(inunit string) bool {
 	return false
 }
 
-// FormatDN formats a DN string as an OpenSSL oneline DN.
-func FormatDN(dn string) (string, error) {
-	re := regexp.MustCompile(`(?U)((\/|\,?)\s*([A-z]+)\s*\=\s*((?:[^\s]+\s*)*)\s*)+$`)
+// ExtractDN extracts a DN from string.
+func ExtractDN(dn string) (string, error) {
+	re := regexp.MustCompile(`\/[^\/]+\=.*[^\s]`)
+	parsedDN := re.FindString(dn)
 
-	var parsedDN, separator string
-	if match := re.FindStringSubmatch(dn); len(match) > 0 {
-		separator = match[2]
-	}
-	
-	loop:
-	for match := re.FindStringSubmatch(dn); len(match) > 0; match = re.FindStringSubmatch(dn) {
-		index := re.FindStringSubmatchIndex(dn)
-
-		switch {
-		//RFC standard format
-		case separator == "," && (match[2] == separator || match[2] == ""):
-			parsedDN = parsedDN + fmt.Sprintf(`/%s=%s`, match[3], match[4])
-		case separator == ""  && match[0] == match[1]:
-			parsedDN = fmt.Sprintf(`/%s=%s`, match[3], match[4])
-		//OpenSSL oneline format
-		case separator == "/" && match[2] == separator:
-			parsedDN = fmt.Sprintf(`/%s=%s`, match[3], match[4]) + parsedDN
-		default:
-			break loop
-		}
-
-		dn = dn[:index[2]]
+	var err error
+	if parsedDN == "" {
+		err = errors.New("malformed dn")
 	}
 
-	if len(dn) > 0 {
-		return "", errors.New("malformed dn")
-	}
-
-	return parsedDN, nil
+	return parsedDN, err
 }
-// FormatValidDN formats a DN string as an OpenSSL oneline DN and validates it against a CA.
-func FormatValidDN(dn string) (string, error) {
-	formatedDN, err := FormatDN(dn)
+// FExtractDN extracts a DN from string and validates it against a CA.
+func ExtractValidDN(dn string) (string, error) {
+	formatedDN, err := ExtractDN(dn)
 	if err != nil {
 		return formatedDN, err
 	}
