@@ -1930,7 +1930,7 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No dn specified.\" }")
 		return
 	} else {
-		dn, err := FormatValidDN(subjDN)
+		dn, err := ExtractValidDN(subjDN)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"%s\" }", err.Error())
@@ -2041,7 +2041,7 @@ func removeUserCertificateDN(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No dn specified.\" }")
 		return
 	} else {
-		dn, err := FormatValidDN(subjDN)
+		dn, err := ExtractValidDN(subjDN)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"%s\" }", err.Error())
