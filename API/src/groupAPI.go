@@ -62,11 +62,12 @@ func createGroup(w http.ResponseWriter, r *http.Request) {
 		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint "idx_groups_gid"`) {
 			log.WithFields(QueryFields(r, startTime)).Error("GID already exists.")
 			fmt.Fprintf(w,"{ \"ferry_error\": \"GID already exists.\" }")
-		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint "idx_groups_group_name"`) {
+		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
 			log.WithFields(QueryFields(r, startTime)).Error("Group already exists.")
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Group already exists.\" }")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Something went wrong.\" }")
 		}
 	}
 }
