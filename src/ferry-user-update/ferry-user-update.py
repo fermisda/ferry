@@ -321,6 +321,7 @@ def update_users():
                 params.__delitem__("expirationdate")
             if writeToFerry("api_create_user", params):
                 ferryUsers[user.uid] = User(user.uid, user.uname, user.full_name, user.status, user.expiration_date)
+                ferryGroups[user.gid].members.append(user.uid)
             changes = True
         else:
             diff = user.diff(ferryUsers[user.uid])
