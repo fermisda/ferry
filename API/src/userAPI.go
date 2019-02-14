@@ -263,47 +263,48 @@ func getUserFQANs(w http.ResponseWriter, r *http.Request) {
 
 	var userExists, exptExists bool
 
-	type jsonout struct {
+	type jsonfqan struct {
 		UnitName string `json:"unit_name"`
 		Fqan     string `json:"fqan"`
 	}
-	var Out jsonout
+	var Out []jsonfqan
 
-	idx := 0
-	output := "[ "
 	for rows.Next() {
-		if idx != 0 {
-			output += ","
-		}
 		var tmpUnitName, tmpFqan sql.NullString
 		rows.Scan(&tmpUnitName, &tmpFqan, &userExists, &exptExists)
 		if tmpFqan.Valid {
-			Out.UnitName, Out.Fqan = tmpUnitName.String, tmpFqan.String
-			outline, jsonerr := json.Marshal(Out)
-			if jsonerr != nil {
-				log.WithFields(QueryFields(r, startTime)).Error(jsonerr)
-			}
-			output += string(outline)
-			idx++
+			Out = append(Out, jsonfqan{tmpUnitName.String, tmpFqan.String})
 		}
 	}
-	if idx == 0 {
+
+	var output interface{}	
+	if len(Out) == 0 {
+		type jsonerror struct {
+			Error []string `json:"ferry_error"`
+		}
+		var queryErr jsonerror
 		if !userExists {
-			output += `"ferry_error": "User does not exist.",`
+			queryErr.Error = append(queryErr.Error, "User does not exist.")
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 		}
 		if !exptExists {
-			output += `"ferry_error": "Experiment does not exist.",`
+			queryErr.Error = append(queryErr.Error, "Experiment does not exist.")
 			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
 		}
-		output += `"ferry_error": "User do not have any assigned FQANs."`
-		log.WithFields(QueryFields(r, startTime)).Error("User do not have any assigned FQANs.")
+		if userExists && exptExists {
+			queryErr.Error = append(queryErr.Error, "User do not have any assigned FQANs.")
+			log.WithFields(QueryFields(r, startTime)).Error("User do not have any assigned FQANs.")
+		}
+		output = queryErr
 	} else {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
 	}
-
-	output += " ]"
-	fmt.Fprintf(w, output)
+	jsonoutput, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+	}
+	fmt.Fprintf(w, string(jsonoutput))
 }
 
 func getSuperUserList(w http.ResponseWriter, r *http.Request) {
