@@ -393,13 +393,13 @@ func getAffiliationUnitMembers(w http.ResponseWriter, r *http.Request) {
 	}
 	var output interface{}
 	if len(Out) == 0 {
-		type jsonerror struct {
-			Error string `json:"ferry_error"`
+		type jsonstatus struct {
+			Status []string `json:"ferry_status"`
 		}
-		var queryErr []jsonerror
-		queryErr = append(queryErr, jsonerror{"This affiliation unit has no groups."})
-		log.WithFields(QueryFields(r, startTime)).Error("This affiliation unit has no groups.")
-		output = queryErr
+		var queryStat jsonstatus
+		queryStat.Status = append(queryStat.Status, "No affiliation unit members found for this query.")
+		log.WithFields(QueryFields(r, startTime)).Error("No affiliation unit members found for this query.")
+		output = queryStat
 	} else {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		output = Out
