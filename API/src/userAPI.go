@@ -1723,14 +1723,20 @@ func setUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Request)
 	var uid int
 	var att sql.NullString
 	queryerr := DBtx.tx.QueryRow(`select us.uid,eaa.attribute from (select uid from users where uname = $1) as us left join (select uid, attribute from external_affiliation_attribute where attribute = $2) as eaa on us.uid=eaa.uid`, uName, attribute).Scan(&uid,&att)
-	if queryerr == sql.ErrNoRows {
-		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-		return
-	} else if queryerr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query. Check logs.\" }")
-		return
+	if queryerr != nil {
+		if queryerr == sql.ErrNoRows {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+			return
+		} else if strings.Contains(queryerr.Error(), "invalid input value for enum") {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid attribute.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid attribute.\" }")
+			return
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query. Check logs.\" }")
+			return
+		}
 	}
 	// if att is valid that means the user/attriute combo is in the table already, so this is an update.
 	// if it is not valid, then we are doing an insert.
@@ -1796,18 +1802,25 @@ func removeUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Reque
 	var att sql.NullString
 
 	queryerr := DBtx.tx.QueryRow(`select us.uid,eaa.attribute from (select uid from users where uname = $1) as us left join (select uid, attribute from external_affiliation_attribute where attribute = $2) as eaa on us.uid=eaa.uid`,uName, attribute).Scan(&uid,&att)
-	if queryerr == sql.ErrNoRows {
-		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-		return
-	} else if queryerr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query. Check logs.\" }")
-		return
+	if queryerr != nil {
+		if queryerr == sql.ErrNoRows {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+			return
+		} else if strings.Contains(queryerr.Error(), "invalid input value for enum") {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid attribute.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid attribute.\" }")
+			return
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query. Check logs.\" }")
+			return
+		}
 	}
+
 	if !att.Valid {
-		log.WithFields(QueryFields(r, startTime)).Error("Attribute does not exist.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Attribute does not exist.\" }")
+		log.WithFields(QueryFields(r, startTime)).Error("User doesn't have this attribute.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"User doesn't have this attribute.\" }")
 		return	
 	}
 	
