@@ -1051,6 +1051,13 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 		fqanids = append(fqanids, fqanid)
 	}
 	rows.Close()
+	if len(fqanids) == 0 {
+		log.WithFields(QueryFields(r, startTime)).Error("No FQANs found for this query.")
+		if cKey != 0 {
+			fmt.Fprintf(w,"{ \"ferry_error\": \"No FQANs found for this query.\" }")
+		}
+		return
+	}
 
 	var duplicate int
 	for _, fqanid := range fqanids {
