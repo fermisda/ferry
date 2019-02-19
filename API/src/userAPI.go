@@ -1609,6 +1609,7 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 					   on conflict (storageid, ` + column + `) where valid_until is null
 					   do update set value = $4, unit = $5, path = $6, last_updated = NOW()`,
 					   vSid, vId, vUnitid, quota, unit, spath.String)
+			DBtx.Exec(`delete from storage_quota where storageid = $1 and ` + column + ` = $2 and valid_until is not null`, vSid, vId)
 		} else {
 			DBtx.Report("Null path for user quota.")
 		}
