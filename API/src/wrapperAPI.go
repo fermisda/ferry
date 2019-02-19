@@ -614,7 +614,11 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 				addUserToGroup(w,R)
 				if !DBtx.Complete() {
 					log.WithFields(QueryFields(r, startTime)).Error("Error in addUserToGroup for " + unitName + "pro: " + DBtx.Error().Error())
-					fmt.Fprintf(w,"{ \"ferry_error\": \"Error in addUserToGroup: " + strings.Replace(DBtx.Error().Error(), "\"", "'", -1) + ". Rolling back transaction.\" }")
+					if strings.Contains(DBtx.Error().Error(), "null value in column \"uid\"") {
+						fmt.Fprintf(w,"{ \"ferry_error\": \"User " + userName + " doesn't exist.\" }")
+					} else {
+						fmt.Fprintf(w,"{ \"ferry_error\": \"Error in addUserToGroup: " + strings.Replace(DBtx.Error().Error(), "\"", "'", -1) + ". Rolling back transaction.\" }")
+					}
 					return
 				}
 			}
