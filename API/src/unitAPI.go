@@ -161,7 +161,17 @@ func removeAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 	
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error deleting " + unitName + " to affiliation_units: " + err.Error())
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB deletion.\" }")
+			if strings.Contains(err.Error(), "fk_affiliation_unit_user_certificate_affiliation_units") {
+				fmt.Fprintf(w,"{ \"ferry_error\": \"There are still user certificates associated with this unit.\" }")
+			} else if strings.Contains(err.Error(), "fk_compute_resource_affiliation_units") {
+				fmt.Fprintf(w,"{ \"ferry_error\": \"There are still compute resources associated with this unit.\" }")
+			} else if strings.Contains(err.Error(), "fk_experiment_group_affiliation_units") {
+				fmt.Fprintf(w,"{ \"ferry_error\": \"There are still groups associated with this unit\" }")
+			} else if strings.Contains(err.Error(), "fk_grid_fqan_affiliation_units") {
+				fmt.Fprintf(w,"{ \"ferry_error\": \"There are still FQANs associated with this unit.\" }")
+			} else {
+				fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB deletion.\" }")
+			}
 		} else {
 			// error is nil, so it's a success. Commit the transaction and return success.
 			if cKey != 0 { DBtx.Commit(cKey) }
