@@ -1515,6 +1515,65 @@ func createStorageResource(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func getStorageResourceInfo(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	type jsonerror struct {
+		Error string `json:"ferry_error"`
+	}
+
+	name := q.Get("resourcename")
+
+	if name == "" {
+		name = "%"
+	}
+
+	rows, err := DBptr.Query(`select name, default_path, default_quota, default_unit, type from storage_resources where name like $1 order by name`, name)
+	if err != nil {	
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	}	
+	defer rows.Close()
+
+	type jsonentry struct {
+		Name  string `json:"name"`
+		Path  string `json:"default_path"`
+		Quota string `json:"default_quota"`
+		Unit  string `json:"default_unit"`
+		Type  string `json:"type"`
+	}
+	var Entry jsonentry
+	var Out []jsonentry
+
+	for rows.Next() {
+		rows.Scan(&Entry.Name, &Entry.Path, &Entry.Quota, &Entry.Unit, &Entry.Type)
+
+		if Entry.Name != "" {
+			Out = append(Out, Entry)
+		}
+	}
+
+	var output interface{}
+	if len(Out) == 0 {
+		var queryErr []jsonerror
+		log.WithFields(QueryFields(r, startTime)).Error("No storage resources found for this query.")
+		queryErr = append(queryErr, jsonerror{"No storage resources found for this query."})
+		output = queryErr
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonout, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	fmt.Fprintf(w, string(jsonout))
+}
+
 func setStorageResourceInfo(w http.ResponseWriter, r *http.Request) {
 	
 	startTime := time.Now()
