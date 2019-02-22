@@ -58,7 +58,7 @@ class User:
 
     def addComputeAccess(self, accessString):
         accessString = accessString.replace("$USER", self.uname)
-        resource, group, home, shell, primary = re.findall(r"(\w+):([\w$]+),([\w\/\$]+),([\w\/\$]+),(true|false)", accessString)[0]
+        resource, group, home, shell, primary = re.findall(r"(\w+):([\w$]+),([\w\/\$\-]+),([\w\/\$\-]+),(true|false)", accessString)[0]
         self.compute_access[resource] = {
             "username": self.uname,
             "groupname": group,
@@ -99,7 +99,7 @@ class Group:
 
 def resources(resourcesString):
     resoruces = []
-    for resource, _ in re.findall(r"(\w+):[\w$]+,[\w\/\$]+,[\w\/\$]+,(true|false);", resourcesString):
+    for resource, _ in re.findall(r"(\w+):[\w$]+,[\w\/\$\-]+,[\w\/\$\-]+,(true|false);", resourcesString):
         resoruces.append(resource)
     return resoruces
 
