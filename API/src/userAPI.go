@@ -3045,8 +3045,7 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 
 		// OK, we don't have this combo, so we do an insert now
 		cagPrimary.Valid = true
-		if is_primary != "" {
-
+		if is_primary != "" || priCount == 0 {
 			cagPrimary.Bool = ispri
 		}
 
