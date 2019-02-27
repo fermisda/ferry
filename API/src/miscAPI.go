@@ -17,6 +17,22 @@ var (
         build_date = "unknown"
 )
 
+func IncludeMiscAPIs(c *APICollection) {
+	testBaseAPI := BaseAPI {
+		InputModel {
+			Parameter{UserName,  false},
+			Parameter{GroupName, false},
+			Parameter{UnitName,  true},
+		},
+		func(i Input) Output {
+			var out Output
+			out.Status = true
+			return out
+		},
+	}
+	c.Add("testBaseAPI", &testBaseAPI)
+}
+
 func NotDoneYet(w http.ResponseWriter, r *http.Request, t time.Time) {
 	fmt.Fprintf(w, `{"ferry_error": "This function is not done yet!"}`)
 	log.WithFields(QueryFields(r, t)).Error("This function is not done yet!")

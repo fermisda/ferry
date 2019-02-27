@@ -107,6 +107,9 @@ func main() {
 		}
 	}
 
+	APIs := make(APICollection)
+	IncludeMiscAPIs(&APIs)
+
 	log.Debug("Here we go...")
 
 	//Make sure we are not running as root, and exit if we are.
@@ -256,6 +259,8 @@ func main() {
 	grouter.HandleFunc("/cleanStorageQuotas", cleanStorageQuotas)
 	grouter.HandleFunc("/cleanCondorQuotas", cleanCondorQuotas)
 	grouter.HandleFunc("/ping", ping)
+
+	grouter.HandleFunc("/testBaseAPI", APIs["testBaseAPI"].Run)
 
 	//affiliation unit API calls
 	grouter.HandleFunc("/createAffiliationUnit", createAffiliationUnit)
