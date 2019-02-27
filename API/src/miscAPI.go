@@ -88,8 +88,12 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 		var tmpAname, tmpRname, tmpUname, tmpUid, tmpGid, tmpGecos, tmpHdir, tmpShell,tmpTime sql.NullString
 		rows.Scan(&tmpAname, &tmpRname, &tmpUname, &tmpUid, &tmpGid, &tmpGecos, &tmpHdir, &tmpShell, &unitExists, &compExists, &tmpTime)
 		log.WithFields(QueryFields(r, startTime)).Debugln(tmpAname.String  + " " + tmpRname.String + " " + tmpUname.String)
+
+		if !tmpRname.Valid {
+			continue
+		}
 		
-		if ! tmpAname.Valid {
+		if !tmpAname.Valid {
 			tmpAname.Valid = true
 			tmpAname.String = "null"
 		}		
@@ -147,13 +151,13 @@ func getPasswdFile(w http.ResponseWriter, r *http.Request) {
 			Err = append(Err, jsonerror{"Affiliation unit does not exist."})
 			log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
 		}
-		if !compExists && comp != "%" {
+		if !compExists && comp != "" {
 			Err = append(Err, jsonerror{"Resource does not exist."})
 			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
 		}
 		if len(Err) == 0 {
-			Err = append(Err, jsonerror{"Something went wrong."})
-			log.WithFields(QueryFields(r, startTime)).Error("Something went wrong.")
+			Err = append(Err, jsonerror{"No entries were found for this query."})
+			log.WithFields(QueryFields(r, startTime)).Error("No entries were found for this query.")
 		}
 		output = Err
 	} else {
@@ -208,7 +212,7 @@ func getGroupFile(w http.ResponseWriter, r *http.Request) {
 								left join affiliation_units as au on au.unitid=cr.unitid
 								join groups as g on cag.groupid=g.groupid		
 								join users as u on cag.uid=u.uid
-								where (au.name = $1 or $4) and g.type = 'UnixGroup' and (cr.name like $2) and (g.last_updated>=$3 or u.last_updated>=$3 or cag.last_updated>=$3 or au.last_updated>=$3 or $3 is null)
+								where (au.name = $1 or $4) and g.type = 'UnixGroup' and (cr.name like $2) and (cag.last_updated>=$3 or $3 is null)
                                                                 order by g.name,u.uname
 							) as t
 								right join (select 1 as key,
@@ -1249,7 +1253,7 @@ func createComputeResource(w http.ResponseWriter, r *http.Request) {
 			}
 			log.WithFields(QueryFields(r, startTime)).Error("Added " + rName + " to compute_resources.")
 			if cKey != 0 {
-				fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
+				fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 			}
 			return
 		}
@@ -1392,7 +1396,7 @@ func setComputeResourceInfo(w http.ResponseWriter, r *http.Request) {
 			// if no error, commit and all that. If this is being called as part of a wrapper, however, cKey will be 0. So only commit if cKey is non-zero
 		if cKey != 0 {	DBtx.Commit(cKey) }
 			log.WithFields(QueryFields(r, startTime)).Info("Successfully updated " + unitName + ".")
-			fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
+			fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 		}
 	} //end switch
 }
@@ -1403,9 +1407,9 @@ func createStorageResource(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 	
-	rName := strings.TrimSpace(strings.ToUpper(q.Get("resourcename")))
-	defunit := strings.TrimSpace(strings.ToUpper(q.Get("default_unit")))
-	rType := strings.TrimSpace(strings.ToLower(q.Get("type")))
+	rName := strings.TrimSpace(q.Get("resourcename"))
+	defunit := strings.TrimSpace(q.Get("default_unit"))
+	rType := strings.TrimSpace(q.Get("type"))
 	
 	defpath := strings.TrimSpace(q.Get("default_path"))
 	defquota := strings.TrimSpace(q.Get("default_quota"))
@@ -1480,7 +1484,10 @@ func createStorageResource(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		defer DBtx.Rollback(cKey)
-		_, inserterr := DBtx.tx.Exec(`insert into storage_resources (name, default_path, default_quota, last_updated, default_unit, type) values ($1,$2,$3,NOW(),$4,$5)`, rName, nullpath, nullquota, nullunit, rType)
+		_, inserterr := DBtx.tx.Exec(`insert into storage_resources (
+										name, default_path, default_quota, last_updated, default_unit, type
+									  ) values ($1,$2,$3,NOW(),$4,$5)`,
+									  rName, nullpath, nullquota, nullunit, rType)
 		
 		if inserterr != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insertionn: " + inserterr.Error())
@@ -1506,6 +1513,65 @@ func createStorageResource(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Resource already exists.\" }")
 		return	
 	}
+}
+
+func getStorageResourceInfo(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	type jsonerror struct {
+		Error string `json:"ferry_error"`
+	}
+
+	name := q.Get("resourcename")
+
+	if name == "" {
+		name = "%"
+	}
+
+	rows, err := DBptr.Query(`select name, default_path, default_quota, default_unit, type from storage_resources where name like $1 order by name`, name)
+	if err != nil {	
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	}	
+	defer rows.Close()
+
+	type jsonentry struct {
+		Name  string `json:"name"`
+		Path  string `json:"default_path"`
+		Quota string `json:"default_quota"`
+		Unit  string `json:"default_unit"`
+		Type  string `json:"type"`
+	}
+	var Entry jsonentry
+	var Out []jsonentry
+
+	for rows.Next() {
+		rows.Scan(&Entry.Name, &Entry.Path, &Entry.Quota, &Entry.Unit, &Entry.Type)
+
+		if Entry.Name != "" {
+			Out = append(Out, Entry)
+		}
+	}
+
+	var output interface{}
+	if len(Out) == 0 {
+		var queryErr []jsonerror
+		log.WithFields(QueryFields(r, startTime)).Error("No storage resources found for this query.")
+		queryErr = append(queryErr, jsonerror{"No storage resources found for this query."})
+		output = queryErr
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonout, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	fmt.Fprintf(w, string(jsonout))
 }
 
 func setStorageResourceInfo(w http.ResponseWriter, r *http.Request) {
@@ -1631,7 +1697,7 @@ func setStorageResourceInfo(w http.ResponseWriter, r *http.Request) {
 			// if no error, commit and all that
 			DBtx.Commit(cKey)
 			log.WithFields(QueryFields(r, startTime)).Info("Successfully updated " + rName + ".")
-			fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
+			fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 		}
 	} //end switch
 
@@ -1697,7 +1763,7 @@ func getAllComputeResources(w http.ResponseWriter, r *http.Request) {
 
 func ping(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	fmt.Fprintf(w,`[{ "ferry_status": "success."}, { "release_version" : "` + release_ver + `"}, {"build_date" : "` + build_date + `"}]`)
+	fmt.Fprintf(w,`[{ "ferry_status": "success"}, { "release_version" : "` + release_ver + `"}, {"build_date" : "` + build_date + `"}]`)
 	return
 }
 
@@ -1861,7 +1927,7 @@ func cleanStorageQuotas(w http.ResponseWriter, r *http.Request) {
 	DBtx.Commit(cKey)
 
 	log.WithFields(QueryFields(r, startTime)).Info("Success!")
-	fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
+	fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 }
 
 func cleanCondorQuotas(w http.ResponseWriter, r *http.Request) {
@@ -1906,5 +1972,5 @@ func cleanCondorQuotas(w http.ResponseWriter, r *http.Request) {
 	DBtx.Commit(cKey)
 
 	log.WithFields(QueryFields(r, startTime)).Info("Success!")
-	fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
+	fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 }

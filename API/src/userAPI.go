@@ -80,7 +80,11 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 		type jsonerror struct {
 			Error []string `json:"ferry_error"`
 		}
+		type jsonstatus struct {
+			Status []string `json:"ferry_status"`
+		}
 		var queryErr jsonerror
+		var queryStatus jsonstatus
 		if !userExists && uname != "%" {
 			queryErr.Error = append(queryErr.Error, "User does not exist.")
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
@@ -90,10 +94,14 @@ func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
 		}
 		if userExists && exptExists {
-			queryErr.Error = append(queryErr.Error, "User does not have any certificates registered.")
-			log.WithFields(QueryFields(r, startTime)).Error("User does not have any certificates registered.")
+			queryStatus.Status = append(queryErr.Error, "User does not have any certificates registered.")
+			log.WithFields(QueryFields(r, startTime)).Info("User does not have any certificates registered.")
 		}
-		output = queryErr
+		if len(queryErr.Error) > 0 {
+			output = queryErr
+		} else {
+			output = queryStatus
+		}
 	} else {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		output = Out
@@ -255,47 +263,48 @@ func getUserFQANs(w http.ResponseWriter, r *http.Request) {
 
 	var userExists, exptExists bool
 
-	type jsonout struct {
+	type jsonfqan struct {
 		UnitName string `json:"unit_name"`
 		Fqan     string `json:"fqan"`
 	}
-	var Out jsonout
+	var Out []jsonfqan
 
-	idx := 0
-	output := "[ "
 	for rows.Next() {
-		if idx != 0 {
-			output += ","
-		}
 		var tmpUnitName, tmpFqan sql.NullString
 		rows.Scan(&tmpUnitName, &tmpFqan, &userExists, &exptExists)
 		if tmpFqan.Valid {
-			Out.UnitName, Out.Fqan = tmpUnitName.String, tmpFqan.String
-			outline, jsonerr := json.Marshal(Out)
-			if jsonerr != nil {
-				log.WithFields(QueryFields(r, startTime)).Error(jsonerr)
-			}
-			output += string(outline)
-			idx++
+			Out = append(Out, jsonfqan{tmpUnitName.String, tmpFqan.String})
 		}
 	}
-	if idx == 0 {
+
+	var output interface{}	
+	if len(Out) == 0 {
+		type jsonerror struct {
+			Error []string `json:"ferry_error"`
+		}
+		var queryErr jsonerror
 		if !userExists {
-			output += `"ferry_error": "User does not exist.",`
+			queryErr.Error = append(queryErr.Error, "User does not exist.")
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 		}
 		if !exptExists {
-			output += `"ferry_error": "Experiment does not exist.",`
+			queryErr.Error = append(queryErr.Error, "Experiment does not exist.")
 			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
 		}
-		output += `"ferry_error": "User do not have any assigned FQANs."`
-		log.WithFields(QueryFields(r, startTime)).Error("User do not have any assigned FQANs.")
+		if userExists && exptExists {
+			queryErr.Error = append(queryErr.Error, "User do not have any assigned FQANs.")
+			log.WithFields(QueryFields(r, startTime)).Error("User do not have any assigned FQANs.")
+		}
+		output = queryErr
 	} else {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
 	}
-
-	output += " ]"
-	fmt.Fprintf(w, output)
+	jsonoutput, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+	}
+	fmt.Fprintf(w, string(jsonoutput))
 }
 
 func getSuperUserList(w http.ResponseWriter, r *http.Request) {
@@ -1042,6 +1051,13 @@ func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
 		fqanids = append(fqanids, fqanid)
 	}
 	rows.Close()
+	if len(fqanids) == 0 {
+		log.WithFields(QueryFields(r, startTime)).Error("No FQANs found for this query.")
+		if cKey != 0 {
+			fmt.Fprintf(w,"{ \"ferry_error\": \"No FQANs found for this query.\" }")
+		}
+		return
+	}
 
 	var duplicate int
 	for _, fqanid := range fqanids {
@@ -1708,14 +1724,20 @@ func setUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Request)
 	var uid int
 	var att sql.NullString
 	queryerr := DBtx.tx.QueryRow(`select us.uid,eaa.attribute from (select uid from users where uname = $1) as us left join (select uid, attribute from external_affiliation_attribute where attribute = $2) as eaa on us.uid=eaa.uid`, uName, attribute).Scan(&uid,&att)
-	if queryerr == sql.ErrNoRows {
-		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-		return
-	} else if queryerr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query. Check logs.\" }")
-		return
+	if queryerr != nil {
+		if queryerr == sql.ErrNoRows {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+			return
+		} else if strings.Contains(queryerr.Error(), "invalid input value for enum") {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid attribute.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid attribute.\" }")
+			return
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query. Check logs.\" }")
+			return
+		}
 	}
 	// if att is valid that means the user/attriute combo is in the table already, so this is an update.
 	// if it is not valid, then we are doing an insert.
@@ -1781,18 +1803,25 @@ func removeUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Reque
 	var att sql.NullString
 
 	queryerr := DBtx.tx.QueryRow(`select us.uid,eaa.attribute from (select uid from users where uname = $1) as us left join (select uid, attribute from external_affiliation_attribute where attribute = $2) as eaa on us.uid=eaa.uid`,uName, attribute).Scan(&uid,&att)
-	if queryerr == sql.ErrNoRows {
-		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-		return
-	} else if queryerr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query. Check logs.\" }")
-		return
+	if queryerr != nil {
+		if queryerr == sql.ErrNoRows {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+			return
+		} else if strings.Contains(queryerr.Error(), "invalid input value for enum") {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid attribute.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid attribute.\" }")
+			return
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query. Check logs.\" }")
+			return
+		}
 	}
+
 	if !att.Valid {
-		log.WithFields(QueryFields(r, startTime)).Error("Attribute does not exist.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Attribute does not exist.\" }")
+		log.WithFields(QueryFields(r, startTime)).Error("User doesn't have this attribute.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"User doesn't have this attribute.\" }")
 		return	
 	}
 	
@@ -1922,6 +1951,12 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	defer DBtx.Rollback(cKey)
+
 	q := r.URL.Query()
 	uName := strings.TrimSpace(q.Get("username"))
 	unitName := strings.TrimSpace(q.Get("unitname"))
@@ -1939,17 +1974,15 @@ func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
 		dn, err := ExtractValidDN(subjDN)
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			fmt.Fprintf(w, "{ \"ferry_error\": \"%s\" }", err.Error())
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"%s\" }", err.Error())
+			} else {
+				DBtx.Report(err.Error())
+			}
 			return
 		}
 		subjDN = dn
 	}
-
-	DBtx, cKey, err := LoadTransaction(r, DBptr)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	defer DBtx.Rollback(cKey)
 
 	var uid, dnid sql.NullInt64
 	queryerr := DBtx.tx.QueryRow(`select us.uid, uc.dnid from (select 1 as key, uid from users where uname=$1 for update) as us full outer join (select 1 as key, dnid from user_certificates where dn=$2 for update) as uc on uc.key=us.key`,uName, subjDN).Scan(&uid,&dnid)
@@ -2675,10 +2708,14 @@ func getStorageQuotas(w http.ResponseWriter, r *http.Request) {
 	var inputErr jsonerror
 
 	user := q.Get("username")
+	group := q.Get("groupname")
 	resource := q.Get("resourcename")
 
 	if user == "" {
 		user = "%"
+	}
+	if group == "" {
+		group = "%"
 	}
 	if resource == "" {
 		resource = "%"
@@ -2699,20 +2736,22 @@ func getStorageQuotas(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := DBptr.Query(`select  uname, name, path, value, unit, valid_until, user_exists, resource_exists from
-							(select 1 as key, u.uname, sr.name, sr.type, sq.* from
+	rows, err := DBptr.Query(`select uname, gname, rname, path, value, unit, valid_until, user_exists, group_exists, resource_exists from
+							(select 1 as key, u.uname as uname, g.name as gname, sr.name as rname, sr.type, sq.* from
 								storage_quota as sq left join
 								users as u on sq.uid = u.uid left join
+								groups as g on sq.groupid = g.groupid left join
 								storage_resources as sr on sq.storageid = sr.storageid
-								where u.uname like $1 and sr.name like $2
-								and (valid_until is null or valid_until >= NOW()) and (sq.last_updated >= $3 or $3 is null)
-							  	order by uname asc, name asc, valid_until desc
+								where (u.uname like $1 or $1 = '%') and (g.name like $2 or $2 = '%') and (sr.name like $3 or $3 = '%')
+								and (valid_until is null or valid_until >= NOW()) and (sq.last_updated >= $4 or $4 is null)
+							  	order by uname asc, gname asc, rname asc, valid_until desc
 							) as t 
 							right join (
 								select 1 as key,
 								$1 in (select uname from users) as user_exists,
-								$2 in (select name from storage_resources) as resource_exists
-							) as c on t.key = c.key;`, user, resource, lastupdate)
+								$2 in (select name from groups) as group_exists,
+								$3 in (select name from storage_resources) as resource_exists
+							) as c on t.key = c.key;`, user, group, resource, lastupdate)
 
 	if err != nil {
 		defer log.WithFields(QueryFields(r, startTime)).Error(err)
@@ -2723,6 +2762,7 @@ func getStorageQuotas(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	var userExists bool
+	var groupExists bool
 	var resourceExists bool
 
 	type jsonquota struct {
@@ -2731,39 +2771,52 @@ func getStorageQuotas(w http.ResponseWriter, r *http.Request) {
 		Unit  string `json:"unit"`
 		Until string `json:"validuntil"`
 	}
-	quotaMap := make(map[string]map[string]jsonquota)
+	type outmap struct {
+		Users  map[string]map[string]jsonquota `json:"user_quotas"`
+		Groups map[string]map[string]jsonquota `json:"group_quotas"`
+	}
+	outMap := outmap{make(map[string]map[string]jsonquota), make(map[string]map[string]jsonquota)}
 
 	for rows.Next() {
-		var tmpUname, tmpRname, tmpPath, tmpValue, tmpUnit, tmpUntil sql.NullString
-		rows.Scan(&tmpUname, &tmpRname, &tmpPath, &tmpValue, &tmpUnit, &tmpUntil, &userExists, &resourceExists)
+		var tmpUname, tmpGname, tmpRname, tmpPath, tmpValue, tmpUnit, tmpUntil sql.NullString
+		rows.Scan(&tmpUname, &tmpGname, &tmpRname, &tmpPath, &tmpValue, &tmpUnit, &tmpUntil, &userExists, &groupExists, &resourceExists)
 
 		if tmpUname.Valid {
-			if _, ok := quotaMap[tmpUname.String]; !ok {
-				quotaMap[tmpUname.String] = make(map[string]jsonquota)
+			if _, ok := outMap.Users[tmpUname.String]; !ok {
+				outMap.Users[tmpUname.String] = make(map[string]jsonquota)
 			}
-
-			quotaMap[tmpUname.String][tmpRname.String] =
+			outMap.Users[tmpUname.String][tmpRname.String] =
+			jsonquota{tmpPath.String, tmpValue.String, tmpUnit.String, tmpUntil.String}
+		}
+		if tmpGname.Valid {
+			if _, ok := outMap.Groups[tmpGname.String]; !ok {
+				outMap.Groups[tmpGname.String] = make(map[string]jsonquota)
+			}
+			outMap.Groups[tmpGname.String][tmpRname.String] =
 			jsonquota{tmpPath.String, tmpValue.String, tmpUnit.String, tmpUntil.String}
 		}
 	}
 
 	var output interface{}
-	if len(quotaMap) == 0 {
+	if len(outMap.Users) == 0 && len(outMap.Groups) == 0 {
 		var queryErr jsonerror
-		if !userExists {
+		if !userExists && user != "%" {
 			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
 			queryErr.Error = append(queryErr.Error, "User does not exist.")
-		} else if !resourceExists {
+		} else if !groupExists && group != "%" {
+			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+			queryErr.Error = append(queryErr.Error, "Group does not exist.")
+		} else if !resourceExists && resource != "%" {
 			log.WithFields(QueryFields(r, startTime)).Error("Storage resource does not exist.")
 			queryErr.Error = append(queryErr.Error, "Storage resource does not exist.")
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not have any assigned storage quotas.")
-			queryErr.Error = append(queryErr.Error, "User does not have any assigned storage quotas.")
+			log.WithFields(QueryFields(r, startTime)).Error("No storage quotas were found for this query.")
+			queryErr.Error = append(queryErr.Error, "No storage quotas were found for this query.")
 		}
 		output = queryErr
 	} else {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = quotaMap
+		output = outMap
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
@@ -2992,8 +3045,7 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 
 		// OK, we don't have this combo, so we do an insert now
 		cagPrimary.Valid = true
-		if is_primary != "" {
-
+		if is_primary != "" || priCount == 0 {
 			cagPrimary.Bool = ispri
 		}
 

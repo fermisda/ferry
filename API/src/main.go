@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strconv"
 	"database/sql"
 	"flag"
 	"fmt"
@@ -145,8 +146,20 @@ func main() {
 		log.Error("there is an issue here")
 		log.Fatal(err)
 	} else {
+		maxOpen, err := strconv.Atoi(dbConfig["max_open_conns"])
+		if err != nil {
+			log.Error("error converting max_open_conns")
+			log.Fatal(err)
+		}
+		maxIdle, err := strconv.Atoi(dbConfig["max_idle_conns"])
+		if err != nil {
+			log.Error("error converting max_idel_conns")
+			log.Fatal(err)
+		}
+
 		DBptr = Mydb
-		Mydb.SetMaxOpenConns(200)
+		Mydb.SetMaxOpenConns(maxOpen)
+		Mydb.SetMaxIdleConns(maxIdle)
 		pingerr := Mydb.Ping()
 		if pingerr != nil {
 			log.Fatal(pingerr)
@@ -237,6 +250,7 @@ func main() {
 	grouter.HandleFunc("/getGroupUnits", getGroupUnits)
 	grouter.HandleFunc("/createStorageResource", createStorageResource)
 	grouter.HandleFunc("/setStorageResourceInfo", setStorageResourceInfo)
+	grouter.HandleFunc("/getStorageResourceInfo", getStorageResourceInfo)
 	grouter.HandleFunc("/getAllComputeResources", getAllComputeResources)
 	grouter.HandleFunc("/getVOUserMap", getVOUserMap)
 	grouter.HandleFunc("/cleanStorageQuotas", cleanStorageQuotas)

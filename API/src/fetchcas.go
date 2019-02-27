@@ -19,6 +19,11 @@ func FetchCAs(caDir string) (CAs, error) {
 	namespaces := make(map[string]string)
 	reAliases := regexp.MustCompile(`TO Issuer \"(.*)\".*\n.*PERMIT Subject \"(.*)\"`)
 	pathList, _ := filepath.Glob(caDir + "/*.namespaces")
+
+	if len(pathList) == 0 {
+		return nil, errors.New("no namespaces found at given location")
+	}
+
 	for _, path := range pathList {
 		file, err := ioutil.ReadFile(path)
 		if err != nil {

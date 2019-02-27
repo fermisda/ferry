@@ -63,7 +63,7 @@ func ParseDN(names []pkix.AttributeTypeAndValue, sep string) string {
 		"2.5.4.6":                    "C",
 		"2.5.4.7":                    "L",
 		"2.5.4.8":                    "ST",
-		"2.5.4.9":                    "streetAddress",
+		"2.5.4.9":                    "STREET",
 		"2.5.4.10":                   "O",
 		"2.5.4.11":                   "OU",
 		"2.5.4.12":                   "title",
@@ -75,7 +75,7 @@ func ParseDN(names []pkix.AttributeTypeAndValue, sep string) string {
 		"2.5.4.65":                   "pseudonym",
 		"0.9.2342.19200300.100.1.25": "DC",
 		"1.2.840.113549.1.9.1":       "emailAddress",
-		"0.9.2342.19200300.100.1.1":  "userid",
+		"0.9.2342.19200300.100.1.1":  "UID",
 	}
 
 	var subject []string

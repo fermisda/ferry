@@ -91,7 +91,7 @@ func createAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 			}
 			log.WithFields(QueryFields(r, startTime)).Info("Successfully added " + unitName + " to affiliation_units.")
 			if cKey != 0 {
-				fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
+				fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 			}
 		}
 //	stmt.Close()
@@ -161,12 +161,22 @@ func removeAffiliationUnit(w http.ResponseWriter, r *http.Request) {
 	
 		if err != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error deleting " + unitName + " to affiliation_units: " + err.Error())
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB deletion.\" }")
+			if strings.Contains(err.Error(), "fk_affiliation_unit_user_certificate_affiliation_units") {
+				fmt.Fprintf(w,"{ \"ferry_error\": \"There are still user certificates associated with this unit.\" }")
+			} else if strings.Contains(err.Error(), "fk_compute_resource_affiliation_units") {
+				fmt.Fprintf(w,"{ \"ferry_error\": \"There are still compute resources associated with this unit.\" }")
+			} else if strings.Contains(err.Error(), "fk_experiment_group_affiliation_units") {
+				fmt.Fprintf(w,"{ \"ferry_error\": \"There are still groups associated with this unit\" }")
+			} else if strings.Contains(err.Error(), "fk_grid_fqan_affiliation_units") {
+				fmt.Fprintf(w,"{ \"ferry_error\": \"There are still FQANs associated with this unit.\" }")
+			} else {
+				fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB deletion.\" }")
+			}
 		} else {
 			// error is nil, so it's a success. Commit the transaction and return success.
 			if cKey != 0 { DBtx.Commit(cKey) }
 			log.WithFields(QueryFields(r, startTime)).Info("Successfully added " + unitName + " to affiliation_units.")
-			fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
+			fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 		}
 		return	
 	}
@@ -309,7 +319,7 @@ func setAffiliationUnitInfo(w http.ResponseWriter, r *http.Request) {
 			// error is nil, so it's a success. Commit the transaction and return success.
 			DBtx.Commit(cKey)
 			log.WithFields(QueryFields(r, startTime)).Info("Successfully set values for " + unitName + " in affiliation_units.")
-			fmt.Fprintf(w,"{ \"ferry_status\": \"success.\" }")
+			fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 		}
 //		stmt.Close()
 		return
@@ -393,13 +403,13 @@ func getAffiliationUnitMembers(w http.ResponseWriter, r *http.Request) {
 	}
 	var output interface{}
 	if len(Out) == 0 {
-		type jsonerror struct {
-			Error string `json:"ferry_error"`
+		type jsonstatus struct {
+			Status []string `json:"ferry_status"`
 		}
-		var queryErr []jsonerror
-		queryErr = append(queryErr, jsonerror{"This affiliation unit has no groups."})
-		log.WithFields(QueryFields(r, startTime)).Error("This affiliation unit has no groups.")
-		output = queryErr
+		var queryStat jsonstatus
+		queryStat.Status = append(queryStat.Status, "No affiliation unit members found for this query.")
+		log.WithFields(QueryFields(r, startTime)).Error("No affiliation unit members found for this query.")
+		output = queryStat
 	} else {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
 		output = Out
