@@ -1,5 +1,6 @@
 package main
 import (
+	"errors"
 	"database/sql"
 	"strconv"
 	log "github.com/sirupsen/logrus"
@@ -20,17 +21,57 @@ var (
 func IncludeMiscAPIs(c *APICollection) {
 	testBaseAPI := BaseAPI {
 		InputModel {
-			Parameter{UserName,  false},
-			Parameter{GroupName, false},
-			Parameter{UnitName,  true},
+			Parameter{UserName, TypeString, false},
+			Parameter{GroupName, TypeBool, false},
+			Parameter{UnitName, TypeInt,  true},
 		},
-		func(i Input) Output {
-			var out Output
-			out.Status = true
-			return out
+		func(c APIContext, i Input) (interface{}, error) {
+			out := make(map[ParameterName]interface{})
+			out[UserName] = "TEST"
+			return out, nil
 		},
 	}
 	c.Add("testBaseAPI", &testBaseAPI)
+
+	getUserInfoBaseAPI := BaseAPI {
+		InputModel {
+			Parameter{UserName, TypeString, true},
+		},
+		getUserInfoBaseAPI,
+	}
+	c.Add("getUserInfoBaseAPI", &getUserInfoBaseAPI)
+}
+
+func getUserInfoBaseAPI(c APIContext, i Input) (interface{}, error) {
+	rows, err := c.DBtx.Query(`select full_name, uid, status, is_groupaccount, expiration_date from users where uname=$1`, i[UserName])
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		c.W.WriteHeader(http.StatusNotFound)
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tmpFullName sql.NullString
+	var tmpUID sql.NullInt64
+	var tmpStatus, tmpGroupAccount sql.NullBool
+	var tmpExpirationDate time.Time
+	out := make(map[ParameterName]interface{})
+	
+	for rows.Next() {
+		rows.Scan(&tmpFullName, &tmpUID, &tmpStatus, &tmpGroupAccount, &tmpExpirationDate)
+		out[FullName] = tmpFullName.String
+		out[UID] = tmpUID.Int64
+		out[Status] = tmpStatus.Bool
+		out[GroupAccount] = tmpGroupAccount.Bool
+		out[ExpirationDate] = tmpExpirationDate
+	}
+	if len(out) == 0 {
+		err := "user does not exist"
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		return nil, errors.New(err)
+	} else {
+		return out, nil
+	}
 }
 
 func NotDoneYet(w http.ResponseWriter, r *http.Request, t time.Time) {

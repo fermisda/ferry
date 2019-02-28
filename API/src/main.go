@@ -261,6 +261,7 @@ func main() {
 	grouter.HandleFunc("/ping", ping)
 
 	grouter.HandleFunc("/testBaseAPI", APIs["testBaseAPI"].Run)
+	grouter.HandleFunc("/getUserInfoBaseAPI", APIs["getUserInfoBaseAPI"].Run)
 
 	//affiliation unit API calls
 	grouter.HandleFunc("/createAffiliationUnit", createAffiliationUnit)
