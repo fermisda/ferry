@@ -23,7 +23,7 @@ func IncludeMiscAPIs(c *APICollection) {
 		InputModel {
 			Parameter{UserName, true},
 			Parameter{UID, true},
-			Parameter{UnitName,  false},
+			Parameter{ExpirationDate,  false},
 		},
 		func(c APIContext, i Input) (interface{}, error) {
 			out := make(map[Attribute]interface{})

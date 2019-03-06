@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strconv"
 	"database/sql/driver"
 	"errors"
 	"time"
@@ -206,27 +207,59 @@ const (
 	TypeDate	AttributeType = "date"
 )
 
-// Parse an AttributeType into its primitive type
+// DateFormat represents the default date format
+const DateFormat = "2006-01-02"
+
+// Parse parses an interface into the AttributeType primitive type
 func (at AttributeType) Parse(value interface{}) (interface{}, bool) {
 	var parsedValue interface{}
-	var err bool
+	var valid bool
 
 	switch at {
 	case TypeString:
-		parsedValue, err = value.(string)
+		parsedValue, valid = value.(string)
 	case TypeInt:
-		parsedValue, err = value.(int64)
+		parsedValue, valid = value.(int64)
 	case TypeUint:
-		parsedValue, err = value.(uint)
+		parsedValue, valid = value.(uint)
 	case TypeFloat:
-		parsedValue, err = value.(float64)
+		parsedValue, valid = value.(float64)
 	case TypeBool:
-		parsedValue, err = value.(bool)
+		parsedValue, valid = value.(bool)
 	case TypeDate:
-		parsedValue, err = value.(time.Time)
+		parsedValue, valid = value.(time.Time)
 	}
 	
-	return parsedValue, err
+	return parsedValue, valid
+}
+
+// ParseString parses a string into the AttributeType primitive type
+func (at AttributeType) ParseString(value string) (interface{}, bool) {
+	var parsedValue interface{}
+	var valid bool
+	var err error
+
+	switch at {
+	case TypeString:
+		parsedValue, valid = value, true
+	case TypeInt:
+		parsedValue, err = strconv.ParseInt(value, 10, 64)
+		valid = (err == nil)
+	case TypeUint:
+		parsedValue, err = strconv.ParseUint(value, 10, 64)
+		valid = (err == nil)
+	case TypeFloat:
+		parsedValue, err = strconv.ParseFloat(value, 64)
+		valid = (err == nil)
+	case TypeBool:
+		parsedValue, err = strconv.ParseBool(value)
+		valid = (err == nil)
+	case TypeDate:
+		parsedValue, err = time.Parse(DateFormat, value)
+		valid = (err == nil)
+	}
+	
+	return parsedValue, valid
 }
 
 // NullAttribute represents a BaseAPI attribute that may be null. NullAttribute implements the
@@ -240,7 +273,11 @@ type NullAttribute struct {
 
 // Scan implements the Scanner interface.
 func (na *NullAttribute) Scan(value interface{}) error {
-	na.Data, na.Valid = na.Attribute.Type().Parse(value)
+	if stringValue, ok := value.(string); ok {
+		na.Data, na.Valid = na.Attribute.Type().ParseString(stringValue)
+	} else {
+		na.Data, na.Valid = na.Attribute.Type().Parse(value)
+	}
 	return nil
 }
 
