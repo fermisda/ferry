@@ -21,12 +21,12 @@ var (
 func IncludeMiscAPIs(c *APICollection) {
 	testBaseAPI := BaseAPI {
 		InputModel {
-			Parameter{UserName, TypeString, false},
-			Parameter{GroupName, TypeBool, false},
-			Parameter{UnitName, TypeInt,  true},
+			Parameter{UserName, true},
+			Parameter{UID, true},
+			Parameter{UnitName,  false},
 		},
 		func(c APIContext, i Input) (interface{}, error) {
-			out := make(map[ParameterName]interface{})
+			out := make(map[Attribute]interface{})
 			out[UserName] = "TEST"
 			return out, nil
 		},
@@ -35,7 +35,7 @@ func IncludeMiscAPIs(c *APICollection) {
 
 	getUserInfoBaseAPI := BaseAPI {
 		InputModel {
-			Parameter{UserName, TypeString, true},
+			Parameter{UserName, true},
 		},
 		getUserInfoBaseAPI,
 	}
@@ -51,19 +51,14 @@ func getUserInfoBaseAPI(c APIContext, i Input) (interface{}, error) {
 	}
 	defer rows.Close()
 
-	var tmpFullName sql.NullString
-	var tmpUID sql.NullInt64
-	var tmpStatus, tmpGroupAccount sql.NullBool
-	var tmpExpirationDate time.Time
-	out := make(map[ParameterName]interface{})
+	out := make(map[Attribute]interface{})
+	columns := MapNullAttribute(FullName, UID, Status, GroupAccount, ExpirationDate)
 	
 	for rows.Next() {
-		rows.Scan(&tmpFullName, &tmpUID, &tmpStatus, &tmpGroupAccount, &tmpExpirationDate)
-		out[FullName] = tmpFullName.String
-		out[UID] = tmpUID.Int64
-		out[Status] = tmpStatus.Bool
-		out[GroupAccount] = tmpGroupAccount.Bool
-		out[ExpirationDate] = tmpExpirationDate
+		rows.Scan(columns[FullName], columns[UID], columns[Status], columns[GroupAccount], columns[ExpirationDate])
+		for _, column := range columns {
+			out[column.Attribute] = column.Data
+		}
 	}
 	if len(out) == 0 {
 		err := "user does not exist"
