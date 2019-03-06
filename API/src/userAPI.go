@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
 	_ "github.com/lib/pq"
 )
 
@@ -1480,9 +1479,8 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var vUntil sql.NullString
-	if validtime != "" && strings.ToUpper(validtime) != "NULL" {
-		vUntil.Valid = true
-		vUntil.String = validtime
+	if validtime != "" {
+		vUntil.Scan(validtime)
 	}
 	
 	if uName == "" {
@@ -1591,41 +1589,44 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 		return
 	} 
 	
-	var(
-		column string
-		vPath sql.NullString
-	)
-	
+	var vPath sql.NullString
+	var column string
+
 	if isGroup {
 		column = `groupid`
 	} else { 
 		column = `uid` 
 	}
 
-	if !vUntil.Valid {
-		if spath.Valid || isGroup {
-			DBtx.Exec(`insert into storage_quota (storageid, ` + column + `, unitid, value, unit, path, last_updated)
-					   values ($1, $2, $3, $4, $5, $6, NOW())
-					   on conflict (storageid, ` + column + `) where valid_until is null
-					   do update set value = $4, unit = $5, path = $6, last_updated = NOW()`,
-					   vSid, vId, vUnitid, quota, unit, spath.String)
-			DBtx.Exec(`delete from storage_quota where storageid = $1 and ` + column + ` = $2 and valid_until is not null`, vSid, vId)
-		} else {
-			DBtx.Report("Null path for user quota.")
-		}
-	} else {
+	if !spath.Valid {
 		queryerr = DBtx.tx.QueryRow(`select path from storage_quota
 									 where storageid = $1 and ` + column + ` = $2 and
 									 unitid = $3 and valid_until is NULL`,
 									 vSid, vId, vUnitid).Scan(&vPath)
 		if queryerr == sql.ErrNoRows {
-			DBtx.Report("No permanent quota.")
-		} else {
-			DBtx.Exec(`insert into storage_quota (storageid, ` + column + `, unitid, value, unit, valid_until, path, last_updated)
-					   values ($1, $2, $3, $4, $5, $6, $7, NOW())
-					   on conflict (storageid, ` + column + `) where valid_until is not null
-					   do update set value = $4, unit = $5, valid_until = $6, last_updated = NOW()`,
-					   vSid, vId, vUnitid, quota, unit, vUntil.String, vPath.String)
+			if !vUntil.Valid { 
+				DBtx.Report("Null path for user quota.")
+			} else {
+				DBtx.Report("No permanent quota.")
+			}
+		}
+	} else {
+		vPath = spath
+	}
+
+	if vPath.Valid {
+		var tmpNull string
+		if vUntil.Valid {
+			tmpNull = "not "
+		}
+
+		DBtx.Exec(`insert into storage_quota (storageid, ` + column + `, unitid, value, unit, valid_until, path, last_updated)
+				   values ($1, $2, $3, $4, $5, $6, $7, NOW())
+				   on conflict (storageid, ` + column + `) where valid_until is ` + tmpNull + `null
+				   do update set value = $4, unit = $5, valid_until = $6, path = $7, last_updated = NOW()`,
+				   vSid, vId, vUnitid, quota, unit, vUntil, vPath)
+		if !vUntil.Valid {
+			DBtx.Exec(`delete from storage_quota where storageid = $1 and ` + column + ` = $2 and valid_until is not null`, vSid, vId)
 		}
 	}
 	
@@ -1652,6 +1653,9 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 		} else if strings.Contains(DBtx.Error().Error(), `No permanent quota.`) {
 			log.WithFields(QueryFields(r, startTime)).Error("No permanent quota.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"No permanent quota defined.\" }")
+		} else if strings.Contains(DBtx.Error().Error(), `invalid input syntax for type date`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid valid_until date.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid valid_until date.\" }")
 		} else {
 			log.WithFields(QueryFields(r, startTime)).Error(DBtx.Error().Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
