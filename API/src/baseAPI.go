@@ -91,7 +91,7 @@ func (i InputModel) Parse(c APIContext) (Input, []error) {
 
 		errString = "parameter '%s' requires a %s value"
 		if value != "" {
-			if v, ok := p.Attribute.Type().Parse(value); ok {
+			if v, ok := p.Attribute.Type().ParseString(value); ok {
 				parsedValue = v
 			} else {
 				errs = append(errs, fmt.Errorf(errString, p.Attribute, p.Attribute.Type()))
