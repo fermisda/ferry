@@ -1122,8 +1122,8 @@ func getCondorQuotas(w http.ResponseWriter, r *http.Request) {
 		rName = "%"
 	}
 
-	query := `select resourcename, unitname, condorgroup, value, type, valid_until, unit_exists, resource_exists from (
-				select 1 as key, cr.name as resourcename, au.name as unitname, cb.name as condorgroup, cb.value, cb.type, cb.valid_until as valid_until
+	query := `select resourcename, unitname, condorgroup, value, type, surplus, valid_until, unit_exists, resource_exists from (
+				select 1 as key, cr.name as resourcename, au.name as unitname, cb.name as condorgroup, cb.value, cb.type, cb.surplus, cb.valid_until as valid_until
 				from compute_batch as cb
 				left join affiliation_units as au on cb.unitid = au.unitid
 				join compute_resources as cr on cb.compid = cr.compid
@@ -1151,22 +1151,23 @@ func getCondorQuotas(w http.ResponseWriter, r *http.Request) {
 		Value float64 `json:"value"`
 		Qtype string `json:"type"`
 		Unit  string `json:"unitname"`
+		Splus bool `json:"surplus"`
 		Vuntil string `json:"valid_until"`
 	}
 	out := make(map[string][]jsonquota)
 
 	var tmpRname, tmpUname, tmpGroup, tmpType, tmpValid sql.NullString
 	var tmpValue sql.NullFloat64
-	var unitExists, resourceExists bool
+	var tmpSplus, unitExists, resourceExists bool
 
 	prevGroup := ""
 	for rows.Next() {
-		rows.Scan(&tmpRname, &tmpUname, &tmpGroup, &tmpValue, &tmpType, &tmpValid, &unitExists, &resourceExists)
+		rows.Scan(&tmpRname, &tmpUname, &tmpGroup, &tmpValue, &tmpType, &tmpSplus, &tmpValid, &unitExists, &resourceExists)
 		if tmpGroup.Valid {
 			if tmpGroup.String != prevGroup {
-				out[tmpRname.String] = append(out[tmpRname.String], jsonquota{tmpGroup.String, tmpValue.Float64, tmpType.String, tmpUname.String, tmpValid.String})
+				out[tmpRname.String] = append(out[tmpRname.String], jsonquota{tmpGroup.String, tmpValue.Float64, tmpType.String, tmpUname.String, tmpSplus, tmpValid.String})
 			} else {
-				out[tmpRname.String][len(out[tmpRname.String]) - 1] = jsonquota{tmpGroup.String, tmpValue.Float64, tmpType.String, tmpUname.String, tmpValid.String}
+				out[tmpRname.String][len(out[tmpRname.String]) - 1] = jsonquota{tmpGroup.String, tmpValue.Float64, tmpType.String, tmpUname.String, tmpSplus, tmpValid.String}
 			}
 		}
 		prevGroup = tmpGroup.String
@@ -1229,6 +1230,7 @@ func setCondorQuota(w http.ResponseWriter, r *http.Request) {
 	comp  := strings.TrimSpace(q.Get("resourcename"))
 	quota := strings.TrimSpace(q.Get("quota"))
 	until := strings.TrimSpace(q.Get("validuntil"))
+	splus := strings.TrimSpace(q.Get("surplus"))
 
 	authorized,authout := authorize(r)
 	if authorized == false {
@@ -1279,6 +1281,17 @@ func setCondorQuota(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if splus != "" {
+		if splusBool, err := strconv.ParseBool(splus); err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid value for surplus. Must be true or false (or omit it from the query).")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid value for surplus. Must be true or false (or omit it from the query).\" }")
+		} else {
+			splus = strconv.FormatBool(splusBool)
+		}
+	} else {
+		splus = "null"
+	}
+
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
@@ -1296,6 +1309,7 @@ func setCondorQuota(w http.ResponseWriter, r *http.Request) {
 										c_qname constant text := '%s';
 										c_qvalue constant numeric := %s;
 										c_qtype constant text := '%s';
+										c_splus constant bool := %s;
 										c_valid constant date := %s;
 									begin
 										select unitid into v_unitid from affiliation_units where name = c_uname;
@@ -1309,17 +1323,17 @@ func setCondorQuota(w http.ResponseWriter, r *http.Request) {
 										end if;
 										
 										if (v_compid, c_qname) not in (select compid, name from compute_batch where (valid_until is null = v_permanet)) then
-										    insert into compute_batch (compid, name, value, type, unitid, valid_until, last_updated)
-															   values (v_compid, c_qname, c_qvalue, c_qtype, v_unitid, c_valid, NOW());
+										    insert into compute_batch (compid, name, value, type, unitid, surplus, valid_until, last_updated)
+															   values (v_compid, c_qname, c_qvalue, c_qtype, v_unitid, coalesce(c_splus, true), c_valid, NOW());
 										else
-											update compute_batch set value = c_qvalue, valid_until = c_valid, last_updated = NOW()
+											update compute_batch set value = c_qvalue, valid_until = c_valid, surplus = coalesce(c_splus, surplus), last_updated = NOW()
 											where compid = v_compid and name = c_qname and (valid_until is null = v_permanet);
 										end if;
 
 										if v_permanet then
 											delete from compute_batch where compid = v_compid and name = c_qname and valid_until is not null;
 										end if;
-									end $$;`, uName, comp, name, quota, qType, until))
+									end $$;`, uName, comp, name, quota, qType, splus, until))
 
 	if err == nil {
 		log.WithFields(QueryFields(r, startTime)).Info("Success!")
