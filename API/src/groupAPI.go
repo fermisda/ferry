@@ -1114,24 +1114,12 @@ func getCondorQuotas(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	uName := strings.TrimSpace(q.Get("unitname"))
 	rName := strings.TrimSpace(q.Get("resourcename"))
-	splusstr := strings.TrimSpace(q.Get("surplus"))
 
 	if uName == "" {
 		uName = "%"
 	}
 	if rName == "" {
 		rName = "%"
-	}
-
-	splus := true
-	if splusstr != "" {
-		var converr error
-		splus, converr = strconv.ParseBool(splusstr)
-		if converr != nil {
-			log.WithFields(QueryFields(r, startTime)).Print("Invalid value of surplus (Must be true or false).")
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid value for surplus (Must be true or false).\" }")
-			return
-		}
 	}
 
 	query := `select resourcename, unitname, condorgroup, value, type, valid_until, unit_exists, resource_exists from (
@@ -1174,9 +1162,6 @@ func getCondorQuotas(w http.ResponseWriter, r *http.Request) {
 	prevGroup := ""
 	for rows.Next() {
 		rows.Scan(&tmpRname, &tmpUname, &tmpGroup, &tmpValue, &tmpType, &tmpValid, &unitExists, &resourceExists)
-		if strings.HasSuffix(tmpGroup.String, ".test") && !splus {
-			tmpGroup.String = tmpGroup.String + "=false"
-		}
 		if tmpGroup.Valid {
 			if tmpGroup.String != prevGroup {
 				out[tmpRname.String] = append(out[tmpRname.String], jsonquota{tmpGroup.String, tmpValue.Float64, tmpType.String, tmpUname.String, tmpValid.String})
