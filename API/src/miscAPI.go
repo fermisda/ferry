@@ -1,6 +1,5 @@
 package main
 import (
-	"errors"
 	"database/sql"
 	"strconv"
 	log "github.com/sirupsen/logrus"
@@ -18,6 +17,7 @@ var (
         build_date = "unknown"
 )
 
+// IncludeMiscAPIs includes all APIs described in this file in an APICollection
 func IncludeMiscAPIs(c *APICollection) {
 	testBaseAPI := BaseAPI {
 		InputModel {
@@ -32,41 +32,6 @@ func IncludeMiscAPIs(c *APICollection) {
 		},
 	}
 	c.Add("testBaseAPI", &testBaseAPI)
-
-	getUserInfoBaseAPI := BaseAPI {
-		InputModel {
-			Parameter{UserName, true},
-		},
-		getUserInfoBaseAPI,
-	}
-	c.Add("getUserInfoBaseAPI", &getUserInfoBaseAPI)
-}
-
-func getUserInfoBaseAPI(c APIContext, i Input) (interface{}, error) {
-	rows, err := c.DBtx.Query(`select full_name, uid, status, is_groupaccount, expiration_date from users where uname=$1`, i[UserName])
-	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
-		c.W.WriteHeader(http.StatusNotFound)
-		return nil, err
-	}
-	defer rows.Close()
-
-	out := make(map[Attribute]interface{})
-	columns := MapNullAttribute(FullName, UID, Status, GroupAccount, ExpirationDate)
-	
-	for rows.Next() {
-		rows.Scan(columns[FullName], columns[UID], columns[Status], columns[GroupAccount], columns[ExpirationDate])
-		for _, column := range columns {
-			out[column.Attribute] = column.Data
-		}
-	}
-	if len(out) == 0 {
-		err := "user does not exist"
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
-		return nil, errors.New(err)
-	} else {
-		return out, nil
-	}
 }
 
 func NotDoneYet(w http.ResponseWriter, r *http.Request, t time.Time) {

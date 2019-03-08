@@ -108,6 +108,7 @@ func main() {
 	}
 
 	APIs := make(APICollection)
+	IncludeUserAPIs(&APIs)
 	IncludeMiscAPIs(&APIs)
 
 	log.Debug("Here we go...")
@@ -175,9 +176,9 @@ func main() {
 	//user API calls
 	grouter.HandleFunc("/getUserCertificateDNs", getUserCertificateDNs)
 	grouter.HandleFunc("/getUserFQANs", getUserFQANs)
-	grouter.HandleFunc("/getSuperUserList", getSuperUserList)
+	grouter.HandleFunc("/getSuperUserList", APIs["getSuperUserList"].Run)
 	grouter.HandleFunc("/getUserGroups", getUserGroups)
-	grouter.HandleFunc("/getUserInfo", getUserInfo)
+	grouter.HandleFunc("/getUserInfo", APIs["getUserInfo"].Run)
 	grouter.HandleFunc("/addUserToGroup", addUserToGroup)
 	grouter.HandleFunc("/removeUserFromGroup", removeUserFromGroup)
 	grouter.HandleFunc("/setUserExperimentFQAN", setUserExperimentFQAN)
@@ -261,7 +262,6 @@ func main() {
 	grouter.HandleFunc("/ping", ping)
 
 	grouter.HandleFunc("/testBaseAPI", APIs["testBaseAPI"].Run)
-	grouter.HandleFunc("/getUserInfoBaseAPI", APIs["getUserInfoBaseAPI"].Run)
 
 	//affiliation unit API calls
 	grouter.HandleFunc("/createAffiliationUnit", createAffiliationUnit)
@@ -284,6 +284,10 @@ func main() {
 	grouter.HandleFunc("/createExperiment", createExperiment)
 	grouter.HandleFunc("/addLPCConvener", addLPCConvener)
 	grouter.HandleFunc("/removeLPCConvener", removeLPCConvener)
+
+	//legacy API calls
+	grouter.HandleFunc("/getUserInfoLegacy", getUserInfoLegacy)
+	grouter.HandleFunc("/getSuperUserListLegacy", getSuperUserListLegacy)
 
 	srvConfig := viper.GetStringMapString("server")
 	Mainsrv = &http.Server{

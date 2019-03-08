@@ -14,7 +14,7 @@ import (
 // BaseAPI is a basic type to build APIs
 type BaseAPI struct {
 	InputModel InputModel
-	QueryFunction func(APIContext, Input) (interface{}, error)
+	QueryFunction func(APIContext, Input) (interface{}, APIError)
 }
 
 // Run the API
@@ -22,11 +22,10 @@ func (b BaseAPI) Run(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	var context APIContext
 	context.StartTime = time.Now()
-	context.W = w
 	context.R = r
 
 	var output Output
-	defer output.Parse(context)
+	defer output.Parse(context, w)
 
 	authorized, authout := authorize(r)
 	if authorized == false {
@@ -52,8 +51,8 @@ func (b BaseAPI) Run(w http.ResponseWriter, r *http.Request) {
 	}
 
 	out, queryErr := b.QueryFunction(context, parsedInput)
-	if queryErr != nil {
-		output.Err = append(output.Err, queryErr)
+	if queryErr.Nil() {
+		output.Err = append(output.Err, queryErr.Error)
 		context.DBtx.Rollback(context.Ckey)
 		log.WithFields(QueryFields(r, context.StartTime)).Error(queryErr)
 		return
@@ -127,7 +126,7 @@ type Output struct {
 }
 
 // Parse the Output and writes to an http.ResponseWriter
-func (o *Output) Parse(c APIContext) () {
+func (o *Output) Parse(c APIContext, w http.ResponseWriter) () {
 	type jsonOutput struct {
 		Status string	`json:"ferry_status"`
 		Err []string	`json:"ferry_error"`
@@ -152,7 +151,7 @@ func (o *Output) Parse(c APIContext) () {
 	if err != nil {
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err.Error())
 	}
-	fmt.Fprintf(c.W, string(parsedOut))
+	fmt.Fprintf(w, string(parsedOut))
 }
 
 // Parameter for basic APIs
@@ -262,6 +261,26 @@ func (at AttributeType) ParseString(value string) (interface{}, bool) {
 	return parsedValue, valid
 }
 
+// APIError is returned by a BaseAPI
+type APIError struct {
+	Error error
+	Type ErrorType
+}
+
+// Nil is true if APIError.Error is nil
+func (e APIError) Nil() bool {
+	return e.Error == nil
+}
+
+// ErrorType is a type of APIError
+type ErrorType int
+
+// List of ErrorType
+const (
+	ErrorDbQuery = iota
+	ErrorDataNotFound
+)
+
 // NullAttribute represents a BaseAPI attribute that may be null. NullAttribute implements the
 // sql.Scanner interface so it can be used as a scan destination, similar to
 // sql.NullString.
@@ -291,7 +310,6 @@ func (na NullAttribute) Value() (driver.Value, error) {
 
 // APIContext stores metadata used through the API execution
 type APIContext struct {
-	W http.ResponseWriter
 	R *http.Request
 	StartTime time.Time
 	DBtx *Transaction

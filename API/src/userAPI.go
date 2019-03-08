@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"regexp"
 	"database/sql"
 	"encoding/json"
@@ -13,6 +14,25 @@ import (
 
 	_ "github.com/lib/pq"
 )
+
+// IncludeUserAPIs includes all APIs described in this file in an APICollection
+func IncludeUserAPIs(c *APICollection) {
+	getUserInfo := BaseAPI {
+		InputModel {
+			Parameter{UserName, true},
+		},
+		getUserInfo,
+	}
+	c.Add("getUserInfo", &getUserInfo)
+
+	getSuperUserList := BaseAPI {
+		InputModel {
+			Parameter{UnitName, true},
+		},
+		getSuperUserList,
+	}
+	c.Add("getSuperUserList", &getSuperUserList)
+}
 
 func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
@@ -307,29 +327,16 @@ func getUserFQANs(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, string(jsonoutput))
 }
 
-func getSuperUserList(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
-	expt := q.Get("unitname")
-	if expt == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
-		return
-	}
-
-	rows, err := DBptr.Query(`select t1.uname, c.unit_exists from 
-							 (select distinct 1 as key, us.uname from users as us right join grid_access as ga on us.uid=ga.uid
-							  left join grid_fqan as gf on ga.fqanid = gf.fqanid
-							  left join affiliation_units as au on gf.unitid = au.unitid
-							  where ga.is_superuser=true and au.name=$1) as t1
-							  right join (select 1 as key, $1 in (select name from affiliation_units) as unit_exists) as c on c.key = t1.key`, expt)
+func getSuperUserList(c APIContext, i Input) (interface{}, APIError) {
+	rows, err := c.DBtx.Query(`select t1.uname, c.unit_exists from
+							  (select distinct 1 as key, us.uname from users as us right join grid_access as ga on us.uid=ga.uid
+							   left join grid_fqan as gf on ga.fqanid = gf.fqanid
+							   left join affiliation_units as au on gf.unitid = au.unitid
+							   where ga.is_superuser=true and au.name=$1) as t1
+							   right join (select 1 as key, $1 in (select name from affiliation_units) as unit_exists) as c on c.key = t1.key`, i[UnitName])
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		//		http.Error(w,"Error in DB query",404)
-		return
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		return nil, APIError{err, ErrorDbQuery}
 	}
 	defer rows.Close()
 
@@ -628,62 +635,29 @@ func getUserGroups(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getUserInfo(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
-	uname := q.Get("username")
-	if uname == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
-		return
-	}
-	pingerr := DBptr.Ping()
-	if pingerr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(pingerr)
-	}
-	rows, err := DBptr.Query(`select full_name, uid, status, is_groupaccount, expiration_date from users where uname=$1`, uname)
+func getUserInfo(c APIContext, i Input) (interface{}, APIError) {
+	rows, err := c.DBtx.Query(`select full_name, uid, status, is_groupaccount, expiration_date from users where uname=$1`, i[UserName])
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "Error in DB query\n")
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		return nil, APIError{err, ErrorDbQuery}
+	}
+	defer rows.Close()
+
+	out := make(map[Attribute]interface{})
+	columns := MapNullAttribute(FullName, UID, Status, GroupAccount, ExpirationDate)
+	
+	for rows.Next() {
+		rows.Scan(columns[FullName], columns[UID], columns[Status], columns[GroupAccount], columns[ExpirationDate])
+		for _, column := range columns {
+			out[column.Attribute] = column.Data
+		}
+	}
+	if len(out) == 0 {
+		err := "user does not exist"
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		return nil, APIError{err, ErrorDataNotFound}
 	} else {
-		defer rows.Close()
-
-		idx := 0
-
-		type jsonout struct {
-			FullName string    `json:"full_name"`
-			Uid      int       `json:"uid"`
-			Status   bool      `json:"status"`
-			GrpAcct  bool      `json:"groupaccount"`
-			ExpDate  time.Time `json:"expiration_date"`
-		}
-
-		var Out jsonout
-
-		for rows.Next() {
-			if idx == 0 {
-				fmt.Fprintf(w, "[ ")
-			} else {
-				fmt.Fprintf(w, ",")
-			}
-			rows.Scan(&Out.FullName, &Out.Uid, &Out.Status, &Out.GrpAcct, &Out.ExpDate)
-			outline, jsonerr := json.Marshal(Out)
-			if jsonerr != nil {
-				log.WithFields(QueryFields(r, startTime)).Error(jsonerr)
-			}
-			fmt.Fprintf(w, string(outline))
-			idx += 1
-		}
-		if idx == 0 {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-			fmt.Fprintf(w, `{ "ferry_error": "User does not exist." }`)
-		} else {
-			
-			log.WithFields(QueryFields(r, startTime)).Info("Success!")
-			fmt.Fprintf(w, " ]")
-		}
+		return out, nil
 	}
 }
 
