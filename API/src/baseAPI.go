@@ -44,14 +44,15 @@ func (b BaseAPI) Run(w http.ResponseWriter, r *http.Request) {
 	context.DBtx = DBtx
 	context.Ckey = ckey
 
-	parsedInput, parseErr := b.InputModel.Parse(context)
+	input := make(Input)
+	parseErr := input.Parse(context, b.InputModel)
 	if parseErr != nil {
 		output.Err = parseErr
 		return
 	}
 
-	out, queryErr := b.QueryFunction(context, parsedInput)
-	if queryErr.Nil() {
+	out, queryErr := b.QueryFunction(context, input)
+	if !queryErr.Nil() {
 		output.Err = append(output.Err, queryErr.Error)
 		context.DBtx.Rollback(context.Ckey)
 		log.WithFields(QueryFields(r, context.StartTime)).Error(queryErr)
@@ -70,13 +71,15 @@ func (i *InputModel) Add(attribute Attribute, optional bool) {
 	*i = append(*i, Parameter{attribute, optional})
 }
 
+// Input is a dictionary of parsed parameters for an API
+type Input map[Attribute]interface{}
+
 // Parse an http.Request and returns a ParsedInput
-func (i InputModel) Parse(c APIContext) (Input, []error) {
+func (i *Input) Parse(c APIContext, m InputModel) ([]error) {
 	var errs []error
-	input := make(Input)
 	q := c.R.URL.Query()
 	
-	for _, p := range i {
+	for _, p := range m {
 		var parsedValue interface{}
 		value := q.Get(string(p.Attribute))
 		q.Del(string(p.Attribute))
@@ -99,7 +102,7 @@ func (i InputModel) Parse(c APIContext) (Input, []error) {
 			}
 		}
 
-		input.Add(p.Attribute, parsedValue)
+		i.Add(p.Attribute, parsedValue)
 	}
 
 	for p := range q {
@@ -107,11 +110,8 @@ func (i InputModel) Parse(c APIContext) (Input, []error) {
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(errs[len(errs) - 1])
 	}
 
-	return input, errs
+	return errs
 }
-
-// Input is a dictionary of parsed parameters for an API
-type Input map[Attribute]interface{}
 
 // Add a parsed parameter to Input
 func (i Input) Add(attribute Attribute, value interface{}) {
@@ -125,14 +125,14 @@ type Output struct {
 	Out interface{}
 }
 
+type jsonOutput struct {
+	Status string	`json:"ferry_status"`
+	Err []string	`json:"ferry_error"`
+	Out interface{}	`json:"ferry_output"`
+}
+
 // Parse the Output and writes to an http.ResponseWriter
 func (o *Output) Parse(c APIContext, w http.ResponseWriter) () {
-	type jsonOutput struct {
-		Status string	`json:"ferry_status"`
-		Err []string	`json:"ferry_error"`
-		Out interface{}	`json:"ferry_output"`
-	}
-
 	var out jsonOutput
 
 	if o.Status {
@@ -171,6 +171,7 @@ const (
 	FullName 		Attribute = "fullname"
 	UID				Attribute = "uid"
 	GID				Attribute = "gid"
+	UnitID			Attribute = "unitid"
 	Status			Attribute = "status"
 	GroupAccount  	Attribute = "groupaccount"
 	ExpirationDate	Attribute = "expirationdate"
@@ -185,6 +186,7 @@ func (a Attribute) Type() (AttributeType) {
 		FullName:		TypeString,
 		UID:			TypeInt,
 		GID:			TypeInt,
+		UnitID:			TypeInt,
 		Status:			TypeBool,
 		GroupAccount:	TypeBool,
 		ExpirationDate:	TypeDate,
@@ -261,26 +263,6 @@ func (at AttributeType) ParseString(value string) (interface{}, bool) {
 	return parsedValue, valid
 }
 
-// APIError is returned by a BaseAPI
-type APIError struct {
-	Error error
-	Type ErrorType
-}
-
-// Nil is true if APIError.Error is nil
-func (e APIError) Nil() bool {
-	return e.Error == nil
-}
-
-// ErrorType is a type of APIError
-type ErrorType int
-
-// List of ErrorType
-const (
-	ErrorDbQuery = iota
-	ErrorDataNotFound
-)
-
 // NullAttribute represents a BaseAPI attribute that may be null. NullAttribute implements the
 // sql.Scanner interface so it can be used as a scan destination, similar to
 // sql.NullString.
@@ -308,6 +290,45 @@ func (na NullAttribute) Value() (driver.Value, error) {
 	return na.Value, nil
 }
 
+// APIError is returned by a BaseAPI
+type APIError struct {
+	Error error
+	Type ErrorType
+}
+
+// Nil is true if APIError.Error is nil
+func (e APIError) Nil() bool {
+	return e.Type == ErrorNull
+}
+
+// ErrorType is a type of APIError
+type ErrorType int
+
+// List of ErrorType
+const (
+	ErrorNull ErrorType = iota
+	ErrorDbQuery
+	ErrorDataNotFound
+)
+
+// DefaultMessage for BaseAPI errors
+func (t ErrorType) DefaultMessage() string {
+	messageMap := map[ErrorType]string {
+		1: "error while querying the database",
+		2: "%s not found",
+	}
+	return messageMap[t]
+}
+
+// DefaultAPIError makes an APIError using the default message for the ErrorType
+// and takes interfaces to complete it when necessary
+func DefaultAPIError(t ErrorType, a ...interface{}) APIError {
+	if a[0] != nil {
+		return APIError{fmt.Errorf(t.DefaultMessage(), a), t}
+	}
+	return APIError{errors.New(t.DefaultMessage()), t}
+}
+
 // APIContext stores metadata used through the API execution
 type APIContext struct {
 	R *http.Request
@@ -324,8 +345,8 @@ func (c APICollection) Add(name string, api *BaseAPI) {
 	c[name] = api
 }
 
-// MapNullAttribute builds a map of Attribute to NullAttribute
-func MapNullAttribute(attributes ...Attribute) map[Attribute]*NullAttribute {
+// NewMapNullAttribute builds a map of Attribute to NullAttribute
+func NewMapNullAttribute(attributes ...Attribute) map[Attribute]*NullAttribute {
 	mapNullAttribute := make(map[Attribute]*NullAttribute)
 
 	for _, attribute := range attributes {
@@ -333,4 +354,9 @@ func MapNullAttribute(attributes ...Attribute) map[Attribute]*NullAttribute {
 	}
 
 	return mapNullAttribute
+}
+
+// NewNullAttribute builds a NullAttribute of type Attribute
+func NewNullAttribute(attribute Attribute) NullAttribute {
+	return NullAttribute{attribute, nil, false}
 }

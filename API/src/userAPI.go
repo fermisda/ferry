@@ -328,57 +328,33 @@ func getUserFQANs(w http.ResponseWriter, r *http.Request) {
 }
 
 func getSuperUserList(c APIContext, i Input) (interface{}, APIError) {
-	rows, err := c.DBtx.Query(`select t1.uname, c.unit_exists from
-							  (select distinct 1 as key, us.uname from users as us right join grid_access as ga on us.uid=ga.uid
-							   left join grid_fqan as gf on ga.fqanid = gf.fqanid
-							   left join affiliation_units as au on gf.unitid = au.unitid
-							   where ga.is_superuser=true and au.name=$1) as t1
-							   right join (select 1 as key, $1 in (select name from affiliation_units) as unit_exists) as c on c.key = t1.key`, i[UnitName])
+	unitID := NewNullAttribute(UnitID)
+	err := c.DBtx.QueryRow(`select unitid from affiliation_units where name = $1`, i[UnitName]).Scan(&unitID)
+	if err == sql.ErrNoRows {
+		return nil, DefaultAPIError(ErrorDataNotFound, UnitName)
+	} else if err != nil {
+		return nil, DefaultAPIError(ErrorDbQuery, nil)
+	}
+
+	rows, err := c.DBtx.Query(`select distinct u.uname from
+								users as u
+								join grid_access as ga on u.uid=ga.uid
+								join grid_fqan as gf on ga.fqanid = gf.fqanid
+							   where ga.is_superuser=true and gf.unitid=$1`, unitID.Data)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
-		return nil, APIError{err, ErrorDbQuery}
+		return nil, DefaultAPIError(ErrorDbQuery, nil)
 	}
 	defer rows.Close()
 
-	var exptExists bool
+	var out []interface{}
 
-	type jsonout struct {
-		Uname string `json:"uname"`
-	}
-	var Out jsonout
-
-	idx := 0
-	output := "[ "
 	for rows.Next() {
-		if idx != 0 {
-			output += ","
-		}
-
-		var tmpUname sql.NullString
-		rows.Scan(&tmpUname, &exptExists)
-		if tmpUname.Valid {
-			Out.Uname = tmpUname.String
-			outline, jsonerr := json.Marshal(Out)
-			if jsonerr != nil {
-				log.WithFields(QueryFields(r, startTime)).Error(jsonerr)
-			}
-			output += string(outline)
-			idx++
-		}
-	}
-	if idx == 0 {
-		if !exptExists {
-			output += `"ferry_error": "Experiment does not exist.",`
-			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
-		}
-		output += `"ferry_error": "No super users found."`
-		log.WithFields(QueryFields(r, startTime)).Error("No super users found.")
-	} else {	
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		row := NewNullAttribute(UserName)
+		rows.Scan(&row)
+		out = append(out, row.Data)
 	}
 
-	output += " ]"
-	fmt.Fprintf(w, output)
+	return out, DefaultAPIError(ErrorNull, nil)
 }
 
 func setSuperUser(w http.ResponseWriter, r *http.Request) {
@@ -644,20 +620,20 @@ func getUserInfo(c APIContext, i Input) (interface{}, APIError) {
 	defer rows.Close()
 
 	out := make(map[Attribute]interface{})
-	columns := MapNullAttribute(FullName, UID, Status, GroupAccount, ExpirationDate)
+	row := NewMapNullAttribute(FullName, UID, Status, GroupAccount, ExpirationDate)
 	
 	for rows.Next() {
-		rows.Scan(columns[FullName], columns[UID], columns[Status], columns[GroupAccount], columns[ExpirationDate])
-		for _, column := range columns {
+		rows.Scan(row[FullName], row[UID], row[Status], row[GroupAccount], row[ExpirationDate])
+		for _, column := range row {
 			out[column.Attribute] = column.Data
 		}
 	}
 	if len(out) == 0 {
-		err := "user does not exist"
+		err := errors.New("user does not exist")
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
 		return nil, APIError{err, ErrorDataNotFound}
 	} else {
-		return out, nil
+		return out, APIError{nil, ErrorNull}
 	}
 }
 

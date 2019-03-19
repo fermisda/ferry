@@ -25,10 +25,10 @@ func IncludeMiscAPIs(c *APICollection) {
 			Parameter{UID, true},
 			Parameter{ExpirationDate,  false},
 		},
-		func(c APIContext, i Input) (interface{}, error) {
+		func(c APIContext, i Input) (interface{}, APIError) {
 			out := make(map[Attribute]interface{})
 			out[UserName] = "TEST"
-			return out, nil
+			return out, APIError{nil, ErrorNull}
 		},
 	}
 	c.Add("testBaseAPI", &testBaseAPI)
