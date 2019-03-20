@@ -56,6 +56,12 @@ func (b BaseAPI) Run(w http.ResponseWriter, r *http.Request) {
 		output.Err = append(output.Err, queryErr.Error)
 		context.DBtx.Rollback(context.Ckey)
 		log.WithFields(QueryFields(r, context.StartTime)).Error(queryErr)
+		
+		switch {
+		case queryErr.Type < HTTP500:
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+		
 		return
 	}
 
@@ -306,9 +312,13 @@ type ErrorType int
 
 // List of ErrorType
 const (
+	// HTTP 200
 	ErrorNull ErrorType = iota
-	ErrorDbQuery
 	ErrorDataNotFound
+	HTTP200
+	// HTTP 500
+	ErrorDbQuery
+	HTTP500
 )
 
 // DefaultMessage for BaseAPI errors
