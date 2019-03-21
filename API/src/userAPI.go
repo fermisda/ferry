@@ -378,7 +378,7 @@ func getSuperUserList(c APIContext, i Input) (interface{}, []APIError) {
 	for rows.Next() {
 		row := NewNullAttribute(UserName)
 		rows.Scan(&row)
-		out = append(out, row)
+		out = append(out, row.Data)
 	}
 
 	return out, nil
@@ -1869,7 +1869,7 @@ func addCertificateDNToUser(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
 	// DN validation
-	dn, err := ExtractValidDN(i[DN].(string))
+	dn, err := ExtractValidDN(i[DN].Data.(string))
 	if err != nil {
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err.Error())
 		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, DN))

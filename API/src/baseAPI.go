@@ -85,7 +85,7 @@ func (i *InputModel) Add(attribute Attribute, optional bool) {
 }
 
 // Input is a dictionary of parsed parameters for an API
-type Input map[Attribute]interface{}
+type Input map[Attribute]NullAttribute
 
 // Parse an http.Request and returns a ParsedInput
 func (i *Input) Parse(c APIContext, m InputModel) ([]error) {
@@ -128,7 +128,9 @@ func (i *Input) Parse(c APIContext, m InputModel) ([]error) {
 
 // Add a parsed parameter to Input
 func (i Input) Add(attribute Attribute, value interface{}) {
-	i[attribute] = value
+	v := NewNullAttribute(attribute)
+	v.Scan(value)
+	i[attribute] = v
 }
 
 // Output is the default structure for APIs to return information
