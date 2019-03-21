@@ -40,6 +40,16 @@ func IncludeUserAPIs(c *APICollection) {
 		addCertificateDNToUser,
 	}
 	c.Add("addCertificateDNToUser", &addCertificateDNToUser)
+
+	setUserExternalAffiliationAttribute := BaseAPI {
+		InputModel {
+			Parameter{UserName, true},
+			Parameter{UserAttribute, true},
+			Parameter{Value, true},
+		},
+		setUserExternalAffiliationAttribute,
+	}
+	c.Add("setUserExternalAffiliationAttribute", &setUserExternalAffiliationAttribute)
 }
 
 func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
@@ -355,7 +365,7 @@ func getSuperUserList(c APIContext, i Input) (interface{}, []APIError) {
 								users as u
 								join grid_access as ga on u.uid=ga.uid
 								join grid_fqan as gf on ga.fqanid = gf.fqanid
-							   where ga.is_superuser=true and gf.unitid=$1`, unitID.Data)
+							   where ga.is_superuser=true and gf.unitid=$1`, unitID)
 	if err != nil {
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -368,7 +378,7 @@ func getSuperUserList(c APIContext, i Input) (interface{}, []APIError) {
 	for rows.Next() {
 		row := NewNullAttribute(UserName)
 		rows.Scan(&row)
-		out = append(out, row.Data)
+		out = append(out, row)
 	}
 
 	return out, nil
@@ -645,7 +655,7 @@ func getUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 	for rows.Next() {
 		rows.Scan(row[FullName], row[UID], row[Status], row[GroupAccount], row[ExpirationDate])
 		for _, column := range row {
-			out[column.Attribute] = column.Data
+			out[column.Attribute] = column
 		}
 	}
 	if len(out) == 0 {
@@ -1635,113 +1645,52 @@ func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func setUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+func setUserExternalAffiliationAttribute(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	uName := strings.TrimSpace(q.Get("username"))
-	attribute := strings.TrimSpace(q.Get("attribute"))
-	value := strings.TrimSpace(q.Get("value"))
-
-	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
-		return
+	uid := NewNullAttribute(UID)
+	err := c.DBtx.QueryRow(`select uid from users where uname = $1`, i[UserName]).Scan(&uid)
+	if err != nil && err != sql.ErrNoRows {
+		err := DefaultAPIError(ErrorDbQuery, nil)
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, err)
+		return nil, apiErr
 	}
-	if attribute == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No attribute specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No attribute specified.\" }")
-		return
-	}
-	if value == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No value specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No value specified.\" }")
-		return
+	if !uid.Valid {
+		err := DefaultAPIError(ErrorDataNotFound, UserName)
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, err)
 	}
 
-	authorized, authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
-		return
-	}
-
-	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	var validAttribute bool
+	err = c.DBtx.QueryRow(`select $1 = any (enum_range(null::external_affiliation_attribute_attribute_type)::text[])`, i[UserAttribute]).Scan(&validAttribute)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		err := DefaultAPIError(ErrorDbQuery, nil)
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, err)
+		return nil, apiErr
 	}
-	defer DBtx.Rollback(cKey)
-
-//	_, err = DBtx.Exec(fmt.Sprintf(`do $$
-//									declare v_uid int;
-//									
-//									declare c_uname text = '%s';
-//									declare c_attribute text = '%s';
-//									declare c_value text = '%s';
-//
-//									begin
-//										select uid into v_uid from users where uname = c_uname;
-//										if v_uid is null then
-//											raise 'uname does not exist';
-//										end if;
-//
-//										if (v_uid, c_attribute) not in (select uid, attribute from external_affiliation_attribute) then
-//											insert into external_affiliation_attribute (uid, attribute, value)
-//											values (v_uid, c_attribute, c_value);
-//										else
-//											update external_affiliation_attribute set
-//												value = c_value,
-//												last_updated = NOW()
-//											where uid = v_uid and attribute = c_attribute;
-//										end if;
-//									end $$;`, uName, attribute, value))
-	execstr := ""
-	var uid int
-	var att sql.NullString
-	queryerr := DBtx.tx.QueryRow(`select us.uid,eaa.attribute from (select uid from users where uname = $1) as us left join (select uid, attribute from external_affiliation_attribute where attribute = $2) as eaa on us.uid=eaa.uid`, uName, attribute).Scan(&uid,&att)
-	if queryerr != nil {
-		if queryerr == sql.ErrNoRows {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-			return
-		} else if strings.Contains(queryerr.Error(), "invalid input value for enum") {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid attribute.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid attribute.\" }")
-			return
-		} else {
-			log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query. Check logs.\" }")
-			return
-		}
+	if !validAttribute {
+		err := DefaultAPIError(ErrorInvalidData, UserAttribute)
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, err)
 	}
-	// if att is valid that means the user/attriute combo is in the table already, so this is an update.
-	// if it is not valid, then we are doing an insert.
-	if att.Valid {
-		execstr = `update external_affiliation_attribute set value = $3, last_updated = NOW() where uid = $1  and attribute = $2`
-	} else {
-		execstr = `insert into external_affiliation_attribute (uid, attribute, value) values ($1, $2, $3)`
-		att.String = attribute
-		att.Valid = true
-	}
-	_, err = DBtx.Exec(execstr, uid, att.String, value)
 	
-	if err == nil {
-		DBtx.Commit(cKey)
-
-		if cKey != 0 {
-			log.WithFields(QueryFields(r, startTime)).Info("Success!")
-			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
-		}
-	} else {
-		if strings.Contains(err.Error(), `uname does not exist`) {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
-		}
+	if len(apiErr) > 0 {
+		return nil, apiErr
 	}
+
+	_, err = c.DBtx.Exec(`insert into external_affiliation_attribute (uid, attribute, value) values ($1, $2, $3)
+						on conflict (uid, attribute) do update set value = $3`, uid, i[UserAttribute], i[Value])
+	if err != nil {
+		print(err.Error())
+		err := DefaultAPIError(ErrorDbQuery, nil)
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, err)
+		return nil, apiErr
+	}
+
+	return nil, nil
 }
 func removeUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
@@ -1954,7 +1903,7 @@ func addCertificateDNToUser(c APIContext, i Input) (interface{}, []APIError) {
 	}
 
 	if !dnid.Valid {
-		_, err := c.DBtx.Exec(`insert into user_certificates (dn, uid, last_updated) values ($1, $2, NOW()) returning dnid`, dn, uid.Data)
+		_, err := c.DBtx.Exec(`insert into user_certificates (dn, uid, last_updated) values ($1, $2, NOW()) returning dnid`, dn, uid)
 		if err != nil {
 			log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1968,7 +1917,7 @@ func addCertificateDNToUser(c APIContext, i Input) (interface{}, []APIError) {
 		}
 	}
 
-	_, err = c.DBtx.Exec(`insert into affiliation_unit_user_certificate (unitid, dnid, last_updated) values ($1, $2, NOW())`, unitid.Data, dnid.Data)
+	_, err = c.DBtx.Exec(`insert into affiliation_unit_user_certificate (unitid, dnid, last_updated) values ($1, $2, NOW())`, unitid, dnid)
 	if err != nil && !strings.Contains(err.Error(), `pk_affiliation_unit_user_certificate`) {
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))

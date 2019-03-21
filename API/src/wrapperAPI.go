@@ -380,7 +380,7 @@ func setLPCStorageAccess(w http.ResponseWriter, r *http.Request) {
 		R.URL.RawQuery = q.Encode()
 
 		DBtx.Continue()
-		setUserExternalAffiliationAttribute(w, R)
+		setUserExternalAffiliationAttributeLegacy(w, R)
 		if !DBtx.Complete() {
 			log.WithFields(QueryFields(r, startTime)).Error("setUserExternalAffiliationAttribute failed.")
 			return

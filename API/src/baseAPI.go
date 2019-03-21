@@ -183,6 +183,8 @@ const (
 	UnitName		Attribute = "unitname"
 	FullName 		Attribute = "fullname"
 	DN				Attribute = "dn"
+	UserAttribute	Attribute = "attribute"
+	Value			Attribute = "value"
 	UID				Attribute = "uid"
 	GID				Attribute = "gid"
 	DNID			Attribute = "dnid"
@@ -200,6 +202,8 @@ func (a Attribute) Type() (AttributeType) {
 		UnitName: 		TypeString,
 		FullName:		TypeString,
 		DN:				TypeString,
+		UserAttribute:	TypeString,
+		Value:			TypeString,
 		UID:			TypeInt,
 		GID:			TypeInt,
 		DNID:			TypeInt,
@@ -304,7 +308,7 @@ func (na NullAttribute) Value() (driver.Value, error) {
 	if !na.Valid {
 		return nil, nil
 	}
-	return na.Value, nil
+	return na.Data, nil
 }
 
 // APIError is returned by a BaseAPI
