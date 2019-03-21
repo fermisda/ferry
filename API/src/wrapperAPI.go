@@ -126,7 +126,7 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 
 	duplicateCountRef ++
 	DBtx.Savepoint("addCertificateDNToUser")
-	addCertificateDNToUser(w, R)
+	addCertificateDNToUserLegacy(w, R)
 	if !DBtx.Complete() {
 		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") {
 			log.WithFields(QueryFields(r, startTime)).Error("addCertificateDNToUser failed: DBtx.Error().Error()" )
@@ -360,7 +360,7 @@ func setLPCStorageAccess(w http.ResponseWriter, r *http.Request) {
 
 	DBtx.Savepoint("addCertificateDNToUser")
 	DBtx.Continue()
-	addCertificateDNToUser(w, R)
+	addCertificateDNToUserLegacy(w, R)
 	if !DBtx.Complete() {
 		if !strings.Contains(DBtx.Error().Error(), `pk_affiliation_unit_user_certificate`) {
 			log.WithFields(QueryFields(r, startTime)).Error("addCertificateDNToUser failed.")

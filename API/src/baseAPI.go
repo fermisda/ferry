@@ -14,7 +14,7 @@ import (
 // BaseAPI is a basic type to build APIs
 type BaseAPI struct {
 	InputModel InputModel
-	QueryFunction func(APIContext, Input) (interface{}, APIError)
+	QueryFunction func(APIContext, Input) (interface{}, []APIError)
 }
 
 // Run the API
@@ -52,19 +52,26 @@ func (b BaseAPI) Run(w http.ResponseWriter, r *http.Request) {
 	}
 
 	out, queryErr := b.QueryFunction(context, input)
-	if !queryErr.Nil() {
-		output.Err = append(output.Err, queryErr.Error)
+	if len(queryErr) > 0 {
+		var errType ErrorType
+		for _, err := range queryErr {
+			output.Err = append(output.Err, err.Error)
+			if err.Type > errType {
+				errType = err.Type
+			}
+		}
 		context.DBtx.Rollback(context.Ckey)
 		log.WithFields(QueryFields(r, context.StartTime)).Error(queryErr)
 		
 		switch {
-		case queryErr.Type < HTTP500:
+		case errType > HTTP500:
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 		
 		return
 	}
 
+	DBtx.Commit(context.Ckey)
 	output.Status = true
 	output.Out = out
 }
@@ -90,14 +97,14 @@ func (i *Input) Parse(c APIContext, m InputModel) ([]error) {
 		value := q.Get(string(p.Attribute))
 		q.Del(string(p.Attribute))
 
-		errString := "required parameter '%s' not provided"
+		errString := "required parameter %s not provided"
 		if value == "" && p.Required {
 			errs = append(errs, fmt.Errorf(errString, p.Attribute))
 			log.WithFields(QueryFields(c.R, c.StartTime)).Error(errs[len(errs) - 1])
 			continue
 		}
 
-		errString = "parameter '%s' requires a %s value"
+		errString = "parameter %s requires a %s value"
 		if value != "" {
 			if v, ok := p.Attribute.Type().ParseString(value); ok {
 				parsedValue = v
@@ -112,7 +119,7 @@ func (i *Input) Parse(c APIContext, m InputModel) ([]error) {
 	}
 
 	for p := range q {
-		errs = append(errs, fmt.Errorf("'%s' is not a valid parameter for this api", p))
+		errs = append(errs, fmt.Errorf("%s is not a valid parameter for this api", p))
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(errs[len(errs) - 1])
 	}
 
@@ -175,8 +182,10 @@ const (
 	GroupName		Attribute = "groupname"
 	UnitName		Attribute = "unitname"
 	FullName 		Attribute = "fullname"
+	DN				Attribute = "dn"
 	UID				Attribute = "uid"
 	GID				Attribute = "gid"
+	DNID			Attribute = "dnid"
 	UnitID			Attribute = "unitid"
 	Status			Attribute = "status"
 	GroupAccount  	Attribute = "groupaccount"
@@ -190,8 +199,10 @@ func (a Attribute) Type() (AttributeType) {
 		GroupName:		TypeString,
 		UnitName: 		TypeString,
 		FullName:		TypeString,
+		DN:				TypeString,
 		UID:			TypeInt,
 		GID:			TypeInt,
+		DNID:			TypeInt,
 		UnitID:			TypeInt,
 		Status:			TypeBool,
 		GroupAccount:	TypeBool,
@@ -302,38 +313,32 @@ type APIError struct {
 	Type ErrorType
 }
 
-// Nil is true if APIError.Error is nil
-func (e APIError) Nil() bool {
-	return e.Type == ErrorNull
-}
-
 // ErrorType is a type of APIError
 type ErrorType int
 
 // List of ErrorType
 const (
-	// HTTP 200
-	ErrorNull ErrorType = iota
+	HTTP200 ErrorType = iota
 	ErrorDataNotFound
-	HTTP200
-	// HTTP 500
-	ErrorDbQuery
+	ErrorInvalidData
 	HTTP500
+	ErrorDbQuery
 )
 
 // DefaultMessage for BaseAPI errors
 func (t ErrorType) DefaultMessage() string {
 	messageMap := map[ErrorType]string {
-		1: "error while querying the database",
-		2: "%s not found",
+		ErrorDbQuery:		"error while querying the database",
+		ErrorDataNotFound:	"%s not found",
+		ErrorInvalidData:	"%s is invalid",
 	}
 	return messageMap[t]
 }
 
 // DefaultAPIError makes an APIError using the default message for the ErrorType
 // and takes interfaces to complete it when necessary
-func DefaultAPIError(t ErrorType, a ...interface{}) APIError {
-	if a[0] != nil {
+func DefaultAPIError(t ErrorType, a interface{}) APIError {
+	if a != nil {
 		return APIError{fmt.Errorf(t.DefaultMessage(), a), t}
 	}
 	return APIError{errors.New(t.DefaultMessage()), t}

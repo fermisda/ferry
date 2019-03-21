@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"regexp"
 	"database/sql"
 	"encoding/json"
@@ -31,6 +30,16 @@ func IncludeUserAPIs(c *APICollection) {
 		getSuperUserList,
 	}
 	c.Add("getSuperUserList", &getSuperUserList)
+
+	addCertificateDNToUser := BaseAPI {
+		InputModel {
+			Parameter{UserName, true},
+			Parameter{UnitName, true},
+			Parameter{DN, true},
+		},
+		addCertificateDNToUser,
+	}
+	c.Add("addCertificateDNToUser", &addCertificateDNToUser)
 }
 
 func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
@@ -326,13 +335,20 @@ func getUserFQANs(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, string(jsonoutput))
 }
 
-func getSuperUserList(c APIContext, i Input) (interface{}, APIError) {
+func getSuperUserList(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+
 	unitID := NewNullAttribute(UnitID)
 	err := c.DBtx.QueryRow(`select unitid from affiliation_units where name = $1`, i[UnitName]).Scan(&unitID)
 	if err == sql.ErrNoRows {
-		return nil, DefaultAPIError(ErrorDataNotFound, UnitName)
+		err := DefaultAPIError(ErrorDataNotFound, UnitName)
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, err)
+		return nil, apiErr
 	} else if err != nil {
-		return nil, DefaultAPIError(ErrorDbQuery, nil)
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
 	rows, err := c.DBtx.Query(`select distinct u.uname from
@@ -341,7 +357,9 @@ func getSuperUserList(c APIContext, i Input) (interface{}, APIError) {
 								join grid_fqan as gf on ga.fqanid = gf.fqanid
 							   where ga.is_superuser=true and gf.unitid=$1`, unitID.Data)
 	if err != nil {
-		return nil, DefaultAPIError(ErrorDbQuery, nil)
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 	defer rows.Close()
 
@@ -353,7 +371,7 @@ func getSuperUserList(c APIContext, i Input) (interface{}, APIError) {
 		out = append(out, row.Data)
 	}
 
-	return out, DefaultAPIError(ErrorNull, nil)
+	return out, nil
 }
 
 func setSuperUser(w http.ResponseWriter, r *http.Request) {
@@ -610,11 +628,14 @@ func getUserGroups(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getUserInfo(c APIContext, i Input) (interface{}, APIError) {
+func getUserInfo(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+
 	rows, err := c.DBtx.Query(`select full_name, uid, status, is_groupaccount, expiration_date from users where uname=$1`, i[UserName])
 	if err != nil {
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
-		return nil, APIError{err, ErrorDbQuery}
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 	defer rows.Close()
 
@@ -628,11 +649,12 @@ func getUserInfo(c APIContext, i Input) (interface{}, APIError) {
 		}
 	}
 	if len(out) == 0 {
-		err := errors.New("user does not exist")
+		err := DefaultAPIError(ErrorDataNotFound, UserName)
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
-		return nil, APIError{err, ErrorDataNotFound}
+		apiErr = append(apiErr, err)
+		return nil, apiErr
 	} else {
-		return out, APIError{nil, ErrorNull}
+		return out, nil
 	}
 }
 
@@ -1894,120 +1916,66 @@ func getUserExternalAffiliationAttributes(w http.ResponseWriter, r *http.Request
 
 }
 
-func addCertificateDNToUser(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+func addCertificateDNToUser(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	authorized, authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
-		return
-	}
-
-	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	// DN validation
+	dn, err := ExtractValidDN(i[DN].(string))
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	defer DBtx.Rollback(cKey)
-
-	q := r.URL.Query()
-	uName := strings.TrimSpace(q.Get("username"))
-	unitName := strings.TrimSpace(q.Get("unitname"))
-	subjDN := strings.TrimSpace(q.Get("dn"))
-	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
-		return
-	}
-	if subjDN == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No DN specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No dn specified.\" }")
-		return
-	} else {
-		dn, err := ExtractValidDN(subjDN)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			if cKey != 0 {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"%s\" }", err.Error())
-			} else {
-				DBtx.Report(err.Error())
-			}
-			return
-		}
-		subjDN = dn
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err.Error())
+		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, DN))
+		return nil, apiErr
 	}
 
-	var uid, dnid sql.NullInt64
-	queryerr := DBtx.tx.QueryRow(`select us.uid, uc.dnid from (select 1 as key, uid from users where uname=$1 for update) as us full outer join (select 1 as key, dnid from user_certificates where dn=$2 for update) as uc on uc.key=us.key`,uName, subjDN).Scan(&uid,&dnid)
-	if queryerr == sql.ErrNoRows {
-		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-		if cKey != 0 {
-			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-		}
-		DBtx.Report("User does not exist.")
-		return
-	} else if queryerr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
-		if cKey != 0 {
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query. Check logs.\" }")
-		}
-		return
-	}
-	if ! uid.Valid {
-		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-		if cKey != 0 {
-			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-		}
-		DBtx.Report("User does not exist.")
-		return		
-	}
-	if ! dnid.Valid {
-		_, err := DBtx.Exec(`insert into user_certificates (dn, uid, last_updated) values ($1, $2, NOW()) returning dnid`, subjDN, uid.Int64)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + err.Error())
-			if cKey != 0 {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB insert. Check logs.\" }")
-			}
-			DBtx.Rollback(cKey)
-			return
-		}
-	} else {
-		if unitName == "" {
-			// error about DN already existing
-			log.WithFields(QueryFields(r, startTime)).Error("DN already exists and is assigned to this affiliation unit.")
-			if cKey != 0 {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"DN already exists and is assigned to this affiliation unit.\" }")
-			}
-			return	
-		}	
-	}
-	_, err = DBtx.Exec(`insert into affiliation_unit_user_certificate (unitid, dnid, last_updated) values ((select unitid from affiliation_units where name=$1), (select dnid from user_certificates where dn=$2), NOW())`,unitName, subjDN)
+	uid    := NewNullAttribute(UID)
+	dnid   := NewNullAttribute(DNID)
+	unitid := NewNullAttribute(UnitID)
+
+	err = c.DBtx.QueryRow(`select (select uid from users where uname = $1),
+								  (select dnid from user_certificates where dn=$2),
+								  (select unitid from affiliation_units where name=$3)`,
+								i[UserName], dn, i[UnitName]).Scan(&uid, &dnid, &unitid)
 	if err != nil {
-		if strings.Contains(err.Error(), `pk_affiliation_unit_user_certificate`) {
-			if cKey != 0 {
-				log.WithFields(QueryFields(r, startTime)).Error("DN already exists and is assigned to this affiliation unit.")
-				fmt.Fprintf(w, "{ \"ferry_error\": \"DN already exists and is assigned to this affiliation unit.\" }")
-			}
-		} else if strings.Contains(err.Error(), `null value in column "unitid"`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
-			if cKey != 0 {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"Affiliation unit does not exist.\" }")
-			}
-		} else if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + err.Error())
-			if cKey != 0 {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB insert. Check logs.\" }")
-			}
-			return
-		}
-	} else {
-		if cKey != 0 {
-			log.WithFields(QueryFields(r, startTime)).Info("Success!")
-			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
-		}
-		DBtx.Commit(cKey)
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
+
+	if !uid.Valid {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
+	}
+	if !unitid.Valid {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	if !dnid.Valid {
+		_, err := c.DBtx.Exec(`insert into user_certificates (dn, uid, last_updated) values ($1, $2, NOW()) returning dnid`, dn, uid.Data)
+		if err != nil {
+			log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+			return nil, apiErr
+		}
+		err = c.DBtx.QueryRow(`select dnid from user_certificates where dn=$1`, dn).Scan(&dnid)
+		if err != nil {
+			log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+			return nil, apiErr
+		}
+	}
+
+	_, err = c.DBtx.Exec(`insert into affiliation_unit_user_certificate (unitid, dnid, last_updated) values ($1, $2, NOW())`, unitid.Data, dnid.Data)
+	if err != nil && !strings.Contains(err.Error(), `pk_affiliation_unit_user_certificate`) {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	return nil, nil
 }
 
 func removeUserCertificateDN(w http.ResponseWriter, r *http.Request) {

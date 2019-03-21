@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -133,4 +134,120 @@ func getSuperUserListLegacy(w http.ResponseWriter, r *http.Request) {
 
 	output += " ]"
 	fmt.Fprintf(w, output)
+}
+
+func addCertificateDNToUserLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+
+	authorized, authout := authorize(r)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
+		return
+	}
+
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	defer DBtx.Rollback(cKey)
+
+	q := r.URL.Query()
+	uName := strings.TrimSpace(q.Get("username"))
+	unitName := strings.TrimSpace(q.Get("unitname"))
+	subjDN := strings.TrimSpace(q.Get("dn"))
+	if uName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
+		return
+	}
+	if subjDN == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No DN specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No dn specified.\" }")
+		return
+	} else {
+		dn, err := ExtractValidDN(subjDN)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"%s\" }", err.Error())
+			} else {
+				DBtx.Report(err.Error())
+			}
+			return
+		}
+		subjDN = dn
+	}
+
+	var uid, dnid sql.NullInt64
+	queryerr := DBtx.tx.QueryRow(`select us.uid, uc.dnid from (select 1 as key, uid from users where uname=$1 for update) as us full outer join (select 1 as key, dnid from user_certificates where dn=$2 for update) as uc on uc.key=us.key`,uName, subjDN).Scan(&uid,&dnid)
+	if queryerr == sql.ErrNoRows {
+		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		if cKey != 0 {
+			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+		}
+		DBtx.Report("User does not exist.")
+		return
+	} else if queryerr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
+		if cKey != 0 {
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query. Check logs.\" }")
+		}
+		return
+	}
+	if ! uid.Valid {
+		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		if cKey != 0 {
+			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+		}
+		DBtx.Report("User does not exist.")
+		return		
+	}
+	if ! dnid.Valid {
+		_, err := DBtx.Exec(`insert into user_certificates (dn, uid, last_updated) values ($1, $2, NOW()) returning dnid`, subjDN, uid.Int64)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + err.Error())
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB insert. Check logs.\" }")
+			}
+			DBtx.Rollback(cKey)
+			return
+		}
+	} else {
+		if unitName == "" {
+			// error about DN already existing
+			log.WithFields(QueryFields(r, startTime)).Error("DN already exists and is assigned to this affiliation unit.")
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"DN already exists and is assigned to this affiliation unit.\" }")
+			}
+			return	
+		}	
+	}
+	_, err = DBtx.Exec(`insert into affiliation_unit_user_certificate (unitid, dnid, last_updated) values ((select unitid from affiliation_units where name=$1), (select dnid from user_certificates where dn=$2), NOW())`,unitName, subjDN)
+	if err != nil {
+		if strings.Contains(err.Error(), `pk_affiliation_unit_user_certificate`) {
+			if cKey != 0 {
+				log.WithFields(QueryFields(r, startTime)).Error("DN already exists and is assigned to this affiliation unit.")
+				fmt.Fprintf(w, "{ \"ferry_error\": \"DN already exists and is assigned to this affiliation unit.\" }")
+			}
+		} else if strings.Contains(err.Error(), `null value in column "unitid"`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"Affiliation unit does not exist.\" }")
+			}
+		} else if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + err.Error())
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB insert. Check logs.\" }")
+			}
+			return
+		}
+	} else {
+		if cKey != 0 {
+			log.WithFields(QueryFields(r, startTime)).Info("Success!")
+			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+		}
+		DBtx.Commit(cKey)
+	}
 }
