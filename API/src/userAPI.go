@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"regexp"
 	"database/sql"
 	"encoding/json"
@@ -50,6 +51,22 @@ func IncludeUserAPIs(c *APICollection) {
 		setUserExternalAffiliationAttribute,
 	}
 	c.Add("setUserExternalAffiliationAttribute", &setUserExternalAffiliationAttribute)
+
+	setUserStorageQuota := BaseAPI {
+		InputModel {
+			Parameter{UserName, false},
+			Parameter{GroupName, false},
+			Parameter{UnitName, true},
+			Parameter{ResourceName, true},
+			Parameter{Quota, true},
+			Parameter{QuotaUnit, true},
+			Parameter{Path, false},
+			Parameter{GroupAccount, false},
+			Parameter{ExpirationDate, false},
+		},
+		setUserStorageQuota,
+	}
+	c.Add("setUserStorageQuota", &setUserStorageQuota)
 }
 
 func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
@@ -365,7 +382,8 @@ func getSuperUserList(c APIContext, i Input) (interface{}, []APIError) {
 								users as u
 								join grid_access as ga on u.uid=ga.uid
 								join grid_fqan as gf on ga.fqanid = gf.fqanid
-							   where ga.is_superuser=true and gf.unitid=$1`, unitID)
+							   where ga.is_superuser=true and gf.unitid=$1
+							   order by u.uname`, unitID)
 	if err != nil {
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1418,231 +1436,134 @@ func getUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, string(jsonoutput))
 }
 
-func setUserStorageQuota(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+func setUserStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+	var vStorageid, vDataid, vUnitid sql.NullInt64
 
-	//call authorize function
-	authorized, authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
-		return
-	}
+	gAccount := i[GroupAccount].Default(false)
 
-	q := r.URL.Query()
-	quota := strings.TrimSpace(q.Get("quota"))
-	uName := strings.TrimSpace(q.Get("username"))
-	unitName := strings.TrimSpace(q.Get("unitname"))
-	unit := strings.TrimSpace(q.Get("quota_unit"))
-	rName := strings.TrimSpace(strings.ToUpper(q.Get("resourcename")))
-	isgrp := strings.TrimSpace( strings.ToLower(q.Get("isGroup")))
-	validtime := strings.TrimSpace(q.Get("valid_until"))
-	path := strings.TrimSpace(q.Get("path"))
-
-	var isGroup bool
-	var spath sql.NullString
-
-	if isgrp == "" {
-		isGroup = false
+	var dataAttr Attribute
+	if !gAccount.Data.(bool) {
+		dataAttr = UserName
 	} else {
-		ig, parserr := strconv.ParseBool(isgrp)
-		if parserr != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid isGroup specified in call.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid isGroup value specified.\" }")
-			return
-		}
-		isGroup = ig
-	}
-	if quota == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No quota value specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No quota specified.\" }")
-		return
+		dataAttr = GroupName
 	}
 
-	var vUntil sql.NullString
-	if validtime != "" {
-		vUntil.Scan(validtime)
+	if !i[dataAttr].Valid {
+		err := APIError{fmt.Errorf("required parameter %s not provided", dataAttr), ErrorAPIRequirement}
+		apiErr = append(apiErr, err)
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err.Error.Error())
+		return nil, apiErr
 	}
 	
-	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No user name given.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No username provided.\" }")
-		return
-	}
-	if rName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No resource name given.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No resourcename provided.\" }")
-		return
-	}
-	if unitName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No affiliation unit given.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname provided.\" }")
-		return
-	}
-	if unit == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No unit given.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No quota_unit provided.\" }")
-		return
-	}
-
-	// We want to store the value in the DB in bytes, no matter what the input unit is. Convert the value here and then set the unit of "B" for bytes	
-	newquota, converr := convertValue(quota, unit, "B")
-	if converr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(converr.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error converting unit value. It must be a number.\" }")
-		return	
-	}
-	// set the quota value to be stored to newquota, which is now in bytes
-	quota = strconv.FormatFloat(newquota, 'f', 0, 64)
-	unit = "B"
-	
-	if path == "" || strings.ToUpper(path) == "NULL" {
-		spath.Valid = false
-		spath.String = ""
-	} else {
-		spath.Valid = true
-		spath.String = path
-	}
-	
-	DBtx, cKey, err := LoadTransaction(r, DBptr)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	defer DBtx.Rollback(cKey)
-	
-	
-	
-	var vSid,vId,vUnitid sql.NullInt64
-
-	//
-	//querystr := 
-	//queryerr := DBtx.QueryRow(querystr,
-	//
-	
-	// get storageID, unitid, uid,
-	querystr := ""
-	if isGroup {
+	// get storageID, unitid, uid/gid
+	var querystr string
+	if gAccount.Data.(bool) {
 		querystr = `select (select storageid from storage_resources where name=$1), (select groupid as id from groups where name=$2), (select unitid from affiliation_units where name=$3)`
 	} else {
 		querystr = `select (select storageid from storage_resources where name=$1), (select uid as id from users where uname=$2), (select unitid from affiliation_units where name=$3)`
 	}
-	queryerr := DBtx.QueryRow(querystr,rName, uName, unitName).Scan(&vSid, &vId, &vUnitid)
-	if queryerr == sql.ErrNoRows {
-		log.WithFields(QueryFields(r, startTime)).Error("Unit does not exist.")
-		if cKey != 0 { 
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Unit does not exist.\" }")	
-		}
-		DBtx.Report("Unit does not exist.")
-		return
-	} else if queryerr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("DB error: " + queryerr.Error())
-		if cKey != 0 { 
-			fmt.Fprintf(w, "{ \"ferry_error\": \"DB error; check log.\" }")	
-		}
-		DBtx.Report("DB error; check log.")
-		return
+	queryerr := c.DBtx.QueryRow(querystr, i[ResourceName], i[dataAttr], i[UnitName]).Scan(&vStorageid, &vDataid, &vUnitid)
+	if queryerr != nil && queryerr != sql.ErrNoRows {
+		err := DefaultAPIError(ErrorDbQuery, nil)
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, err)
+		return nil, apiErr
 	}
-	if ! vId.Valid {
-		if isGroup {
-			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
-			if cKey !=0 {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"Group does not exist.\" }")
-			} else{
-				DBtx.Report("Group does not exist.")	
-			}
+	if !vDataid.Valid {
+		var dataID Attribute
+		if !gAccount.Data.(bool) {
+			dataID = UserName
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-			if cKey != 0 {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")	
-			} else {
-				DBtx.Report("User does not exist.")	
-			}
+			dataID = GroupName
 		}
-		return
+		err := DefaultAPIError(ErrorDataNotFound, dataID)
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, err)
 	} 
-	if ! vSid.Valid {
-		log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
-		if cKey != 0 {
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
-		} else {
-			DBtx.Report("Resource does not exist.")	
-		}
-		return
-	} 
+	if !vStorageid.Valid {
+		err := DefaultAPIError(ErrorDataNotFound, ResourceName)
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, err)
+	}
+	if !vUnitid.Valid {
+		err := DefaultAPIError(ErrorDataNotFound, UnitName)
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, err)
+	}
+
+	// We want to store the value in the DB in bytes, no matter what the input unit is. Convert the value here and then set the unit of "B" for bytes	
+	newquota, converr := convertValue(i[Quota].Data, i[QuotaUnit].Data.(string), "B")
+	if converr != nil {
+		err := APIError{converr, ErrorInvalidData}
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(converr.Error())
+		apiErr = append(apiErr, err)
+	}
+
+	// set the quota value to be stored to newquota, which is now in bytes
+	quota := strconv.FormatFloat(newquota, 'f', 0, 64)
+	unit := "B"
+
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
 	
 	var vPath sql.NullString
 	var column string
 
-	if isGroup {
+	if gAccount.Data.(bool) {
 		column = `groupid`
 	} else { 
 		column = `uid` 
 	}
 
-	if !spath.Valid {
-		queryerr = DBtx.tx.QueryRow(`select path from storage_quota
+	if i[Path].Valid {
+		vPath.String = i[Path].Data.(string)
+		vPath.Valid = i[Path].Valid
+	} else if !i[Path].AbsoluteNull {
+		queryerr = c.DBtx.tx.QueryRow(`select path from storage_quota
 									 where storageid = $1 and ` + column + ` = $2 and
 									 unitid = $3 and valid_until is NULL`,
-									 vSid, vId, vUnitid).Scan(&vPath)
-		if queryerr == sql.ErrNoRows {
-			if !vUntil.Valid { 
-				DBtx.Report("Null path for user quota.")
-			} else {
-				DBtx.Report("No permanent quota.")
-			}
+									 vStorageid, vDataid, vUnitid).Scan(&vPath)
+		if queryerr != nil && queryerr != sql.ErrNoRows {
+			err := DefaultAPIError(ErrorDbQuery, nil)
+			log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+			apiErr = append(apiErr, err)
+			return nil, apiErr
 		}
-	} else {
-		vPath = spath
+	}
+	if !gAccount.Data.(bool) && !vPath.Valid {
+		var msg string
+		if !i[ExpirationDate].Valid { 
+			msg = "null path for user quota"
+		} else {
+			msg = "no permanent quota"
+		}
+		err := APIError{errors.New(msg), ErrorAPIRequirement}
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err.Error.Error())
+		apiErr = append(apiErr, err)
+		return nil, apiErr
 	}
 
-	if vPath.Valid {
-		var tmpNull string
-		if vUntil.Valid {
-			tmpNull = "not "
-		}
+	var tmpNull string
+	if i[ExpirationDate].Valid {
+		tmpNull = "not "
+	}
 
-		DBtx.Exec(`insert into storage_quota (storageid, ` + column + `, unitid, value, unit, valid_until, path, last_updated)
-				   values ($1, $2, $3, $4, $5, $6, $7, NOW())
-				   on conflict (storageid, ` + column + `) where valid_until is ` + tmpNull + `null
-				   do update set value = $4, unit = $5, valid_until = $6, path = $7, last_updated = NOW()`,
-				   vSid, vId, vUnitid, quota, unit, vUntil, vPath)
-		if !vUntil.Valid {
-			DBtx.Exec(`delete from storage_quota where storageid = $1 and ` + column + ` = $2 and valid_until is not null`, vSid, vId)
-		}
+	c.DBtx.Exec(`insert into storage_quota (storageid, ` + column + `, unitid, value, unit, valid_until, path, last_updated)
+				values ($1, $2, $3, $4, $5, $6, $7, NOW())
+				on conflict (storageid, ` + column + `) where valid_until is ` + tmpNull + `null
+				do update set value = $4, unit = $5, valid_until = $6, path = $7, last_updated = NOW()`,
+				vStorageid, vDataid, vUnitid, quota, unit, i[ExpirationDate], vPath)
+	if !i[ExpirationDate].Valid {
+		c.DBtx.Exec(`delete from storage_quota where storageid = $1 and ` + column + ` = $2 and valid_until is not null`, vStorageid, vDataid)
 	}
 	
-	if DBtx.Error() == nil {
-		DBtx.Commit(cKey)
-		
-		if cKey != 0 {
-			log.WithFields(QueryFields(r, startTime)).Info("Success!")
-			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
-		}
-	} else {
-		if strings.Contains(DBtx.Error().Error(), `User does not exist.`) {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-		} else if strings.Contains(DBtx.Error().Error(), `Resource does not exist.`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
-		} else if strings.Contains(DBtx.Error().Error(), `Group does not exist.`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Group does not exist.\" }")
-		} else if strings.Contains(DBtx.Error().Error(), `Null path for user quota.`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Null path for user quota.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"No path given. It is required for permanent user quotas.\" }")
-		} else if strings.Contains(DBtx.Error().Error(), `No permanent quota.`) {
-			log.WithFields(QueryFields(r, startTime)).Error("No permanent quota.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"No permanent quota defined.\" }")
-		} else if strings.Contains(DBtx.Error().Error(), `invalid input syntax for type date`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid valid_until date.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid valid_until date.\" }")
-		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(DBtx.Error().Error())
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
-		}
+	if c.DBtx.Error() != nil {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
+	return nil, nil
 }
 
 func setUserExternalAffiliationAttribute(c APIContext, i Input) (interface{}, []APIError) {

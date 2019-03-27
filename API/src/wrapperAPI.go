@@ -305,7 +305,7 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 			}
 			if quotaCount == 0 {
 				DBtx.Savepoint("setUserStorageQuota_" + sr[isr].SrName)
-				setUserStorageQuota(w,R)
+				setUserStorageQuotaLegacy(w,R)
 				if !DBtx.Complete() {
 					log.WithFields(QueryFields(r, startTime)).Error("setUserStorageQuota on  " + sr[isr].SrName + "  failed: " + DBtx.Error().Error() )
 					fmt.Fprintf(w, "{ \"ferry_error\": \"setUserStorageQuota for " + sr[isr].SrName + " failed. Last DB error: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
@@ -418,7 +418,7 @@ func setLPCStorageAccess(w http.ResponseWriter, r *http.Request) {
 		R.URL.RawQuery = q.Encode()
 
 		DBtx.Continue()
-		setUserStorageQuota(w, R)
+		setUserStorageQuotaLegacy(w, R)
 		if !DBtx.Complete() {
 			log.WithFields(QueryFields(r, startTime)).Error("setUserStorageQuota failed.")
 			return
@@ -536,7 +536,7 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 	q.Set("unitname", unitName)
 	q.Set("resourcename", unitName)
 	q.Set("type", "Interactive")
-	q.Set("default_shell", "/bin/bash")
+	q.Set("defaultshell", "/bin/bash")
 	q.Set("defaulthomedir", homedir)
 	
 	R.URL.RawQuery = q.Encode()

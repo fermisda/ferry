@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"strconv"
 	"database/sql/driver"
 	"errors"
@@ -88,34 +89,33 @@ func (i *InputModel) Add(attribute Attribute, optional bool) {
 type Input map[Attribute]NullAttribute
 
 // Parse an http.Request and returns a ParsedInput
-func (i *Input) Parse(c APIContext, m InputModel) ([]error) {
+func (i Input) Parse(c APIContext, m InputModel) ([]error) {
 	var errs []error
 	q := c.R.URL.Query()
 	
 	for _, p := range m {
-		var parsedValue interface{}
+		parsedAttribute := NewNullAttribute(p.Attribute)
 		value := q.Get(string(p.Attribute))
 		q.Del(string(p.Attribute))
 
-		errString := "required parameter %s not provided"
-		if value == "" && p.Required {
-			errs = append(errs, fmt.Errorf(errString, p.Attribute))
-			log.WithFields(QueryFields(c.R, c.StartTime)).Error(errs[len(errs) - 1])
-			continue
-		}
-
-		errString = "parameter %s requires a %s value"
+		errString := "parameter %s requires a %s value"
 		if value != "" {
-			if v, ok := p.Attribute.Type().ParseString(value); ok {
-				parsedValue = v
-			} else {
+			parsedAttribute.Scan(value)
+			if !parsedAttribute.Valid && !parsedAttribute.AbsoluteNull {
 				errs = append(errs, fmt.Errorf(errString, p.Attribute, p.Attribute.Type()))
 				log.WithFields(QueryFields(c.R, c.StartTime)).Error(errs[len(errs) - 1])
 				continue
 			}
 		}
 
-		i.Add(p.Attribute, parsedValue)
+		errString = "required parameter %s not provided"
+		if !parsedAttribute.Valid && p.Required {
+			errs = append(errs, fmt.Errorf(errString, p.Attribute))
+			log.WithFields(QueryFields(c.R, c.StartTime)).Error(errs[len(errs) - 1])
+			continue
+		}
+
+		i.Add(parsedAttribute)
 	}
 
 	for p := range q {
@@ -126,8 +126,13 @@ func (i *Input) Parse(c APIContext, m InputModel) ([]error) {
 	return errs
 }
 
-// Add a parsed parameter to Input
-func (i Input) Add(attribute Attribute, value interface{}) {
+// Add a parsed attribute to Input
+func (i Input) Add(attribute NullAttribute) {
+	i[attribute.Attribute] = attribute
+}
+
+// AddValue a parsed parameter to Input
+func (i Input) AddValue(attribute Attribute, value interface{}) {
 	v := NewNullAttribute(attribute)
 	v.Scan(value)
 	i[attribute] = v
@@ -184,13 +189,17 @@ const (
 	GroupName		Attribute = "groupname"
 	UnitName		Attribute = "unitname"
 	FullName 		Attribute = "fullname"
+	ResourceName	Attribute = "resourcename"
 	DN				Attribute = "dn"
 	UserAttribute	Attribute = "attribute"
 	Value			Attribute = "value"
+	QuotaUnit		Attribute = "quotaunit"
+	Path			Attribute = "path"
 	UID				Attribute = "uid"
 	GID				Attribute = "gid"
 	DNID			Attribute = "dnid"
 	UnitID			Attribute = "unitid"
+	Quota			Attribute = "quota"
 	Status			Attribute = "status"
 	GroupAccount  	Attribute = "groupaccount"
 	ExpirationDate	Attribute = "expirationdate"
@@ -203,13 +212,17 @@ func (a Attribute) Type() (AttributeType) {
 		GroupName:		TypeString,
 		UnitName: 		TypeString,
 		FullName:		TypeString,
+		ResourceName:	TypeString,
 		DN:				TypeString,
 		UserAttribute:	TypeString,
 		Value:			TypeString,
+		QuotaUnit:		TypeString,
+		Path:			TypeString,
 		UID:			TypeInt,
 		GID:			TypeInt,
 		DNID:			TypeInt,
 		UnitID:			TypeInt,
+		Quota:			TypeFloat,
 		Status:			TypeBool,
 		GroupAccount:	TypeBool,
 		ExpirationDate:	TypeDate,
@@ -293,11 +306,16 @@ type NullAttribute struct {
 	Attribute Attribute
 	Data interface{}
 	Valid bool // Valid is true if Value matches Attribute.Type
+	AbsoluteNull bool // Valid is true if Scan receives is the string "NULL"
 }
 
 // Scan implements the Scanner interface.
-func (na *NullAttribute) Scan(value interface{}) error {
+func (na *NullAttribute) Scan(value interface{}) error {	
 	if stringValue, ok := value.(string); ok {
+		if strings.ToLower(stringValue) == "null" {
+			na.AbsoluteNull = true
+			return nil
+		}
 		na.Data, na.Valid = na.Attribute.Type().ParseString(stringValue)
 	} else {
 		na.Data, na.Valid = na.Attribute.Type().Parse(value)
@@ -311,6 +329,16 @@ func (na NullAttribute) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return na.Data, nil
+}
+
+// Default returns a copy of the NullAttribute replacing Data with value
+// if Valid is false
+func (na NullAttribute) Default(value interface{}) NullAttribute {
+	if !na.Valid {
+		na.Scan(value)
+		return na
+	}
+	return na
 }
 
 // APIError is returned by a BaseAPI
@@ -327,6 +355,7 @@ const (
 	HTTP200 ErrorType = iota
 	ErrorDataNotFound
 	ErrorInvalidData
+	ErrorAPIRequirement
 	HTTP500
 	ErrorDbQuery
 )
@@ -371,7 +400,7 @@ func NewMapNullAttribute(attributes ...Attribute) map[Attribute]*NullAttribute {
 	mapNullAttribute := make(map[Attribute]*NullAttribute)
 
 	for _, attribute := range attributes {
-		mapNullAttribute[attribute] = &NullAttribute{attribute, nil, false}
+		mapNullAttribute[attribute] = &NullAttribute{attribute, nil, false, false}
 	}
 
 	return mapNullAttribute
@@ -379,5 +408,5 @@ func NewMapNullAttribute(attributes ...Attribute) map[Attribute]*NullAttribute {
 
 // NewNullAttribute builds a NullAttribute of type Attribute
 func NewNullAttribute(attribute Attribute) NullAttribute {
-	return NullAttribute{attribute, nil, false}
+	return NullAttribute{attribute, nil, false, false}
 }
