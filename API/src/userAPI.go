@@ -381,9 +381,7 @@ func getSuperUserList(c APIContext, i Input) (interface{}, []APIError) {
 	unitID := NewNullAttribute(UnitID)
 	err := c.DBtx.QueryRow(`select unitid from affiliation_units where name = $1`, i[UnitName]).Scan(&unitID)
 	if err == sql.ErrNoRows {
-		err := DefaultAPIError(ErrorDataNotFound, UnitName)
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
-		apiErr = append(apiErr, err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
 		return nil, apiErr
 	} else if err != nil {
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
@@ -690,9 +688,7 @@ func getUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 		}
 	}
 	if len(out) == 0 {
-		err := DefaultAPIError(ErrorDataNotFound, UserName)
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
-		apiErr = append(apiErr, err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
 		return nil, apiErr
 	} else {
 		return out, nil
@@ -1463,9 +1459,7 @@ func setUserStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
 	}
 
 	if !i[dataAttr].Valid {
-		err := APIError{fmt.Errorf("required parameter %s not provided", dataAttr), ErrorAPIRequirement}
-		apiErr = append(apiErr, err)
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err.Error.Error())
+		apiErr = append(apiErr, APIError{fmt.Errorf("required parameter %s not provided", dataAttr), ErrorAPIRequirement})
 		return nil, apiErr
 	}
 	
@@ -1478,9 +1472,8 @@ func setUserStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
 	}
 	queryerr := c.DBtx.QueryRow(querystr, i[ResourceName], i[dataAttr], i[UnitName]).Scan(&vStorageid, &vDataid, &vUnitid)
 	if queryerr != nil && queryerr != sql.ErrNoRows {
-		err := DefaultAPIError(ErrorDbQuery, nil)
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
-		apiErr = append(apiErr, err)
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
 	if !vDataid.Valid {
@@ -1490,27 +1483,19 @@ func setUserStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
 		} else {
 			dataID = GroupName
 		}
-		err := DefaultAPIError(ErrorDataNotFound, dataID)
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
-		apiErr = append(apiErr, err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, dataID))
 	} 
 	if !vStorageid.Valid {
-		err := DefaultAPIError(ErrorDataNotFound, ResourceName)
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
-		apiErr = append(apiErr, err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, ResourceName))
 	}
 	if !vUnitid.Valid {
-		err := DefaultAPIError(ErrorDataNotFound, UnitName)
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
-		apiErr = append(apiErr, err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
 	}
 
 	// We want to store the value in the DB in bytes, no matter what the input unit is. Convert the value here and then set the unit of "B" for bytes	
 	newquota, converr := convertValue(i[Quota].Data, i[QuotaUnit].Data.(string), "B")
 	if converr != nil {
-		err := APIError{converr, ErrorInvalidData}
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(converr.Error())
-		apiErr = append(apiErr, err)
+		apiErr = append(apiErr, APIError{converr, ErrorInvalidData})
 	}
 
 	// set the quota value to be stored to newquota, which is now in bytes
@@ -1539,9 +1524,8 @@ func setUserStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
 									 unitid = $3 and valid_until is NULL`,
 									 vStorageid, vDataid, vUnitid).Scan(&vPath)
 		if queryerr != nil && queryerr != sql.ErrNoRows {
-			err := DefaultAPIError(ErrorDbQuery, nil)
-			log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
-			apiErr = append(apiErr, err)
+			log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 			return nil, apiErr
 		}
 	}
@@ -1552,9 +1536,7 @@ func setUserStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
 		} else {
 			msg = "no permanent quota"
 		}
-		err := APIError{errors.New(msg), ErrorAPIRequirement}
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err.Error.Error())
-		apiErr = append(apiErr, err)
+		apiErr = append(apiErr, APIError{errors.New(msg), ErrorAPIRequirement})
 		return nil, apiErr
 	}
 
@@ -1585,29 +1567,23 @@ func setUserExternalAffiliationAttribute(c APIContext, i Input) (interface{}, []
 	uid := NewNullAttribute(UID)
 	err := c.DBtx.QueryRow(`select uid from users where uname = $1`, i[UserName]).Scan(&uid)
 	if err != nil && err != sql.ErrNoRows {
-		err := DefaultAPIError(ErrorDbQuery, nil)
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
-		apiErr = append(apiErr, err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
 	if !uid.Valid {
-		err := DefaultAPIError(ErrorDataNotFound, UserName)
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
-		apiErr = append(apiErr, err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
 	}
 
 	var validAttribute bool
 	err = c.DBtx.QueryRow(`select $1 = any (enum_range(null::external_affiliation_attribute_attribute_type)::text[])`, i[UserAttribute]).Scan(&validAttribute)
 	if err != nil {
-		err := DefaultAPIError(ErrorDbQuery, nil)
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
-		apiErr = append(apiErr, err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
 	if !validAttribute {
-		err := DefaultAPIError(ErrorInvalidData, UserAttribute)
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
-		apiErr = append(apiErr, err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, UserAttribute))
 	}
 	
 	if len(apiErr) > 0 {
@@ -1617,10 +1593,8 @@ func setUserExternalAffiliationAttribute(c APIContext, i Input) (interface{}, []
 	_, err = c.DBtx.Exec(`insert into external_affiliation_attribute (uid, attribute, value) values ($1, $2, $3)
 						on conflict (uid, attribute) do update set value = $3`, uid, i[UserAttribute], i[Value])
 	if err != nil {
-		print(err.Error())
-		err := DefaultAPIError(ErrorDbQuery, nil)
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
-		apiErr = append(apiErr, err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
 
@@ -1825,11 +1799,9 @@ func addCertificateDNToUser(c APIContext, i Input) (interface{}, []APIError) {
 	}
 
 	if !uid.Valid {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
 	}
 	if !unitid.Valid {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
 	}
 	if len(apiErr) > 0 {
@@ -2653,19 +2625,13 @@ func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIEr
 	}
 
 	if !uid.Valid {
-		err := DefaultAPIError(ErrorDataNotFound, UserName)
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
-		apiErr = append(apiErr, err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
 	}
 	if !groupid.Valid {
-		err := DefaultAPIError(ErrorDataNotFound, GroupName)
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
-		apiErr = append(apiErr, err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
 	}
 	if !compid.Valid {
-		err := DefaultAPIError(ErrorDataNotFound, ResourceName)
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
-		apiErr = append(apiErr, err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, ResourceName))
 	}
 	if len(apiErr) > 0 {
 		return nil, apiErr
@@ -2700,6 +2666,11 @@ func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIEr
 	
 	shell := i[Shell].Default(dShell.Data.(string))
 	home  := i[HomeDir].Default(dHome.Data.(string))
+
+	if !shell.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, Shell))
+		return nil, apiErr
+	}
 
 	_, err = c.DBtx.Exec(`insert into compute_access as ca (compid, uid, shell, home_dir) values ($1, $2, $3, $4)
 						  on conflict (compid, uid) do update set shell = coalesce($5, ca.shell), home_dir = coalesce($6, ca.home_dir)`,

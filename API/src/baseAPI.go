@@ -56,13 +56,13 @@ func (b BaseAPI) Run(w http.ResponseWriter, r *http.Request) {
 	if len(queryErr) > 0 {
 		var errType ErrorType
 		for _, err := range queryErr {
+			log.WithFields(QueryFields(r, context.StartTime)).Error(err.Error)
 			output.Err = append(output.Err, err.Error)
 			if err.Type > errType {
 				errType = err.Type
 			}
 		}
 		context.DBtx.Rollback(context.Ckey)
-		log.WithFields(QueryFields(r, context.StartTime)).Error(queryErr)
 		
 		switch {
 		case errType > HTTP500:
