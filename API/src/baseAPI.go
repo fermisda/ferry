@@ -195,12 +195,17 @@ const (
 	Value			Attribute = "value"
 	QuotaUnit		Attribute = "quotaunit"
 	Path			Attribute = "path"
+	Shell			Attribute = "shell"
+	HomeDir			Attribute = "homedir"
 	UID				Attribute = "uid"
 	GID				Attribute = "gid"
+	GroupID			Attribute = "groupid"
 	DNID			Attribute = "dnid"
 	UnitID			Attribute = "unitid"
+	CompID			Attribute = "compid"
 	Quota			Attribute = "quota"
 	Status			Attribute = "status"
+	Primary			Attribute = "primary"
 	GroupAccount  	Attribute = "groupaccount"
 	ExpirationDate	Attribute = "expirationdate"
 )
@@ -218,12 +223,17 @@ func (a Attribute) Type() (AttributeType) {
 		Value:			TypeString,
 		QuotaUnit:		TypeString,
 		Path:			TypeString,
+		Shell:			TypeString,
+		HomeDir:		TypeString,
 		UID:			TypeInt,
 		GID:			TypeInt,
+		GroupID:		TypeInt,
 		DNID:			TypeInt,
 		UnitID:			TypeInt,
+		CompID:			TypeInt,
 		Quota:			TypeFloat,
 		Status:			TypeBool,
+		Primary:		TypeBool,
 		GroupAccount:	TypeBool,
 		ExpirationDate:	TypeDate,
 	}
@@ -332,9 +342,9 @@ func (na NullAttribute) Value() (driver.Value, error) {
 }
 
 // Default returns a copy of the NullAttribute replacing Data with value
-// if Valid is false
+// if Valid is false and is not an AbsoluteNull
 func (na NullAttribute) Default(value interface{}) NullAttribute {
-	if !na.Valid {
+	if !na.Valid && !na.AbsoluteNull {
 		na.Scan(value)
 		return na
 	}

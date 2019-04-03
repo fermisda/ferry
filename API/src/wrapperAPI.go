@@ -228,7 +228,7 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 
 	duplicateCountRef ++
 	DBtx.Savepoint("setUserAccessToComputeResource_" + compResource)
-	setUserAccessToComputeResource(w, R)
+	setUserAccessToComputeResourceLegacy(w, R)
 	if !DBtx.Complete() {
 		if !strings.Contains(DBtx.Error().Error(), "The request already exists in the database.") {
 			log.WithFields(QueryFields(r, startTime)).Error("addUserToGroup failed: " + DBtx.Error().Error() )
@@ -695,7 +695,7 @@ func addLPCConvener(w http.ResponseWriter, r *http.Request) {
 	R.URL.RawQuery = q.Encode()
 
 	DBtx.Continue()
-	setUserAccessToComputeResource(w, R)
+	setUserAccessToComputeResourceLegacy(w, R)
 	if !DBtx.Complete() {
 		if !strings.Contains(DBtx.Error().Error(), `The request already exists in the database`) {
 			log.WithFields(QueryFields(r, startTime)).Error("setUserAccessToComputeResource failed.")

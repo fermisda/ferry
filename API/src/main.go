@@ -185,7 +185,7 @@ func main() {
 	grouter.HandleFunc("/setUserShellAndHomeDir", setUserShellAndHomeDir)
 	grouter.HandleFunc("/getUserShellAndHomeDir", getUserShellAndHomeDir)
 	grouter.HandleFunc("/setUserShell", setUserShell)
-	grouter.HandleFunc("/setUserAccessToComputeResource", setUserAccessToComputeResource)
+	grouter.HandleFunc("/setUserAccessToComputeResource", APIs["setUserAccessToComputeResource"].Run)
 	grouter.HandleFunc("/removeUserAccessFromResource", removeUserAccessFromResource)
 	grouter.HandleFunc("/getUserStorageQuota", getUserStorageQuota)
 	grouter.HandleFunc("/setUserStorageQuota", APIs["setUserStorageQuota"].Run)
@@ -291,6 +291,7 @@ func main() {
 	grouter.HandleFunc("/addCertificateDNToUser", addCertificateDNToUserLegacy)
 	grouter.HandleFunc("/setUserExternalAffiliationAttributeLegacy", setUserExternalAffiliationAttributeLegacy)
 	grouter.HandleFunc("/setUserStorageQuotaLegacy", setUserStorageQuotaLegacy)
+	grouter.HandleFunc("/setUserAccessToComputeResourceLegacy", setUserAccessToComputeResourceLegacy)
 
 	srvConfig := viper.GetStringMapString("server")
 	Mainsrv = &http.Server{
