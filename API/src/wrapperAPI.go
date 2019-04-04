@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"strings"
 	"encoding/json"
 	log "github.com/sirupsen/logrus"
@@ -11,6 +12,18 @@ import (
 	"strconv"
 	"database/sql"
 )
+
+// IncludeWrapperAPIs includes all APIs described in this file in an APICollection
+func IncludeWrapperAPIs(c *APICollection) {
+	addUserToExperiment := BaseAPI {
+		InputModel {
+			Parameter{UserName, true},
+			Parameter{UnitName, true},
+		},
+		addUserToExperiment,
+	}
+	c.Add("addUserToExperiment", &addUserToExperiment)
+}
 
 func testWrapper(w http.ResponseWriter, r *http.Request) {
 	cas, _ := FetchCAs(`C:\Users\coimb\Documents\Ferry\Certificates`)
@@ -32,300 +45,163 @@ func testWrapper(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	var duplicateCount, duplicateCountRef int
+	dnTemplate	:= "/DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=%s/CN=UID:%s"
+	fullName 	:= NewNullAttribute(FullName)
+	status		:= NewNullAttribute(Status)
+	unitid		:= NewNullAttribute(UnitID)
 
-	var compResource string
-	var compGroup string
-
-	type jsonerror struct {
-		Error string `json:"ferry_error"`
-	}
-	var inputErr []jsonerror
-
-	unit := strings.TrimSpace(q.Get("unitname"))
-	if unit == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
-		inputErr = append(inputErr, jsonerror{"No unitname specified."})
+	err := c.DBtx.QueryRow("select full_name, status from users where uname = $1", i[UserName]).Scan(&fullName, &status)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	if len(inputErr) > 0 {
-		jsonout, err := json.Marshal(inputErr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
+	err = c.DBtx.QueryRow("select unitid from affiliation_units where name = $1", i[UnitName]).Scan(&unitid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !status.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
+	}
+	if !unitid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	if !status.Data.(bool) {
+		apiErr = append(apiErr, APIError{errors.New("user status is not valid"), ErrorAPIRequirement})
+		return nil, apiErr
+	}
+
+	dn := NewNullAttribute(DN)
+	dn.Scan(fmt.Sprintf(dnTemplate, fullName.Data.(string), i[UserName].Data.(string)))
+
+	input := Input {
+		UserName:	i[UserName],
+		UnitName:	i[UnitName],
+		DN:			dn,
+	}
+	_, apiErr = addCertificateDNToUser(c, input)
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	for _, r := range []string{"Analysis", "NULL"} {
+		role := NewNullAttribute(Role)
+		role.Scan(r)
+
+		input = Input {
+			UserName:	i[UserName],
+			UnitName:	i[UnitName],
+			Role:		role,
+			FQAN:		NewNullAttribute(FQAN),
 		}
-		fmt.Fprintf(w, string(jsonout))
-		return
+
+		_, apiErr = setUserExperimentFQAN(c, input)
+		if len(apiErr) > 0 {
+			return nil, apiErr
+		}
 	}
-	
-    	authorized,authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
-		return
-	}    
-        
-	var DBtx Transaction
-	R := WithTransaction(r, &DBtx)
-	
-	key, err := DBtx.Start(DBptr)
+
+	compResource := NewNullAttribute(ResourceName)
+	err = c.DBtx.QueryRow(`select name from compute_resources
+						   where unitid = $1 and type = 'Interactive';`,
+						  unitid).Scan(&compResource)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error starting database transaction: " + err.Error())
-		inputErr = append(inputErr, jsonerror{"Error starting database transaction." })
-		jsonout, err := json.Marshal(inputErr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
-		}
-		fmt.Fprintf(w, string(jsonout))
-		return
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
-	defer DBtx.Rollback(key)
 
-	uName := strings.TrimSpace(q.Get("username"))
-	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified.")
-		inputErr = append(inputErr, jsonerror{"No username specified." })
-		jsonout, err := json.Marshal(inputErr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
-		}
-		fmt.Fprintf(w, string(jsonout))
-		return	
+	if !compResource.Valid {
+		apiErr = append(apiErr, APIError{errors.New("interactive compute resource not found"), ErrorAPIRequirement})
+		return nil, apiErr
 	}
-	dnTemplate := "/DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=%s/CN=UID:%s"
-	var fullName string
-	var valid bool
 
-	rows, err := DBtx.Query("select full_name, status from users where uname = $1", uName)
+	compGroup := NewNullAttribute(GroupName)
+	err = c.DBtx.QueryRow(`select name from affiliation_unit_group
+						 left join groups as g using(groupid)
+						 where is_primary and unitid = $1;`,
+						unitid).Scan(&compGroup)
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		return
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	if !rows.Next() {
-		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-		return
-	}
-	rows.Scan(&fullName, &valid)
-	rows.Close()
-
-	if !valid {
-		log.WithFields(QueryFields(r, startTime)).Error("User status is not valid.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"User status is not valid.\" }")
-		return
+	if !compGroup.Valid {
+		apiErr = append(apiErr, APIError{errors.New("primary group not found for this affiliation unit"), ErrorAPIRequirement})
+		return nil, apiErr
 	}
 
-	q.Set("dn", fmt.Sprintf(dnTemplate, fullName, uName))
-	R.URL.RawQuery = q.Encode()
+	primary := NewNullAttribute(Primary)
+	primary.Scan(true)
 
-	duplicateCountRef ++
-	DBtx.Savepoint("addCertificateDNToUser")
-	addCertificateDNToUserLegacy(w, R)
-	if !DBtx.Complete() {
-		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") {
-			log.WithFields(QueryFields(r, startTime)).Error("addCertificateDNToUser failed: DBtx.Error().Error()" )
-			if  strings.Contains(DBtx.Error().Error(), `null value in column "unitid" violates not-null constraint`) {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"Affiliation unit does not exist.\" }")					
-			} else {		
-				fmt.Fprintf(w, "{ \"ferry_error\": \"addCertificateDNToUser failed. Last DB error: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
-			}
-			return
-		}
-		DBtx.RollbackToSavepoint("addCertificateDNToUser")
-		duplicateCount ++
+	input = Input {
+		UserName: i[UserName],
+		GroupName: compGroup,
+		ResourceName: compResource,
+		Primary: primary,
+		Shell: NewNullAttribute(Shell),
+		HomeDir: NewNullAttribute(HomeDir),
 	}
 
-	for _, fqan := range []string{"Analysis", "NULL"} {
-		rows, err := DBtx.Query(`select fqan from grid_fqan
-								 where (lower(fqan) like lower($1) or lower(fqan) like lower($2)) and mapped_user is null;`,
-								 "/" + unit + "/Role=" + fqan + "%", "/fermilab/" + unit + "/Role=" + fqan + "%")
-		if err != nil {
-			defer log.WithFields(QueryFields(r, startTime)).Error(err)
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-			return
-		}
-		if !rows.Next() {
-			log.WithFields(QueryFields(r, startTime)).Error("FQAN not found.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"FQAN not found.\" }")
-			return
-		}
-
-		var fullFqan string
-		rows.Scan(&fullFqan)
-
-		if rows.Next() {
-			rows.Scan(&fullFqan)
-			log.WithFields(QueryFields(r, startTime)).Error("Found ambiguous FQANs.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Found ambiguous FQANs.\" }")
-			return
-		}
-
-		rows.Close()
-
-		q.Set("fqan", fullFqan)
-		R.URL.RawQuery = q.Encode()
-
-		duplicateCountRef ++
-		DBtx.Savepoint("setUserExperimentFQAN_" + fqan)
-		setUserExperimentFQAN(w, R)
-		if !DBtx.Complete() {
-			if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") && !strings.Contains(DBtx.Error().Error(), "FQAN not assigned to specified unit") {
-				log.WithFields(QueryFields(r, startTime)).Error("Failed to set FQAN to user: " + DBtx.Error().Error())
-				fmt.Fprintf(w, "{ \"ferry_error\": \"setUserExperimentFQAN failed. Last DB error: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
-				return	
-			}
-			DBtx.RollbackToSavepoint("setUserExperimentFQAN_" + fqan)
-			duplicateCount ++
-		}
-	}
-
-	rows, err = DBtx.Query(`select cr.name from compute_resources as cr
-							 left join affiliation_units au on cr.unitid = au.unitid
-							 where au.name = $1 and cr.type = 'Interactive';`, unit)
-	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		return
-	}
-
-	if !rows.Next() {
-		log.WithFields(QueryFields(r, startTime)).Error("Compute resource not found.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Compute resource not found.\" }")
-		return
-	}
-	rows.Scan(&compResource)
-	rows.Close()
-
-	rows, err = DBtx.Query(`select gp.name from affiliation_unit_group as ag
-							left join affiliation_units as au on ag.unitid = au.unitid
-							left join groups as gp on ag.groupid = gp.groupid
-							where ag.is_primary and au.name = $1;`, unit)
-	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		return
-	}
-
-	if !rows.Next() {
-		log.WithFields(QueryFields(r, startTime)).Error("Primary group not found for this unit.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Primary group not found for this unit.\" }")
-		return
-	}
-	rows.Scan(&compGroup)
-	rows.Close()
-
-	q.Set("resourcename", compResource)
-	q.Set("groupname", compGroup)
-	q.Set("is_primary", "true")
-	R.URL.RawQuery = q.Encode()
-
-	duplicateCountRef ++
-	DBtx.Savepoint("setUserAccessToComputeResource_" + compResource)
-	setUserAccessToComputeResourceLegacy(w, R)
-	if !DBtx.Complete() {
-		if !strings.Contains(DBtx.Error().Error(), "The request already exists in the database.") {
-			log.WithFields(QueryFields(r, startTime)).Error("addUserToGroup failed: " + DBtx.Error().Error() )
-			fmt.Fprintf(w, "{ \"ferry_error\": \"setUserAccessToComputeResource for " + compResource + " failed. Last DB error: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
-			return
-		}
-		DBtx.RollbackToSavepoint("setUserAccessToComputeResource_" + compResource)
-		duplicateCount ++
+	_, apiErr = setUserAccessToComputeResource(c, input)
+	if len(apiErr) > 0 {
+		return nil, apiErr
 	}
 	
-	// now we need to do the storage resources. Comment out for now 20180813, until we figure out how to do it.
-	
-	var( 
-		storageid int64
-		srquota sql.NullInt64
-		srname, srpath, srunit sql.NullString
-	)
-	
-	if unit == "cms" {
-		rows, err = DBtx.Query(`select sr.storageid, sr.name, sr.default_path, sr.default_quota, sr.default_unit from storage_resources as sr`)
+	if i[UnitName].Data.(string) == "cms" {
+		rows, err := c.DBtx.Query(`select name, default_path, default_quota, default_unit from storage_resources`)
 		if err != nil {
-			defer log.WithFields(QueryFields(r, startTime)).Error(err)
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-			return
+			log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+			return nil, apiErr
 		}
-		
-		type srinfo struct {
-			SrID int64	
-			SrName string
-			SrPath string
-			SrQuota int64
-			SrUnit string
-		}
-		var tmpsr srinfo
-		var sr []srinfo
-		
+
+		var inputs []Input
 		for rows.Next() {
-			
-			
-			rows.Scan(&storageid, &srname, &srpath, &srquota, &srunit)
-			if ! srunit.Valid {
-				srunit.Valid = true
-				srunit.String = "B" // if not default unit, set a default of bytes
-				
-			}
-			if srname.Valid {
-				tmpsr.SrID = storageid	
-				tmpsr.SrName = srname.String
-				tmpsr.SrPath = srpath.String
-				tmpsr.SrQuota = srquota.Int64
-				tmpsr.SrUnit = srunit.String
-				sr = append(sr,tmpsr)	
-			}
+			storageInfo := NewMapNullAttribute(ResourceName, Path, Quota, QuotaUnit)
+			err = rows.Scan(storageInfo[ResourceName], storageInfo[Path],
+					  storageInfo[Quota], storageInfo[QuotaUnit])
+
+			*storageInfo[QuotaUnit] = storageInfo[QuotaUnit].Default("B")
+			fullPath := storageInfo[Path].Data.(string) + "/" + i[UserName].Data.(string)
+
+			input := make(Input)
+
+			input.Add(i[UserName])
+			input.Add(i[UnitName])
+			input.Add(*storageInfo[ResourceName])
+			input.Add(*storageInfo[Quota])
+			input.Add(*storageInfo[QuotaUnit])
+			input.AddValue(Path, fullPath)
+			input.AddValue(GroupAccount, false)
+			input.Add(NewNullAttribute(GroupName))
+			input.Add(NewNullAttribute(ExpirationDate))
+
+			inputs = append(inputs, input)
 		}
 		rows.Close()
 
-		for isr := 0; isr<len(sr); isr++ {
-			
-			q.Set("resourcename", sr[isr].SrName)
-			q.Set("path", sr[isr].SrPath + "/" + uName)
-			q.Set("isGroup", "false")
-			q.Set("valid_until", "")
-			q.Set("quota", strconv.FormatInt(sr[isr].SrQuota, 10))
-			q.Set("quota_unit", sr[isr].SrUnit)
-			R.URL.RawQuery = q.Encode()
-
-			duplicateCountRef ++
-			var quotaCount int
-			err = DBtx.QueryRow("select count(*) from storage_quota where path = $1", q["path"][0]).Scan(&quotaCount)
-			if err != nil {
-				defer log.WithFields(QueryFields(r, startTime)).Error(err)
-				fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-				return
-			}
-			if quotaCount == 0 {
-				DBtx.Savepoint("setUserStorageQuota_" + sr[isr].SrName)
-				setUserStorageQuotaLegacy(w,R)
-				if !DBtx.Complete() {
-					log.WithFields(QueryFields(r, startTime)).Error("setUserStorageQuota on  " + sr[isr].SrName + "  failed: " + DBtx.Error().Error() )
-					fmt.Fprintf(w, "{ \"ferry_error\": \"setUserStorageQuota for " + sr[isr].SrName + " failed. Last DB error: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
-					return
-				}
-			} else {
-				duplicateCount ++
+		for _, input := range(inputs) {
+			_, apiErr = setUserStorageQuota(c, input)
+			if len(apiErr) > 0 {
+				return nil, apiErr
 			}
 		}
 	}
-	//
-	
-	if duplicateCount == duplicateCountRef {
-		fmt.Fprintf(w, "{ \"ferry_status\": \"User already belongs to the experiment.\" }")
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 
-		DBtx.Commit(key)
-	}
+	return nil, nil
 }
 
 func setLPCStorageAccess(w http.ResponseWriter, r *http.Request) {

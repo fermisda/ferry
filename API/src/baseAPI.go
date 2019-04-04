@@ -197,12 +197,15 @@ const (
 	Path			Attribute = "path"
 	Shell			Attribute = "shell"
 	HomeDir			Attribute = "homedir"
+	FQAN			Attribute = "fqan"
+	Role			Attribute = "role"
 	UID				Attribute = "uid"
 	GID				Attribute = "gid"
 	GroupID			Attribute = "groupid"
 	DNID			Attribute = "dnid"
+	FQANID			Attribute = "fqanid"
 	UnitID			Attribute = "unitid"
-	CompID			Attribute = "compid"
+	ResourceID		Attribute = "compid"
 	Quota			Attribute = "quota"
 	Status			Attribute = "status"
 	Primary			Attribute = "primary"
@@ -225,12 +228,15 @@ func (a Attribute) Type() (AttributeType) {
 		Path:			TypeString,
 		Shell:			TypeString,
 		HomeDir:		TypeString,
+		FQAN:			TypeString,
+		Role:			TypeString,
 		UID:			TypeInt,
 		GID:			TypeInt,
 		GroupID:		TypeInt,
 		DNID:			TypeInt,
+		FQANID:			TypeInt,
 		UnitID:			TypeInt,
-		CompID:			TypeInt,
+		ResourceID:		TypeInt,
 		Quota:			TypeFloat,
 		Status:			TypeBool,
 		Primary:		TypeBool,

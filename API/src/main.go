@@ -110,6 +110,7 @@ func main() {
 	APIs := make(APICollection)
 	IncludeUserAPIs(&APIs)
 	IncludeMiscAPIs(&APIs)
+	IncludeWrapperAPIs(&APIs)
 
 	log.Debug("Here we go...")
 
@@ -181,7 +182,7 @@ func main() {
 	grouter.HandleFunc("/getUserInfo", APIs["getUserInfo"].Run)
 	grouter.HandleFunc("/addUserToGroup", addUserToGroup)
 	grouter.HandleFunc("/removeUserFromGroup", removeUserFromGroup)
-	grouter.HandleFunc("/setUserExperimentFQAN", setUserExperimentFQAN)
+	grouter.HandleFunc("/setUserExperimentFQAN", APIs["setUserExperimentFQAN"].Run)
 	grouter.HandleFunc("/setUserShellAndHomeDir", setUserShellAndHomeDir)
 	grouter.HandleFunc("/getUserShellAndHomeDir", getUserShellAndHomeDir)
 	grouter.HandleFunc("/setUserShell", setUserShell)
@@ -279,7 +280,7 @@ func main() {
 
 	//wrapper API calls
 	grouter.HandleFunc("/testWrapper", testWrapper)
-	grouter.HandleFunc("/addUsertoExperiment", addUsertoExperiment)
+	grouter.HandleFunc("/addUsertoExperiment", APIs["addUserToExperiment"].Run)
 	grouter.HandleFunc("/setLPCStorageAccess", setLPCStorageAccess)
 	grouter.HandleFunc("/createExperiment", createExperiment)
 	grouter.HandleFunc("/addLPCConvener", addLPCConvener)
@@ -291,7 +292,9 @@ func main() {
 	grouter.HandleFunc("/addCertificateDNToUser", addCertificateDNToUserLegacy)
 	grouter.HandleFunc("/setUserExternalAffiliationAttributeLegacy", setUserExternalAffiliationAttributeLegacy)
 	grouter.HandleFunc("/setUserStorageQuotaLegacy", setUserStorageQuotaLegacy)
+	grouter.HandleFunc("/setUserExperimentFQANLegacy", setUserExperimentFQANLegacy)
 	grouter.HandleFunc("/setUserAccessToComputeResourceLegacy", setUserAccessToComputeResourceLegacy)
+	grouter.HandleFunc("/addUsertoExperimentLegacy", addUsertoExperimentLegacy)
 
 	srvConfig := viper.GetStringMapString("server")
 	Mainsrv = &http.Server{

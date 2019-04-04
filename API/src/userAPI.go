@@ -80,6 +80,17 @@ func IncludeUserAPIs(c *APICollection) {
 		setUserAccessToComputeResource,
 	}
 	c.Add("setUserAccessToComputeResource", &setUserAccessToComputeResource)
+
+	setUserExperimentFQAN := BaseAPI {
+		InputModel {
+			Parameter{UserName, true},
+			Parameter{UnitName, true},
+			Parameter{FQAN, false},
+			Parameter{Role, false},
+		},
+		setUserExperimentFQAN,
+	}
+	c.Add("setUserExperimentFQAN", &setUserExperimentFQAN)
 }
 
 func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
@@ -939,180 +950,90 @@ func removeUserFromGroup(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, string(jsonout))
 }
 
-func setUserExperimentFQAN(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+func setUserExperimentFQAN(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	uName := strings.TrimSpace(q.Get("username"))
-	unitName := strings.TrimSpace(q.Get("unitname"))
-	fqan := strings.TrimSpace(q.Get("fqan"))
-
-	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
-		return
-	}
-	if unitName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
-		return
-	}
-	if fqan == "" {
-		if strings.TrimSpace(q.Get("role")) != "" {
-			fqan = "%Role=" + strings.TrimSpace(q.Get("role")) + "%"
+	fqan := NewNullAttribute(FQAN)
+	if i[FQAN].Valid {
+		fqan = i[FQAN]
+	} else {
+		if i[Role].Valid {
+			fqan.Scan("%Role=" + strings.TrimSpace(i[Role].Data.(string)) + "%")
+		} else if i[Role].AbsoluteNull {
+			fqan.Scan("%Role=NULL%")
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error("No role or fqan specified in http query.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"No role or fqan specified.\" }")
-			return
+			apiErr = append(apiErr, APIError{errors.New("no role or fqan specified"), ErrorAPIRequirement})
+			return nil, apiErr
 		}
 	}
 
-	authorized, authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
-		return
+	uid := NewNullAttribute(UID)
+	unitid := NewNullAttribute(UnitID)
+	queryerr := c.DBtx.QueryRow(`select (select uid from users where uname=$1),
+									    (select unitid from affiliation_units where name=$2)`,
+							  i[UserName], i[UnitName]).Scan(&uid, &unitid)
+	if queryerr != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	DBtx, cKey, err := LoadTransaction(r, DBptr)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+	if !uid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
 	}
-	defer DBtx.Rollback(cKey)
-
-	var uid, unitid int
-	queryerr := DBtx.QueryRow(`select uid from users where uname=$1 for update`, uName).Scan(&uid)
-	switch {
-	case queryerr == sql.ErrNoRows:
-		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-		if cKey != 0 {
-			fmt.Fprintf(w,"{ \"ferry_error\": \"User does not exist.\" }")
-		}
-		return
-	case queryerr != nil:
-		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
-		if cKey != 0 {
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
-		}
-		return	
+	if !unitid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
 	}
-
-	queryerr = DBtx.QueryRow(`select unitid from affiliation_units where name=$1 for update`, unitName).Scan(&unitid)
-	switch {
-	case queryerr == sql.ErrNoRows:
-		log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
-		if cKey != 0 {
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Affiliation unit does not exist.\" }")
-		}
-		return
-	case queryerr != nil:
-		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
-		if cKey != 0 {
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
-		}
-		return	
+	if len(apiErr) > 0 {
+		return nil, apiErr
 	}
 
 	var hasCert bool
-	queryerr = DBtx.QueryRow(`select count(*) > 0 from affiliation_unit_user_certificate as ac
-							   join user_certificates as uc on ac.dnid = uc.dnid
-							   where uid = $1 and unitid = $2`, uid, unitid).Scan(&hasCert)
-	switch {
-	case queryerr == nil:
-		if !hasCert {
-			log.WithFields(QueryFields(r, startTime)).Error("User is not member of affiliation unit.")
-			if cKey != 0 {
-				fmt.Fprintf(w,"{ \"ferry_error\": \"User is not member of affiliation unit.\" }")
-			}
-			return
-		}
-	default:
-		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
-		if cKey != 0 {
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
-		}
-		return	
+	queryerr = c.DBtx.QueryRow(`select count(*) > 0 from affiliation_unit_user_certificate as ac
+							  join user_certificates as uc on ac.dnid = uc.dnid
+							  where uid = $1 and unitid = $2`, uid, unitid).Scan(&hasCert)
+	if queryerr != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	rows, queryerr := DBtx.Query(`select fqanid from 
-								  grid_fqan as gf join
-								  affiliation_units as au on gf.unitid=au.unitid
-								  where au.name=$1 and gf.fqan like $2`,unitName, fqan)
+	if !hasCert {
+		apiErr = append(apiErr, APIError{errors.New("the user is not a member of the affiliation unit"), ErrorAPIRequirement})
+		return nil, apiErr
+	}
+
+	rows, queryerr := c.DBtx.Query(`select fqanid from grid_fqan where unitid = $1 and fqan like $2`, unitid, fqan)
 	if queryerr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
-		if cKey != 0 {
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
-		}
-		return
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
 	var fqanids []int
 	for rows.Next() {
 		var fqanid int
-		err = rows.Scan(&fqanid)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
-			return
-		}
+		rows.Scan(&fqanid)
 		fqanids = append(fqanids, fqanid)
 	}
 	rows.Close()
 	if len(fqanids) == 0 {
-		log.WithFields(QueryFields(r, startTime)).Error("No FQANs found for this query.")
-		if cKey != 0 {
-			fmt.Fprintf(w,"{ \"ferry_error\": \"No FQANs found for this query.\" }")
-		}
-		return
+		apiErr = append(apiErr, APIError{errors.New("no FQANs found for this query"), ErrorAPIRequirement})
+		return nil, apiErr
 	}
 
-	var duplicate int
 	for _, fqanid := range fqanids {
-		DBtx.Savepoint("INSERT_" + strconv.Itoa(fqanid))
-		_, err = DBtx.Exec(`insert into grid_access (uid, fqanid, is_superuser, is_banned, last_updated) values($1, $2, false, false, NOW())`, uid, fqanid)
-		if err != nil {
-			if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
-				DBtx.RollbackToSavepoint("INSERT_" + strconv.Itoa(fqanid))
-				duplicate ++
-			} else {
-				if strings.Contains(err.Error(), `null value in column "uid" violates not-null constraint`) {
-					log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-					if cKey != 0 {
-						fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-					}
-				} else if strings.Contains(err.Error(), `null value in column "fqanid" violates not-null constraint`) {
-					log.WithFields(QueryFields(r, startTime)).Error("FQAN does not exist.")
-					if cKey != 0 {
-						fmt.Fprintf(w, "{ \"ferry_error\": \"FQAN does not exist.\" }")
-					} else {
-						DBtx.Report("FQAN does not exist.")
-					}
-				} else {
-					log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-					if cKey != 0 {
-						fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
-					}
-				}
-				return
-			}
+		_, queryerr = c.DBtx.Exec(`insert into grid_access (uid, fqanid, is_superuser, is_banned, last_updated)
+								   values($1, $2, false, false, NOW())
+								   on conflict (uid, fqanid) do nothing`, uid, fqanid)
+		if queryerr != nil {
+			log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+			return nil, apiErr
 		}
 	}
 
-	if len(fqanids) == duplicate {
-		if cKey != 0 {
-			log.WithFields(QueryFields(r, startTime)).Error("This association already exists.")
-			fmt.Fprintf(w, "{ \"ferry_status\": \"This association already exists.\" }")
-		}
-		return
-	} else {
-		if cKey != 0 {
-			log.WithFields(QueryFields(r, startTime)).Info("Success!")
-			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
-		}
-	}
-	
-	DBtx.Commit(cKey)
+	return nil, nil
 }
 
 func setUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
@@ -1823,7 +1744,8 @@ func addCertificateDNToUser(c APIContext, i Input) (interface{}, []APIError) {
 		}
 	}
 
-	_, err = c.DBtx.Exec(`insert into affiliation_unit_user_certificate (unitid, dnid, last_updated) values ($1, $2, NOW())`, unitid, dnid)
+	_, err = c.DBtx.Exec(`insert into affiliation_unit_user_certificate (unitid, dnid, last_updated) values ($1, $2, NOW())
+						  on conflict (unitid, dnid) do nothing`, unitid, dnid)
 	if err != nil && !strings.Contains(err.Error(), `pk_affiliation_unit_user_certificate`) {
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -2610,7 +2532,7 @@ func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIEr
 	dShell	:= NewNullAttribute(Shell)
 	dHome	:= NewNullAttribute(HomeDir)
 	groupid	:= NewNullAttribute(GroupID)
-	compid	:= NewNullAttribute(CompID)
+	compid	:= NewNullAttribute(ResourceID)
 	uid		:= NewNullAttribute(UID)
 
 	err := c.DBtx.QueryRow(`select
