@@ -2537,9 +2537,9 @@ func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIEr
 
 	err := c.DBtx.QueryRow(`select
 								(select uid from users where uname = $1),
-								(select gid from groups where name = $2 and type = 'UnixGroup'),
+								(select groupid from groups where name = $2 and type = 'UnixGroup'),
 								(select compid from compute_resources where name = $3)`,
-						 i[UserName], i[GroupName], i[ResourceName]).Scan(&uid, &groupid, &compid)
+						   i[UserName], i[GroupName], i[ResourceName]).Scan(&uid, &groupid, &compid)
 	if err != nil {
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
