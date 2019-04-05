@@ -695,7 +695,7 @@ func getUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 	for rows.Next() {
 		rows.Scan(row[FullName], row[UID], row[Status], row[GroupAccount], row[ExpirationDate])
 		for _, column := range row {
-			out[column.Attribute] = column
+			out[column.Attribute] = column.Data
 		}
 	}
 	if len(out) == 0 {
