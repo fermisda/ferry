@@ -152,8 +152,8 @@ def fetch_userdb():
         userdbFile.write(urllib.request.urlopen(u).read().decode())
         userdbFile.close()
         if os.path.isfile(files[f] + ".cache"):
-            userdbLines = open(files[f], "r").readlines()
-            cacheLines = open(files[f] + ".cache", "r").readlines()
+            userdbLines = open(files[f], "r").readlines().sort()
+            cacheLines = open(files[f] + ".cache", "r").readlines().sort()
             s = difflib.SequenceMatcher(None, userdbLines, cacheLines)
             changeRatio = 1 - s.ratio()
             totalChangeRatio += changeRatio
