@@ -177,9 +177,15 @@ func main() {
 	//user API calls
 	grouter.HandleFunc("/getUserCertificateDNs", getUserCertificateDNs)
 	grouter.HandleFunc("/getUserFQANs", getUserFQANs)
+<<<<<<< HEAD
 	grouter.HandleFunc("/getSuperUserList", APIs["getSuperUserList"].Run)
 	grouter.HandleFunc("/getUserGroups", getUserGroups)
 	grouter.HandleFunc("/getUserInfo", APIs["getUserInfo"].Run)
+=======
+	grouter.HandleFunc("/getSuperUserListNext", APIs["getSuperUserList"].Run)
+	grouter.HandleFunc("/getUserGroups", getUserGroups)
+	grouter.HandleFunc("/getUserInfoNext", APIs["getUserInfo"].Run)
+>>>>>>> master
 	grouter.HandleFunc("/addUserToGroup", addUserToGroup)
 	grouter.HandleFunc("/removeUserFromGroup", removeUserFromGroup)
 	grouter.HandleFunc("/setUserExperimentFQAN", APIs["setUserExperimentFQAN"].Run)
@@ -191,7 +197,11 @@ func main() {
 	grouter.HandleFunc("/getUserStorageQuota", getUserStorageQuota)
 	grouter.HandleFunc("/setUserStorageQuota", APIs["setUserStorageQuota"].Run)
 	grouter.HandleFunc("/getUserExternalAffiliationAttributes", getUserExternalAffiliationAttributes)
+<<<<<<< HEAD
 	grouter.HandleFunc("/addCertificateDNToUser", APIs["addCertificateDNToUser"].Run)
+=======
+	grouter.HandleFunc("/addCertificateDNToUserNext", APIs["addCertificateDNToUser"].Run)
+>>>>>>> master
 	grouter.HandleFunc("/setSuperUser", setSuperUser)
 	grouter.HandleFunc("/removeSuperUser", removeSuperUser)
 	grouter.HandleFunc("/removeUserCertificateDN", removeUserCertificateDN)

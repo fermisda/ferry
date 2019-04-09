@@ -154,6 +154,8 @@ def fetch_userdb():
         if os.path.isfile(files[f] + ".cache"):
             userdbLines = open(files[f], "r").readlines()
             cacheLines = open(files[f] + ".cache", "r").readlines()
+            userdbLines.sort()
+            cacheLines.sort()
             s = difflib.SequenceMatcher(None, userdbLines, cacheLines)
             changeRatio = 1 - s.ratio()
             totalChangeRatio += changeRatio
@@ -219,7 +221,25 @@ def fetch_userdb():
         unameUid.__delitem__(uname)
 
     logging.debug("Reading services-users.csv")
-    servicesUsersLines = re.findall(r"(\w+)\,(\".+\"),(No\sExpiration\sdate|\d{4}-\d{2}-\d{2}|EXPIRED)", open(files["services-users.csv"], "r").read())
+    fileText = open(files["services-users.csv"], "r").read()
+    servicesUsersLines = re.findall(r"(\w+)\,(\".+\"),(No\sExpiration\sdate|\d{4}-\d{2}-\d{2}|EXPIRED)", fileText)
+    # Check number of users
+    complete = True
+    complete = complete and bool(re.search(r"# SERVICES active users list made on  [A-z]{3} [A-z]{3} \d{2} \d{2}:\d{2} \d{4}", fileText))
+    loadedUsers =                re.search(r"# (\d+) username loaded from Active Directory", fileText)
+    complete = complete and bool(re.search(r"# \d+ users output to list", fileText))
+    complete = complete and bool(re.search(r"# SERVICES active users list completed on  [A-z]{3} [A-z]{3} \d{2} \d{2}:\d{2} \d{4}", fileText))
+    complete = complete and bool(loadedUsers)
+    if not complete:
+        logging.error("file services-users.csv seem truncated")
+        os.rename(files["services-users.csv"], files["services-users.csv"] + ".error")
+        os.rename(files["services-users.csv"] + ".cache", files[f])
+        exit(6)
+    if int(loadedUsers.group(1)) != len(servicesUsersLines):
+        logging.error("file services-users.csv is missing users")
+        os.rename(files["services-users.csv"], files["services-users.csv"] + ".error")
+        os.rename(files["services-users.csv"] + ".cache", files[f])
+        exit(7)
     for line in servicesUsersLines:
         uname, full_name, expiration_date = line
         full_name = full_name.strip("\"")
