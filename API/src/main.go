@@ -175,7 +175,7 @@ func main() {
 	grouter.HandleFunc("/", handler)
 
 	//user API calls
-	grouter.HandleFunc("/getUserCertificateDNs", getUserCertificateDNs)
+	grouter.HandleFunc("/getUserCertificateDNs", APIs["getUserCertificateDNs"].Run)
 	grouter.HandleFunc("/getUserFQANs", getUserFQANs)
 	grouter.HandleFunc("/getSuperUserList", APIs["getSuperUserList"].Run)
 	grouter.HandleFunc("/getUserGroups", getUserGroups)
@@ -295,6 +295,7 @@ func main() {
 	grouter.HandleFunc("/setUserExperimentFQANLegacy", setUserExperimentFQANLegacy)
 	grouter.HandleFunc("/setUserAccessToComputeResourceLegacy", setUserAccessToComputeResourceLegacy)
 	grouter.HandleFunc("/addUsertoExperimentLegacy", addUsertoExperimentLegacy)
+	grouter.HandleFunc("/getUserCertificateDNsLegacy", getUserCertificateDNsLegacy)
 
 	srvConfig := viper.GetStringMapString("server")
 	Mainsrv = &http.Server{

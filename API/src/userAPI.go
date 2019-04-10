@@ -91,105 +91,84 @@ func IncludeUserAPIs(c *APICollection) {
 		setUserExperimentFQAN,
 	}
 	c.Add("setUserExperimentFQAN", &setUserExperimentFQAN)
+
+	getUserCertificateDNs := BaseAPI {
+		InputModel {
+			Parameter{UserName, false},
+			Parameter{UnitName, false},
+		},
+		getUserCertificateDNs,
+	}
+	c.Add("getUserCertificateDNs", &getUserCertificateDNs)
 }
 
-func getUserCertificateDNs(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
-	uname := q.Get("username")
-	expt := q.Get("unitname")
-	if uname == "" {
-		uname = "%"
-	}
-	if expt == "" {
-		expt = "%"
+func getUserCertificateDNs(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+
+	uid := NewNullAttribute(UID)
+	unitid := NewNullAttribute(UnitID)
+	queryerr := c.DBtx.QueryRow(`select (select uid from users where uname=$1),
+									    (select unitid from affiliation_units where name=$2)`,
+							  i[UserName], i[UnitName]).Scan(&uid, &unitid)
+	if queryerr != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	rows, err := DBptr.Query(`select uname, dn, user_exists, unit_exists from (
-								select distinct 1 as key, uname, dn
-								from affiliation_unit_user_certificate as ac
-								join affiliation_units as au on ac.unitid = au.unitid
-								join user_certificates as uc on ac.dnid = uc.dnid
-								join users as u on uc.uid = u.uid 
-								where u.uname like $1 and (ac.unitid in (select unitid from grid_fqan where fqan like $3) or '%' = $2)
-								order by uname
-							) as t right join (
-								select 1 as key,
-								$1 in (select uname from users) as user_exists,
-								($2 in (select name from affiliation_units) or $2 = '%') as unit_exists
-							) as c on t.key = c.key;`, uname, expt, "%" + expt + "%")
-	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		//		http.Error(w,"Error in DB query",404)
-		return
+	if !uid.Valid && i[UserName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
+	}
+	if !unitid.Valid && i[UnitName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
 	}
 
+	rows, queryerr := c.DBtx.Query(`select distinct uname, dn from
+							   user_certificates as uc
+							   join users as u using(uid)
+							   join affiliation_unit_user_certificate ac using(dnid)
+							   where uid = coalesce($1, uid) and unitid = coalesce($2, unitid)
+							   order by uname`,
+							uid, unitid)
+	if queryerr != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
 	defer rows.Close()
 
-	var userExists, exptExists bool
+	const Certificates Attribute = "certificates"
 
-	type jsonEntry struct {
-		Uname string `json:"username"`
-		DNs []string `json:"certificates"`
+	entry := map[Attribute]interface{}{
+		UserName: 	"",
+		Certificates:	make([]interface{}, 0),
 	}
-	var Out []jsonEntry
+	var out []map[Attribute]interface{}
 
-	var tmpUname, tmpDN sql.NullString
-	var tmpEntry jsonEntry
+	row := NewMapNullAttribute(UserName, DN)
 	for rows.Next() {
-		rows.Scan(&tmpUname, &tmpDN, &userExists, &exptExists)
-		if tmpDN.Valid {
-			if tmpEntry.Uname == "" {
-				tmpEntry = jsonEntry{tmpUname.String, make([]string, 0)}
+		rows.Scan(row[UserName], row[DN])
+		if row[DN].Valid {
+			if entry[UserName] == "" {
+				entry[UserName] = row[UserName].Data
 			}
-			if tmpUname.String != tmpEntry.Uname {
-				Out = append(Out, tmpEntry)
-				tmpEntry = jsonEntry{tmpUname.String, make([]string, 0)}
+			if row[UserName].Data != entry[UserName] {
+				newEntry := make(map[Attribute]interface{})
+				newEntry[UserName] = entry[UserName]
+				newEntry[Certificates] = entry[Certificates]
+				out = append(out, newEntry)
+				entry[UserName] = row[UserName].Data
+				entry[Certificates] = make([]interface{}, 0)
 			}
-			tmpEntry.DNs = append(tmpEntry.DNs, tmpDN.String)
+			entry[Certificates] = append(entry[Certificates].([]interface{}), row[DN].Data)
 		}
 	}
-	Out = append(Out, tmpEntry)
+	out = append(out, entry)
 
-	var output interface{}	
-	if !tmpDN.Valid {
-		type jsonerror struct {
-			Error []string `json:"ferry_error"`
-		}
-		type jsonstatus struct {
-			Status []string `json:"ferry_status"`
-		}
-		var queryErr jsonerror
-		var queryStatus jsonstatus
-		if !userExists && uname != "%" {
-			queryErr.Error = append(queryErr.Error, "User does not exist.")
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-		}
-		if !exptExists && expt != "%" {
-			queryErr.Error = append(queryErr.Error, "Experiment does not exist.")
-			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
-		}
-		if userExists && exptExists {
-			queryStatus.Status = append(queryErr.Error, "User does not have any certificates registered.")
-			log.WithFields(QueryFields(r, startTime)).Info("User does not have any certificates registered.")
-		}
-		if len(queryErr.Error) > 0 {
-			output = queryErr
-		} else {
-			output = queryStatus
-		}
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = Out
-	}
-	jsonoutput, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-	}
-	fmt.Fprintf(w, string(jsonoutput))
+	return out, nil
 }
 
 func getAllUsersCertificateDNs(w http.ResponseWriter, r *http.Request) {

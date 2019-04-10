@@ -1390,3 +1390,102 @@ func setUserExperimentFQANLegacy(w http.ResponseWriter, r *http.Request) {
 	
 	DBtx.Commit(cKey)
 }
+
+func getUserCertificateDNsLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	uname := q.Get("username")
+	expt := q.Get("unitname")
+	if uname == "" {
+		uname = "%"
+	}
+	if expt == "" {
+		expt = "%"
+	}
+
+	rows, err := DBptr.Query(`select uname, dn, user_exists, unit_exists from (
+								select distinct 1 as key, uname, dn
+								from affiliation_unit_user_certificate as ac
+								join affiliation_units as au on ac.unitid = au.unitid
+								join user_certificates as uc on ac.dnid = uc.dnid
+								join users as u on uc.uid = u.uid 
+								where u.uname like $1 and (ac.unitid in (select unitid from grid_fqan where fqan like $3) or '%' = $2)
+								order by uname
+							) as t right join (
+								select 1 as key,
+								$1 in (select uname from users) as user_exists,
+								($2 in (select name from affiliation_units) or $2 = '%') as unit_exists
+							) as c on t.key = c.key;`, uname, expt, "%" + expt + "%")
+	if err != nil {
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+		//		http.Error(w,"Error in DB query",404)
+		return
+	}
+
+	defer rows.Close()
+
+	var userExists, exptExists bool
+
+	type jsonEntry struct {
+		Uname string `json:"username"`
+		DNs []string `json:"certificates"`
+	}
+	var Out []jsonEntry
+
+	var tmpUname, tmpDN sql.NullString
+	var tmpEntry jsonEntry
+	for rows.Next() {
+		rows.Scan(&tmpUname, &tmpDN, &userExists, &exptExists)
+		if tmpDN.Valid {
+			if tmpEntry.Uname == "" {
+				tmpEntry = jsonEntry{tmpUname.String, make([]string, 0)}
+			}
+			if tmpUname.String != tmpEntry.Uname {
+				Out = append(Out, tmpEntry)
+				tmpEntry = jsonEntry{tmpUname.String, make([]string, 0)}
+			}
+			tmpEntry.DNs = append(tmpEntry.DNs, tmpDN.String)
+		}
+	}
+	Out = append(Out, tmpEntry)
+
+	var output interface{}	
+	if !tmpDN.Valid {
+		type jsonerror struct {
+			Error []string `json:"ferry_error"`
+		}
+		type jsonstatus struct {
+			Status []string `json:"ferry_status"`
+		}
+		var queryErr jsonerror
+		var queryStatus jsonstatus
+		if !userExists && uname != "%" {
+			queryErr.Error = append(queryErr.Error, "User does not exist.")
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		}
+		if !exptExists && expt != "%" {
+			queryErr.Error = append(queryErr.Error, "Experiment does not exist.")
+			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
+		}
+		if userExists && exptExists {
+			queryStatus.Status = append(queryErr.Error, "User does not have any certificates registered.")
+			log.WithFields(QueryFields(r, startTime)).Info("User does not have any certificates registered.")
+		}
+		if len(queryErr.Error) > 0 {
+			output = queryErr
+		} else {
+			output = queryStatus
+		}
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonoutput, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+	}
+	fmt.Fprintf(w, string(jsonoutput))
+}
