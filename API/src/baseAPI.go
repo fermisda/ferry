@@ -35,15 +35,15 @@ func (b BaseAPI) Run(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	DBtx, ckey, err := LoadTransaction(r, DBptr)
+	var err error
+	context.DBtx, context.Ckey, err = LoadTransaction(r, DBptr)
 	if err != nil {
 		err := errors.New("error starting database transaction")
 		output.Err = append(output.Err, err)
 		log.WithFields(QueryFields(r, context.StartTime)).Error(err)
 		return
 	}
-	context.DBtx = DBtx
-	context.Ckey = ckey
+	defer context.DBtx.Rollback(context.Ckey)
 
 	input := make(Input)
 	parseErr := input.Parse(context, b.InputModel)
@@ -62,7 +62,6 @@ func (b BaseAPI) Run(w http.ResponseWriter, r *http.Request) {
 				errType = err.Type
 			}
 		}
-		context.DBtx.Rollback(context.Ckey)
 		
 		switch {
 		case errType > HTTP500:
