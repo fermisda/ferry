@@ -71,7 +71,7 @@ func (b BaseAPI) Run(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	DBtx.Commit(context.Ckey)
+	context.DBtx.Commit(context.Ckey)
 	output.Status = true
 	output.Out = out
 }
