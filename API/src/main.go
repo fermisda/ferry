@@ -195,7 +195,7 @@ func main() {
 	grouter.HandleFunc("/setSuperUser", setSuperUser)
 	grouter.HandleFunc("/removeSuperUser", removeSuperUser)
 	grouter.HandleFunc("/removeUserCertificateDN", removeUserCertificateDN)
-	grouter.HandleFunc("/setUserInfo", setUserInfo)
+	grouter.HandleFunc("/setUserInfo", APIs["setUserInfo"].Run)
 	grouter.HandleFunc("/setUserExternalAffiliationAttribute", APIs["setUserExternalAffiliationAttribute"].Run)
 	grouter.HandleFunc("/removeUserExternalAffiliationAttribute", removeUserExternalAffiliationAttribute)
 	grouter.HandleFunc("/createUser", createUser)

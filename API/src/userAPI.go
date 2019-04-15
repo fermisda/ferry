@@ -24,6 +24,18 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("getUserInfo", &getUserInfo)
 
+	setUserInfo := BaseAPI {
+		InputModel {
+			Parameter{UserName, true},
+			Parameter{FullName, false},
+			Parameter{Status, false},
+			Parameter{GroupAccount, false},
+			Parameter{ExpirationDate, false},
+		},
+		setUserInfo,
+	}
+	c.Add("setUserInfo", &setUserInfo)
+
 	getSuperUserList := BaseAPI {
 		InputModel {
 			Parameter{UnitName, true},
@@ -1810,118 +1822,45 @@ func removeUserCertificateDN(w http.ResponseWriter, r *http.Request) {
 	DBtx.Commit(cKey)
 }
 
-func setUserInfo(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	var fName, status, gAccount, eDate sql.NullString
-
-	uName := strings.TrimSpace(q.Get("username"))
-	fName.String = strings.TrimSpace(q.Get("fullname"))
-	status.String = strings.TrimSpace(q.Get("status"))
-	gAccount.String = strings.TrimSpace(q.Get("groupaccount"))
-	eDate.String =strings.TrimSpace( q.Get("expiration_date"))
-
-	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
-		return
-	}
-	if fName.String == "" {
-		fName.Valid = false
-	} else {
-		fName.Valid = true
-	}
-	if status.String == "" {
-		status.Valid = false
-	} else {
-		_, err := strconv.ParseBool(status.String)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid status specified in http query.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid status specified. Should be true or false.\" }")
-			return
-		}
-		status.Valid = true
-	}
-	if gAccount.String == "" {
-		gAccount.Valid = false
-	} else {
-		_, err := strconv.ParseBool(gAccount.String)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid groupaccount specified in http query.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid groupaccount specified. Should be true or false.\" }")
-			return
-		}
-		gAccount.Valid = true
-	}
-	if eDate.String == "" {
-		eDate.Valid = false
-	} else if strings.ToLower(eDate.String) == "null" {
-		eDate.Valid = false
-	} else {
-		eDate.String = fmt.Sprintf("'%s'", eDate.String)
-		eDate.Valid = true
+	if !i[FullName].Valid && !i[Status].Valid && !i[GroupAccount].Valid &&
+	   !i[ExpirationDate].Valid && !i[ExpirationDate].AbsoluteNull {
+		apiErr = append(apiErr, APIError{errors.New("not enough arguments"), ErrorAPIRequirement})
+		return nil, apiErr
 	}
 
-	if fName.String == "" && status.String == "" && gAccount.String == "" && eDate.String == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("Not enough arguments.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Not enough arguments.\" }")
-		return
-	}
+	uid := NewNullAttribute(UID)
+	expDate := NewNullAttribute(ExpirationDate)
 
-	authorized, authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
-		return
-	}
-
-	DBtx, cKey, err := LoadTransaction(r, DBptr)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	defer DBtx.Rollback(cKey)
-
-
-	var uidint int
-
-	queryerr := DBtx.tx.QueryRow(`select uid from users where uname=$1`,uName).Scan(&uidint)
+	queryerr := c.DBtx.tx.QueryRow(`select uid, expiration_date from users where uname = $1`,
+								   i[UserName]).Scan(&uid, &expDate)
 	if queryerr == sql.ErrNoRows {
-		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-		return
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
+		return nil, apiErr
 	} else if queryerr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error determining uid.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"DB error determining uid.\" }")
-		return
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
-	query := `update users set 	full_name = coalesce($2, full_name),
-								status = coalesce($3, status),
-								is_groupaccount = coalesce($4, is_groupaccount),
-								expiration_date = coalesce($5, expiration_date),
-								last_updated = NOW()
-			  where uid = $1`
-	if strings.ToLower(eDate.String) == "null" {
-		query = strings.Replace(query, "coalesce($5, expiration_date)", "$5", 1)
-	}
-	print(query)
-	_, err = DBtx.Exec(query, uidint, fName, status, gAccount, eDate)
 
-	if err == nil {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
-		DBtx.Commit(cKey)
-	} else {
-		if strings.Contains(err.Error(), `invalid input syntax for type date`) ||
-			strings.Contains(err.Error(), `date/time field value out of range`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid expiration date.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid expiration date.\" }")
-		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
-		}
+	expDate = i[ExpirationDate].Default(expDate.Data)
+
+	_, queryerr = c.DBtx.Exec(`update users set	full_name = coalesce($2, full_name),
+												status = coalesce($3, status),
+												is_groupaccount = coalesce($4, is_groupaccount),
+												expiration_date = $5,
+												last_updated = NOW()
+							   where uid = $1`,
+							  uid, i[FullName], i[Status], i[GroupAccount], expDate)
+	if queryerr != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
+
+	return nil, nil
 }
 
 func createUser(w http.ResponseWriter, r *http.Request) {
