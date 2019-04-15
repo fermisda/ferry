@@ -100,6 +100,16 @@ func IncludeUserAPIs(c *APICollection) {
 		getUserCertificateDNs,
 	}
 	c.Add("getUserCertificateDNs", &getUserCertificateDNs)
+
+	getAllUsersCertificateDNs := BaseAPI {
+		InputModel {
+			Parameter{UnitName, false},
+			Parameter{Status, false},
+			Parameter{LastUpdated, false},
+		},
+		getAllUsersCertificateDNs,
+	}
+	c.Add("getAllUsersCertificateDNs", &getAllUsersCertificateDNs)
 }
 
 func getUserCertificateDNs(c APIContext, i Input) (interface{}, []APIError) {
@@ -142,11 +152,14 @@ func getUserCertificateDNs(c APIContext, i Input) (interface{}, []APIError) {
 
 	const Certificates Attribute = "certificates"
 
-	entry := map[Attribute]interface{}{
-		UserName: 	"",
-		Certificates:	make([]interface{}, 0),
+	type jsonentry map[Attribute]interface{}
+	type jsoncerts []interface{}
+
+	entry := jsonentry{
+		UserName: 		"",
+		Certificates:	make(jsoncerts, 0),
 	}
-	var out []map[Attribute]interface{}
+	var out jsoncerts
 
 	row := NewMapNullAttribute(UserName, DN)
 	for rows.Next() {
@@ -156,14 +169,14 @@ func getUserCertificateDNs(c APIContext, i Input) (interface{}, []APIError) {
 				entry[UserName] = row[UserName].Data
 			}
 			if row[UserName].Data != entry[UserName] {
-				newEntry := make(map[Attribute]interface{})
+				newEntry := make(jsonentry)
 				newEntry[UserName] = entry[UserName]
 				newEntry[Certificates] = entry[Certificates]
 				out = append(out, newEntry)
 				entry[UserName] = row[UserName].Data
-				entry[Certificates] = make([]interface{}, 0)
+				entry[Certificates] = make(jsoncerts, 0)
 			}
-			entry[Certificates] = append(entry[Certificates].([]interface{}), row[DN].Data)
+			entry[Certificates] = append(entry[Certificates].(jsoncerts), row[DN].Data)
 		}
 	}
 	out = append(out, entry)
@@ -171,109 +184,64 @@ func getUserCertificateDNs(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
-func getAllUsersCertificateDNs(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+func getAllUsersCertificateDNs(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	type jsonerror struct {
-		Error string `json:"ferry_error"`
-	}
-	var inputErr []jsonerror
+	unitid := NewNullAttribute(UnitID)
 
-	expt := q.Get("unitname")
-	if expt == "" {
-		expt = "%"
-	}
-	ao := strings.TrimSpace(q.Get("active"))
-	activeonly := false
-
-	if ao != "" {
-		if activebool,err := strconv.ParseBool(ao) ; err == nil {
-			activeonly = activebool
-		} else {
-			log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
-			inputErr = append(inputErr, jsonerror{"Invalid value for active. Must be true or false (or omit it from the query)."})
-		}
+	queryerr := c.DBtx.QueryRow(`select unitid from affiliation_units where name=$1`,
+								i[UnitName]).Scan(&unitid)
+	if queryerr != nil && queryerr != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
-	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
-		inputErr = append(inputErr, jsonerror{"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time."})
+	if !unitid.Valid && i[UnitName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+		return nil, apiErr
 	}
+
+	activeOnly := i[Status].Default(false)
 	
-	if len(inputErr) > 0 {
-		jsonout, err := json.Marshal(inputErr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
-		}
-		fmt.Fprintf(w, string(jsonout))
-		return
-	}
-	
-	rows, err := DBptr.Query(`select uname, name, dn, unit_exists from (
-								select 1 as key, uname, name, uc.dn from affiliation_unit_user_certificate as ac
-								left join user_certificates as uc on ac.dnid = uc.dnid
-								left join users as u on uc.uid = u.uid
-								left join affiliation_units as au on ac.unitid = au.unitid
-								where name like $1 and (status = $2 or not $2) and (ac.last_updated>=$3 or $3 is null) order by uname
-							) as t right join (
-								select 1 as key,
-								$1 in (select name from affiliation_units) as unit_exists
-							) as c on t.key = c.key;`, expt, activeonly, lastupdate)
-	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		return
+	rows, queryerr := c.DBtx.Query(`select uname, name, dn from
+										affiliation_unit_user_certificate as ac
+										join user_certificates using(dnid)
+										join users using(uid)
+										join affiliation_units using(unitid)
+										where unitid = coalesce($1, unitid) and (status = $2 or not $2) and (ac.last_updated >= $3 or $3 is null)
+									order by uname`, unitid, activeOnly, i[LastUpdated])
+	if queryerr != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 	defer rows.Close()
 
-	var exptExists bool
-	type jsoncert struct {
-		UnitName string `json:"unit_name"`
-		DN       string `json:"dn"`
-	}
-	type jsonuser struct {
-		Uname string `json:"username"`
-		Certs []jsoncert `json:"certificates"`
-	}
-	var Out []jsonuser
+	type jsoncert map[Attribute]interface{}
+	type jsonuser map[Attribute]interface{}
+	var out []jsonuser
 
-	prevUname := ""
+	prevUname := NewNullAttribute(UserName)
 	for rows.Next() {
-		var tmpUname, tmpUnitName, tmpDN sql.NullString
-		rows.Scan(&tmpUname, &tmpUnitName, &tmpDN, &exptExists)
-		if tmpUname.Valid {
-			if prevUname != tmpUname.String {
-				Out = append(Out, jsonuser{tmpUname.String, make([]jsoncert, 0)})
-				prevUname = tmpUname.String
+		row := NewMapNullAttribute(UserName, UnitName, DN)
+		rows.Scan(row[UserName], row[UnitName], row[DN])
+		if row[UserName].Valid {
+			if prevUname != *row[UserName] {
+				user := make(jsonuser)
+				user[UserName] = row[UserName].Data
+				user[Certificates] = make([]jsoncert, 0)
+				out = append(out, user)
+				prevUname = *row[UserName]
 			}
-			Out[len(Out)-1].Certs = append(Out[len(Out)-1].Certs, jsoncert{tmpUnitName.String, tmpDN.String})
+			cert := make(jsoncert)
+			cert[UnitName] = row[UnitName].Data
+			cert[DN] = row[DN].Data
+			out[len(out)-1][Certificates] = append(out[len(out)-1][Certificates].([]jsoncert), cert)
 		}
 	}
 
-	var output interface{}	
-	if len(Out) == 0 {
-		var queryErr []jsonerror
-		if !exptExists {
-			queryErr = append(queryErr, jsonerror{"Experiment does not exist."})
-			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
-		} else {
-			queryErr = append(queryErr, jsonerror{"Query returned no users."})
-			log.WithFields(QueryFields(r, startTime)).Error("Query returned no users.")
-		}
-		output = queryErr
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = Out
-	}
-	jsonoutput, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-	}
-	fmt.Fprintf(w, string(jsonoutput))
+	return out, nil
 }
 
 func getUserFQANs(w http.ResponseWriter, r *http.Request) {

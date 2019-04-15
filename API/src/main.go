@@ -206,7 +206,7 @@ func main() {
 	grouter.HandleFunc("/getStorageQuotas", getStorageQuotas)
 	grouter.HandleFunc("/getAllUsers", getAllUsers)
 	grouter.HandleFunc("/getAllUsersFQANs", getAllUsersFQANs)
-	grouter.HandleFunc("/getAllUsersCertificateDNs", getAllUsersCertificateDNs)
+	grouter.HandleFunc("/getAllUsersCertificateDNs", APIs["getAllUsersCertificateDNs"].Run)
 
 	//group API calls
 	grouter.HandleFunc("/getgroupmembers", getGroupMembers)
@@ -285,17 +285,6 @@ func main() {
 	grouter.HandleFunc("/createExperiment", createExperiment)
 	grouter.HandleFunc("/addLPCConvener", addLPCConvener)
 	grouter.HandleFunc("/removeLPCConvener", removeLPCConvener)
-
-	//legacy API calls
-	grouter.HandleFunc("/getUserInfo", getUserInfoLegacy)
-	grouter.HandleFunc("/getSuperUserList", getSuperUserListLegacy)
-	grouter.HandleFunc("/addCertificateDNToUser", addCertificateDNToUserLegacy)
-	grouter.HandleFunc("/setUserExternalAffiliationAttributeLegacy", setUserExternalAffiliationAttributeLegacy)
-	grouter.HandleFunc("/setUserStorageQuotaLegacy", setUserStorageQuotaLegacy)
-	grouter.HandleFunc("/setUserExperimentFQANLegacy", setUserExperimentFQANLegacy)
-	grouter.HandleFunc("/setUserAccessToComputeResourceLegacy", setUserAccessToComputeResourceLegacy)
-	grouter.HandleFunc("/addUsertoExperimentLegacy", addUsertoExperimentLegacy)
-	grouter.HandleFunc("/getUserCertificateDNsLegacy", getUserCertificateDNsLegacy)
 
 	srvConfig := viper.GetStringMapString("server")
 	Mainsrv = &http.Server{

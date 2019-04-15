@@ -210,6 +210,10 @@ const (
 	Primary			Attribute = "primary"
 	GroupAccount  	Attribute = "groupaccount"
 	ExpirationDate	Attribute = "expirationdate"
+	LastUpdated		Attribute = "lastupdated"
+
+	// Typeless attributes used for output only
+	Certificates Attribute = "certificates"
 )
 
 // Type returns the type of the Attribute
@@ -241,6 +245,7 @@ func (a Attribute) Type() (AttributeType) {
 		Primary:		TypeBool,
 		GroupAccount:	TypeBool,
 		ExpirationDate:	TypeDate,
+		LastUpdated:	TypeDate,
 	}
 
 	return AttributeType[a]
@@ -308,6 +313,17 @@ func (at AttributeType) ParseString(value string) (interface{}, bool) {
 		valid = (err == nil)
 	case TypeDate:
 		parsedValue, err = time.Parse(DateFormat, value)
+		if err != nil {
+			var intValue int64
+			intValue, err = strconv.ParseInt(value, 10, 64)
+			if err == nil {
+				if -99999999999 < intValue && intValue < 999999999999 {
+					parsedValue = time.Unix(intValue, 0).UTC()
+				} else {
+					err = errors.New("epoch out of range")
+				}
+			}
+		}
 		valid = (err == nil)
 	}
 	
