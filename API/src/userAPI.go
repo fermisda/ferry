@@ -89,6 +89,17 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("setUserStorageQuota", &setUserStorageQuota)
 
+	getStorageQuotas := BaseAPI {
+		InputModel {
+			Parameter{UserName, false},
+			Parameter{GroupName, false},
+			Parameter{ResourceName, false},
+			Parameter{LastUpdated, false},
+		},
+		getStorageQuotas,
+	}
+	c.Add("getStorageQuotas", &getStorageQuotas)
+
 	setUserAccessToComputeResource := BaseAPI {
 		InputModel {
 			Parameter{UserName, true},
@@ -238,6 +249,8 @@ func getAllUsersCertificateDNs(c APIContext, i Input) (interface{}, []APIError) 
 		return nil, apiErr
 	}
 	defer rows.Close()
+
+	const Certificates Attribute = "certificates"
 
 	type jsoncert map[Attribute]interface{}
 	type jsonuser map[Attribute]interface{}
@@ -2262,132 +2275,96 @@ func getUserAccessToComputeResources(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, string(jsonout))
 }
 
-func getStorageQuotas(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+func getStorageQuotas(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	type jsonerror struct {
-		Error []string `json:"ferry_error"`
-	}
-	var inputErr jsonerror
+	uid 		:= NewNullAttribute(UID)
+	groupid		:= NewNullAttribute(GroupID)
+	resourceid	:= NewNullAttribute(ResourceID)
 
-	user := q.Get("username")
-	group := q.Get("groupname")
-	resource := q.Get("resourcename")
-
-	if user == "" {
-		user = "%"
-	}
-	if group == "" {
-		group = "%"
-	}
-	if resource == "" {
-		resource = "%"
-	}
-	
-	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
-	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
-		inputErr.Error = append(inputErr.Error, "Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.")
-	}
-	
-	if len(inputErr.Error) > 0 {
-		jsonout, err := json.Marshal(inputErr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
-		}
-		fmt.Fprintf(w, string(jsonout))
-		return
-	}
-
-	rows, err := DBptr.Query(`select uname, gname, rname, path, value, unit, valid_until, user_exists, group_exists, resource_exists from
-							(select 1 as key, u.uname as uname, g.name as gname, sr.name as rname, sr.type, sq.* from
-								storage_quota as sq left join
-								users as u on sq.uid = u.uid left join
-								groups as g on sq.groupid = g.groupid left join
-								storage_resources as sr on sq.storageid = sr.storageid
-								where (u.uname like $1 or $1 = '%') and (g.name like $2 or $2 = '%') and (sr.name like $3 or $3 = '%')
-								and (valid_until is null or valid_until >= NOW()) and (sq.last_updated >= $4 or $4 is null)
-							  	order by uname asc, gname asc, rname asc, valid_until desc
-							) as t 
-							right join (
-								select 1 as key,
-								$1 in (select uname from users) as user_exists,
-								$2 in (select name from groups) as group_exists,
-								$3 in (select name from storage_resources) as resource_exists
-							) as c on t.key = c.key;`, user, group, resource, lastupdate)
-
+	err := c.DBtx.QueryRow(`select
+								(select uid from users where uname = $1),
+								(select groupid from groups where name = $2 and type = 'UnixGroup'),
+								(select storageid from storage_resources where name = $3)`,
+						   i[UserName], i[GroupName], i[ResourceName]).Scan(&uid, &groupid, &resourceid)
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		return
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !uid.Valid && i[UserName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
+	}
+	if !groupid.Valid && i[GroupName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
+	}
+	if !resourceid.Valid && i[ResourceName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, ResourceName))
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	rows, err := DBptr.Query(`select uname, g.name, sr.name, path, value, unit, valid_until from
+								storage_quota as sq
+								left join users as u on sq.uid = u.uid
+								left join groups as g on sq.groupid = g.groupid
+								join storage_resources as sr on sq.storageid = sr.storageid
+							  where
+							  		(u.uid = $1 or $1 is null)
+								and (g.groupid = $2 or $2 is null)
+								and (sr.storageid = coalesce($3, sr.storageid))
+								and (valid_until is null or valid_until >= NOW())
+								and (sq.last_updated >= $4 or $4 is null)
+							  order by uname asc, g.name asc, sr.name asc, valid_until desc`,
+							 uid, groupid, resourceid, i[LastUpdated])
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 	defer rows.Close()
 
-	var userExists bool
-	var groupExists bool
-	var resourceExists bool
+	const Users Attribute = "users"
+	const Groups Attribute = "groups"
 
-	type jsonquota struct {
-		Path  string `json:"path"`
-		Value string `json:"value"`
-		Unit  string `json:"unit"`
-		Until string `json:"validuntil"`
-	}
-	type outmap struct {
-		Users  map[string]map[string]jsonquota `json:"user_quotas"`
-		Groups map[string]map[string]jsonquota `json:"group_quotas"`
-	}
-	outMap := outmap{make(map[string]map[string]jsonquota), make(map[string]map[string]jsonquota)}
+	type jsonquota 		map[Attribute]interface{}
+	type jsonstorage	map[string]jsonquota
+	type jsonowner		map[string]jsonstorage
+	
+	out := make(map[Attribute]jsonowner)
+	out[Users] 	= make(jsonowner)
+	out[Groups]	= make(jsonowner)
 
 	for rows.Next() {
-		var tmpUname, tmpGname, tmpRname, tmpPath, tmpValue, tmpUnit, tmpUntil sql.NullString
-		rows.Scan(&tmpUname, &tmpGname, &tmpRname, &tmpPath, &tmpValue, &tmpUnit, &tmpUntil, &userExists, &groupExists, &resourceExists)
+		row := NewMapNullAttribute(UserName, GroupName, ResourceName, Path, Quota, QuotaUnit, ExpirationDate)
+		rows.Scan(row[UserName], row[GroupName], row[ResourceName], row[Path], row[Quota], row[QuotaUnit], row[ExpirationDate])
 
-		if tmpUname.Valid {
-			if _, ok := outMap.Users[tmpUname.String]; !ok {
-				outMap.Users[tmpUname.String] = make(map[string]jsonquota)
-			}
-			outMap.Users[tmpUname.String][tmpRname.String] =
-			jsonquota{tmpPath.String, tmpValue.String, tmpUnit.String, tmpUntil.String}
+		var ownerName, ownerType Attribute
+		if row[UserName].Valid {
+			ownerName = UserName
+			ownerType = Users
 		}
-		if tmpGname.Valid {
-			if _, ok := outMap.Groups[tmpGname.String]; !ok {
-				outMap.Groups[tmpGname.String] = make(map[string]jsonquota)
+		if row[GroupName].Valid {
+			ownerName = GroupName
+			ownerType = Groups
+		}
+
+		if ownerName != "" {
+			if _, ok := out[ownerType][row[ownerName].Data.(string)]; !ok {
+				out[ownerType][row[ownerName].Data.(string)] = make(jsonstorage)
 			}
-			outMap.Groups[tmpGname.String][tmpRname.String] =
-			jsonquota{tmpPath.String, tmpValue.String, tmpUnit.String, tmpUntil.String}
+			out[ownerType][row[ownerName].Data.(string)][row[ResourceName].Data.(string)] = jsonquota {
+				Path: 			row[Path].Data,
+				Quota: 			row[Quota].Data,
+				QuotaUnit:		row[QuotaUnit].Data,
+				ExpirationDate:	row[ExpirationDate].Data,
+			}
 		}
 	}
 
-	var output interface{}
-	if len(outMap.Users) == 0 && len(outMap.Groups) == 0 {
-		var queryErr jsonerror
-		if !userExists && user != "%" {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-			queryErr.Error = append(queryErr.Error, "User does not exist.")
-		} else if !groupExists && group != "%" {
-			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
-			queryErr.Error = append(queryErr.Error, "Group does not exist.")
-		} else if !resourceExists && resource != "%" {
-			log.WithFields(QueryFields(r, startTime)).Error("Storage resource does not exist.")
-			queryErr.Error = append(queryErr.Error, "Storage resource does not exist.")
-		} else {
-			log.WithFields(QueryFields(r, startTime)).Error("No storage quotas were found for this query.")
-			queryErr.Error = append(queryErr.Error, "No storage quotas were found for this query.")
-		}
-		output = queryErr
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = outMap
-	}
-	jsonout, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	fmt.Fprintf(w, string(jsonout))
+	return out, nil
 }
 
 func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIError) {

@@ -1784,3 +1784,131 @@ func getUserExternalAffiliationAttributesLegacy(w http.ResponseWriter, r *http.R
 	fmt.Fprintf(w, string(jsonout))
 
 }
+
+func getStorageQuotasLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	type jsonerror struct {
+		Error []string `json:"ferry_error"`
+	}
+	var inputErr jsonerror
+
+	user := q.Get("username")
+	group := q.Get("groupname")
+	resource := q.Get("resourcename")
+
+	if user == "" {
+		user = "%"
+	}
+	if group == "" {
+		group = "%"
+	}
+	if resource == "" {
+		resource = "%"
+	}
+	
+	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		inputErr.Error = append(inputErr.Error, "Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.")
+	}
+	
+	if len(inputErr.Error) > 0 {
+		jsonout, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err)
+		}
+		fmt.Fprintf(w, string(jsonout))
+		return
+	}
+
+	rows, err := DBptr.Query(`select uname, gname, rname, path, value, unit, valid_until, user_exists, group_exists, resource_exists from
+							(select 1 as key, u.uname as uname, g.name as gname, sr.name as rname, sr.type, sq.* from
+								storage_quota as sq left join
+								users as u on sq.uid = u.uid left join
+								groups as g on sq.groupid = g.groupid left join
+								storage_resources as sr on sq.storageid = sr.storageid
+								where (u.uname like $1 or $1 = '%') and (g.name like $2 or $2 = '%') and (sr.name like $3 or $3 = '%')
+								and (valid_until is null or valid_until >= NOW()) and (sq.last_updated >= $4 or $4 is null)
+							  	order by uname asc, gname asc, rname asc, valid_until desc
+							) as t 
+							right join (
+								select 1 as key,
+								$1 in (select uname from users) as user_exists,
+								$2 in (select name from groups) as group_exists,
+								$3 in (select name from storage_resources) as resource_exists
+							) as c on t.key = c.key;`, user, group, resource, lastupdate)
+
+	if err != nil {
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	var userExists bool
+	var groupExists bool
+	var resourceExists bool
+
+	type jsonquota struct {
+		Path  string `json:"path"`
+		Value string `json:"value"`
+		Unit  string `json:"unit"`
+		Until string `json:"validuntil"`
+	}
+	type outmap struct {
+		Users  map[string]map[string]jsonquota `json:"user_quotas"`
+		Groups map[string]map[string]jsonquota `json:"group_quotas"`
+	}
+	outMap := outmap{make(map[string]map[string]jsonquota), make(map[string]map[string]jsonquota)}
+
+	for rows.Next() {
+		var tmpUname, tmpGname, tmpRname, tmpPath, tmpValue, tmpUnit, tmpUntil sql.NullString
+		rows.Scan(&tmpUname, &tmpGname, &tmpRname, &tmpPath, &tmpValue, &tmpUnit, &tmpUntil, &userExists, &groupExists, &resourceExists)
+
+		if tmpUname.Valid {
+			if _, ok := outMap.Users[tmpUname.String]; !ok {
+				outMap.Users[tmpUname.String] = make(map[string]jsonquota)
+			}
+			outMap.Users[tmpUname.String][tmpRname.String] =
+			jsonquota{tmpPath.String, tmpValue.String, tmpUnit.String, tmpUntil.String}
+		}
+		if tmpGname.Valid {
+			if _, ok := outMap.Groups[tmpGname.String]; !ok {
+				outMap.Groups[tmpGname.String] = make(map[string]jsonquota)
+			}
+			outMap.Groups[tmpGname.String][tmpRname.String] =
+			jsonquota{tmpPath.String, tmpValue.String, tmpUnit.String, tmpUntil.String}
+		}
+	}
+
+	var output interface{}
+	if len(outMap.Users) == 0 && len(outMap.Groups) == 0 {
+		var queryErr jsonerror
+		if !userExists && user != "%" {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			queryErr.Error = append(queryErr.Error, "User does not exist.")
+		} else if !groupExists && group != "%" {
+			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+			queryErr.Error = append(queryErr.Error, "Group does not exist.")
+		} else if !resourceExists && resource != "%" {
+			log.WithFields(QueryFields(r, startTime)).Error("Storage resource does not exist.")
+			queryErr.Error = append(queryErr.Error, "Storage resource does not exist.")
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Error("No storage quotas were found for this query.")
+			queryErr.Error = append(queryErr.Error, "No storage quotas were found for this query.")
+		}
+		output = queryErr
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = outMap
+	}
+	jsonout, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	fmt.Fprintf(w, string(jsonout))
+}

@@ -211,9 +211,6 @@ const (
 	GroupAccount  	Attribute = "groupaccount"
 	ExpirationDate	Attribute = "expirationdate"
 	LastUpdated		Attribute = "lastupdated"
-
-	// Typeless attributes used for output only
-	Certificates Attribute = "certificates"
 )
 
 // Type returns the type of the Attribute
