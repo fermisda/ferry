@@ -341,7 +341,10 @@ type NullAttribute struct {
 }
 
 // Scan implements the Scanner interface.
-func (na *NullAttribute) Scan(value interface{}) error {	
+func (na *NullAttribute) Scan(value interface{}) error {
+	if byteValue, ok := value.([]byte); ok {
+		value = string(byteValue)
+	}
 	if stringValue, ok := value.(string); ok {
 		if strings.ToLower(stringValue) == "null" {
 			na.AbsoluteNull = true

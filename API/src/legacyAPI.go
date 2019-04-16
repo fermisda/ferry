@@ -1708,3 +1708,79 @@ func setUserInfoLegacy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
+
+func getUserExternalAffiliationAttributesLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	user := strings.TrimSpace(q.Get("username"))
+
+	if user == "" {
+		user = "%"
+	}
+	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
+		return
+	}
+
+	rows, err := DBptr.Query(`select uname, attribute, value, user_exists from
+							 (select 1 as key, a.attribute, a.value, u.uname, a.last_updated from external_affiliation_attribute as a 
+							  left join users as u on a.uid = u.uid where uname like $1) as t right join
+							 (select 1 as key, $1 in (select uname from users) as user_exists) as c on t.key = c.key where t.last_updated>=$2 or $2 is null;`, user, lastupdate)
+
+	if err != nil {
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	var userExists bool
+
+	type jsonentry struct {
+		Attribute string `json:"attribute"`
+		Value     string `json:"value"`
+	}
+	var Entry jsonentry
+	Out := make(map[string][]jsonentry)
+
+	for rows.Next() {
+		var tmpUname, tmpAttribute, tmpValue sql.NullString
+		rows.Scan(&tmpUname, &tmpAttribute, &tmpValue, &userExists)
+
+		if tmpAttribute.Valid {
+			Entry.Attribute = tmpAttribute.String
+			Entry.Value = tmpValue.String
+			Out[tmpUname.String] = append(Out[tmpUname.String], Entry)
+		}
+	}
+
+	var output interface{}
+	if len(Out) == 0 {
+		type jsonerror struct {
+			Error string `json:"ferry_error"`
+		}
+		var Err []jsonerror
+		if !userExists {
+			Err = append(Err, jsonerror{"User does not exist."})
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		} else {
+			Err = append(Err, jsonerror{"User does not have external affiliation attributes"})
+			log.WithFields(QueryFields(r, startTime)).Error("User does not have external affiliation attributes")
+		}
+		output = Err
+	} else {
+		output = Out
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+	}
+	jsonout, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	fmt.Fprintf(w, string(jsonout))
+
+}

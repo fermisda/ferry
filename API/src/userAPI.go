@@ -54,6 +54,15 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("addCertificateDNToUser", &addCertificateDNToUser)
 
+	getUserExternalAffiliationAttributes := BaseAPI {
+		InputModel {
+			Parameter{UserName, false},
+			Parameter{LastUpdated, false},
+		},
+		getUserExternalAffiliationAttributes,
+	}
+	c.Add("getUserExternalAffiliationAttributes", &getUserExternalAffiliationAttributes)
+
 	setUserExternalAffiliationAttribute := BaseAPI {
 		InputModel {
 			Parameter{UserName, true},
@@ -1577,80 +1586,51 @@ func removeUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Reque
 
 	DBtx.Commit(cKey)
 }
-func getUserExternalAffiliationAttributes(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+func getUserExternalAffiliationAttributes(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	user := strings.TrimSpace(q.Get("username"))
+	uid := NewNullAttribute(UID)
 
-	if user == "" {
-		user = "%"
-	}
-	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
-	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
-		return
+	err := c.DBtx.tx.QueryRow(`select uid from users where uname = $1`, i[UserName]).Scan(&uid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	rows, err := DBptr.Query(`select uname, attribute, value, user_exists from
-							 (select 1 as key, a.attribute, a.value, u.uname, a.last_updated from external_affiliation_attribute as a 
-							  left join users as u on a.uid = u.uid where uname like $1) as t right join
-							 (select 1 as key, $1 in (select uname from users) as user_exists) as c on t.key = c.key where t.last_updated>=$2 or $2 is null;`, user, lastupdate)
+	if !uid.Valid && i[UserName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
+		return nil, apiErr
+	}
 
+	rows, err := DBptr.Query(`select uname, attribute, value from
+								external_affiliation_attribute as a
+								join users as u using(uid)
+							  where u.uid = coalesce($1, uid) and (a.last_updated >= $2 or $2 is null)
+							  order by uname`, uid, i[LastUpdated])
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		return
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 	defer rows.Close()
 
-	var userExists bool
-
-	type jsonentry struct {
-		Attribute string `json:"attribute"`
-		Value     string `json:"value"`
-	}
-	var Entry jsonentry
-	Out := make(map[string][]jsonentry)
+	type jsonentry map[Attribute]interface{}
+	out := make(map[string][]jsonentry)
 
 	for rows.Next() {
-		var tmpUname, tmpAttribute, tmpValue sql.NullString
-		rows.Scan(&tmpUname, &tmpAttribute, &tmpValue, &userExists)
+		row := NewMapNullAttribute(UserName, UserAttribute, Value)
+		err = rows.Scan(row[UserName], row[UserAttribute], row[Value])
 
-		if tmpAttribute.Valid {
-			Entry.Attribute = tmpAttribute.String
-			Entry.Value = tmpValue.String
-			Out[tmpUname.String] = append(Out[tmpUname.String], Entry)
+		if row[UserAttribute].Valid {
+			entry := make(jsonentry)
+			entry[UserAttribute] = row[UserAttribute].Data
+			entry[Value] = row[Value].Data
+			out[row[UserName].Data.(string)] = append(out[row[UserName].Data.(string)], entry)
 		}
 	}
 
-	var output interface{}
-	if len(Out) == 0 {
-		type jsonerror struct {
-			Error string `json:"ferry_error"`
-		}
-		var Err []jsonerror
-		if !userExists {
-			Err = append(Err, jsonerror{"User does not exist."})
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-		} else {
-			Err = append(Err, jsonerror{"User does not have external affiliation attributes"})
-			log.WithFields(QueryFields(r, startTime)).Error("User does not have external affiliation attributes")
-		}
-		output = Err
-	} else {
-		output = Out
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-	}
-	jsonout, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	fmt.Fprintf(w, string(jsonout))
-
+	return out, nil
 }
 
 func addCertificateDNToUser(c APIContext, i Input) (interface{}, []APIError) {
