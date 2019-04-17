@@ -176,7 +176,7 @@ func main() {
 
 	//user API calls
 	grouter.HandleFunc("/getUserCertificateDNs", APIs["getUserCertificateDNs"].Run)
-	grouter.HandleFunc("/getUserFQANs", getUserFQANs)
+	grouter.HandleFunc("/getUserFQANs", APIs["getUserFQANs"].Run)
 	grouter.HandleFunc("/getSuperUserList", APIs["getSuperUserList"].Run)
 	grouter.HandleFunc("/getUserGroups", getUserGroups)
 	grouter.HandleFunc("/getUserInfo", APIs["getUserInfo"].Run)

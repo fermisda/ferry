@@ -124,6 +124,16 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("setUserExperimentFQAN", &setUserExperimentFQAN)
 
+	getUserFQANs := BaseAPI {
+		InputModel {
+			Parameter{UserName, true},
+			Parameter{UnitName, false},
+			Parameter{LastUpdated, false},
+		},
+		getUserFQANs,
+	}
+	c.Add("getUserFQANs", &getUserFQANs)
+
 	getUserCertificateDNs := BaseAPI {
 		InputModel {
 			Parameter{UserName, false},
@@ -278,93 +288,59 @@ func getAllUsersCertificateDNs(c APIContext, i Input) (interface{}, []APIError) 
 	return out, nil
 }
 
-func getUserFQANs(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
-	uname := q.Get("username")
-	expt := q.Get("unitname")
-	if uname == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
-		return
-	}
-	if expt == "" {
-		expt = "%"
-	}
+func getUserFQANs(c APIContext, i Input) (interface{}, []APIError) {
+	apiErr := make([]APIError, 0)
 
-	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
-	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
-		return
-	}
+	uid 	:= NewNullAttribute(UID)
+	unitid	:= NewNullAttribute(UnitID)
 
-	rows, err := DBptr.Query(`select name, fqan, user_exists, unit_exists from (
-								select 1 as key, name, fqan, ga.last_updated from
-								grid_access as ga right join
-								(select * from users where uname = $1) as us on ga.uid = us.uid	left join
-								grid_fqan as gf on ga.fqanid = gf.fqanid join
-								(select * from affiliation_units where name like $2) as au on gf.unitid = au.unitid
-							) as T
-							right join (
-								select 1 as key,
-								$1 in (select uname from users) as user_exists,
-								$2 in (select name from affiliation_units) as unit_exists
-							) as C on T.key = C.key where T.last_updated >= $3 or $3 is null order by T.name;`, uname, expt, lastupdate)
+	err := c.DBtx.QueryRow(`select (select uid from users where uname = $1),
+								   (select unitid from affiliation_units where name=$2)`,
+						   i[UserName], i[UnitName]).Scan(&uid, &unitid)
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		//		http.Error(w,"Error in DB query",404)
-		return
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !uid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
+	}
+	if !unitid.Valid && i[UnitName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	rows, err := c.DBtx.Query(`select name, fqan from
+								grid_access as ga
+							  	join grid_fqan using(fqanid)
+							  	left join affiliation_units using(unitid)
+							   where
+								uid = $1 and
+								(unitid = $2 or $2 is null) and
+							  	(ga.last_updated >= $3 or $3 is null)
+							   order by name;`, uid, unitid, i[LastUpdated])
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 	defer rows.Close()
 
-	var userExists, exptExists bool
-
-	type jsonfqan struct {
-		UnitName string `json:"unit_name"`
-		Fqan     string `json:"fqan"`
-	}
-	var Out []jsonfqan
+	type jsonfqan map[Attribute]interface{}
+	out := make([]jsonfqan, 0)
 
 	for rows.Next() {
-		var tmpUnitName, tmpFqan sql.NullString
-		rows.Scan(&tmpUnitName, &tmpFqan, &userExists, &exptExists)
-		if tmpFqan.Valid {
-			Out = append(Out, jsonfqan{tmpUnitName.String, tmpFqan.String})
+		row := NewMapNullAttribute(UnitName, FQAN)
+		rows.Scan(row[UnitName], row[FQAN])
+		if row[FQAN].Valid {
+			out = append(out, jsonfqan{UnitName: row[UnitName].Data, FQAN: row[FQAN].Data})
 		}
 	}
 
-	var output interface{}	
-	if len(Out) == 0 {
-		type jsonerror struct {
-			Error []string `json:"ferry_error"`
-		}
-		var queryErr jsonerror
-		if !userExists {
-			queryErr.Error = append(queryErr.Error, "User does not exist.")
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-		}
-		if !exptExists {
-			queryErr.Error = append(queryErr.Error, "Experiment does not exist.")
-			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
-		}
-		if userExists && exptExists {
-			queryErr.Error = append(queryErr.Error, "User do not have any assigned FQANs.")
-			log.WithFields(QueryFields(r, startTime)).Error("User do not have any assigned FQANs.")
-		}
-		output = queryErr
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = Out
-	}
-	jsonoutput, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-	}
-	fmt.Fprintf(w, string(jsonoutput))
+	return out, apiErr
 }
 
 func getSuperUserList(c APIContext, i Input) (interface{}, []APIError) {

@@ -1912,3 +1912,92 @@ func getStorageQuotasLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
+
+func getUserFQANsLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	uname := q.Get("username")
+	expt := q.Get("unitname")
+	if uname == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
+		return
+	}
+	if expt == "" {
+		expt = "%"
+	}
+
+	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
+		return
+	}
+
+	rows, err := DBptr.Query(`select name, fqan, user_exists, unit_exists from (
+								select 1 as key, name, fqan, ga.last_updated from
+								grid_access as ga right join
+								(select * from users where uname = $1) as us on ga.uid = us.uid	left join
+								grid_fqan as gf on ga.fqanid = gf.fqanid join
+								(select * from affiliation_units where name like $2) as au on gf.unitid = au.unitid
+							) as T
+							right join (
+								select 1 as key,
+								$1 in (select uname from users) as user_exists,
+								$2 in (select name from affiliation_units) as unit_exists
+							) as C on T.key = C.key where T.last_updated >= $3 or $3 is null order by T.name;`, uname, expt, lastupdate)
+	if err != nil {
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+		//		http.Error(w,"Error in DB query",404)
+		return
+	}
+	defer rows.Close()
+
+	var userExists, exptExists bool
+
+	type jsonfqan struct {
+		UnitName string `json:"unit_name"`
+		Fqan     string `json:"fqan"`
+	}
+	var Out []jsonfqan
+
+	for rows.Next() {
+		var tmpUnitName, tmpFqan sql.NullString
+		rows.Scan(&tmpUnitName, &tmpFqan, &userExists, &exptExists)
+		if tmpFqan.Valid {
+			Out = append(Out, jsonfqan{tmpUnitName.String, tmpFqan.String})
+		}
+	}
+
+	var output interface{}	
+	if len(Out) == 0 {
+		type jsonerror struct {
+			Error []string `json:"ferry_error"`
+		}
+		var queryErr jsonerror
+		if !userExists {
+			queryErr.Error = append(queryErr.Error, "User does not exist.")
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		}
+		if !exptExists {
+			queryErr.Error = append(queryErr.Error, "Experiment does not exist.")
+			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
+		}
+		if userExists && exptExists {
+			queryErr.Error = append(queryErr.Error, "User do not have any assigned FQANs.")
+			log.WithFields(QueryFields(r, startTime)).Error("User do not have any assigned FQANs.")
+		}
+		output = queryErr
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonoutput, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+	}
+	fmt.Fprintf(w, string(jsonoutput))
+}
