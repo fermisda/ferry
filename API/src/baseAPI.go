@@ -160,6 +160,7 @@ func (o *Output) Parse(c APIContext, w http.ResponseWriter) () {
 		out.Status = "failure"
 	}
 
+	out.Err = make([]string, 0)
 	for _, err := range o.Err {
 		out.Err = append (out.Err, err.Error())
 	}
