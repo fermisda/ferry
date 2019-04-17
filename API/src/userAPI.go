@@ -289,7 +289,7 @@ func getAllUsersCertificateDNs(c APIContext, i Input) (interface{}, []APIError) 
 }
 
 func getUserFQANs(c APIContext, i Input) (interface{}, []APIError) {
-	apiErr := make([]APIError, 0)
+	var apiErr []APIError
 
 	uid 	:= NewNullAttribute(UID)
 	unitid	:= NewNullAttribute(UnitID)
@@ -340,7 +340,7 @@ func getUserFQANs(c APIContext, i Input) (interface{}, []APIError) {
 		}
 	}
 
-	return out, apiErr
+	return out, nil
 }
 
 func getSuperUserList(c APIContext, i Input) (interface{}, []APIError) {
