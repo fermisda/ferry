@@ -190,6 +190,7 @@ const (
 	UnitName		Attribute = "unitname"
 	FullName 		Attribute = "fullname"
 	ResourceName	Attribute = "resourcename"
+	GroupType		Attribute = "grouptype"
 	ResourceType	Attribute = "resourcetype"
 	DN				Attribute = "dn"
 	UserAttribute	Attribute = "attribute"
@@ -210,6 +211,7 @@ const (
 	Quota			Attribute = "quota"
 	Status			Attribute = "status"
 	Primary			Attribute = "primary"
+	Leader			Attribute = "leader"
 	GroupAccount  	Attribute = "groupaccount"
 	ExpirationDate	Attribute = "expirationdate"
 	LastUpdated		Attribute = "lastupdated"
@@ -223,6 +225,7 @@ func (a Attribute) Type() (AttributeType) {
 		UnitName: 		TypeString,
 		FullName:		TypeString,
 		ResourceName:	TypeString,
+		GroupType:		TypeString,
 		ResourceType:	TypeString,
 		DN:				TypeString,
 		UserAttribute:	TypeString,
@@ -243,6 +246,7 @@ func (a Attribute) Type() (AttributeType) {
 		Quota:			TypeFloat,
 		Status:			TypeBool,
 		Primary:		TypeBool,
+		Leader:			TypeBool,
 		GroupAccount:	TypeBool,
 		ExpirationDate:	TypeDate,
 		LastUpdated:	TypeDate,

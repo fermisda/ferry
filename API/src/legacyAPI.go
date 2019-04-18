@@ -2001,3 +2001,110 @@ func getUserFQANsLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, string(jsonoutput))
 }
+
+func getGroupMembersLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query() 
+	groupname := q.Get("groupname")
+	grouptype := q.Get("grouptype")
+	//	//should be a bool
+
+	if groupname == "" {	
+		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified\" }")
+		return
+	}
+	if grouptype == "" {	
+		grouptype = "UnixGroup"
+	}
+	
+	getLeaders := false
+	gl := q.Get("return_leaders")
+	if gl != "" {
+		getl,glerr := strconv.ParseBool(gl)	
+		if glerr != nil {
+			log.WithFields(QueryFields(r, startTime)).Print("Invalid value of return_leaders: " + gl + ". Must be true or false.")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid value for return_leaders. Must be true or false\" }")		
+			return
+		} else {
+			getLeaders = getl
+		}
+	}
+	
+	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+                log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+                fmt.Fprintf(w,"{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
+                return
+    }
+	
+	type jsonout struct {
+		UID int `json:"uid"`
+		Uname string `json:"username"`
+		Leader string `json:"is_leader,omitempty"`
+	}
+	var grpid,tmpuid int
+	var tmpuname string
+	var tmpleader bool
+	var tmpout jsonout
+	var Out []jsonout
+
+	err := DBptr.QueryRow(`select groupid from groups where (name, type) = ($1, $2)`, groupname, grouptype).Scan(&grpid)
+	switch {
+	case err == sql.ErrNoRows:
+		log.WithFields(QueryFields(r, startTime)).Print("Group does not exist.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Group does not exist.\" }")
+		return
+
+	case err != nil && strings.Contains(err.Error(), `invalid input value for enum`):
+		log.WithFields(QueryFields(r, startTime)).Print("Invalid group type.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid group type.\" }")
+		return
+		
+	case err != nil:
+		log.WithFields(QueryFields(r, startTime)).Print("Group ID query error: " + err.Error())
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+		
+	default:
+		rows, err := DBptr.Query(`select users.uname, users.uid, user_group.is_leader from user_group join users on users.uid=user_group.uid where user_group.groupid=$1 and (user_group.last_updated>=$2 or $2 is null)`, grpid, lastupdate)
+		if err != nil {	
+			log.WithFields(QueryFields(r, startTime)).Print("Database query error: " + err.Error())
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")		
+			return
+		}
+		
+		defer rows.Close()
+		for rows.Next() {
+			rows.Scan(&tmpuname,&tmpuid,&tmpleader)
+			tmpout.Uname = tmpuname
+			tmpout.UID = tmpuid
+			if getLeaders == true {
+				tmpout.Leader = strconv.FormatBool(tmpleader)
+			}
+			Out = append(Out,tmpout)
+		}
+		
+		var output interface{}
+		if len(Out) == 0 {
+			type jsonerror struct {
+				Error string `json:"ferry_error"`
+			}
+			var queryErr []jsonerror
+			queryErr = append(queryErr, jsonerror{"This group has no members."})
+			log.WithFields(QueryFields(r, startTime)).Error("Group has no members")
+			output = queryErr
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Info("Success!")
+			output = Out
+		}
+		jsonoutput, err := json.Marshal(output)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		}
+		fmt.Fprintf(w, string(jsonoutput))	
+	}
+}

@@ -109,6 +109,7 @@ func main() {
 
 	APIs := make(APICollection)
 	IncludeUserAPIs(&APIs)
+	IncludeGroupAPIs(&APIs)
 	IncludeMiscAPIs(&APIs)
 	IncludeWrapperAPIs(&APIs)
 
@@ -209,7 +210,8 @@ func main() {
 	grouter.HandleFunc("/getAllUsersCertificateDNs", APIs["getAllUsersCertificateDNs"].Run)
 
 	//group API calls
-	grouter.HandleFunc("/getgroupmembers", getGroupMembers)
+	grouter.HandleFunc("/getgroupmembers", APIs["getGroupMembers"].Run)
+	grouter.HandleFunc("/getGroupMembers", APIs["getGroupMembers"].Run)
 	grouter.HandleFunc("/createGroup", createGroup)
 	grouter.HandleFunc("/deleteGroupt", deleteGroupt)
 	grouter.HandleFunc("/deleteGroup", deleteGroup)
@@ -217,7 +219,6 @@ func main() {
 	grouter.HandleFunc("/removeGroupFromUnit", removeGroupFromUnit)
 	grouter.HandleFunc("/setPrimaryStatusGroup", setPrimaryStatusGroup)
 	grouter.HandleFunc("/removePrimaryStatusfromGroup", removePrimaryStatusfromGroup)
-	grouter.HandleFunc("/getGroupMembers", getGroupMembers)
 	grouter.HandleFunc("/IsUserLeaderOfGroup", IsUserLeaderOfGroup)
 	grouter.HandleFunc("/IsUserMemberOfGroup", IsUserMemberOfGroup)
 	grouter.HandleFunc("/setGroupLeader", setGroupLeader) //add user to group
