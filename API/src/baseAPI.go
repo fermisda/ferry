@@ -190,6 +190,7 @@ const (
 	UnitName		Attribute = "unitname"
 	FullName 		Attribute = "fullname"
 	ResourceName	Attribute = "resourcename"
+	ResourceType	Attribute = "resourcetype"
 	DN				Attribute = "dn"
 	UserAttribute	Attribute = "attribute"
 	Value			Attribute = "value"
@@ -222,6 +223,7 @@ func (a Attribute) Type() (AttributeType) {
 		UnitName: 		TypeString,
 		FullName:		TypeString,
 		ResourceName:	TypeString,
+		ResourceType:	TypeString,
 		DN:				TypeString,
 		UserAttribute:	TypeString,
 		Value:			TypeString,

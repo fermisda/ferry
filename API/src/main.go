@@ -202,7 +202,7 @@ func main() {
 	grouter.HandleFunc("/deleteUser", deleteUser)
 	grouter.HandleFunc("/getUserUname", getUserUname)
 	grouter.HandleFunc("/getMemberAffiliations", getMemberAffiliations)
-	grouter.HandleFunc("/getUserAccessToComputeResources", getUserAccessToComputeResources)
+	grouter.HandleFunc("/getUserAccessToComputeResources", APIs["getUserAccessToComputeResources"].Run)
 	grouter.HandleFunc("/getStorageQuotas", APIs["getStorageQuotas"].Run)
 	grouter.HandleFunc("/getAllUsers", getAllUsers)
 	grouter.HandleFunc("/getAllUsersFQANs", getAllUsersFQANs)
