@@ -2108,3 +2108,104 @@ func getGroupMembersLegacy(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, string(jsonoutput))	
 	}
 }
+
+func IsUserMemberOfGroupLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	type jsonerror struct {
+		Error string `json:"ferry_error"`
+	}
+	var inputErr []jsonerror
+
+	user := q.Get("username")
+	group := q.Get("groupname")
+	gtype := q.Get("grouptype")
+
+	if user == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		inputErr = append(inputErr, jsonerror{"No username specified."})
+	}
+	if group == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
+		inputErr = append(inputErr, jsonerror{"No groupname specified."})
+	}
+	if gtype == "" {	
+		gtype = "UnixGroup"
+	}
+
+	if len(inputErr) > 0 {
+		jsonout, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err)
+		}
+		fmt.Fprintf(w, string(jsonout))
+		return
+	}
+
+	typeExists := true
+	rows, err := DBptr.Query(`select member, user_exists, group_exists from (
+								select 1 as key, (
+									(select uid from users where uname = $1),
+									(select groupid from groups where (name, type) = ($2, $3))
+								) in (select uid, groupid from user_group) as member
+							) as t right join (
+								select 1 as key, $1 in (select uname from users) as user_exists,
+												 $2 in (select name from groups) as group_exists
+							) as c on t.key = c.key;`, user, group, gtype)
+	if err != nil {
+		if strings.Contains(err.Error(), `invalid input value for enum`){
+			typeExists = false
+		} else {
+			defer log.WithFields(QueryFields(r, startTime)).Error(err)
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+			return
+		}
+	} else {
+		defer rows.Close()
+	}
+
+	var userExists, groupExists bool
+
+	type jsonentry struct {
+		Member  bool `json:"member"`
+	}
+	var Out jsonentry
+
+	var tmpMember sql.NullBool
+	if rows != nil {
+		for rows.Next() {
+			rows.Scan(&tmpMember, &userExists, &groupExists)
+			Out.Member = tmpMember.Bool
+		}
+	}
+
+	var output interface{}
+	if !tmpMember.Valid {
+		var queryErr []jsonerror
+		if !typeExists {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid group type.")
+			queryErr = append(queryErr, jsonerror{"Invalid group type."})
+		} else {
+			if !userExists {
+				log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+				queryErr = append(queryErr, jsonerror{"User does not exist."})
+			}
+			if !groupExists {
+				log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+				queryErr = append(queryErr, jsonerror{"Group does not exist."})
+			}
+		}
+		output = queryErr
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonout, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	fmt.Fprintf(w, string(jsonout))
+}
