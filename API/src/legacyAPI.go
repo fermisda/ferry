@@ -2279,3 +2279,113 @@ func IsUserLeaderOfGroupLegacy(w http.ResponseWriter, r *http.Request) {
 		}
 	}					
 }
+
+func setGroupLeaderLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	uName := q.Get("username")
+	groupname := q.Get("groupname")
+	grouptype := q.Get("grouptype")
+	
+	if groupname == "" {	
+		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified\" }")
+		return
+	}
+	if grouptype == "" {	
+		log.WithFields(QueryFields(r, startTime)).Print("No grouptype specified.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No grouptype specified\" }")
+		return
+	}
+	if uName == "" {	
+		log.WithFields(QueryFields(r, startTime)).Print("No username specified.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No username specified\" }")
+		return
+	}
+
+	//requires authorization
+	authorized,authout := authorize(r)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
+		return
+	}
+	
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Print("Error starting DB transaction: " + err.Error())
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
+		return
+	}
+	defer DBtx.Rollback(cKey)
+	
+	var groupId, uId int
+	grouperr := DBptr.QueryRow(`select groupid from groups where (name, type) = ($1, $2)`, groupname, grouptype).Scan(&groupId)
+	switch {
+	case grouperr == sql.ErrNoRows:
+		log.WithFields(QueryFields(r, startTime)).Print("Group " + groupname + " does not exist.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Group " + groupname + " does not exist.\" }")
+		return
+	case grouperr != nil && strings.Contains(grouperr.Error(), "invalid input value for enum"):
+		log.WithFields(QueryFields(r, startTime)).Print("Invalid group type.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid group type.\" }")
+		return
+	case grouperr != nil:
+		log.WithFields(QueryFields(r, startTime)).Print("Group ID query error: " + grouperr.Error())
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	default:
+		// group is good, now make sure the user exists
+		usererr := DBptr.QueryRow(`select uid from users where uname=$1`,uName).Scan(&uId)
+		switch {
+		case usererr == sql.ErrNoRows:
+			log.WithFields(QueryFields(r, startTime)).Print("User " + uName + " does not exist.")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"User " + uName + " does not exist.\" }")
+			return
+		case usererr != nil:
+			log.WithFields(QueryFields(r, startTime)).Print("User ID query error: " + usererr.Error())
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+			return
+		default:
+			setstr := fmt.Sprintf(`do $$
+								   declare
+										c_groupid constant int := '%d';
+										c_uid constant int := '%d';
+								   begin
+										if exists (select uid, groupid from user_group where groupid = c_groupid and uid = c_uid) then
+											update user_group set is_leader = true, last_updated = NOW() where groupid = c_groupid and uid = c_uid;
+										else
+											insert into user_group (uid, groupid, is_leader) values(c_uid, c_groupid, true);
+										end if ;
+								   end $$;`, groupId, uId)
+			stmt, err := DBtx.Prepare(setstr)
+			if err != nil {
+				log.WithFields(QueryFields(r, startTime)).Print("Error preparing DB command: " + err.Error())
+				w.WriteHeader(http.StatusNotFound)
+				fmt.Fprintf(w,"{ \"ferry_error\": \"Error preparing database command.\" }")
+				return
+			}
+			//run said statement and check errors
+			_, err = stmt.Exec()
+			if err != nil {
+				w.WriteHeader(http.StatusNotFound)
+				log.WithFields(QueryFields(r, startTime)).Print("Error setting " + uName + " leader of " + groupname + ": " + err.Error())
+				fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB update.\" }")		
+				return
+			} else {
+				// error is nil, so it's a success. Commit the transaction and return success.
+				DBtx.Commit(cKey)
+				w.WriteHeader(http.StatusOK)
+				log.WithFields(QueryFields(r, startTime)).Print("Successfully set " + uName + " as leader of " + groupname + ".")
+				if cKey != 0 {
+					fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
+				}
+			}
+			return
+		}
+	}
+}

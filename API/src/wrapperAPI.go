@@ -561,7 +561,7 @@ func addLPCConvener(w http.ResponseWriter, r *http.Request) {
 	R.URL.RawQuery = q.Encode()
 
 	DBtx.Continue()
-	setGroupLeader(w, R)
+	setGroupLeaderLegacy(w, R)
 	if !DBtx.Complete() {
 		log.WithFields(QueryFields(r, startTime)).Error("setGroupLeader failed.")
 		return
