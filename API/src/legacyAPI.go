@@ -2209,3 +2209,73 @@ func IsUserMemberOfGroupLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
+
+func IsUserLeaderOfGroupLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	uName := q.Get("username")
+	groupname := q.Get("groupname")
+	grouptype := q.Get("grouptype")
+	
+	if groupname == "" {	
+		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified\" }")
+		return
+	}
+	if uName == "" {	
+		log.WithFields(QueryFields(r, startTime)).Print("No username specified.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No username specified\" }")
+		return
+	}
+	if grouptype == "" {
+		grouptype = "UnixGroup"
+	}
+	var groupId, uId int
+	grouperr := DBptr.QueryRow(`select groupid from groups where (name, type) = ($1, $2)`, groupname, grouptype).Scan(&groupId)
+	switch {
+	case grouperr == sql.ErrNoRows:
+		log.WithFields(QueryFields(r, startTime)).Print("Group " + groupname + " does not exist.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Group " + groupname + " does not exist.\" }")
+		return
+	case grouperr != nil && strings.Contains(grouperr.Error(), "invalid input value for enum"):
+		log.WithFields(QueryFields(r, startTime)).Print("Invalid group type.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid group type.\" }")
+		return
+	case grouperr != nil:
+		log.WithFields(QueryFields(r, startTime)).Print("Group ID query error: " + grouperr.Error())
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	default:
+		// group is good, now make sure the user exists
+		usererr := DBptr.QueryRow(`select uid from users where uname=$1`,uName).Scan(&uId)
+		switch {
+		case usererr == sql.ErrNoRows:
+			log.WithFields(QueryFields(r, startTime)).Print("User " + uName + " does not exist.")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"User " + uName + " does not exist.\" }")
+			return
+		case usererr != nil:
+			log.WithFields(QueryFields(r, startTime)).Print("User ID query error: " + usererr.Error())
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+			return
+		default:
+			var isLeader bool
+			checkerr := DBptr.QueryRow(`select is_leader from user_group as ug join users on users.uid=ug.uid join groups on groups.groupid=ug.groupid where users.uname=$1 and groups.name=$2`,uName,groupname).Scan(&isLeader)
+			leaderstr := strconv.FormatBool(isLeader)
+			switch {
+			case checkerr != nil && checkerr != sql.ErrNoRows:
+				log.WithFields(QueryFields(r, startTime)).Print("Group leader query error: " + checkerr.Error())
+				w.WriteHeader(http.StatusNotFound)
+				fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+				return	
+			default:
+				w.WriteHeader(http.StatusOK)
+				log.WithFields(QueryFields(r, startTime)).Print(uName + " is a leader of " + groupname + ": " + leaderstr)
+				fmt.Fprintf(w,"{ \"leader\": \"" + leaderstr + "\" }")
+				return
+			}
+		}
+	}					
+}
