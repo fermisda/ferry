@@ -619,7 +619,7 @@ func removeLPCConvener(w http.ResponseWriter, r *http.Request) {
 
 	DBtx.Savepoint("removeGroupLeader")
 	DBtx.Continue()
-	removeGroupLeader(w, R)
+	removeGroupLeaderLegacy(w, R)
 	if !DBtx.Complete() {
 		if !strings.Contains(DBtx.Error().Error(), `User is not a leader of this group.`) {
 			log.WithFields(QueryFields(r, startTime)).Error("removeGroupLeader failed.")

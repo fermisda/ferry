@@ -222,7 +222,7 @@ func main() {
 	grouter.HandleFunc("/IsUserLeaderOfGroup", APIs["isUserLeaderOfGroup"].Run)
 	grouter.HandleFunc("/IsUserMemberOfGroup", APIs["isUserMemberOfGroup"].Run)
 	grouter.HandleFunc("/setGroupLeader", APIs["setGroupLeader"].Run) //add user to group
-	grouter.HandleFunc("/removeGroupLeader", removeGroupLeader)
+	grouter.HandleFunc("/removeGroupLeader", APIs["removeGroupLeader"].Run)
 	grouter.HandleFunc("/getGroupUnits", getGroupUnits) //don't remove the last leader
 	grouter.HandleFunc("/getBatchPriorities", getBatchPriorities)
 	grouter.HandleFunc("/getCondorQuotas", getCondorQuotas)

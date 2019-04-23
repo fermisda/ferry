@@ -50,11 +50,21 @@ func IncludeGroupAPIs(c *APICollection) {
 		InputModel {
 			Parameter{UserName, true},
 			Parameter{GroupName, true},
-			Parameter{GroupType, false},
+			Parameter{GroupType, true},
 		},
 		setGroupLeader,
 	}
 	c.Add("setGroupLeader", &setGroupLeader)
+
+	removeGroupLeader := BaseAPI {
+		InputModel {
+			Parameter{UserName, true},
+			Parameter{GroupName, true},
+			Parameter{GroupType, true},
+		},
+		removeGroupLeader,
+	}
+	c.Add("removeGroupLeader", &removeGroupLeader)
 }
 
 func createGroup(w http.ResponseWriter, r *http.Request) {
@@ -612,14 +622,13 @@ func setGroupLeader(c APIContext, i Input) (interface{}, []APIError) {
 
 	uid			:= NewNullAttribute(UID)
 	groupid		:= NewNullAttribute(GroupID)
-	grouptype	:= i[GroupType].Default("UnixGroup")
 	
 	var validType bool
 
 	err := c.DBtx.QueryRow(`select (select uid from users where uname = $1),
 								   (select groupid from groups where name = $2),
 								   (select $3 = any (enum_range(null::groups_group_type)::text[]))`,
-						   i[UserName], i[GroupName], grouptype).Scan(&uid, &groupid, &validType)
+						   i[UserName], i[GroupName], i[GroupType]).Scan(&uid, &groupid, &validType)
 	if err != nil {
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -651,123 +660,48 @@ func setGroupLeader(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
-func removeGroupLeader(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
-	uName := q.Get("username")
-	groupname := q.Get("groupname")
-	grouptype := q.Get("grouptype")
+func removeGroupLeader(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+
+	uid			:= NewNullAttribute(UID)
+	groupid		:= NewNullAttribute(GroupID)
 	
-	if groupname == "" {	
-		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified\" }")
-		return
-	}
-	if grouptype == "" {	
-		log.WithFields(QueryFields(r, startTime)).Print("No grouptype specified.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No grouptype specified\" }")
-		return
-	}
-	if uName == "" {	
-		log.WithFields(QueryFields(r, startTime)).Print("No username specified.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No username specified\" }")
-		return
+	var validType bool
+
+	err := c.DBtx.QueryRow(`select (select uid from users where uname = $1),
+								   (select groupid from groups where name = $2),
+								   (select $3 = any (enum_range(null::groups_group_type)::text[]))`,
+						   i[UserName], i[GroupName], i[GroupType]).Scan(&uid, &groupid, &validType)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	//requires authorization
-	authorized,authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
-		return
+	if !uid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
 	}
-	
-	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	if !groupid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
+	}
+	if !validType && i[GroupType].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, GroupType))
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	_, err = c.DBtx.Exec(`update user_group set is_leader = false, last_updated = NOW() where uid = $1 and groupid = $2`,
+						 uid, groupid)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Print("Error starting DB transaction: " + err.Error())
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
-		return
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
-	defer DBtx.Rollback(cKey)
-	
-	var groupId, uId int
-	grouperr := DBptr.QueryRow(`select groupid from groups where (name, type) = ($1, $2)`, groupname, grouptype).Scan(&groupId)
-	switch {
-	case grouperr == sql.ErrNoRows:
-		log.WithFields(QueryFields(r, startTime)).Print("Group " + groupname + " does not exist.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Group " + groupname + " does not exist.\" }")
-		return
-	case grouperr != nil && strings.Contains(grouperr.Error(), "invalid input value for enum"):
-		log.WithFields(QueryFields(r, startTime)).Print("Invalid group type.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid group type.\" }")
-		return
-	case grouperr != nil:
-		log.WithFields(QueryFields(r, startTime)).Print("Group ID query error: " + grouperr.Error())
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
-		return
-	default:
-		// group is good, now make sure the user exists
-		usererr := DBptr.QueryRow(`select uid from users where uname=$1`,uName).Scan(&uId)
-		switch {
-		case usererr == sql.ErrNoRows:
-			log.WithFields(QueryFields(r, startTime)).Print("User " + uName + " does not exist.")
-			fmt.Fprintf(w,"{ \"ferry_error\": \"User " + uName + " does not exist.\" }")
-			return
-		case usererr != nil:
-			log.WithFields(QueryFields(r, startTime)).Print("User ID query error: " + usererr.Error())
-			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
-			return
-		default:
-			setstr := fmt.Sprintf(`do $$
-								   declare
-										c_groupid constant int := '%d';
-										c_uid constant int := '%d';
-								   begin
-										if exists (select * from user_group where groupid = c_groupid and uid = c_uid and is_leader = true) then
-											update user_group set is_leader = false, last_updated = NOW() where groupid = c_groupid and uid = c_uid;
-										else
-											raise 'User is not a leader of this group.';
-										end if ;
-								   end $$;`, groupId, uId)
-			stmt, err := DBtx.Prepare(setstr)
-			if err != nil {
-				log.WithFields(QueryFields(r, startTime)).Print("Error preparing DB command: " + err.Error())
-				w.WriteHeader(http.StatusNotFound)
-				fmt.Fprintf(w,"{ \"ferry_error\": \"Error preparing database command.\" }")
-				return
-			}
-			//run said statement and check errors
-			_, err = stmt.Exec()
-			DBtx.err = err
-			if err != nil {
-				if strings.Contains(err.Error(), "User is not a leader of this group.") {
-					log.WithFields(QueryFields(r, startTime)).Error("User is not a leader of this group.")
-					if cKey != 0 {
-						fmt.Fprintf(w,"{ \"ferry_error\": \"User is not a leader of this group.\" }")
-					}
-				} else {
-					w.WriteHeader(http.StatusNotFound)
-					log.WithFields(QueryFields(r, startTime)).Print("Error setting " + uName + " leader of " + groupname + ": " + err.Error())
-					fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB update.\" }")
-					return
-				}
-			} else {
-				// error is nil, so it's a success. Commit the transaction and return success.
-				DBtx.Commit(cKey)
-				w.WriteHeader(http.StatusOK)
-				log.WithFields(QueryFields(r, startTime)).Print("Successfully set " + uName + " as leader of " + groupname + ".")
-				if cKey != 0 {
-					fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
-				}
-			}
-			return
-		}
-	}
+
+	return nil, nil
 }
+
 func getGroupUnits(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
