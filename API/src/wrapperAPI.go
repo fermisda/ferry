@@ -487,7 +487,7 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 			if queryerr == sql.ErrNoRows {
 				DBtx.RollbackToSavepoint("QuerryRow")
 				DBtx.Savepoint("addUserToGroup_" + role)
-				addUserToGroup(w,R)
+				addUserToGroupLegacy(w,R)
 				if !DBtx.Complete() {
 					log.WithFields(QueryFields(r, startTime)).Error("Error in addUserToGroup for " + unitName + "pro: " + DBtx.Error().Error())
 					if strings.Contains(DBtx.Error().Error(), "null value in column \"uid\"") {

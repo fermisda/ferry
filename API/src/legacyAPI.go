@@ -2571,3 +2571,108 @@ func getUserGroupsLegacy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
+
+func addUserToGroupLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	uName := strings.TrimSpace(q.Get("username"))
+	gName := strings.TrimSpace(q.Get("groupname"))
+	gType := strings.TrimSpace(q.Get("grouptype"))
+	isLeader := strings.TrimSpace(q.Get("is_leader"))
+
+	if uName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
+		return
+	}
+	if gName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No groupname specified.\" }")
+		return
+	}
+	if gType == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No grouptype specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No grouptype specified.\" }")
+		return
+	}
+	if isLeader == "" {
+		isLeader = "false"
+	} else {
+		_, err := strconv.ParseBool(q.Get("is_leader"))
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid is_leader specified in http query.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid is_leader specified.\" }")
+			return
+		}
+	}
+
+	authorized, authout := authorize(r)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
+		return
+	}
+
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	defer DBtx.Rollback(cKey)
+
+//	_, err = DBtx.Exec(fmt.Sprintf(`do $$
+//										declare uid int;
+//										declare groupid int;
+//									begin
+//										select u.uid into uid from users as u where uname = '%s';
+//										select g.groupid into groupid from groups as g where name = '%s' and type = '%s';
+//										
+//										insert into user_group (uid, groupid, is_leader, last_updated)
+//														values (uid, groupid, %s, NOW());
+//									end $$;`, uName, gName, gType, isLeader))
+//
+
+	DBtx.Savepoint("duplicateUser")
+	_, err = DBtx.Exec(`insert into user_group (uid, groupid, is_leader, last_updated) values
+                            ((select uid from users where uname=$1),
+                             (select groupid from groups where name=$2 and type=$3),
+                             $4, NOW())`,uName, gName, gType, isLeader)
+	if err == nil {
+		if cKey != 0 {
+			log.WithFields(QueryFields(r, startTime)).Info("Success!")
+			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+		}
+	} else {
+		if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
+			DBtx.RollbackToSavepoint("duplicateUser")
+			log.WithFields(QueryFields(r, startTime)).Error("User already belongs to this group.")
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_status\": \"User already belongs to this group.\" }")
+			}
+		} else if strings.Contains(err.Error(), `null value in column "uid" violates not-null constraint`) {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+			}
+		} else if strings.Contains(err.Error(), `null value in column "groupid" violates not-null constraint`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"Group does not exist.\" }")
+			}
+		} else if strings.Contains(err.Error(), `invalid input value for enum`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid group type.")
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid group type.\" }")
+			}
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
+			}
+		}
+	}
+	if cKey != 0 {
+		DBtx.Commit(cKey)
+	}
+}
