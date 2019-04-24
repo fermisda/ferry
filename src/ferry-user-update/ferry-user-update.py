@@ -514,7 +514,7 @@ if __name__ == "__main__":
     ferryContext = ssl.SSLContext(protocol=ssl.PROTOCOL_TLSv1_2)
     ferryContext.verify_mode = ssl.CERT_REQUIRED
     ferryContext.load_cert_chain(config.get("ferry", "cert"), config.get("ferry", "key"))
-    ferryContext.load_verify_locations(config.get("ferry", "ca"))
+    ferryContext.load_verify_locations(capath=config.get("ferry", "ca"))
 
     logging.info("Starting Ferry User Update")
 
