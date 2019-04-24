@@ -2507,3 +2507,67 @@ func removeGroupLeaderLegacy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
+
+func getUserGroupsLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	uname := q.Get("username")
+	if uname == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
+		return
+	}
+	pingerr := DBptr.Ping()
+	if pingerr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(pingerr)
+	}
+	
+	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
+		return
+	}
+
+	rows, err := DBptr.Query(`select groups.gid, groups.name, groups.type from groups INNER JOIN user_group on (groups.groupid = user_group.groupid) INNER JOIN users on (user_group.uid = users.uid) where users.uname=$1 and (user_group.last_updated>=$2 or $2 is null)`, uname, lastupdate)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "Error in DB query\n")
+	} else {
+		defer rows.Close()
+
+		idx := 0
+
+		type jsonout struct {
+			Gid       int    `json:"gid"`
+			Groupname string `json:"groupname"`
+			Grouptype string `json:"grouptype"`
+		}
+
+		var Out jsonout
+
+		for rows.Next() {
+			if idx == 0 {
+				fmt.Fprintf(w, "[ ")
+			} else {
+				fmt.Fprintf(w, ",")
+			}
+			rows.Scan(&Out.Gid, &Out.Groupname, &Out.Grouptype)
+			outline, jsonerr := json.Marshal(Out)
+			if jsonerr != nil {
+				log.WithFields(QueryFields(r, startTime)).Error(jsonerr)
+			}
+			fmt.Fprintf(w, string(outline))
+			idx += 1
+		}
+		if idx == 0 {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			fmt.Fprintf(w, `{ "ferry_error": "User does not exist." }`)
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Info("Success!")
+			fmt.Fprintf(w, " ]")
+		}
+	}
+}

@@ -161,6 +161,15 @@ func IncludeUserAPIs(c *APICollection) {
 		getAllUsersCertificateDNs,
 	}
 	c.Add("getAllUsersCertificateDNs", &getAllUsersCertificateDNs)
+
+	getUserGroups := BaseAPI {
+		InputModel {
+			Parameter{UserName, true},
+			Parameter{LastUpdated, false},
+		},
+		getUserGroups,
+	}
+	c.Add("getUserGroups", &getUserGroups)
 }
 
 func getUserCertificateDNs(c APIContext, i Input) (interface{}, []APIError) {
@@ -580,68 +589,47 @@ func removeSuperUser(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getUserGroups(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
-	uname := q.Get("username")
-	if uname == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
-		return
+func getUserGroups(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+
+	uid := NewNullAttribute(UID)
+	err := c.DBtx.QueryRow(`select uid from users where uname = $1`, i[UserName]).Scan(&uid)
+	if err == sql.ErrNoRows {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
+		return nil, apiErr
 	}
-	pingerr := DBptr.Ping()
-	if pingerr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(pingerr)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	rows, err := c.DBtx.Query(`select gid, name, type from
+									groups join
+									user_group using(groupid)
+							   where uid = $1 and (user_group.last_updated >= $2 or $2 is null)`,
+							  uid, i[LastUpdated])
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+	defer rows.Close()
+
+	type jsongroup map[Attribute]interface{}
+	out := make([]jsongroup, 0)
+
+	for rows.Next() {
+		row := NewMapNullAttribute(GID, GroupName, GroupType)
+		rows.Scan(row[GID], row[GroupName], row[GroupType])
+		out = append(out, jsongroup{
+			GID: 		row[GID].Data,
+			GroupName:	row[GroupName].Data,
+			GroupType:	row[GroupType].Data,
+		})
 	}
 	
-	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
-	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
-		return
-	}
-
-	rows, err := DBptr.Query(`select groups.gid, groups.name, groups.type from groups INNER JOIN user_group on (groups.groupid = user_group.groupid) INNER JOIN users on (user_group.uid = users.uid) where users.uname=$1 and (user_group.last_updated>=$2 or $2 is null)`, uname, lastupdate)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "Error in DB query\n")
-	} else {
-		defer rows.Close()
-
-		idx := 0
-
-		type jsonout struct {
-			Gid       int    `json:"gid"`
-			Groupname string `json:"groupname"`
-			Grouptype string `json:"grouptype"`
-		}
-
-		var Out jsonout
-
-		for rows.Next() {
-			if idx == 0 {
-				fmt.Fprintf(w, "[ ")
-			} else {
-				fmt.Fprintf(w, ",")
-			}
-			rows.Scan(&Out.Gid, &Out.Groupname, &Out.Grouptype)
-			outline, jsonerr := json.Marshal(Out)
-			if jsonerr != nil {
-				log.WithFields(QueryFields(r, startTime)).Error(jsonerr)
-			}
-			fmt.Fprintf(w, string(outline))
-			idx += 1
-		}
-		if idx == 0 {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-			fmt.Fprintf(w, `{ "ferry_error": "User does not exist." }`)
-		} else {
-			log.WithFields(QueryFields(r, startTime)).Info("Success!")
-			fmt.Fprintf(w, " ]")
-		}
-	}
+	return out, nil
 }
 
 func getUserInfo(c APIContext, i Input) (interface{}, []APIError) {
