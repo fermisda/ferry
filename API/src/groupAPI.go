@@ -474,9 +474,19 @@ func getGroupMembers(c APIContext, i Input) (interface{}, []APIError) {
 	
 	var validType bool
 
-	err := c.DBtx.QueryRow(`select (select groupid from groups where name = $1),
-								   (select $2 = any (enum_range(null::groups_group_type)::text[]))`,
-						   i[GroupName], grouptype).Scan(&groupid, &validType)
+	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, grouptype).Scan(&validType)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !validType {
+		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, GroupType))
+		return nil, apiErr
+	}
+
+	err = c.DBtx.QueryRow(`select (select groupid from groups where name = $1 and type = $2)`, i[GroupName], grouptype).Scan(&groupid)
 	if err != nil {
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -485,11 +495,6 @@ func getGroupMembers(c APIContext, i Input) (interface{}, []APIError) {
 
 	if !groupid.Valid {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
-	}
-	if !validType && i[GroupType].Valid {
-		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, GroupType))
-	}
-	if len(apiErr) > 0 {
 		return nil, apiErr
 	}
 
@@ -537,10 +542,21 @@ func isUserMemberOfGroup(c APIContext, i Input) (interface{}, []APIError) {
 	
 	var validType bool
 
-	err := c.DBtx.QueryRow(`select (select uid from users where uname = $1),
-								   (select groupid from groups where name = $2),
-								   (select $3 = any (enum_range(null::groups_group_type)::text[]))`,
-						   i[UserName], i[GroupName], grouptype).Scan(&uid, &groupid, &validType)
+	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, grouptype).Scan(&validType)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !validType {
+		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, GroupType))
+		return nil, apiErr
+	}
+
+	err = c.DBtx.QueryRow(`select (select uid from users where uname = $1),
+								  (select groupid from groups where name = $2 and type = $3)`,
+						  i[UserName], i[GroupName], grouptype).Scan(&uid, &groupid)
 	if err != nil {
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -552,9 +568,6 @@ func isUserMemberOfGroup(c APIContext, i Input) (interface{}, []APIError) {
 	}
 	if !groupid.Valid {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
-	}
-	if !validType && i[GroupType].Valid {
-		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, GroupType))
 	}
 	if len(apiErr) > 0 {
 		return nil, apiErr
@@ -582,10 +595,21 @@ func isUserLeaderOfGroup(c APIContext, i Input) (interface{}, []APIError) {
 	
 	var validType bool
 
-	err := c.DBtx.QueryRow(`select (select uid from users where uname = $1),
-								   (select groupid from groups where name = $2),
-								   (select $3 = any (enum_range(null::groups_group_type)::text[]))`,
-						   i[UserName], i[GroupName], grouptype).Scan(&uid, &groupid, &validType)
+	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, grouptype).Scan(&validType)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !validType {
+		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, GroupType))
+		return nil, apiErr
+	}
+
+	err = c.DBtx.QueryRow(`select (select uid from users where uname = $1),
+								  (select groupid from groups where name = $2 and type = $3)`,
+						  i[UserName], i[GroupName], grouptype).Scan(&uid, &groupid)
 	if err != nil {
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -597,9 +621,6 @@ func isUserLeaderOfGroup(c APIContext, i Input) (interface{}, []APIError) {
 	}
 	if !groupid.Valid {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
-	}
-	if !validType && i[GroupType].Valid {
-		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, GroupType))
 	}
 	if len(apiErr) > 0 {
 		return nil, apiErr
@@ -625,10 +646,21 @@ func setGroupLeader(c APIContext, i Input) (interface{}, []APIError) {
 	
 	var validType bool
 
-	err := c.DBtx.QueryRow(`select (select uid from users where uname = $1),
-								   (select groupid from groups where name = $2),
-								   (select $3 = any (enum_range(null::groups_group_type)::text[]))`,
-						   i[UserName], i[GroupName], i[GroupType]).Scan(&uid, &groupid, &validType)
+	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, i[GroupType]).Scan(&validType)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !validType {
+		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, GroupType))
+		return nil, apiErr
+	}
+
+	err = c.DBtx.QueryRow(`select (select uid from users where uname = $1),
+								  (select groupid from groups where name = $2 and type = $3)`,
+						  i[UserName], i[GroupName], i[GroupType]).Scan(&uid, &groupid)
 	if err != nil {
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -640,9 +672,6 @@ func setGroupLeader(c APIContext, i Input) (interface{}, []APIError) {
 	}
 	if !groupid.Valid {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
-	}
-	if !validType && i[GroupType].Valid {
-		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, GroupType))
 	}
 	if len(apiErr) > 0 {
 		return nil, apiErr
@@ -668,10 +697,21 @@ func removeGroupLeader(c APIContext, i Input) (interface{}, []APIError) {
 	
 	var validType bool
 
-	err := c.DBtx.QueryRow(`select (select uid from users where uname = $1),
-								   (select groupid from groups where name = $2),
-								   (select $3 = any (enum_range(null::groups_group_type)::text[]))`,
-						   i[UserName], i[GroupName], i[GroupType]).Scan(&uid, &groupid, &validType)
+	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, i[GroupType]).Scan(&validType)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !validType {
+		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, GroupType))
+		return nil, apiErr
+	}
+
+	err = c.DBtx.QueryRow(`select (select uid from users where uname = $1),
+								  (select groupid from groups where name = $2 and type = $3)`,
+						  i[UserName], i[GroupName], i[GroupType]).Scan(&uid, &groupid)
 	if err != nil {
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -683,9 +723,6 @@ func removeGroupLeader(c APIContext, i Input) (interface{}, []APIError) {
 	}
 	if !groupid.Valid {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
-	}
-	if !validType && i[GroupType].Valid {
-		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, GroupType))
 	}
 	if len(apiErr) > 0 {
 		return nil, apiErr
