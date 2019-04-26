@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"regexp"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -181,6 +180,16 @@ func IncludeUserAPIs(c *APICollection) {
 		addUserToGroup,
 	}
 	c.Add("addUserToGroup", &addUserToGroup)
+
+	removeUserFromGroup := BaseAPI {
+		InputModel {
+			Parameter{UserName, true},
+			Parameter{GroupName, true},
+			Parameter{GroupType, true},
+		},
+		removeUserFromGroup,
+	}
+	c.Add("removeUserFromGroup", &removeUserFromGroup)
 }
 
 func getUserCertificateDNs(c APIContext, i Input) (interface{}, []APIError) {
@@ -724,143 +733,53 @@ func addUserToGroup(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
-func removeUserFromGroup(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+func removeUserFromGroup(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	type jsonerror struct {
-		Error []string `json:"ferry_error"`
-	}
-	var inputErr jsonerror
+	uid := NewNullAttribute(UID)
+	groupid := NewNullAttribute(GroupID)
 
-	user := strings.TrimSpace(q.Get("username"))
-	group := strings.TrimSpace(q.Get("groupname"))
-	gtype := strings.TrimSpace(q.Get("grouptype"))
+	var validType bool
 
-	if user == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
-		inputErr.Error = append(inputErr.Error, "No username specified.")
-	}
-	if group == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
-		inputErr.Error = append(inputErr.Error, "No groupname specified.")
-	}
-	if gtype == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No grouptype specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No grouptype specified.\" }")
-		return
-	}
-
-	if len(inputErr.Error) > 0 {
-		jsonout, err := json.Marshal(inputErr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
-		}
-		fmt.Fprintf(w, string(jsonout))
-		return
-	}
-
-	//require auth	
-	authorized,authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
-		return
-	}
-
-	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, i[GroupType]).Scan(&validType)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	defer DBtx.Rollback(cKey)
-
-	var uid, groupid sql.NullInt64
-
-	queryerr := DBtx.tx.QueryRow(`select uid, groupid from (select 1 as key, uid from users where uname=$1) as us full outer join (select 1 as key, groupid, type from groups where name = $2 and type = $3) as g on us.key=g.key`,user, group, gtype).Scan(&uid,&groupid)
-	if queryerr == sql.ErrNoRows {
-		log.WithFields(QueryFields(r, startTime)).Error("User and group names do not exist.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"User and group names do not exist.\" }")
-		return	
-	} else if queryerr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error: " + queryerr.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
-		return
-	}
-	if ! uid.Valid {
-		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-		return
-	} 
-	if ! groupid.Valid {
-		log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Group does not exist.\" }")
-		return
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	query := fmt.Sprintf(`do $$
-						  declare
+	if !validType {
+		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, GroupType))
+		return nil, apiErr
+	}
 
-							vUid constant int := %d;
-							vGroupid constant int := %d;
-							vError text;
-						  begin
-
-							if vUid is null then vError = concat(vError, 'noUser,'); end if;
-							if vGroupid is null then vError = concat(vError, 'noGroup,'); end if;
-							if (vUid, vGroupid) not in (select uid, groupid from user_group) then vError = concat(vError, 'user_group,'); end if;
-							vError = trim(both ',' from vError);
-
-							if vError is not null then raise '%%', vError; end if;
-							
-							delete from user_group where uid = vUid and groupid = vGroupid;
-						  end $$;`, uid.Int64, groupid.Int64)
-	_, err = DBtx.Exec(query)
-
-	re := regexp.MustCompile(`[\s\t\n]+`)
-	log.Debug(re.ReplaceAllString(query, " "))
-
-	var output interface{}
+	err = c.DBtx.QueryRow(`select (select uid from users where uname = $1),
+								  (select groupid from groups where name = $2 and type = $3)`,
+						  i[UserName], i[GroupName], i[GroupType]).Scan(&uid, &groupid)
 	if err != nil {
-		var queryErr jsonerror
-		if strings.Contains(err.Error(), `noUser`) {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-			queryErr.Error = append(queryErr.Error, "User does not exist.")
-		}
-		if strings.Contains(err.Error(), `noGroup`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
-			queryErr.Error = append(queryErr.Error, "Group does not exist.")
-		}
-		if strings.Contains(err.Error(), `user_group`) {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not belong to this group.")
-			queryErr.Error = append(queryErr.Error, "User does not belong to this group.")
-		}
-		if strings.Contains(err.Error(), `invalid input value for enum`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid group type.")
-			queryErr.Error = append(queryErr.Error, "Invalid group type.")
-		}
-		if len(queryErr.Error) == 0 {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			queryErr.Error = append(queryErr.Error, "Something went wrong.")
-		}
-		output = queryErr
-	} else {
-		type jsonstatus struct {
-			Error string `json:"ferry_status"`
-		}
-		output = jsonstatus{"success"}
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
 
-		DBtx.Commit(cKey)
-		if cKey == 0 {
-			return
-		}
+	if !uid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
 	}
-	jsonout, err := json.Marshal(output)
+	if !groupid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	_, err = c.DBtx.Exec(`delete from user_group where uid = $1 and groupid = $2`, uid, groupid)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
-	fmt.Fprintf(w, string(jsonout))
+
+	return nil, nil
 }
 
 func setUserExperimentFQAN(c APIContext, i Input) (interface{}, []APIError) {

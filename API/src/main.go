@@ -182,7 +182,7 @@ func main() {
 	grouter.HandleFunc("/getUserGroups", APIs["getUserGroups"].Run)
 	grouter.HandleFunc("/getUserInfo", APIs["getUserInfo"].Run)
 	grouter.HandleFunc("/addUserToGroup", APIs["addUserToGroup"].Run)
-	grouter.HandleFunc("/removeUserFromGroup", removeUserFromGroup)
+	grouter.HandleFunc("/removeUserFromGroup", APIs["removeUserFromGroup"].Run)
 	grouter.HandleFunc("/setUserExperimentFQAN", APIs["setUserExperimentFQAN"].Run)
 	grouter.HandleFunc("/setUserShellAndHomeDir", setUserShellAndHomeDir)
 	grouter.HandleFunc("/getUserShellAndHomeDir", getUserShellAndHomeDir)
