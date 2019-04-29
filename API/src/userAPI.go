@@ -181,6 +181,17 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("addUserToGroup", &addUserToGroup)
 
+	setUserShellAndHomeDir := BaseAPI {
+		InputModel {
+			Parameter{UserName, true},
+			Parameter{ResourceName, true},
+			Parameter{Shell, true},
+			Parameter{HomeDir, true},
+		},
+		setUserShellAndHomeDir,
+	}
+	c.Add("setUserShellAndHomeDir", &setUserShellAndHomeDir)
+
 	removeUserFromGroup := BaseAPI {
 		InputModel {
 			Parameter{UserName, true},
@@ -868,95 +879,57 @@ func setUserExperimentFQAN(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
-func setUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+func setUserShellAndHomeDir(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	rName := strings.TrimSpace(q.Get("resourcename"))
-	uName := strings.TrimSpace(q.Get("username"))
-	shell := strings.TrimSpace(q.Get("shell"))
-	hDir  := strings.TrimSpace(q.Get("homedir"))
+	uid 		:= NewNullAttribute(UID)
+	resourceid	:= NewNullAttribute(ResourceID)
 
-	if rName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No resourcename specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No resourcename specified.\" }")
-		return
-	}
-	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
-		return
-	}
-	if shell == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No shell specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No shell specified.\" }")
-		return
-	}
-	if hDir == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No homedir specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No homedir specified.\" }")
-		return
-	}
-
-	authorized, authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
-		return
-	}
-
-	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	err := c.DBtx.QueryRow(`select (select uid from users where uname = $1),
+								   (select compid from compute_resources where name = $2)`,
+						   i[UserName], i[ResourceName]).Scan(&uid, &resourceid)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	defer DBtx.Rollback(cKey)
-
-	// check whether the user and resource actually exist before doing anything
-	var cauid,cacompid sql.NullInt64
-	queryerr := DBtx.QueryRow(`select (select uid from users where uname=$1), (select compid from compute_resources where name=$2)`, uName, rName).Scan(&cauid, &cacompid)
-	if queryerr != nil && queryerr != sql.ErrNoRows {
-		log.WithFields(QueryFields(r, startTime)).Error("Error verifying user and resource status: " + queryerr.Error() + ". Will not proceed.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query. Check log.\" }")
-		return
-	}
-	if !cauid.Valid {
-		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")	
-		return
-	}
-	if !cacompid.Valid {
-		log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")	
-		return
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	res, err := DBtx.Exec(`update compute_access set shell = $1, home_dir = $2, last_updated = NOW() where compid = $3 and uid = $4`, shell, hDir, cacompid, cauid)
-
-	if err == nil {
-		//check whether any rows were modified. If no rows were modified, the user did not have access to this compute resource. Print such a message.
-		aRows, _ := res.RowsAffected()
-		if aRows == 0 {
-			log.WithFields(QueryFields(r, startTime)).Info("User " + uName + " does not have access to resource " + rName + ".")
-                        fmt.Fprintf(w, "{ \"ferry_error\": \"User does not have access to this resource.\" }")
-		} else {
-			log.WithFields(QueryFields(r, startTime)).Info("Success!")
-			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
-		}
-	} else {
-		if strings.Contains(err.Error(), `User does not exist.`) {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-		} else if strings.Contains(err.Error(), `Resource does not exist.`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
-		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
-		}
+	if !uid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
+	}
+	if !resourceid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, ResourceName))
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
 	}
 
-	if cKey != 0 {	DBtx.Commit(cKey) }
+	var member bool
+	err = c.DBtx.QueryRow(`select ($1, $2) in (select uid, compid from compute_access)`,
+						  uid, resourceid).Scan(&member)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !member {
+		apiErr = append(apiErr, APIError{
+			errors.New("user does not have access to compute resource"),
+			ErrorAPIRequirement,
+		})
+		return nil, apiErr
+	}
+
+	_, err = c.DBtx.Exec(`update compute_access set shell = $1, home_dir = $2, last_updated = NOW()
+						   where compid = $3 and uid = $4`, i[Shell], i[HomeDir], resourceid, uid)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	return nil, nil
 }
 
 func setUserShell(w http.ResponseWriter, r *http.Request) {
