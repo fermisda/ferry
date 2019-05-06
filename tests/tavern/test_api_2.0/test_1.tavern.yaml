@@ -1,0 +1,111 @@
+# Tests UserInfo  (get and set); restores changes
+test_name: test 1 getUserInfo
+stages: 
+ - name: testing getUserInfo
+   request:
+      url: https://fermicloud033.fnal.gov:8443/getUserInfo?username=napier
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_output: {'status': True,'fullname': 'Austin Napier', 'groupaccount': False, 'uid': 1136}
+             ferry_error: [] 
+             ferry_status: success
+---
+test_name: test 2 
+stages:
+ - name: "testing getUserInfo for failure: wrong uname"
+   request:
+      url: https://fermicloud033.fnal.gov:8443/getUserInfo?username=napierxxx
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_output: null 
+             ferry_error: 
+                       -  "username not found" 
+             ferry_status: failure
+---             
+test_name: test 3 setUserInfo
+stages:
+ - name: testing setUserInfo fullname change
+   request:
+      url: https://fermicloud033.fnal.gov:8443/setUserInfo?username=napier&fullname=New%20Austin%20Napier
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_output: null
+             ferry_error: []
+             ferry_status: success
+
+---
+test_name: test 4 getUserInfo
+stages:
+ - name: testing modified full name
+   request:
+      url: https://fermicloud033.fnal.gov:8443/getUserInfo?username=napier
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_output: {'status': True,'fullname': 'New Austin Napier', 'groupaccount': False, 'uid': 1136}
+             ferry_error: []
+             ferry_status: success
+---
+test_name: test 5 setUserInfo
+stages:
+ - name: testing setUserInfo fullname change back
+   request:
+      url: https://fermicloud033.fnal.gov:8443/setUserInfo?username=napier&fullname=Austin%20Napier
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_output: null
+             ferry_error: []
+             ferry_status: success
+---
+test_name: test 6 setUserInfo
+stages:
+ - name: testing setUserInfo groupaccount and status 
+   request:
+      url: https://fermicloud033.fnal.gov:8443/setUserInfo?username=novapro&groupaccount=true&status=true
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_output: null
+             ferry_error: []
+             ferry_status: success
+
+---
+test_name: test 7 getUserInfo
+stages:
+ - name: testing modified group account and status 
+   request:
+      url: https://fermicloud033.fnal.gov:8443/getUserInfo?username=novapro
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_output: {'status': True,'fullname': 'Steven Timm', 'groupaccount': True, 'uid': 42417}
+             ferry_error: []
+             ferry_status: success
+---
+test_name: test 6 setUserInfo
+stages:
+ - name: testing setUserInfo groupaccount and status 
+   request:
+      url: https://fermicloud033.fnal.gov:8443/setUserInfo?username=novapro&groupaccount=false&status=false
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_output: null
+             ferry_error: []
+             ferry_status: success
+
+
+
+
