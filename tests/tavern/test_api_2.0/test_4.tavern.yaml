@@ -1,0 +1,77 @@
+#Tests addCertificateDNToUser, getUserCertificateDNs, getALLUsersCertificateDNs
+test_name: test 1 addCertificateDNToUser
+stages: 
+ - name: testing addCertificateDNToUser
+   request:
+      url: https://fermicloud033.fnal.gov:8443/addCertificateDNToUser?unitname=ebd&username=tlevshin&dn=/DC=org/DC=opensciencegrid/O=Open%20Science%20Grid/OU=People/CN=Tanya%20Levshina%20306
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_status: "success"
+             ferry_error: []
+             ferry_output: null
+---
+test_name: test 2 
+stages:
+ - name: "testing addCertificateDNToUser failure: unitname not found"
+   request:
+      url: https://fermicloud033.fnal.gov:8443/addCertificateDNToUser?unitname=ebdX&username=tlevshin&dn=/DC=org/DC=opensciencegrid/O=Open%20Science%20Grid/OU=People/CN=Tanya%20Levshina%20306
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_status: "failure"
+             ferry_error: 
+                - "unitname not found"
+             ferry_output: null
+
+---
+test_name: test 3 
+stages:
+ - name: "testing addCertificateDNToUser for failure: username not found"
+   request:
+      url: https://fermicloud033.fnal.gov:8443/addCertificateDNToUser?unitname=ebd&username=tlevshinX&dn=/DC=org/DC=opensciencegrid/O=Open%20Science%20Grid/OU=People/CN=Tanya%20Levshina%20306
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_status: "failure"
+             ferry_error:
+                - "username not found"
+             ferry_output: null
+---
+test_name: test 4 
+stages:
+ - name: testing getUserCertificateDNs
+   request:
+      url: https://fermicloud033.fnal.gov:8443/getUserCertificateDNs?unitname=ebd&username=napier
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_status: "success"
+             ferry_error: []
+             ferry_output: 
+                - {"certificates":["/DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Austin Napier/CN=UID:napier"],"username":"napier"}
+
+---
+test_name: test 5
+stages:
+ - name: testing getALLUsersCertificateDNs
+   request:
+      url: https://fermicloud033.fnal.gov:8443/getAllUsersCertificateDNs?unitname=egp
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_status: "success"
+             ferry_error: []
+             ferry_output:
+                - {"certificates":[{"dn":"/DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Joe Boyd/CN=UID:boyd","unitname":"egp"}],"username":"boyd"}
+                - {"certificates":[{"dn":"/DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Alan Bross/CN=UID:bross","unitname":"egp"}],"username":"bross"}
+                - {"certificates":[{"dn":"/DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Ralf Ehrlich/CN=UID:ehrlich","unitname":"egp"}],"username":"ehrlich"}
+                - {"certificates":[{"dn":"/DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Kenneth Herner/CN=UID:kherner","unitname":"egp"},{"dn":"/DC=org/DC=opensciencegrid/O=Open Science Grid/OU=People/CN=Kenneth Herner 1385","unitname":"egp"},{"dn":"/DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/CN=Kenneth Herner A18121","unitname":"egp"},{"dn":"/DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=darksidepro/ds50samgpvm01.fnal.gov","unitname":"egp"},{"dn":"/DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=Robots/CN=ds50samgpvm01.fnal.gov/CN=cron/CN=Kenneth Herner/CN=UID:kherner","unitname":"egp"},{"dn":"/DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=coupp/couppgpvm01.fnal.gov","unitname":"egp"},{"dn":"/DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=production/gm2gpvm01.fnal.gov","unitname":"egp"},{"dn":"/DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=Robots/CN=novagpvm14.fnal.gov/CN=cron/CN=Kenneth Herner/CN=UID:kherner","unitname":"egp"}],"username":"kherner"}
+                - {"certificates":[{"dn":"/DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Thomas Kobilarcik/CN=UID:kobilarc","unitname":"egp"}],"username":"kobilarc"}
+                - {"certificates":[{"dn":"/DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Adam Lyon/CN=UID:lyon","unitname":"egp"}],"username":"lyon"}
+                - {"certificates":[{"dn":"/DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=Robots/CN=novagpvm01.fnal.gov/CN=cron/CN=Shreyas Bhat123456/CN=UID:sbhat","unitname":"egp"},{"dn":"/DC=org/DC=opensciencegrid/O=Open Science Grid/OU=People/CN=Shreyas Bhat 3733","unitname":"egp"},{"dn":"/DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=usdc/fifeutilgpvm01.fnal.gov","unitname":"egp"},{"dn":"/DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Shreyas Bhat/CN=UID:sbhat","unitname":"egp"}],"username":"sbhat"}

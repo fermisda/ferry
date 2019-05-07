@@ -1,0 +1,91 @@
+#Tests set/get user storage quota
+test_name: test 1 setUserStorageQuota
+stages: 
+ - name: testing setUserStorageQuota 
+   request:
+      url: https://fermicloud033.fnal.gov:8443/setUserStorageQuota?quotaunit=TB&quota=170.0&expirationdate=2019-12-08&unitname=cms&username=tlevshin&resourcename=EOS&groupaccount=False
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_status: "success"
+             ferry_error: []
+             ferry_output: null
+
+---
+
+test_name: test 2 setUserStorageQuota
+stages:
+ - name: "testing setUserStorageQuota for failure: wrong user name"
+   request:
+      url: https://fermicloud033.fnal.gov:8443/setUserStorageQuota?quotaunit=TB&quota=70.0&expirationdate=2019-12-08&unitname=cms&username=tlevshinX&resourcename=EOS&groupaccount=False
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_status: "failure"
+             ferry_error: 
+                - "username not found"
+             ferry_output: null
+---
+
+test_name: test 3 getUserStorageQuota
+stages:
+ - name: "testing getStorageQuotas "
+   request:
+      url: https://fermicloud033.fnal.gov:8443/getStorageQuotas?username=tlevshin&resourcename=EOS
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_status: "success"
+             ferry_error: []
+             ferry_output: {"groups": {}, "users": {"tlevshin": {"EOS": {"expirationdate":"2019-12-08T00:00:00Z", "path": "/eos/uscms/tlevshin","quota": 170000000000000, "quotaunit": "B"}}}}
+
+---
+test_name: test 4 setUserStorageQuota
+stages:
+ - name: reverting back the quota for setUserStorageQuota
+   request:
+      url: https://fermicloud033.fnal.gov:8443/setUserStorageQuota?quotaunit=TB&quota=1.0&expirationdate=2019-12-08&unitname=cms&username=tlevshin&resourcename=EOS&groupaccount=False
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_status: "success"
+             ferry_error: []
+             ferry_output: null
+
+
+
+---
+test_name: test 5 setUserStorageQuota
+stages:
+ - name: testing setUserStorageQuota for group account
+   request:
+      url: https://fermicloud033.fnal.gov:8443/setUserStorageQuota?quotaunit=TB&quota=28&expirationdate=2021-12-08&unitname=cms&username=lpcjj&resourcename=EOS&groupaccount=True
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_status: "success"
+             ferry_error: []
+             ferry_output: null
+
+---
+
+test_name: test 6 getUserStorageQuota
+stages:
+ - name: "testing getStorageQuotas "
+   request:
+      url: https://fermicloud033.fnal.gov:8443/getStorageQuotas?username=lpcjm&resourcename=EOS
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_status: "success"
+             ferry_error: []
+             ferry_output: {"groups": {}, "users": {}}
+
+
+
