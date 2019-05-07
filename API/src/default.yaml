@@ -69,6 +69,7 @@ dn_whitelist:
  - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=jobsub-dev.fnal.gov
  - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=fifebatch.fnal.gov
  - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=scsgpvm01.fnal.gov
+ - /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=scsgpvm01.fnal.gov
  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Joe Boyd/CN=UID:boyd
  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Kevin Retzke/CN=UID:kretzke
  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Shreyas Bhat/CN=UID:sbhat
