@@ -98,12 +98,14 @@ class Group:
             diff.append("members")
         return diff
 
-def postToSlack(message):
+def postToSlack(message, action):
     if "slack" not in config:
         return
     target = dict(config.items("slack"))
     url = target["url"]
-    data = {"payload": target["payload"].replace("$MSG", message)}
+    data = {"payload": target["payload"]}
+    data["payload"] = data["payload"].replace("$MSG", message)
+    data["payload"] = data["payload"].replace("$ACT", action)
     data = bytes(urllib.parse.urlencode(data).encode())
     urllib.request.urlopen(url, data)
 
@@ -127,9 +129,8 @@ def writeToFerry(action, params = None):
                 params = ""
             logging.info("action: %s(%s)" % (action, params))
             return True
-        message = "message: %s action: %s(%s)" %(jOut["ferry_error"], action, params)
-        logging.error(message)
-        postToSlack(message)
+        logging.error("message: %s action: %s(%s)" % (jOut["ferry_error"], action, params))
+        postToSlack(jOut["ferry_error"], "action: %s(%s)" % (action, params))
         return False
     else:
         params = ", ".join(["%s=%s" % (x, y) for x, y in params.items()])
@@ -154,9 +155,8 @@ def fetch_userdb():
             exit(2)
         files[f] = "%s/%s" % (cacheDir, f)
         if os.path.isfile(files[f] + ".error"):
-            message = "bad %s file detected on a previous cycle" % f
-            logging.error(message)
-            postToSlack(message)
+            logging.error("bad %s file detected on a previous cycle" % f)
+            postToSlack("Update Script Halted!", "Bad %s file detected on a previous cycle." % f)
             exit(5)
         logging.debug("Downloading %s: %s" % (f, u))
         if os.path.isfile(files[f]):
@@ -173,9 +173,8 @@ def fetch_userdb():
             changeRatio = 1 - s.ratio()
             totalChangeRatio += changeRatio
             if changeRatio > float(config.get("general", "cache_max_diff")):
-                message = "file %s has too many changes" % f
-                logging.error(message)
-                postToSlack(message)
+                logging.error("file %s has too many changes" % f)
+                postToSlack("Update Script Halted!", "File %s has too many changes." % f)
                 os.rename(files[f], files[f] + ".error")
                 os.rename(files[f] + ".cache", files[f])
                 exit(4)
@@ -246,16 +245,14 @@ def fetch_userdb():
     complete = complete and bool(re.search(r"# SERVICES active users list completed on  [A-z]{3} [A-z]{3} \d{2} \d{2}:\d{2} \d{4}", fileText))
     complete = complete and bool(loadedUsers)
     if not complete:
-        message = "file services-users.csv seem truncated"
-        logging.error(message)
-        postToSlack(message)
+        logging.error("file services-users.csv seem truncated")
+        postToSlack("Update Script Halted!", "File services-users.csv seem truncated")
         os.rename(files["services-users.csv"], files["services-users.csv"] + ".error")
         os.rename(files["services-users.csv"] + ".cache", files[f])
         exit(6)
     if int(loadedUsers.group(1)) != len(servicesUsersLines):
-        message = "file services-users.csv is missing users"
-        logging.error(message)
-        postToSlack(message)
+        logging.error("file services-users.csv is missing users")
+        postToSlack("Update Script Halted!", "File services-users.csv seem truncated")
         os.rename(files["services-users.csv"], files["services-users.csv"] + ".error")
         os.rename(files["services-users.csv"] + ".cache", files[f])
         exit(7)
