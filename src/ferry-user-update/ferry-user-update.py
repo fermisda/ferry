@@ -116,6 +116,9 @@ def resources(resourcesString):
     return resoruces
 
 def writeToFerry(action, params = None):
+    for item in ["username", "groupname"]:
+        if params and item in params and params[item] in skipList:
+            return
     target = dict(config.items("ferry"))
     url = target["hostname"] + target[action]
     if params:
@@ -131,6 +134,10 @@ def writeToFerry(action, params = None):
             return True
         logging.error("message: %s action: %s(%s)" % (jOut["ferry_error"], action, params))
         postToSlack(jOut["ferry_error"], "action: %s(%s)" % (action, params))
+        if jOut["ferry_error"] in target["skip_user_errors"]:
+            skipList.append(params["username"])
+        if jOut["ferry_error"] in target["skip_group_errors"]:
+            skipList.append(params["groupname"])
         return False
     else:
         params = ", ".join(["%s=%s" % (x, y) for x, y in params.items()])
@@ -531,6 +538,8 @@ if __name__ == "__main__":
     ferryContext.verify_mode = ssl.CERT_REQUIRED
     ferryContext.load_cert_chain(config.get("ferry", "cert"), config.get("ferry", "key"))
     ferryContext.load_verify_locations(capath=config.get("ferry", "ca"))
+
+    skipList = []
 
     logging.info("Starting Ferry User Update")
 
