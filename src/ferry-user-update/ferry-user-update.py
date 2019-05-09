@@ -510,6 +510,8 @@ if __name__ == "__main__":
 
     if "FERRY_API_HOST" in os.environ:
         config.set("ferry", "hostname", os.environ["FERRY_API_HOST"])
+    if "FERRY_SLACK_HOOK" in os.environ:
+        config.set("slack", "url", os.environ["FERRY_SLACK_HOOK"])
 
     rootDir = os.path.dirname(os.path.realpath(__file__))
     if config.has_option("general", "cache_dir"):
