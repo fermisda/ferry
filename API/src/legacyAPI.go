@@ -2997,3 +2997,78 @@ func getUserShellAndHomeDirLegacy(w http.ResponseWriter, r *http.Request) {
 	output += " ]"
 	fmt.Fprintf(w, output)
 }
+
+func setUserShellLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	aName := strings.TrimSpace(q.Get("unitname"))
+	uName := strings.TrimSpace(q.Get("username"))
+	shell := strings.TrimSpace(q.Get("shell"))
+
+	if aName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
+		return
+	}
+	if uName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
+		return
+	}
+	if shell == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No shell specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No shell specified.\" }")
+		return
+	}
+
+	authorized, authout := authorize(r)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
+		return
+	}
+
+	
+	var uid, unitid sql.NullInt64
+
+	queryerr := DBptr.QueryRow(`select uid, unitid from (select 1 as key, uid from users where uname = $1) as u full outer join (select 1 as key, unitid from affiliation_units au where au.name = $2 ) as aut on u.key=aut.key`, uName, aName).Scan(&uid,&unitid)
+	if queryerr == sql.ErrNoRows {
+		log.WithFields(QueryFields(r, startTime)).Error("User and unit do not exist.")	
+		fmt.Fprintf(w, "{ \"ferry_error\": \"User and unit do not exist.\" }")
+		return
+	}
+	if !uid.Valid {
+		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+	}
+	if !unitid.Valid {
+		log.WithFields(QueryFields(r, startTime)).Error("Unit does not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Unit does not exist.\" }")
+	}
+
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	defer DBtx.Rollback(cKey)
+
+	res, err := DBtx.Exec(`update compute_access set shell = $1, last_updated = NOW()
+			    where uid = $2 and compid in (select compid from compute_resources where unitid = $3)`, shell, uid, unitid)
+	if err == nil {
+		aRows, _ := res.RowsAffected()
+		if aRows == 0 {
+			log.WithFields(QueryFields(r, startTime)).Info("User " + uName + " does not have access to resources owned by " + aName + ".")
+                        fmt.Fprintf(w, "{ \"ferry_error\": \"User does not have access to this resource.\" }")
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Info("Success!")
+			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+		}
+	} else {	
+		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
+	}
+	
+	if cKey != 0 { DBtx.Commit(cKey) }
+}

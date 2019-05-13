@@ -186,7 +186,7 @@ func main() {
 	grouter.HandleFunc("/setUserExperimentFQAN", APIs["setUserExperimentFQAN"].Run)
 	grouter.HandleFunc("/setUserShellAndHomeDir", APIs["setUserShellAndHomeDir"].Run)
 	grouter.HandleFunc("/getUserShellAndHomeDir", APIs["getUserShellAndHomeDir"].Run)
-	grouter.HandleFunc("/setUserShell", setUserShell)
+	grouter.HandleFunc("/setUserShell", APIs["setUserShell"].Run)
 	grouter.HandleFunc("/setUserAccessToComputeResource", APIs["setUserAccessToComputeResource"].Run)
 	grouter.HandleFunc("/removeUserAccessFromResource", removeUserAccessFromResource)
 	grouter.HandleFunc("/getUserStorageQuota", getUserStorageQuota)
