@@ -3072,3 +3072,78 @@ func setUserShellLegacy(w http.ResponseWriter, r *http.Request) {
 	
 	if cKey != 0 { DBtx.Commit(cKey) }
 }
+
+func getUserStorageQuotaLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	rName := strings.TrimSpace(strings.ToLower(q.Get("resourcename")))
+	uName := strings.TrimSpace(q.Get("username"))
+	unitName := strings.TrimSpace(q.Get("unitname"))
+
+	if rName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No resource name specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No resourcename specified.\" }")
+		return
+
+	}
+	if uName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No user name specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
+		return
+	}
+	if unitName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No unit name specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
+		return
+	}
+
+	rows, err := DBptr.Query(`select sq.path,sq.value, sq.unit, sq.valid_until from storage_quota sq
+							  INNER JOIN affiliation_units on affiliation_units.unitid = sq.unitid
+							  INNER JOIN storage_resources on storage_resources.storageid = sq.storageid
+							  INNER JOIN users on users.uid = sq.uid
+							  where affiliation_units.name=$1 AND storage_resources.type=$2 and users.uname=$3 and (valid_until is null or valid_until >= NOW())
+							  order by valid_until desc`, unitName, rName, uName)
+	if err != nil {
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+
+		return
+	}
+	defer rows.Close()
+
+	type jsonentry struct {
+		Path       string `json:"path"`
+		Value      string `json:"value"`
+		Unit       string `json:"unit"`
+		ValidUntil string `json:"valid_until"`
+	}
+	var Out jsonentry
+	for rows.Next() {
+		var tmpPath, tmpUnit, tmpValue, tmpValid sql.NullString
+		rows.Scan(&tmpPath, &tmpValue, &tmpUnit, &tmpValid)
+		if tmpValue.Valid {
+			Out = jsonentry{tmpPath.String, tmpValue.String, tmpUnit.String, tmpValid.String}
+		}
+	}
+
+	var output interface{}	
+	if Out.Value == "" {
+		type jsonerror struct {
+			Error string `json:"ferry_error"`
+		}
+		var queryErr []jsonerror
+		queryErr = append(queryErr, jsonerror{"User has no quotas registered."})
+		log.WithFields(QueryFields(r, startTime)).Error("User has no quotas registered.")
+		output = queryErr
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonoutput, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+	}
+	fmt.Fprintf(w, string(jsonoutput))
+}

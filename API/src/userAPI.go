@@ -88,6 +88,16 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("setUserStorageQuota", &setUserStorageQuota)
 
+	getUserStorageQuota := BaseAPI {
+		InputModel {
+			Parameter{UserName, true},
+			Parameter{UnitName, true},
+			Parameter{ResourceName, true},
+		},
+		getUserStorageQuota,
+	}
+	c.Add("getUserStorageQuota", &getUserStorageQuota)
+
 	getStorageQuotas := BaseAPI {
 		InputModel {
 			Parameter{UserName, false},
@@ -1070,79 +1080,63 @@ func getUserShellAndHomeDir(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
-func getUserStorageQuota(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
-	rName := strings.TrimSpace(strings.ToLower(q.Get("resourcename")))
-	uName := strings.TrimSpace(q.Get("username"))
-	unitName := strings.TrimSpace(q.Get("unitname"))
+func getUserStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	if rName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No resource name specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No resourcename specified.\" }")
-		return
+	uid 		:= NewNullAttribute(UID)
+	unitid		:= NewNullAttribute(UnitID)
+	resourceid	:= NewNullAttribute(ResourceID)
 
-	}
-	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No user name specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
-		return
-	}
-	if unitName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No unit name specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
-		return
-	}
-
-	rows, err := DBptr.Query(`select sq.path,sq.value, sq.unit, sq.valid_until from storage_quota sq
-							  INNER JOIN affiliation_units on affiliation_units.unitid = sq.unitid
-							  INNER JOIN storage_resources on storage_resources.storageid = sq.storageid
-							  INNER JOIN users on users.uid = sq.uid
-							  where affiliation_units.name=$1 AND storage_resources.type=$2 and users.uname=$3 and (valid_until is null or valid_until >= NOW())
-							  order by valid_until desc`, unitName, rName, uName)
+	err := c.DBtx.QueryRow(`select (select uid from users where uname = $1),
+								   (select unitid from affiliation_units where name = $2),
+								   (select storageid from storage_resources where name = $3)`,
+						   i[UserName], i[UnitName], i[ResourceName]).Scan(&uid, &unitid, &resourceid)
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
 
-		return
+	if !uid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
+	}
+	if !unitid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+	}
+	if !resourceid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, ResourceName))
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	rows, err := DBptr.Query(`select path, value, unit, valid_until from storage_quota
+							  where uid = $1 AND unitid = $2 and storageid = $3 and (valid_until is null or valid_until >= NOW())
+							  order by valid_until desc`, uid, unitid, resourceid)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 	defer rows.Close()
 
-	type jsonentry struct {
-		Path       string `json:"path"`
-		Value      string `json:"value"`
-		Unit       string `json:"unit"`
-		ValidUntil string `json:"valid_until"`
-	}
-	var Out jsonentry
+	type jsonentry map[Attribute]interface{}
+	out := make(jsonentry)
+	
 	for rows.Next() {
-		var tmpPath, tmpUnit, tmpValue, tmpValid sql.NullString
-		rows.Scan(&tmpPath, &tmpValue, &tmpUnit, &tmpValid)
-		if tmpValue.Valid {
-			Out = jsonentry{tmpPath.String, tmpValue.String, tmpUnit.String, tmpValid.String}
+		row := NewMapNullAttribute(Path, Value, QuotaUnit, ExpirationDate)
+		rows.Scan(row[Path], row[Value], row[QuotaUnit], row[ExpirationDate])
+		if row[Value].Valid {
+			out = jsonentry{
+				Path:			row[Path].Data,
+				Value:			row[Value].Data,
+				QuotaUnit:		row[QuotaUnit].Data,
+				ExpirationDate:	row[ExpirationDate].Data,
+			}
 		}
 	}
 
-	var output interface{}	
-	if Out.Value == "" {
-		type jsonerror struct {
-			Error string `json:"ferry_error"`
-		}
-		var queryErr []jsonerror
-		queryErr = append(queryErr, jsonerror{"User has no quotas registered."})
-		log.WithFields(QueryFields(r, startTime)).Error("User has no quotas registered.")
-		output = queryErr
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = Out
-	}
-	jsonoutput, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-	}
-	fmt.Fprintf(w, string(jsonoutput))
+	return out, nil
 }
 
 func setUserStorageQuota(c APIContext, i Input) (interface{}, []APIError) {

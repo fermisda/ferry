@@ -189,7 +189,7 @@ func main() {
 	grouter.HandleFunc("/setUserShell", APIs["setUserShell"].Run)
 	grouter.HandleFunc("/setUserAccessToComputeResource", APIs["setUserAccessToComputeResource"].Run)
 	grouter.HandleFunc("/removeUserAccessFromResource", removeUserAccessFromResource)
-	grouter.HandleFunc("/getUserStorageQuota", getUserStorageQuota)
+	grouter.HandleFunc("/getUserStorageQuota", APIs["getUserStorageQuota"].Run)
 	grouter.HandleFunc("/setUserStorageQuota", APIs["setUserStorageQuota"].Run)
 	grouter.HandleFunc("/getUserExternalAffiliationAttributes", APIs["getUserExternalAffiliationAttributes"].Run)
 	grouter.HandleFunc("/addCertificateDNToUser", APIs["addCertificateDNToUser"].Run)
