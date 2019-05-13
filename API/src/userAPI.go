@@ -192,6 +192,16 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("setUserShellAndHomeDir", &setUserShellAndHomeDir)
 
+	getUserShellAndHomeDir := BaseAPI {
+		InputModel {
+			Parameter{UserName, true},
+			Parameter{ResourceName, true},
+			Parameter{LastUpdated, false},
+		},
+		getUserShellAndHomeDir,
+	}
+	c.Add("getUserShellAndHomeDir", &getUserShellAndHomeDir)
+
 	removeUserFromGroup := BaseAPI {
 		InputModel {
 			Parameter{UserName, true},
@@ -1007,95 +1017,69 @@ func setUserShell(w http.ResponseWriter, r *http.Request) {
 	if cKey != 0 { DBtx.Commit(cKey) }
 }
 
-func getUserShellAndHomeDir(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
-	comp := q.Get("resourcename")
-	user := q.Get("username")
+func getUserShellAndHomeDir(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	if comp == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No resourcename specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No resourcename specified.\" }")
-		return
-	}
-	if user == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
-		return
-	}
+	uid 		:= NewNullAttribute(UID)
+	resourceid	:= NewNullAttribute(ResourceID)
 
-	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
-	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
-		return
-	}
-
-	rows, err := DBptr.Query(`select t1.shell, t1.home_dir, c.resource_exists, c.user_exists from
-							 (select 1 as key, ca.shell, ca.home_dir from compute_access as ca
-							  left join compute_resources as cr on ca.compid = cr.compid
-							  left join users as us on ca.uid = us.uid 
-							  where cr.name=$1 and us.uname=$2 and (ca.last_updated>=$3 or $3 is null)) as t1
-							  right join (select 1 as key, $1 in (select name from compute_resources) as resource_exists,
-														   $2 in (select uname from users) as user_exists)
-							  as c on c.key = t1.key`, comp, user, lastupdate)
+	err := c.DBtx.QueryRow(`select (select uid from users where uname = $1),
+								   (select compid from compute_resources where name = $2)`,
+						   i[UserName], i[ResourceName]).Scan(&uid, &resourceid)
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		//		http.Error(w,"Error in DB query",404)
-		return
-	}
-	defer rows.Close()
-
-	var compExists bool
-	var userExists bool
-
-	type jsonout struct {
-		Shell   string `json:"shell"`
-		HomeDir string `json:"homedir"`
-	}
-	var Out jsonout
-
-	idx := 0
-	output := "[ "
-	for rows.Next() {
-		if idx != 0 {
-			output += ","
-		}
-
-		var tmpShell, tmpHomeDir sql.NullString
-		rows.Scan(&tmpShell, &tmpHomeDir, &compExists, &userExists)
-		if tmpShell.Valid {
-			Out.Shell = tmpShell.String
-			Out.HomeDir = tmpHomeDir.String
-			outline, jsonerr := json.Marshal(Out)
-			if jsonerr != nil {
-				log.WithFields(QueryFields(r, startTime)).Error(jsonerr)
-			}
-			output += string(outline)
-			idx++
-		}
-	}
-	if idx == 0 {
-		if !compExists {
-			output += `{"ferry_error": "Resource does not exist."},`
-			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
-		}
-		if !userExists {
-			output += `{"ferry_error": "User does not exist."},`
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-		}
-		output += `{"ferry_error": "User doesn't have access to resource."}`
-		log.WithFields(QueryFields(r, startTime)).Error("No super users found.")
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	output += " ]"
-	fmt.Fprintf(w, output)
+	if !uid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
+	}
+	if !resourceid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, ResourceName))
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	var member bool
+	err = c.DBtx.QueryRow(`select ($1, $2) in (select uid, compid from compute_access)`,
+						  uid, resourceid).Scan(&member)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !member {
+		apiErr = append(apiErr, APIError{
+			errors.New("user does not have access to compute resource"),
+			ErrorAPIRequirement,
+		})
+		return nil, apiErr
+	}
+
+	row := NewMapNullAttribute(Shell, HomeDir)
+	err = DBptr.QueryRow(`select shell, home_dir from compute_access
+						  where uid = $1 and compid = $2 and (last_updated >= $3 or $3 is null)`,
+						 uid, resourceid, i[LastUpdated]).Scan(row[Shell], row[HomeDir])
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	type jsonout map[Attribute]interface{}
+	var out jsonout
+
+	out = jsonout{
+		Shell:	 row[Shell].Data,
+		HomeDir: row[HomeDir].Data,
+	}
+
+	return out, nil
 }
+
 func getUserStorageQuota(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
