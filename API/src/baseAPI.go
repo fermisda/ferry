@@ -393,6 +393,7 @@ const (
 	HTTP200 ErrorType = iota
 	ErrorDataNotFound
 	ErrorInvalidData
+	ErrorDuplicateData
 	ErrorAPIRequirement
 	HTTP500
 	ErrorDbQuery
@@ -404,6 +405,7 @@ func (t ErrorType) DefaultMessage() string {
 		ErrorDbQuery:		"error while querying the database",
 		ErrorDataNotFound:	"%s not found",
 		ErrorInvalidData:	"%s is invalid",
+		ErrorDuplicateData: "%s already exists",
 	}
 	return messageMap[t]
 }
