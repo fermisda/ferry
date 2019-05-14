@@ -261,6 +261,15 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("getUserUID", &getUserUID)
 
+	getAllUsers := BaseAPI {
+		InputModel {
+			Parameter{Status, false},
+			Parameter{LastUpdated, false},
+		},
+		getAllUsers,
+	}
+	c.Add("getAllUsers", &getAllUsers)
+
 	getMemberAffiliations := BaseAPI {
 		InputModel {
 			Parameter{UserName, true},
@@ -2134,73 +2143,37 @@ func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIEr
 	return nil, nil
 }
 
-func getAllUsers(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
-	ao := strings.TrimSpace(q.Get("active"))
-	activeonly := false
+func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	if ao != "" {
-		if activebool,err := strconv.ParseBool(ao) ; err == nil {
-			activeonly = activebool
-		} else {
-			log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid value for active. Must be true or false (or omit it from the query).\" }")
-			return
-		}
-	}
-	
-	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
-	
-	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
-		return
-	}
+	status := i[Status].Default(false)
 
-	rows, err := DBptr.Query(`select uname, uid, full_name, status, expiration_date from users where (status=$1 or not $1) and (last_updated>=$2 or $2 is null) order by uname`,strconv.FormatBool(activeonly),lastupdate)
+	rows, err := DBptr.Query(`select uname, uid, full_name, status, expiration_date from users
+							  where (status=$1 or not $1) and (last_updated>=$2 or $2 is null)
+							  order by uname`, status, i[LastUpdated])
 	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
-		return
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 	defer rows.Close()
-	
-	type jsonout struct {
-		Uname string `json:"username"`
-		UID int `json:"uid"`
-		Fullname string `json:"full_name"`
-		Status bool `json:"status"`
-		ExpDate string `json:"expiration_date"`
-	} 
-	var Out []jsonout
+
+	type jsonout map[Attribute]interface{}
+	var out []jsonout
 	
 	for rows.Next() {
-		var tmpout jsonout
-		rows.Scan(&tmpout.Uname, &tmpout.UID, &tmpout.Fullname, &tmpout.Status, &tmpout.ExpDate)
-		Out = append(Out, tmpout)
+		row := NewMapNullAttribute(UserName, UID, FullName, Status, ExpirationDate)
+		rows.Scan(row[UserName], row[UID], row[FullName], row[Status], row[ExpirationDate])
+		out = append(out, jsonout{
+			UserName:		row[UserName].Data,
+			UID:			row[UID].Data,
+			FullName:		row[FullName].Data,
+			Status:			row[Status].Data,
+			ExpirationDate:	row[ExpirationDate].Data,
+		})
 	}
 
-	var output interface{}	
-	if len(Out) == 0 {
-		type jsonerror struct {
-			Error string `json:"ferry_error"`
-		}
-		var queryErr []jsonerror
-		queryErr = append(queryErr, jsonerror{"Query returned no users."})
-		log.WithFields(QueryFields(r, startTime)).Error("Query returned no users.")
-		output = queryErr
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = Out
-	}
-	jsonoutput, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-	}
-	fmt.Fprintf(w, string(jsonoutput))
+	return out, nil
 }
 
 func getAllUsersFQANs(w http.ResponseWriter, r *http.Request) {
