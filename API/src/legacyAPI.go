@@ -3316,3 +3316,102 @@ func getUserUIDLegacy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
+func getMemberAffiliationsLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	type jsonerror struct {
+		Error string `json:"ferry_error"`
+	}
+	var inputErr []jsonerror
+
+	user := q.Get("username")
+	expOnly := false
+
+	if user == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		inputErr = append(inputErr, jsonerror{"No username specified."})
+	}
+	if q.Get("experimentsonly") != "" {
+		var err error
+		if expOnly, err = strconv.ParseBool(q.Get("experimentsonly")); err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid experimentsonly specified in http query.")
+			inputErr = append(inputErr, jsonerror{"Invalid experimentsonly specified."})
+		}
+	}
+	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		inputErr = append(inputErr, jsonerror{"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time."})
+	}
+	if len(inputErr) > 0 {
+		jsonout, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err)
+		}
+		fmt.Fprintf(w, string(jsonout))
+		return
+	}
+
+	rows, err := DBptr.Query(`select name, alternative_name, user_exists from (
+									select distinct 1 as key, * from 
+										(select au.name, au.alternative_name from affiliation_units as au
+										 join affiliation_unit_user_certificate as ac on au.unitid = ac.unitid
+										 join user_certificates as uc on ac.dnid = uc.dnid
+										 join users as u on uc.uid = u.uid
+										 where u.uname = $1 and (((au.unitid in (select unitid from voms_url)) = $2) or not $2) and (ac.last_updated>=$3 or $3 is null)
+									) as t
+									right join (select 1 as key, $1 in (select uname from users) as user_exists) as c on key = c.key
+							 ) as r;`, user, expOnly, lastupdate)
+
+	if err != nil {
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	var userExists bool
+
+	type jsonentry struct {
+		Unit  string `json:"unitname"`
+		Aname string `json:"alternativename"`
+	}
+	var Entry jsonentry
+	var Out []jsonentry
+
+	for rows.Next() {
+		var tmpUnit, tmpAname sql.NullString
+		rows.Scan(&tmpUnit, &tmpAname, &userExists)
+
+		if tmpUnit.Valid {
+			Entry.Unit = tmpUnit.String
+			Entry.Aname = tmpAname.String
+			Out = append(Out, Entry)
+		}
+	}
+
+	var output interface{}
+	if len(Out) == 0 {
+		var queryErr []jsonerror
+		if !userExists {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			queryErr = append(queryErr, jsonerror{"User does not exist."})
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not belong to any affiliation unit or experiment.")
+			queryErr = append(queryErr, jsonerror{"User does not belong to any affiliation unit or experiment."})
+		}
+		output = queryErr
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonout, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	fmt.Fprintf(w, string(jsonout))
+}

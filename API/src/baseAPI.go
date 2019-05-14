@@ -185,71 +185,75 @@ type Attribute string
 
 // List of valid Attribute names
 const (
-	UserName 		Attribute = "username"
-	GroupName		Attribute = "groupname"
-	UnitName		Attribute = "unitname"
-	FullName 		Attribute = "fullname"
-	ResourceName	Attribute = "resourcename"
-	GroupType		Attribute = "grouptype"
-	ResourceType	Attribute = "resourcetype"
-	DN				Attribute = "dn"
-	UserAttribute	Attribute = "attribute"
-	Value			Attribute = "value"
-	QuotaUnit		Attribute = "quotaunit"
-	Path			Attribute = "path"
-	Shell			Attribute = "shell"
-	HomeDir			Attribute = "homedir"
-	FQAN			Attribute = "fqan"
-	Role			Attribute = "role"
-	UID				Attribute = "uid"
-	GID				Attribute = "gid"
-	GroupID			Attribute = "groupid"
-	DNID			Attribute = "dnid"
-	FQANID			Attribute = "fqanid"
-	UnitID			Attribute = "unitid"
-	ResourceID		Attribute = "compid"
-	Quota			Attribute = "quota"
-	Status			Attribute = "status"
-	Primary			Attribute = "primary"
-	Leader			Attribute = "leader"
-	GroupAccount  	Attribute = "groupaccount"
-	ExpirationDate	Attribute = "expirationdate"
-	LastUpdated		Attribute = "lastupdated"
+	UserName 			Attribute = "username"
+	GroupName			Attribute = "groupname"
+	UnitName			Attribute = "unitname"
+	FullName 			Attribute = "fullname"
+	ResourceName		Attribute = "resourcename"
+	AlternativeName		Attribute = "alternativename"
+	GroupType			Attribute = "grouptype"
+	ResourceType		Attribute = "resourcetype"
+	DN					Attribute = "dn"
+	UserAttribute		Attribute = "attribute"
+	Value				Attribute = "value"
+	QuotaUnit			Attribute = "quotaunit"
+	Path				Attribute = "path"
+	Shell				Attribute = "shell"
+	HomeDir				Attribute = "homedir"
+	FQAN				Attribute = "fqan"
+	Role				Attribute = "role"
+	UID					Attribute = "uid"
+	GID					Attribute = "gid"
+	GroupID				Attribute = "groupid"
+	DNID				Attribute = "dnid"
+	FQANID				Attribute = "fqanid"
+	UnitID				Attribute = "unitid"
+	ResourceID			Attribute = "compid"
+	Quota				Attribute = "quota"
+	Status				Attribute = "status"
+	Primary				Attribute = "primary"
+	Leader				Attribute = "leader"
+	GroupAccount  		Attribute = "groupaccount"
+	Experiment			Attribute = "experiment"
+	ExpirationDate		Attribute = "expirationdate"
+	LastUpdated			Attribute = "lastupdated"
 )
 
 // Type returns the type of the Attribute
 func (a Attribute) Type() (AttributeType) {
 	AttributeType := map[Attribute]AttributeType{
-		UserName:		TypeString,
-		GroupName:		TypeString,
-		UnitName: 		TypeString,
-		FullName:		TypeString,
-		ResourceName:	TypeString,
-		GroupType:		TypeString,
-		ResourceType:	TypeString,
-		DN:				TypeString,
-		UserAttribute:	TypeString,
-		Value:			TypeString,
-		QuotaUnit:		TypeString,
-		Path:			TypeString,
-		Shell:			TypeString,
-		HomeDir:		TypeString,
-		FQAN:			TypeString,
-		Role:			TypeString,
-		UID:			TypeInt,
-		GID:			TypeInt,
-		GroupID:		TypeInt,
-		DNID:			TypeInt,
-		FQANID:			TypeInt,
-		UnitID:			TypeInt,
-		ResourceID:		TypeInt,
-		Quota:			TypeFloat,
-		Status:			TypeBool,
-		Primary:		TypeBool,
-		Leader:			TypeBool,
-		GroupAccount:	TypeBool,
-		ExpirationDate:	TypeDate,
-		LastUpdated:	TypeDate,
+		UserName:			TypeString,
+		GroupName:			TypeString,
+		UnitName: 			TypeString,
+		FullName:			TypeString,
+		ResourceName:		TypeString,
+		AlternativeName:	TypeString,
+		GroupType:			TypeString,
+		ResourceType:		TypeString,
+		DN:					TypeString,
+		UserAttribute:		TypeString,
+		Value:				TypeString,
+		QuotaUnit:			TypeString,
+		Path:				TypeString,
+		Shell:				TypeString,
+		HomeDir:			TypeString,
+		FQAN:				TypeString,
+		Role:				TypeString,
+		UID:				TypeInt,
+		GID:				TypeInt,
+		GroupID:			TypeInt,
+		DNID:				TypeInt,
+		FQANID:				TypeInt,
+		UnitID:				TypeInt,
+		ResourceID:			TypeInt,
+		Quota:				TypeFloat,
+		Status:				TypeBool,
+		Primary:			TypeBool,
+		Leader:				TypeBool,
+		GroupAccount:		TypeBool,
+		Experiment:			TypeBool,
+		ExpirationDate:		TypeDate,
+		LastUpdated:		TypeDate,
 	}
 
 	return AttributeType[a]
