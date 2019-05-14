@@ -35,6 +35,19 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("setUserInfo", &setUserInfo)
 
+	createUser := BaseAPI {
+		InputModel {
+			Parameter{UID, true},
+			Parameter{UserName, true},
+			Parameter{FullName, true},
+			Parameter{Status, true},
+			Parameter{GroupName, true},
+			Parameter{ExpirationDate, false},
+		},
+		createUser,
+	}
+	c.Add("createUser", &createUser)
+
 	getSuperUserList := BaseAPI {
 		InputModel {
 			Parameter{UnitName, true},
@@ -1648,104 +1661,49 @@ func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
-func createUser(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+func createUser(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+	
+	groupid	:= NewNullAttribute(GroupID)
+	expDate	:= i[ExpirationDate].Default("2038-01-01")
 
-	authorized, authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
-		return
-	}
-
-	var uid, uName, fullname, expdate, groupname sql.NullString
-	var status sql.NullBool
-
-	q := r.URL.Query()
-	uid.Scan(strings.TrimSpace(q.Get("uid")))
-	uName.Scan(strings.TrimSpace(q.Get("username")))
-	fullname.Scan(strings.TrimSpace(q.Get("fullname")))
-	expdate.Scan(strings.TrimSpace(q.Get("expirationdate")))
-	groupname.Scan(strings.TrimSpace(q.Get("groupname")))
-	tmpStatus, err := strconv.ParseBool(strings.TrimSpace(q.Get("status")))
-
+	err := c.DBtx.QueryRow(`select (select groupid from groups where name = $1)`, i[GroupName]).Scan(&groupid)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Invalid status specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid status value. Must be true or false.\" }")
-		return
-	} else {
-		status.Scan(tmpStatus)
-	}
-	if uName.String == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
-		return
-	}
-	if uid.String == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No UID specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No uid specified.\" }")
-		return
-	}
-	if fullname.String == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No fullname specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No fullname specified.\" }")
-		return
-	}
-	if expdate.String == "" {
-		expdate.String = "2038-01-01"
-	}
-	if groupname.String == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No groupname specified.\" }")
-		return
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	DBtx, cKey, err := LoadTransaction(r, DBptr)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+	if !groupid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
+		return nil, apiErr
 	}
-	defer DBtx.Rollback(cKey)
 
-	_, err = DBtx.Exec(`insert into users (uname, uid, full_name, status, expiration_date, last_updated)
-						values ($1, $2, $3, $4, $5, NOW())`,
-						uName, uid, fullname, status, expdate)
+	_, err = c.DBtx.Exec(`insert into users (uname, uid, full_name, status, expiration_date, last_updated)
+						  values ($1, $2, $3, $4, $5, NOW())`,
+						 i[UserName], i[UID], i[FullName], i[Status], expDate)
 	if err != nil {
-		if strings.Contains(err.Error(), "invalid input syntax for type date") {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid expiration date.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid expiration date.\" }")
-		} else if strings.Contains(err.Error(), "duplicate key value violates unique constraint \"pk_users\"") {
-			log.WithFields(QueryFields(r, startTime)).Error("UID already exists.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"UID already exists\" }")
+		if strings.Contains(err.Error(), "duplicate key value violates unique constraint \"pk_users\"") {
+			apiErr = append(apiErr, DefaultAPIError(ErrorDuplicateData, UID))
 		} else if strings.Contains(err.Error(), "duplicate key value violates unique constraint \"unq_users_uname\"") {
-			log.WithFields(QueryFields(r, startTime)).Error("Username already exists.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Username already exists.\" }")
+			apiErr = append(apiErr, DefaultAPIError(ErrorDuplicateData, UserName))
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			fmt.Fprintf(w, "{ \"ferry_error\": \"" + strings.Replace(err.Error(), "\"", "'", -1) + "\" }")
+			log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))	
 		}
-		return
+		return nil, apiErr
 	}
 
-	_, err = DBtx.Exec(`insert into user_group (uid, groupid, is_leader, last_updated)
-						values ($1, (select groupid from groups where name = $2 and type = 'UnixGroup'), false, NOW())`,
-						uid, groupname)
+	_, err = c.DBtx.Exec(`insert into user_group (uid, groupid, is_leader, last_updated)
+						  values ($1, $2, false, NOW())`,
+						 i[UID], groupid)
 	if err != nil {
-		if strings.Contains(err.Error(), "null value in column \"groupid\" violates not-null constraint") {
-			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Group does not exist.\" }")
-		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			fmt.Fprintf(w, "{ \"ferry_error\": \"" + strings.Replace(err.Error(), "\"", "'", -1) + "\" }")
-		}
-		return
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	if cKey != 0 {
-		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
-	}
-	log.WithFields(QueryFields(r, startTime)).Info("Success!")
-	DBtx.Commit(cKey)
+	return nil, nil
 }
 
 func getMemberAffiliations(w http.ResponseWriter, r *http.Request) {
