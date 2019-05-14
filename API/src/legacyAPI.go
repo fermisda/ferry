@@ -3247,3 +3247,41 @@ func createUserLegacy(w http.ResponseWriter, r *http.Request) {
 	log.WithFields(QueryFields(r, startTime)).Info("Success!")
 	DBtx.Commit(cKey)
 }
+
+func getUserUnameLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	uidstr := q.Get("uid")
+	if uidstr == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No uid specified in http query.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No uid specified (use uid=<number> in API query).\" }")
+		return
+	}
+	uid,err := strconv.Atoi(uidstr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Invalid uid specified (either missing or not an integer).")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid uid format.\" }")
+		return	
+	}
+	
+	var uname string
+	checkerr := DBptr.QueryRow(`select uname from users where uid=$1`, uid).Scan(&uname)
+	
+	switch {
+	case checkerr == sql.ErrNoRows:
+		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+		log.WithFields(QueryFields(r, startTime)).Error("user ID " + uidstr + " not found in DB.")
+		return
+		
+	case checkerr != nil:
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query for " + uidstr + ": " + checkerr.Error())
+		return
+	default:		
+		fmt.Fprintf(w, "{ \"uname\": \"" + uname  + "\" }")	
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		return
+	}
+}
