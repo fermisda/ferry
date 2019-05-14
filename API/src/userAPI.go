@@ -252,6 +252,14 @@ func IncludeUserAPIs(c *APICollection) {
 		getUserUname,
 	}
 	c.Add("getUserUname", &getUserUname)
+
+	getUserUID := BaseAPI {
+		InputModel {
+			Parameter{UserName, true},
+		},
+		getUserUID,
+	}
+	c.Add("getUserUID", &getUserUID)
 }
 
 func getUserCertificateDNs(c APIContext, i Input) (interface{}, []APIError) {
@@ -1813,37 +1821,6 @@ func getMemberAffiliations(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, string(jsonout))
 }
 
-func getUserUID(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
-	uName := q.Get("username")
-	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No username specified (use username=foo in the API query).\" }")
-		return
-	}
-	var uid int
-	checkerr := DBptr.QueryRow(`select uid from users where uname=$1`, uName).Scan(&uid)
-	
-	switch {
-	case checkerr == sql.ErrNoRows:
-		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-		log.WithFields(QueryFields(r, startTime)).Error("user " + uName + " not found in DB.")
-		return
-		
-	case checkerr != nil: 
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query for " + uName + ": " + checkerr.Error())
-		return
-	default:
-		fmt.Fprintf(w, "{ \"uid\": " + strconv.Itoa(uid) + " }")	
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		return
-	}
-}
-
 func getUserUname(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 	
@@ -1862,6 +1839,26 @@ func getUserUname(c APIContext, i Input) (interface{}, []APIError) {
 	}
 
 	return uname.Data, nil
+}
+
+func getUserUID(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+	
+	uid := NewNullAttribute(UID)
+
+	err := c.DBtx.QueryRow(`select uid from users where uname = $1`, i[UserName]).Scan(&uid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !uid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
+		return nil, apiErr
+	}
+
+	return uid.Data, nil
 }
 
 func deleteUser(w http.ResponseWriter, r *http.Request) {
