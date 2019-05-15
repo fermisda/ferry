@@ -3542,3 +3542,61 @@ func getAllUsersFQANsLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, string(jsonoutput))
 }
+
+func createGroupLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	gName := q.Get("groupname")
+	gType := q.Get("grouptype")
+	var gid sql.NullString
+
+	if gName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified.\" }")
+		return
+	}
+	if gType == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No grouptype specified in http query.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No grouptype specified.\" }")
+		return
+	}
+	if q.Get("gid") != "" {
+		gid.Scan(q.Get("gid"))
+	}
+
+	authorized,authout := authorize(r)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
+		return
+	}
+
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	defer DBtx.Rollback(cKey)
+
+	_, err = DBtx.Exec("insert into groups (gid, name, type, last_updated) values ($1, $2, $3, NOW())", gid, gName, gType)
+	if err == nil {
+		DBtx.Commit(cKey)
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
+	} else {
+		if strings.Contains(err.Error(), `invalid input value for enum groups_group_type`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid grouptype specified in http query.")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid grouptype specified in http query.\" }")
+		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint "idx_groups_gid"`) {
+			log.WithFields(QueryFields(r, startTime)).Error("GID already exists.")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"GID already exists.\" }")
+		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Group already exists.")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Group already exists.\" }")
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Something went wrong.\" }")
+		}
+	}
+}

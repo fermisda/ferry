@@ -213,7 +213,7 @@ func main() {
 	//group API calls
 	grouter.HandleFunc("/getgroupmembers", APIs["getGroupMembers"].Run)
 	grouter.HandleFunc("/getGroupMembers", APIs["getGroupMembers"].Run)
-	grouter.HandleFunc("/createGroup", createGroup)
+	grouter.HandleFunc("/createGroup", APIs["createGroup"].Run)
 	grouter.HandleFunc("/deleteGroupt", deleteGroupt)
 	grouter.HandleFunc("/deleteGroup", deleteGroup)
 	grouter.HandleFunc("/addGroupToUnit", addGroupToUnit)
