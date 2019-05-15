@@ -192,6 +192,7 @@ const (
 	ResourceName		Attribute = "resourcename"
 	AlternativeName		Attribute = "alternativename"
 	GroupType			Attribute = "grouptype"
+	UnitType			Attribute = "unittype"
 	ResourceType		Attribute = "resourcetype"
 	DN					Attribute = "dn"
 	UserAttribute		Attribute = "attribute"
@@ -201,6 +202,7 @@ const (
 	Shell				Attribute = "shell"
 	HomeDir				Attribute = "homedir"
 	FQAN				Attribute = "fqan"
+	VOMSURL				Attribute = "vomsurl"
 	Role				Attribute = "role"
 	UID					Attribute = "uid"
 	GID					Attribute = "gid"
@@ -229,6 +231,7 @@ func (a Attribute) Type() (AttributeType) {
 		ResourceName:		TypeString,
 		AlternativeName:	TypeString,
 		GroupType:			TypeString,
+		UnitType:			TypeString,
 		ResourceType:		TypeString,
 		DN:					TypeString,
 		UserAttribute:		TypeString,
@@ -238,6 +241,7 @@ func (a Attribute) Type() (AttributeType) {
 		Shell:				TypeString,
 		HomeDir:			TypeString,
 		FQAN:				TypeString,
+		VOMSURL:			TypeString,
 		Role:				TypeString,
 		UID:				TypeInt,
 		GID:				TypeInt,

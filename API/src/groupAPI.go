@@ -95,6 +95,17 @@ func IncludeGroupAPIs(c *APICollection) {
 		removeGroupLeader,
 	}
 	c.Add("removeGroupLeader", &removeGroupLeader)
+
+	getGroupUnits := BaseAPI {
+		InputModel {
+			Parameter{GroupName, true},
+			Parameter{GroupType, false},
+			Parameter{Experiment, false},
+			Parameter{LastUpdated, false},
+		},
+		getGroupUnits,
+	}
+	c.Add("getGroupUnits", &getGroupUnits)
 }
 
 func createGroup(c APIContext, i Input) (interface{}, []APIError) {
@@ -687,117 +698,72 @@ func removeGroupLeader(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
-func getGroupUnits(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+func getGroupUnits(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	type jsonerror struct {
-		Error string `json:"ferry_error"`
-	}
-	var inputErr []jsonerror
-
-	group := q.Get("groupname")
-	gtype := q.Get("grouptype")
-	expOnly := false
-
-	if group == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No group name specified in http query.")
-		inputErr = append(inputErr, jsonerror{"No group name specified."})
-	}
-	if gtype == "" {
-		gtype = "UnixGroup"
-	}
-	if q.Get("experimentsonly") != "" {
-		var err error
-		if expOnly, err = strconv.ParseBool(q.Get("experimentsonly")); err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid experimentsonly specified in http query.")
-			inputErr = append(inputErr, jsonerror{"Invalid experimentsonly specified."})
-		}
-	}
+	groupid		:= NewNullAttribute(GroupID)
+	groupType	:= i[GroupType].Default("UnixGroup")
+	experiment	:= i[Experiment].Default(false)
 	
-	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
-	if parserr != nil {
-                log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
-          	inputErr = append(inputErr, jsonerror{"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time."})
-        }
-	
-	if len(inputErr) > 0 {
-		jsonout, err := json.Marshal(inputErr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
-		}
-		fmt.Fprintf(w, string(jsonout))
-		return
-	}
+	var validType bool
 
-	rows, err := DBptr.Query(`select name, type, url, alternative_name, group_exists from (
-								select 1 as key, au.*, vu.url from
-									affiliation_unit_group as ag left join
-									groups as g on ag.groupid = g.groupid left join
-									affiliation_units as au on ag.unitid = au.unitid left join
-									voms_url as vu on au.unitid = vu.unitid
-								where (g.name, g.type) = ($1, $2) and ((url is not null = $3) or not $3) and (vu.last_updated>=$4 or ag.last_updated>=$4 or $4 is null)
-							) as t right join (
-								select 1 as key, ($1, $2) in (select name, type from groups) as group_exists
-							) as c on t.key = c.key;`, group, gtype, expOnly, lastupdate)
+	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, groupType).Scan(&validType)
 	if err != nil {
-		if strings.Contains(err.Error(), "invalid input value for enum") {
-			defer log.WithFields(QueryFields(r, startTime)).Error("Invalid group type.")
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid group type.\" }")
-		} else {
-			defer log.WithFields(QueryFields(r, startTime)).Error(err)
-			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
-		}
-		return
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !validType {
+		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, GroupType))
+		return nil, apiErr
+	}
+
+	err = c.DBtx.QueryRow(`select groupid from groups where name = $1 and type = $2`,
+						  i[GroupName], groupType).Scan(&groupid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !groupid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
+		return nil, apiErr
+	}
+
+	rows, err := DBptr.Query(`select name, type, url, alternative_name from
+									affiliation_unit_group as ag join
+									affiliation_units using(unitid) left join
+									voms_url as vu using(unitid)
+								where groupid = $1 and ((url is not null = $2) or not $2)
+								and (vu.last_updated>=$3 or ag.last_updated>=$3 or $3 is null)`,
+								groupid, experiment, i[LastUpdated])
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 	defer rows.Close()
 
-	var groupExists bool
-
-	type jsonentry struct {
-		Unit  string `json:"unitname"`
-		Type  string `json:"type"`
-		Voms  string `json:"vomsurl"`
-		Aname string `json:"alternativename"`
-	}
-	var Entry jsonentry
-	var Out []jsonentry
+	type jsonentry map[Attribute]interface{}
+	out := make([]jsonentry, 0)
 
 	for rows.Next() {
-		var tmpUnit, tmpType, tmpVoms, tmpAname sql.NullString
-		rows.Scan(&tmpUnit, &tmpType, &tmpVoms, &tmpAname, &groupExists)
+		row := NewMapNullAttribute(UnitName, UnitType, VOMSURL, AlternativeName)
+		rows.Scan(row[UnitName], row[UnitType], row[VOMSURL], row[AlternativeName])
 
-		if tmpUnit.Valid {
-			Entry.Unit = tmpUnit.String
-			Entry.Type = tmpType.String
-			Entry.Voms = tmpVoms.String
-			Entry.Aname = tmpAname.String
-			Out = append(Out, Entry)
+		if row[UnitName].Valid {
+			out = append(out, jsonentry{
+				UnitName:			row[UnitName].Data,
+				UnitType:			row[UnitType].Data,
+				VOMSURL:			row[VOMSURL].Data,
+				AlternativeName:	row[AlternativeName].Data,
+			})
 		}
 	}
 
-	var output interface{}
-	if len(Out) == 0 {
-		var queryErr []jsonerror
-		if !groupExists {
-			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
-			queryErr = append(queryErr, jsonerror{"Group does not exist."})
-		} else {
-			log.WithFields(QueryFields(r, startTime)).Error("Group does not belong to any unit.")
-			queryErr = append(queryErr, jsonerror{"Group does not belong to any unit."})
-		}
-		output = queryErr
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = Out
-	}
-	jsonout, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	fmt.Fprintf(w, string(jsonout))
+	return out, nil
 }
 
 func getBatchPriorities(w http.ResponseWriter, r *http.Request) {

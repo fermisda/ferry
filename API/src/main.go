@@ -224,7 +224,7 @@ func main() {
 	grouter.HandleFunc("/IsUserMemberOfGroup", APIs["isUserMemberOfGroup"].Run)
 	grouter.HandleFunc("/setGroupLeader", APIs["setGroupLeader"].Run) //add user to group
 	grouter.HandleFunc("/removeGroupLeader", APIs["removeGroupLeader"].Run)
-	grouter.HandleFunc("/getGroupUnits", getGroupUnits) //don't remove the last leader
+	grouter.HandleFunc("/getGroupUnits", APIs["getGroupUnits"].Run) //don't remove the last leader
 	grouter.HandleFunc("/getBatchPriorities", getBatchPriorities)
 	grouter.HandleFunc("/getCondorQuotas", getCondorQuotas)
 	grouter.HandleFunc("/setGroupBatchPriority", setGroupBatchPriority)
@@ -252,7 +252,6 @@ func main() {
 	grouter.HandleFunc("/getStorageAccessLists", getStorageAccessLists)
 	grouter.HandleFunc("/createComputeResource", createComputeResource)
 	grouter.HandleFunc("/setComputeResourceInfo", setComputeResourceInfo)
-	grouter.HandleFunc("/getGroupUnits", getGroupUnits)
 	grouter.HandleFunc("/createStorageResource", createStorageResource)
 	grouter.HandleFunc("/setStorageResourceInfo", setStorageResourceInfo)
 	grouter.HandleFunc("/getStorageResourceInfo", getStorageResourceInfo)
