@@ -3484,3 +3484,61 @@ func getAllUsersLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, string(jsonoutput))
 }
+
+func getAllUsersFQANsLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	
+	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
+		return
+	}
+
+	rows, err := DBptr.Query(`select uname, fqan, name from grid_access as ga
+							  join grid_fqan as gf on ga.fqanid = gf.fqanid
+							  join users as u on ga.uid = u.uid
+							  join affiliation_units as au on gf.unitid = au.unitid
+							  where (ga.last_updated>=$1 or gf.last_updated>=$1 or
+									  u.last_updated>=$1 or au.last_updated>=$1 or $1 is null) order by uname;`, lastupdate)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+	
+	type jsonfqan struct {
+		FQAN string `json:"fqan"`
+		Unit string `json:"unitname"`
+	} 
+	Out := make(map[string][]jsonfqan)
+	
+	for rows.Next() {
+		var tmpUname, tmpFQAN, tmpUnit sql.NullString
+		rows.Scan(&tmpUname, &tmpFQAN, &tmpUnit)
+		Out[tmpUname.String] = append(Out[tmpUname.String], jsonfqan{tmpFQAN.String, tmpUnit.String})
+	}
+
+	var output interface{}	
+	if len(Out) == 0 {
+		type jsonerror struct {
+			Error string `json:"ferry_error"`
+		}
+		var queryErr []jsonerror
+		queryErr = append(queryErr, jsonerror{"Query returned no FQANs."})
+		log.WithFields(QueryFields(r, startTime)).Error("Query returned no FQANs.")
+		output = queryErr
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonoutput, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+	}
+	fmt.Fprintf(w, string(jsonoutput))
+}

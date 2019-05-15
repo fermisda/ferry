@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"net/http"
@@ -269,6 +268,14 @@ func IncludeUserAPIs(c *APICollection) {
 		getAllUsers,
 	}
 	c.Add("getAllUsers", &getAllUsers)
+
+	getAllUsersFQANs := BaseAPI {
+		InputModel {
+			Parameter{LastUpdated, false},
+		},
+		getAllUsersFQANs,
+	}
+	c.Add("getAllUsersFQANs", &getAllUsersFQANs)
 
 	getMemberAffiliations := BaseAPI {
 		InputModel {
@@ -2176,60 +2183,33 @@ func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
-func getAllUsersFQANs(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
-	
-	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
-	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
-		return
-	}
+func getAllUsersFQANs(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
 	rows, err := DBptr.Query(`select uname, fqan, name from grid_access as ga
-							  join grid_fqan as gf on ga.fqanid = gf.fqanid
-							  join users as u on ga.uid = u.uid
-							  join affiliation_units as au on gf.unitid = au.unitid
+							  join grid_fqan as gf using(fqanid)
+							  join users as u using(uid)
+							  join affiliation_units as au using(unitid)
 							  where (ga.last_updated>=$1 or gf.last_updated>=$1 or
-									  u.last_updated>=$1 or au.last_updated>=$1 or $1 is null) order by uname;`, lastupdate)
+									  u.last_updated>=$1 or au.last_updated>=$1 or $1 is null) order by uname;`, i[LastUpdated])
 	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
-		return
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 	defer rows.Close()
 	
-	type jsonfqan struct {
-		FQAN string `json:"fqan"`
-		Unit string `json:"unitname"`
-	} 
-	Out := make(map[string][]jsonfqan)
+	type jsonfqan map[Attribute]interface{}
+	out := make(map[string][]jsonfqan)
 	
 	for rows.Next() {
-		var tmpUname, tmpFQAN, tmpUnit sql.NullString
-		rows.Scan(&tmpUname, &tmpFQAN, &tmpUnit)
-		Out[tmpUname.String] = append(Out[tmpUname.String], jsonfqan{tmpFQAN.String, tmpUnit.String})
+		row := NewMapNullAttribute(UserName, FQAN, UnitName)
+		rows.Scan(row[UserName], row[FQAN], row[UnitName])
+		out[row[UserName].Data.(string)] = append(out[row[UserName].Data.(string)], jsonfqan{
+			FQAN: row[FQAN].Data,
+			UnitName: row[UnitName].Data,
+		})
 	}
 
-	var output interface{}	
-	if len(Out) == 0 {
-		type jsonerror struct {
-			Error string `json:"ferry_error"`
-		}
-		var queryErr []jsonerror
-		queryErr = append(queryErr, jsonerror{"Query returned no FQANs."})
-		log.WithFields(QueryFields(r, startTime)).Error("Query returned no FQANs.")
-		output = queryErr
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = Out
-	}
-	jsonoutput, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-	}
-	fmt.Fprintf(w, string(jsonoutput))
+	return out, nil
 }
