@@ -26,6 +26,17 @@ func IncludeGroupAPIs(c *APICollection) {
 	}
 	c.Add("createGroup", &createGroup)
 
+	addGroupToUnit := BaseAPI {
+		InputModel {
+			Parameter{GroupName, true},
+			Parameter{GroupType, true},
+			Parameter{UnitName, true},
+			Parameter{Primary, false},
+		},
+		addGroupToUnit,
+	}
+	c.Add("addGroupToUnit", &addGroupToUnit)
+
 	getGroupMembers := BaseAPI {
 		InputModel {
 			Parameter{GroupName, true},
@@ -144,93 +155,59 @@ func deleteGroup(w http.ResponseWriter, r *http.Request) {
 
 	NotDoneYet(w, r, startTime) 
 }
-func addGroupToUnit(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
-	groupname := strings.TrimSpace(q.Get("groupname"))
-	grouptype := strings.TrimSpace(q.Get("grouptype"))
-	unitName := strings.TrimSpace(q.Get("unitname"))
-	isPrimarystr := strings.TrimSpace(q.Get("is_primary"))
-	isPrimary := false
-//if is_primary is not set in the query, assume it is false. Otherwise take the value from the query
-	if isPrimarystr != "" {
-		var converr error
-		isPrimary, converr = strconv.ParseBool(isPrimarystr)	
-		if converr != nil {
-			log.WithFields(QueryFields(r, startTime)).Print("Invalid value of is_primary (Must be true or false).")
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid value for is_primary (Must be true or false).\" }")
-			return
-		}
-	}
-	if groupname == "" {	
-		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified\" }")
-		return
-	}
-	if grouptype == "" {	
-		log.WithFields(QueryFields(r, startTime)).Print("No grouptype specified.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No grouptype specified\" }")
-		return
-	}
-	if unitName == "" {	
-		log.WithFields(QueryFields(r, startTime)).Print("No unitname specified.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No unitname specified\" }")
-		return
-	}
-	
-	authorized,authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
-		return
-	}
-	
+func addGroupToUnit(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	DBtx, cKey, err := LoadTransaction(r, DBptr)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	defer DBtx.Rollback(cKey)
-
-	err = addGroupToUnitDB(DBtx, groupname, grouptype, unitName, isPrimary)
+	groupid	:= NewNullAttribute(GroupID)
+	unitid	:= NewNullAttribute(UnitID)
+	primary	:= i[Primary].Default(false)
 	
+	var validType bool
+
+	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, i[GroupType]).Scan(&validType)
 	if err != nil {
-		DBtx.Report(err.Error())
-		if strings.Contains(err.Error(), `Group and unit combination already in DB`) {
-			log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
-			if cKey != 0 {
-				fmt.Fprintf(w,"{ \"ferry_error\": \"Group already belongs to unit.\" }")
-			}
-		} else if strings.Contains(err.Error(), `unq_affiliation_unit_group_unitid_is_primary`) {
-			log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
-			if cKey != 0 {
-				fmt.Fprintf(w,"{ \"ferry_error\": \"Unit can not have more then one primary group.\" }")
-			}
-		} else if strings.Contains(err.Error(), `invalid input value for enum`) {
-			log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
-			if cKey != 0 {
-				fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid group type.\" }")
-			}
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !validType {
+		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, GroupType))
+		return nil, apiErr
+	}
+
+	err = c.DBtx.QueryRow(`select (select groupid from groups where name = $1 and type = $2),
+								  (select unitid from affiliation_units where name = $3)`,
+						  i[GroupName], i[GroupType], i[UnitName]).Scan(&groupid, &unitid)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !unitid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+	}
+	if !groupid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	_, err = c.DBtx.Exec(`insert into affiliation_unit_group (groupid, unitid, is_primary, last_updated) values ($1, $2, $3, NOW())`,
+						 groupid, unitid, primary)
+	if err != nil && !strings.Contains(err.Error(), "pk_affiliation_unit_group") {
+		if strings.Contains(err.Error(), `unq_affiliation_unit_group_unitid_is_primary`) {
+			apiErr = append(apiErr, APIError{errors.New("affiliation unit already has a primary group"), ErrorAPIRequirement})
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
-			if cKey != 0 {
-				fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB insert.\" }")
-			}
+			log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		}
-		//				DBtx.Rollback(cKey) // COMMENT 2018-04-04
-		return
-	} else {
-		w.WriteHeader(http.StatusOK)
-		log.WithFields(QueryFields(r, startTime)).Print("Successfully added " + groupname + " to affiliation_unit_groups.")
-		if cKey != 0 {
-			DBtx.Commit(cKey)
-			fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
-		}
+		return nil, apiErr
 	}
-	return	
-	
-	//	} //end first switch COMMENT 2018-04-04
+
+	return nil, nil
 }
 
 func removeGroupFromUnit(w http.ResponseWriter, r *http.Request) {
@@ -2053,77 +2030,6 @@ func addLPCCollaborationGroup(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 		return
 	}
-}
-
-func addGroupToUnitDB(tx *Transaction, groupname, grouptype, unitName string, isPrimary bool) (error) {
-
-	var unitId,groupId int
-	checkerr := tx.tx.QueryRow(`select unitid from affiliation_units where name=$1`,unitName).Scan(&unitId)
-	switch {
-	case checkerr == sql.ErrNoRows:
-//		log.WithFields(QueryFields(r, startTime)).Print("Affiliation unit " + unitName + " does not exist.")
-	//	w.WriteHeader(http.StatusNotFound)
-	//	fmt.Fprintf(w,"{ \"ferry_error\": \"Affiliation unit " + unitName + " does not exist.\" }")
-		return checkerr
-	case checkerr != nil:
-//		log.WithFields(QueryFields(r, startTime)).Print("Affiliation unit query error: " + checkerr.Error())
-
-		return checkerr
-	default:
-		grouperr := tx.tx.QueryRow(`select groupid from groups where name=$1 and type=$2`,groupname,grouptype).Scan(&groupId)
-//		log.WithFields(QueryFields(r, startTime)).Print(" group ID = " + strconv.Itoa(groupId))
-		switch {
-		case grouperr == sql.ErrNoRows:
-//			log.WithFields(QueryFields(r, startTime)).Print("Group " + groupname + " does not exist.")
-//			w.WriteHeader(http.StatusNotFound)
-//			fmt.Fprintf(w,"{ \"ferry_error\": \"Group " + groupname + " does not exist.\" }")
-			return grouperr
-		case grouperr != nil:
-			return grouperr
-		default:
-			// OK, both group and unit exist. Let's get down to business. Check if it's already in affiliation_unit_groups
-			
-			// start a transaction
-	//		DBtx, cKey, err := LoadTransaction(r, DBptr)
-	//		if err != nil {
-	//			log.WithFields(QueryFields(r, startTime)).Print("Error starting DB transaction: " + err.Error())
-	//			w.WriteHeader(http.StatusNotFound)
-	//			fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
-	//			return
-	//		}
-			
-			addstr := fmt.Sprintf(`do $$ begin if exists (select groupid, unitid from affiliation_unit_group where groupid=%d and unitid=%d) then raise 'Group and unit combination already in DB.'; else 
-insert into affiliation_unit_group (groupid, unitid, is_primary, last_updated) values (%d, %d, %t, NOW()); end if ; end $$;`, groupId, unitId, groupId, unitId, isPrimary)
-			log.Print(addstr)
-			stmt, err := tx.Prepare(addstr)
-			if err != nil {
-			//	log.WithFields(QueryFields(r, startTime)).Print("Error preparing DB command: " + err.Error())
-			//	w.WriteHeader(http.StatusNotFound)
-			//	fmt.Fprintf(w,"{ \"ferry_error\": \"Error preparing database command.\" }")
-				//				DBtx.Rollback(cKey)
-				return err
-			}
-			//run said statement and check errors
-			_, err = stmt.Exec()
-			defer stmt.Close()
-			if err != nil {
-//				if strings.Contains(err.Error(),`Group and unit combination already in DB`) {
-//					log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
-//				} else {
-//					log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
-//				}
-				//				DBtx.Rollback(cKey)
-				return err
-			} else {
-				// error is nil, so it's a success. Commit the transaction and return success.
-				//				DBtx.Commit(cKey)
-				
-//				log.WithFields(QueryFields(r, startTime)).Print("Successfully added " + groupname + " to affiliation_unit_groups.")
-				return nil	
-			}
-		}
-	} //en
-	
 }
 
 func setGroupStorageQuotaDB(tx *Transaction, gName, unitname, rName, groupquota, quotaunit, valid_until string) (error) {

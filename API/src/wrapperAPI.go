@@ -442,7 +442,7 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 	DBtx.Savepoint("addGroupToUnit")
 //	DBtx.Continue()
 	duplicateCountRef ++
-	addGroupToUnit(w,R)
+	addGroupToUnitLegacy(w,R)
 	if !DBtx.Complete() {
 		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") &&
 		   !strings.Contains(DBtx.Error().Error(), "Group and unit combination already in DB") {
