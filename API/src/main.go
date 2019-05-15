@@ -218,7 +218,7 @@ func main() {
 	grouter.HandleFunc("/deleteGroup", deleteGroup)
 	grouter.HandleFunc("/addGroupToUnit", APIs["addGroupToUnit"].Run)
 	grouter.HandleFunc("/removeGroupFromUnit", removeGroupFromUnit)
-	grouter.HandleFunc("/setPrimaryStatusGroup", setPrimaryStatusGroup)
+	grouter.HandleFunc("/setPrimaryStatusGroup", APIs["setPrimaryStatusGroup"].Run)
 	grouter.HandleFunc("/removePrimaryStatusfromGroup", removePrimaryStatusfromGroup)
 	grouter.HandleFunc("/IsUserLeaderOfGroup", APIs["isUserLeaderOfGroup"].Run)
 	grouter.HandleFunc("/IsUserMemberOfGroup", APIs["isUserMemberOfGroup"].Run)

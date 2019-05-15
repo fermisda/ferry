@@ -37,6 +37,15 @@ func IncludeGroupAPIs(c *APICollection) {
 	}
 	c.Add("addGroupToUnit", &addGroupToUnit)
 
+	setPrimaryStatusGroup := BaseAPI {
+		InputModel {
+			Parameter{GroupName, true},
+			Parameter{UnitName, true},
+		},
+		setPrimaryStatusGroup,
+	}
+	c.Add("setPrimaryStatusGroup", &setPrimaryStatusGroup)
+
 	getGroupMembers := BaseAPI {
 		InputModel {
 			Parameter{GroupName, true},
@@ -327,88 +336,64 @@ func removeGroupFromUnit(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, string(out))
 }
-func setPrimaryStatusGroup(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
-	groupname := strings.TrimSpace(q.Get("groupname"))
-	unitName := strings.TrimSpace(q.Get("unitname"))
-	if groupname == "" {	
-		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified\" }")
-		return
-	}
-	if unitName == "" {	
-		log.WithFields(QueryFields(r, startTime)).Print("No unitname specified.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No unitname specified\" }")
-		return
+
+func setPrimaryStatusGroup(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+
+	groupid	:= NewNullAttribute(GroupID)
+	unitid	:= NewNullAttribute(UnitID)
+
+	var groupInUnit bool
+
+	err := c.DBtx.QueryRow(`select (select groupid from groups where name = $1 and type = 'UnixGroup'),
+								   (select unitid from affiliation_units where name = $2)`,
+						  i[GroupName], i[UnitName]).Scan(&groupid, &unitid)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	authorized,authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
-		return
+	if !unitid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
 	}
-	
-	DBtx, cKey, err := LoadTransaction(r, DBptr)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Print("Error starting DB transaction: " + err.Error())
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
-		return
+	if !groupid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
 	}
-	defer DBtx.Rollback(cKey)
-	
-	setstr := fmt.Sprintf(`do $FOO$
-								declare grpid int;
-								declare idunit int;
-						   begin
-								select groupid into grpid from groups where name = '%s' and type = 'UnixGroup';
-								select unitid into idunit from affiliation_units where name = '%s';
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
 
-								if grpid is null then
-									raise 'Group does not exist.';
-								elseif idunit is null then
-									raise 'Unit does not exist.' ;
-								else
-									update affiliation_unit_group set is_primary = false, last_updated = NOW() where is_primary = true and unitid = idunit;
-									update affiliation_unit_group set is_primary = true, last_updated = NOW() where groupid = grpid and unitid = idunit;
-								end if ;
-						   end $FOO$;`, groupname, unitName)
-	stmt, err := DBtx.Prepare(setstr)
+	err = c.DBtx.QueryRow(`select ($1, $2) in (select groupid, unitid from affiliation_unit_group)`,
+						  groupid, unitid).Scan(&groupInUnit)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Print("Error preparing DB command: " + err.Error())
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Error preparing database command.\" }")
-		return
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
-	//run said statement and check errors
-	_, err = stmt.Exec()
-//	_, err = DBtx.Exec(setstr,groupname,unitName)
+
+	_, err = c.DBtx.Exec(`update affiliation_unit_group set is_primary = false, last_updated = NOW()
+						  where is_primary = true and unitid = $1`, unitid)
 	if err != nil {
-		if strings.Contains(err.Error(),`Group does not exist`) {
-			log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Group does not exist.\" }")
-		} else if strings.Contains(err.Error(),`Unit does not exist`) {
-			log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Unit does not exist.\" }")
-		} else {
-			w.WriteHeader(http.StatusNotFound)
-			log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB insert.\" }")		
-		}
-		stmt.Close()
-		return
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if groupInUnit {
+		_, err = c.DBtx.Exec(`update affiliation_unit_group set is_primary = true, last_updated = NOW()
+							  where groupid = $1 and unitid = $2`, groupid, unitid)
 	} else {
-		// error is nil, so it's a success. Commit the transaction and return success.
-		DBtx.Commit(cKey)
-		w.WriteHeader(http.StatusOK)
-		log.WithFields(QueryFields(r, startTime)).Print("Successfully added " + groupname + " to affiliation_unit_groups.")
-		fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
+		_, err = c.DBtx.Exec(`insert into affiliation_unit_group (groupid, unitid, is_primary, last_updated)
+							  values ($1, $2, true, NOW())`, groupid, unitid)
 	}
-	stmt.Close()
-	return
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	return nil, nil
 }
 
 func removePrimaryStatusfromGroup(w http.ResponseWriter, r *http.Request) {
