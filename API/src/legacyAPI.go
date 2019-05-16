@@ -4010,3 +4010,94 @@ func getAllGroupsLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, string(jsonoutput))
 }
+
+func getAllGroupsMembersLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	type jsonerror struct {
+		Error string `json:"ferry_error"`
+	}
+	var inputErr []jsonerror
+
+	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		inputErr = append(inputErr, jsonerror{"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time."})
+	}
+
+	if len(inputErr) > 0 {
+		jsonout, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err)
+		}
+		fmt.Fprintf(w, string(jsonout))
+		return
+	}
+
+	rows, err := DBptr.Query(`select g.name, g.type, g.gid, u.uname, u.uid
+							  from user_group as ug
+							  join users as u on ug.uid = u.uid
+							  right join groups as g on ug.groupid = g.groupid
+							  where ug.last_updated >= $1 or g.last_updated >= $1 or $1 is null
+							  order by g.name, g.type;`, lastupdate)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	type jsonuser struct {
+		Uname string `json:"username"`
+		Uid string `json:"uid"`
+	}
+	
+	type jsongroup struct {
+		Gname string `json:"name"`
+		Gtype string `json:"type"`
+		Gid int `json:"gid"`
+		Members []jsonuser `json:"members"`
+	}
+
+	var tmpgroup, group jsongroup
+	var Out []jsongroup
+	
+	for rows.Next() {
+		var tmpuser jsonuser
+		rows.Scan(&tmpgroup.Gname, &tmpgroup.Gtype, &tmpgroup.Gid, &tmpuser.Uname, &tmpuser.Uid)
+		if tmpgroup.Gname != group.Gname {
+			if group.Gname != "" {
+				Out = append(Out, group)
+			}
+			group = tmpgroup
+			if tmpuser.Uname != "" {
+				group.Members = append(group.Members, tmpuser)
+			}
+		} else {
+			group.Members = append(group.Members, tmpuser)
+		}
+	}
+	Out = append(Out, group)
+
+	var output interface{}	
+	if len(Out) == 0 {
+		type jsonerror struct {
+			Error string `json:"ferry_error"`
+		}
+		var queryErr []jsonerror
+		queryErr = append(queryErr, jsonerror{"Query returned no groups."})
+		log.WithFields(QueryFields(r, startTime)).Error("Query returned no groups.")
+		output = queryErr
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonoutput, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+	}
+	fmt.Fprintf(w, string(jsonoutput))
+}

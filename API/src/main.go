@@ -233,7 +233,7 @@ func main() {
 	grouter.HandleFunc("/getGroupStorageQuota", getGroupStorageQuota)
 	grouter.HandleFunc("/setGroupStorageQuota", setGroupStorageQuota)
 	grouter.HandleFunc("/getAllGroups", APIs["getAllGroups"].Run)
-	grouter.HandleFunc("/getAllGroupsMembers", getAllGroupsMembers)
+	grouter.HandleFunc("/getAllGroupsMembers", APIs["getAllGroupsMembers"].Run)
 	grouter.HandleFunc("/addLPCCollaborationGroup", addLPCCollaborationGroup)
 	grouter.HandleFunc("/getGroupAccessToResource", getGroupAccessToResource)
 

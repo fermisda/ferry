@@ -114,6 +114,14 @@ func IncludeGroupAPIs(c *APICollection) {
 		getAllGroups,
 	}
 	c.Add("getAllGroups", &getAllGroups)
+
+	getAllGroupsMembers := BaseAPI {
+		InputModel {
+			Parameter{LastUpdated, false},
+		},
+		getAllGroupsMembers,
+	}
+	c.Add("getAllGroupsMembers", &getAllGroupsMembers)
 }
 
 func createGroup(c APIContext, i Input) (interface{}, []APIError) {
@@ -1720,95 +1728,62 @@ func getAllGroups(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
-func getAllGroupsMembers(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+func getAllGroupsMembers(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	type jsonerror struct {
-		Error string `json:"ferry_error"`
-	}
-	var inputErr []jsonerror
-
-	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
-	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
-		inputErr = append(inputErr, jsonerror{"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time."})
-	}
-
-	if len(inputErr) > 0 {
-		jsonout, err := json.Marshal(inputErr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
-		}
-		fmt.Fprintf(w, string(jsonout))
-		return
-	}
-
-	rows, err := DBptr.Query(`select g.name, g.type, g.gid, u.uname, u.uid
+	rows, err := DBptr.Query(`select name, type, gid, uname, uid
 							  from user_group as ug
-							  join users as u on ug.uid = u.uid
-							  right join groups as g on ug.groupid = g.groupid
+							  join users using(uid)
+							  right join groups as g using(groupid)
 							  where ug.last_updated >= $1 or g.last_updated >= $1 or $1 is null
-							  order by g.name, g.type;`, lastupdate)
+							  order by name, type;`, i[LastUpdated])
 	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
-		return
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 	defer rows.Close()
 
-	type jsonuser struct {
-		Uname string `json:"username"`
-		Uid string `json:"uid"`
-	}
-	
-	type jsongroup struct {
-		Gname string `json:"name"`
-		Gtype string `json:"type"`
-		Gid int `json:"gid"`
-		Members []jsonuser `json:"members"`
-	}
+	type jsonentry map[Attribute]interface{}
 
-	var tmpgroup, group jsongroup
-	var Out []jsongroup
+	const Members Attribute = "members"
+	group := jsonentry {
+		GroupName: 	"",
+		GroupType: 	"",
+		GID:		0,
+		Members:	make([]jsonentry, 0),
+	}
+	out := make([]jsonentry, 0)
 	
 	for rows.Next() {
-		var tmpuser jsonuser
-		rows.Scan(&tmpgroup.Gname, &tmpgroup.Gtype, &tmpgroup.Gid, &tmpuser.Uname, &tmpuser.Uid)
-		if tmpgroup.Gname != group.Gname {
-			if group.Gname != "" {
-				Out = append(Out, group)
+		row := NewMapNullAttribute(GroupName, GroupType, GID, UserName, UID)
+		rows.Scan(row[GroupName], row[GroupType], row[GID], row[UserName], row[UID])
+		if row[GroupName].Data != group[GroupName] {
+			if group[GroupName] != "" {
+				out = append(out, group)
 			}
-			group = tmpgroup
-			if tmpuser.Uname != "" {
-				group.Members = append(group.Members, tmpuser)
+			group = jsonentry {
+				GroupName: 	row[GroupName].Data,
+				GroupType: 	row[GroupType].Data,
+				GID:		row[GID].Data,
+				Members:	make([]jsonentry, 0),
+			}
+			if row[UserName].Data != "" {
+				group[Members] = append(group[Members].([]jsonentry), jsonentry {
+					UserName:	row[UserName].Data,
+					UID:		row[UID].Data,
+				})
 			}
 		} else {
-			group.Members = append(group.Members, tmpuser)
+			group[Members] = append(group[Members].([]jsonentry), jsonentry {
+				UserName:	row[UserName].Data,
+				UID:		row[UID].Data,
+			})
 		}
 	}
-	Out = append(Out, group)
+	out = append(out, group)
 
-	var output interface{}	
-	if len(Out) == 0 {
-		type jsonerror struct {
-			Error string `json:"ferry_error"`
-		}
-		var queryErr []jsonerror
-		queryErr = append(queryErr, jsonerror{"Query returned no groups."})
-		log.WithFields(QueryFields(r, startTime)).Error("Query returned no groups.")
-		output = queryErr
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = Out
-	}
-	jsonoutput, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-	}
-	fmt.Fprintf(w, string(jsonoutput))
+	return out, nil
 }
 
 func addLPCCollaborationGroup(w http.ResponseWriter, r *http.Request) {
