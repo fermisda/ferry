@@ -1,5 +1,6 @@
 package main
 import (
+	"errors"
 	"database/sql"
 	"strconv"
 	log "github.com/sirupsen/logrus"
@@ -32,6 +33,22 @@ func IncludeMiscAPIs(c *APICollection) {
 		},
 	}
 	c.Add("testBaseAPI", &testBaseAPI)
+
+	setUserStorageQuota := BaseAPI {
+		InputModel {
+			Parameter{UserName, false},
+			Parameter{GroupName, false},
+			Parameter{UnitName, true},
+			Parameter{ResourceName, true},
+			Parameter{Quota, true},
+			Parameter{QuotaUnit, true},
+			Parameter{Path, false},
+			Parameter{GroupAccount, false},
+			Parameter{ExpirationDate, false},
+		},
+		setUserStorageQuota,
+	}
+	c.Add("setUserStorageQuota", &setUserStorageQuota)
 }
 
 func NotDoneYet(w http.ResponseWriter, r *http.Request, t time.Time) {
@@ -1990,4 +2007,120 @@ func cleanCondorQuotas(w http.ResponseWriter, r *http.Request) {
 
 	log.WithFields(QueryFields(r, startTime)).Info("Success!")
 	fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
+}
+
+func setUserStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+	var vStorageid, vDataid, vUnitid sql.NullInt64
+
+	gAccount := i[GroupAccount].Default(false)
+
+	var dataAttr Attribute
+	if !gAccount.Data.(bool) {
+		dataAttr = UserName
+	} else {
+		dataAttr = GroupName
+	}
+
+	if !i[dataAttr].Valid {
+		apiErr = append(apiErr, APIError{fmt.Errorf("required parameter %s not provided", dataAttr), ErrorAPIRequirement})
+		return nil, apiErr
+	}
+	
+	// get storageID, unitid, uid/gid
+	var querystr string
+	if gAccount.Data.(bool) {
+		querystr = `select (select storageid from storage_resources where name=$1), (select groupid as id from groups where name=$2), (select unitid from affiliation_units where name=$3)`
+	} else {
+		querystr = `select (select storageid from storage_resources where name=$1), (select uid as id from users where uname=$2), (select unitid from affiliation_units where name=$3)`
+	}
+	queryerr := c.DBtx.QueryRow(querystr, i[ResourceName], i[dataAttr], i[UnitName]).Scan(&vStorageid, &vDataid, &vUnitid)
+	if queryerr != nil && queryerr != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+	if !vDataid.Valid {
+		var dataID Attribute
+		if !gAccount.Data.(bool) {
+			dataID = UserName
+		} else {
+			dataID = GroupName
+		}
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, dataID))
+	} 
+	if !vStorageid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, ResourceName))
+	}
+	if !vUnitid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+	}
+
+	// We want to store the value in the DB in bytes, no matter what the input unit is. Convert the value here and then set the unit of "B" for bytes	
+	newquota, converr := convertValue(i[Quota].Data, i[QuotaUnit].Data.(string), "B")
+	if converr != nil {
+		apiErr = append(apiErr, APIError{converr, ErrorInvalidData})
+	}
+
+	// set the quota value to be stored to newquota, which is now in bytes
+	quota := strconv.FormatFloat(newquota, 'f', 0, 64)
+	unit := "B"
+
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+	
+	var vPath sql.NullString
+	var column string
+
+	if gAccount.Data.(bool) {
+		column = `groupid`
+	} else { 
+		column = `uid` 
+	}
+
+	if i[Path].Valid {
+		vPath.String = i[Path].Data.(string)
+		vPath.Valid = i[Path].Valid
+	} else if !i[Path].AbsoluteNull {
+		queryerr = c.DBtx.tx.QueryRow(`select path from storage_quota
+									 where storageid = $1 and ` + column + ` = $2 and
+									 unitid = $3 and valid_until is NULL`,
+									 vStorageid, vDataid, vUnitid).Scan(&vPath)
+		if queryerr != nil && queryerr != sql.ErrNoRows {
+			log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+			return nil, apiErr
+		}
+	}
+	if !gAccount.Data.(bool) && !vPath.Valid {
+		var msg string
+		if !i[ExpirationDate].Valid { 
+			msg = "null path for user quota"
+		} else {
+			msg = "no permanent quota"
+		}
+		apiErr = append(apiErr, APIError{errors.New(msg), ErrorAPIRequirement})
+		return nil, apiErr
+	}
+
+	var tmpNull string
+	if i[ExpirationDate].Valid {
+		tmpNull = "not "
+	}
+
+	c.DBtx.Exec(`insert into storage_quota (storageid, ` + column + `, unitid, value, unit, valid_until, path, last_updated)
+				values ($1, $2, $3, $4, $5, $6, $7, NOW())
+				on conflict (storageid, ` + column + `) where valid_until is ` + tmpNull + `null
+				do update set value = $4, unit = $5, valid_until = $6, path = $7, last_updated = NOW()`,
+				vStorageid, vDataid, vUnitid, quota, unit, i[ExpirationDate], vPath)
+	if !i[ExpirationDate].Valid {
+		c.DBtx.Exec(`delete from storage_quota where storageid = $1 and ` + column + ` = $2 and valid_until is not null`, vStorageid, vDataid)
+	}
+	
+	if c.DBtx.Error() != nil {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+	return nil, nil
 }
