@@ -234,7 +234,6 @@ func main() {
 	grouter.HandleFunc("/setGroupStorageQuota", setGroupStorageQuota)
 	grouter.HandleFunc("/getAllGroups", APIs["getAllGroups"].Run)
 	grouter.HandleFunc("/getAllGroupsMembers", APIs["getAllGroupsMembers"].Run)
-	grouter.HandleFunc("/addLPCCollaborationGroup", addLPCCollaborationGroup)
 	grouter.HandleFunc("/getGroupAccessToResource", getGroupAccessToResource)
 
 	// misc API cals
@@ -285,6 +284,7 @@ func main() {
 	grouter.HandleFunc("/createExperiment", createExperiment)
 	grouter.HandleFunc("/addLPCConvener", addLPCConvener)
 	grouter.HandleFunc("/removeLPCConvener", removeLPCConvener)
+	grouter.HandleFunc("/addLPCCollaborationGroup", APIs["addLPCCollaborationGroup"].Run)
 
 	srvConfig := viper.GetStringMapString("server")
 	Mainsrv = &http.Server{

@@ -34,7 +34,7 @@ func IncludeMiscAPIs(c *APICollection) {
 	}
 	c.Add("testBaseAPI", &testBaseAPI)
 
-	setUserStorageQuota := BaseAPI {
+	setStorageQuota := BaseAPI {
 		InputModel {
 			Parameter{UserName, false},
 			Parameter{GroupName, false},
@@ -46,9 +46,9 @@ func IncludeMiscAPIs(c *APICollection) {
 			Parameter{GroupAccount, false},
 			Parameter{ExpirationDate, false},
 		},
-		setUserStorageQuota,
+		setStorageQuota,
 	}
-	c.Add("setUserStorageQuota", &setUserStorageQuota)
+	c.Add("setStorageQuota", &setStorageQuota)
 }
 
 func NotDoneYet(w http.ResponseWriter, r *http.Request, t time.Time) {
@@ -2009,7 +2009,7 @@ func cleanCondorQuotas(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 }
 
-func setUserStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
+func setStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 	var vStorageid, vDataid, vUnitid sql.NullInt64
 

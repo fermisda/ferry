@@ -23,6 +23,16 @@ func IncludeWrapperAPIs(c *APICollection) {
 		addUserToExperiment,
 	}
 	c.Add("addUserToExperiment", &addUserToExperiment)
+
+	addLPCCollaborationGroup := BaseAPI {
+		InputModel {
+			Parameter{GroupName, true},
+			Parameter{Quota, true},
+			Parameter{QuotaUnit, false},
+		},
+		addLPCCollaborationGroup,
+	}
+	c.Add("addLPCCollaborationGroup", &addLPCCollaborationGroup)
 }
 
 func testWrapper(w http.ResponseWriter, r *http.Request) {
@@ -194,7 +204,7 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 		rows.Close()
 
 		for _, input := range(inputs) {
-			_, apiErr = setUserStorageQuota(c, input)
+			_, apiErr = setStorageQuota(c, input)
 			if len(apiErr) > 0 {
 				return nil, apiErr
 			}
@@ -646,4 +656,120 @@ func removeLPCConvener(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 
 	DBtx.Commit(key)
+}
+
+func addLPCCollaborationGroup(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+
+	uid			:= NewNullAttribute(UID)
+	groupid		:= NewNullAttribute(GroupID)
+	unitid		:= NewNullAttribute(UnitID)
+	resourceid	:= NewNullAttribute(ResourceID)
+
+	username	:= NewNullAttribute(UserName).Default(i[GroupName].Data)
+	unitname	:= NewNullAttribute(UnitName).Default("cms")
+	computeres	:= NewNullAttribute(ResourceName).Default("lpcinteractive")
+	storageres  := NewNullAttribute(ResourceName).Default("EOS")
+	grouptype	:= NewNullAttribute(GroupType).Default("UnixGroup")
+	primaryUnit	:= NewNullAttribute(Primary).Default(false)
+	primaryComp	:= NewNullAttribute(Primary).Default(true)
+	quotaunit	:= i[QuotaUnit].Default("B")
+
+	if i[GroupName].Data.(string)[0:3] != "lpc" {
+		apiErr = append(apiErr, APIError{errors.New("groupname must begin with lpc"), ErrorAPIRequirement})
+		return nil, apiErr
+	}
+	
+	err := c.DBtx.QueryRow(`select (select uid from users where uname = $1),
+								   (select groupid from groups where name = $1 and type = $2),
+								   (select unitid from affiliation_units where name = $3),
+								   (select compid from compute_resources where name = $4);`,
+						   i[GroupName], grouptype, unitname, computeres).Scan(&uid, &groupid, &unitid, &resourceid)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !uid.Valid {
+		apiErr = append(apiErr, APIError{errors.New("LPC groups require a user with the same name"), ErrorAPIRequirement})
+	}
+	if !groupid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
+	}
+	if !unitid.Valid {
+		apiErr = append(apiErr, APIError{fmt.Errorf("LPC groups require the affiliation unit '%s'", unitname.Data.(string)), ErrorAPIRequirement})
+	}
+	if !resourceid.Valid {
+		apiErr = append(apiErr, APIError{fmt.Errorf("LPC groups require the compute resource '%s'", computeres.Data.(string)), ErrorAPIRequirement})
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	input := make(Input)
+
+	input.Add(i[GroupName])
+	input.Add(grouptype)
+	input.Add(unitname)
+	input.Add(primaryUnit)
+
+	_, apiErr = addGroupToUnit(c, input)
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	shell 	:= NewNullAttribute(Shell)
+	homedir	:= NewNullAttribute(HomeDir)
+	err = c.DBtx.QueryRow(`select (select default_shell from compute_resources where name = $1),
+								  (select default_home_dir from compute_resources where name = $1)`,
+								  computeres).Scan(&shell, &homedir)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !shell.Valid {
+		apiErr = append(apiErr, APIError{fmt.Errorf("default shell for '%s' not found", computeres.Data.(string)), ErrorAPIRequirement})
+	}
+	if !homedir.Valid {
+		apiErr = append(apiErr, APIError{fmt.Errorf("default home directory for '%s' not found", computeres.Data.(string)), ErrorAPIRequirement})
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	input = make(Input)
+
+	input.Add(username)
+	input.Add(i[GroupName])
+	input.Add(computeres)
+	input.Add(shell)
+	input.Add(primaryComp)
+	input.Add(homedir)
+
+	_, apiErr = setUserAccessToComputeResource(c, input)
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	input = make(Input)
+
+	input.Add(username)
+	input.Add(i[GroupName])
+	input.Add(unitname)
+	input.Add(storageres)
+	input.Add(i[Quota])
+	input.Add(quotaunit)
+	input.Add(NewNullAttribute(Path))
+	input.AddValue(GroupAccount, true)
+	input.Add(NewNullAttribute(ExpirationDate))
+
+	_, apiErr = setStorageQuota(c, input)
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	return nil, nil
 }
