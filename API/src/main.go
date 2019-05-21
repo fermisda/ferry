@@ -234,7 +234,7 @@ func main() {
 	grouter.HandleFunc("/setGroupStorageQuota", setGroupStorageQuota)
 	grouter.HandleFunc("/getAllGroups", APIs["getAllGroups"].Run)
 	grouter.HandleFunc("/getAllGroupsMembers", APIs["getAllGroupsMembers"].Run)
-	grouter.HandleFunc("/getGroupAccessToResource", getGroupAccessToResource)
+	grouter.HandleFunc("/getGroupAccessToResource", APIs["getGroupAccessToResource"].Run)
 
 	// misc API cals
 	grouter.HandleFunc("/getPasswdFile", getPasswdFile)

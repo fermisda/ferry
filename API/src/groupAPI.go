@@ -122,6 +122,16 @@ func IncludeGroupAPIs(c *APICollection) {
 		getAllGroupsMembers,
 	}
 	c.Add("getAllGroupsMembers", &getAllGroupsMembers)
+
+	getGroupAccessToResource := BaseAPI {
+		InputModel {
+			Parameter{UnitName, true},
+			Parameter{ResourceName, true},
+			Parameter{LastUpdated, false},
+		},
+		getGroupAccessToResource,
+	}
+	c.Add("getGroupAccessToResource", &getGroupAccessToResource)
 }
 
 func createGroup(c APIContext, i Input) (interface{}, []APIError) {
@@ -1806,122 +1816,51 @@ func setGroupStorageQuotaDB(tx *Transaction, gName, unitname, rName, groupquota,
 	return reterr
 }
 
-func getGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+func getGroupAccessToResource(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	rName := strings.TrimSpace(q.Get("resourcename"))
-	unitName := strings.TrimSpace(q.Get("unitname"))
+	unitid		:= NewNullAttribute(UnitID)
+	resourceid	:= NewNullAttribute(ResourceID)
 
-	type jsonerror struct {
-		Error string `json:"ferry_error"`
-	}
-	var inputErr []jsonerror
-
-	if unitName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No  unit name specified in http query.")
-		inputErr = append(inputErr, jsonerror{"No unitname specified."})
-	}
-	if rName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No resource name specified in http query.")
-		inputErr = append(inputErr, jsonerror{"No resourcename specified."})
-	}	
-	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
-	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
-		inputErr = append(inputErr, jsonerror{"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time."})
+	err := c.DBtx.QueryRow(`select (select unitid from affiliation_units where name = $1),
+								   (select compid from compute_resources where name = $2)`,
+						  i[UnitName], i[ResourceName]).Scan(&unitid, &resourceid)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	if len(inputErr) > 0 {
-		jsonout, err := json.Marshal(inputErr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
-		}
-		fmt.Fprintf(w, string(jsonout))
-		return
+	if !unitid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+	}
+	if !resourceid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, ResourceName))
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
 	}
 
-	var unitid,compid int
-	checkerr := DBptr.QueryRow(`select unitid from affiliation_units where name=$1`,unitName).Scan(&unitid)
-	switch {
-	case checkerr == sql.ErrNoRows:
-		log.WithFields(QueryFields(r, startTime)).Error("Unit " + unitName + " does not exist.")
-		inputErr = append(inputErr, jsonerror{"Unit " + unitName + " does not exist."})
-	case checkerr != nil :
-		log.WithFields(QueryFields(r, startTime)).Error("Error in affiliation_unit check: " + checkerr.Error())
-		inputErr = append(inputErr, jsonerror{"Error in affiliation_unit check."})	
-	}
-
-	checkerr = DBptr.QueryRow(`select compid from compute_resources where name=$1`,rName).Scan(&compid)
-	switch {
-	case checkerr == sql.ErrNoRows:
-		log.WithFields(QueryFields(r, startTime)).Error("Resource " + rName + " does not exist.")
-		inputErr = append(inputErr, jsonerror{"Resource " + rName + " does not exist."})
-	case checkerr != nil :
-		log.WithFields(QueryFields(r, startTime)).Error("Error in compute_resource check: " + checkerr.Error())
-		inputErr = append(inputErr, jsonerror{"Error in compute_resource check."})	
-	}
-
-	if len(inputErr) > 0 {
-		jsonout, err := json.Marshal(inputErr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
-		}
-		fmt.Fprintf(w, string(jsonout))
-		return
-	}
-	
-	type jsonout struct {
-		Groupname []string `json:"groups"`
-	}
-	
-	var (
-		grouplist jsonout
-		scanname string
-	)
-	rows, dberr := DBptr.Query(`select groups.name from groups
-								where groups.groupid in (
-									select distinct cg.groupid from compute_access as ca
-									join compute_access_group as cg on ca.compid = cg.compid and ca.uid = cg.uid
-									join compute_resources as cr on cr.compid=ca.compid
-									where ca.compid=$1 and cr.unitid=$2
-									and (ca.last_updated>=$3 or $3 is null)
-								) order by groups.name`, compid, unitid, lastupdate)
-	if dberr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + dberr.Error())
-		inputErr = append(inputErr, jsonerror{dberr.Error()})
-		
-		if len(inputErr) > 0 {
-			errjson, err := json.Marshal(inputErr)
-			if err != nil {
-				log.WithFields(QueryFields(r, startTime)).Error(err)
-			}
-			fmt.Fprintf(w, string(errjson))
-			return
-		}
+	out := make([]interface{}, 0)
+	rows, err := DBptr.Query(`select name from groups where groupid in (
+								select distinct groupid from compute_access as ca
+								join compute_access_group using(compid, uid)
+								join compute_resources using(compid)
+								where compid=$1 and unitid=$2
+								and (ca.last_updated>=$3 or $3 is null)
+							  ) order by groups.name`, resourceid, unitid, i[LastUpdated])
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 	defer rows.Close()
+
 	for rows.Next() {
-		rows.Scan(&scanname)
-		grouplist.Groupname = append(grouplist.Groupname,scanname)
+		row := NewNullAttribute(GroupName)
+		rows.Scan(&row)
+		out = append(out, row.Data)
 	}
 	
-	var output interface{}	
-	
-	if len(grouplist.Groupname) == 0 {
-		var queryErr []jsonerror
-		queryErr = append(queryErr, jsonerror{"No groups for this unit have access to this resource."})
-		log.WithFields(QueryFields(r, startTime)).Error("No groups for " + unitName + " on resource " + rName + ".")
-		output = queryErr
-		
-	} else {
-		output = grouplist
-	}
-	
-	jsonoutput, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-	}
-	fmt.Fprintf(w, string(jsonoutput))
+	return out, nil
 }
