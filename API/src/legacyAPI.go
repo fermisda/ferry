@@ -4535,3 +4535,61 @@ func getGroupGIDLegacy(w http.ResponseWriter, r *http.Request) {
 		}		
 	}
 }
+
+func getGroupNameLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	gid := q.Get("gid")
+	if gid == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No gid specified in http query.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No gid specified.\" }")
+		return
+	} else if _, err := strconv.Atoi(gid); err != nil  {
+		log.WithFields(QueryFields(r, startTime)).Error("Invalid gid specified in http query.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid gid specified.\" }")
+		return
+	}
+
+	pingerr := DBptr.Ping()
+	if pingerr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(pingerr)
+	}
+	
+	rows, err := DBptr.Query(`select name from groups where gid=$1`, gid)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"Error in DB query\n")	
+	} else {	
+		defer rows.Close()
+
+		type jsonout struct {
+			Groupname string `json:"groupname"`
+		}
+		var Out jsonout
+		
+		idx := 0
+		for rows.Next() {
+			if idx == 0 {
+				fmt.Fprintf(w,"[ ")
+			} else {
+				fmt.Fprintf(w,",")
+			}
+			rows.Scan(&Out.Groupname)
+			outline, jsonerr := json.Marshal(Out)
+			if jsonerr != nil {
+				log.WithFields(QueryFields(r, startTime)).Error(jsonerr)
+				}
+			fmt.Fprintf(w,string(outline))
+			idx++
+			}
+		if idx == 0 {
+			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+			fmt.Fprintf(w, `{ "ferry_error": "Group does not exist." }`)
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Info("Success!")
+			fmt.Fprintf(w," ]")
+		}		
+	}
+}
