@@ -4467,3 +4467,71 @@ func getGroupAccessToResourceLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, string(jsonoutput))
 }
+
+func getGroupGIDLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	gName := q.Get("groupname")
+	var iGid bool
+	if gName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified.\" }")
+		return
+	}
+	if q.Get("include_gid") != "" {
+		var err error
+		iGid, err = strconv.ParseBool(q.Get("include_gid"))
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid include_gid specified in http query.")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid include_gid specified.\" }")
+			return
+		}
+	}
+
+	pingerr := DBptr.Ping()
+	if pingerr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(pingerr)
+	}
+	
+	rows, err := DBptr.Query(`select groupid, gid from groups where name=$1 and type = 'UnixGroup'`, gName)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"Error in DB query\n")	
+	} else {	
+		defer rows.Close()
+
+		type jsonout struct {
+			Groupid int `json:"groupid"`;
+			Gid int `json:"gid,omitempty"`;
+		}
+		var Out jsonout
+		
+		idx := 0
+		for rows.Next() {
+			if idx == 0 {
+				fmt.Fprintf(w,"[ ")
+			} else {
+				fmt.Fprintf(w,",")
+			}
+			rows.Scan(&Out.Groupid, &Out.Gid)
+			if !iGid {
+				Out.Gid = 0
+			}
+			outline, jsonerr := json.Marshal(Out)
+			if jsonerr != nil {
+				log.WithFields(QueryFields(r, startTime)).Error(jsonerr)
+			}
+			fmt.Fprintf(w,string(outline))
+			idx++
+		}
+		if idx == 0 {
+			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+			fmt.Fprintf(w, `{ "ferry_error": "Group does not exist." }`)
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Info("Success!")
+			fmt.Fprintf(w," ]")
+		}		
+	}
+}
