@@ -2839,10 +2839,10 @@ func setUserAccessToComputeResource(w http.ResponseWriter, r *http.Request) {
 
 
 	//We need to check whether the user is in the requested group. If not, add now, or the subsequent steps will fail.
-	err = DBtx.tx.QueryRow(`select uid, groupid from user_group join users using(uid) join groups using (groupid) where users.uname=$1 and groups.name=$2`,uname,gName).Scan(&uid,&grpid)
+	err = DBtx.tx.QueryRow(`select uid, groupid from user_group join users using(uid) join groups using (groupid) where users.uname=$1 and groups.name=$2 and groups.type='UnixGroup'`,uname,gName).Scan(&uid,&grpid)
 	if err == sql.ErrNoRows {
 		// do the insertion now
-		_, ugerr := DBtx.Exec(`insert into user_group (uid, groupid) values ((select uid from users where uname=$1),(select groupid from groups where name=$2))`,uname,gName)
+		_, ugerr := DBtx.Exec(`insert into user_group (uid, groupid) values ((select uid from users where uname=$1),(select groupid from groups where name=$2 and type='UnixGroup'))`,uname,gName)
 		if ugerr != nil {
 			log.WithFields(QueryFields(r, startTime)).Error("Error inserting into user_group: " + ugerr.Error())
 			if cKey != 0 {
