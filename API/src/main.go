@@ -1,11 +1,11 @@
 package main
 
 import (
-	"strconv"
 	"database/sql"
 	"flag"
 	"fmt"
 	"net"
+	"strconv"
 
 	"github.com/fsnotify/fsnotify"
 
@@ -112,6 +112,7 @@ func main() {
 	IncludeGroupAPIs(&APIs)
 	IncludeMiscAPIs(&APIs)
 	IncludeWrapperAPIs(&APIs)
+	IncludeUnitAPIs(&APIs)
 
 	log.Debug("Here we go...")
 
@@ -266,12 +267,12 @@ func main() {
 	//affiliation unit API calls
 	grouter.HandleFunc("/createAffiliationUnit", createAffiliationUnit)
 	grouter.HandleFunc("/removeAffiliationUnit", removeAffiliationUnit)
-	grouter.HandleFunc("/setAffiliationUnitInfo", setAffiliationUnitInfo)
-	grouter.HandleFunc("/getAffiliationUnitMembers", getAffiliationUnitMembers)
-	grouter.HandleFunc("/getGroupsInAffiliationUnit", getGroupsInAffiliationUnit)
-	grouter.HandleFunc("/getGroupLeadersinAffiliationUnit", getGroupLeadersinAffiliationUnit)
+	grouter.HandleFunc("/setAffiliationUnitInfo", APIs["setAffiliationUnitInfo"].Run)
+	grouter.HandleFunc("/getAffiliationUnitMembers", APIs["getAffiliationUnitMembers"].Run)
+	grouter.HandleFunc("/getGroupsInAffiliationUnit", APIs["getGroupsInAffiliationUnit"].Run)
+	grouter.HandleFunc("/getGroupLeadersinAffiliationUnit", APIs["getGroupLeadersinAffiliationUnit"].Run)
 	grouter.HandleFunc("/getAffiliationUnitStorageResources", getAffiliationUnitStorageResources)
-	grouter.HandleFunc("/getAffiliationUnitComputeResources", getAffiliationUnitComputeResources)
+	grouter.HandleFunc("/getAffiliationUnitComputeResources", APIs["getAffiliationUnitComputeResources"].Run)
 	grouter.HandleFunc("/createFQAN", createFQAN)
 	grouter.HandleFunc("/removeFQAN", removeFQAN)
 	grouter.HandleFunc("/setFQANMappings", setFQANMappings)

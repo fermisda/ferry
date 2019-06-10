@@ -1659,9 +1659,11 @@ func getMemberAffiliations(c APIContext, i Input) (interface{}, []APIError) {
 				UnitName:			row[UnitName].Data,
 				AlternativeName:	row[AlternativeName].Data,
 			})
+		} else {
+			apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+			return nil, apiErr
 		}
 	}
-
 	return out, nil
 }
 
@@ -1678,7 +1680,7 @@ func getUserUname(c APIContext, i Input) (interface{}, []APIError) {
 	}
 
 	if !uname.Valid {
-		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UID))
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
 		return nil, apiErr
 	}
 
