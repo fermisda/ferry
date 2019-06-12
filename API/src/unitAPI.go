@@ -102,7 +102,8 @@ func createAffiliationUnit(c APIContext, i Input) (interface{}, []APIError) {
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))	
 		return nil, apiErr
-	} else if i[VOMSURL].Valid { //do only after unitid has been created by initial insert
+	} 
+	if i[VOMSURL].Valid { //do only after unitid has been created by initial insert
 		_, vomserr := c.DBtx.Exec(`insert into voms_url (unitid, url) values ((select unitid from affiliation_units where name = $1), $2)`, i[UnitName], i[VOMSURL])
 		if vomserr != nil {
 			log.WithFields(QueryFields(c.R, c.StartTime)).Error(vomserr)
