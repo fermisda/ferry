@@ -403,7 +403,7 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 	DBtx.Savepoint("createAffiliationUnit")
 //	DBtx.Continue()
 	duplicateCountRef ++
-	createAffiliationUnit(w,R)
+	createAffiliationUnitLegacy(w,R)
 	if ! DBtx.Complete() {
 		// ERROR HANDLING AND ROLLBACK		
 		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") &&

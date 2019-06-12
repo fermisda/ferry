@@ -265,7 +265,7 @@ func main() {
 	grouter.HandleFunc("/testBaseAPI", APIs["testBaseAPI"].Run)
 
 	//affiliation unit API calls
-	grouter.HandleFunc("/createAffiliationUnit", createAffiliationUnit)
+	grouter.HandleFunc("/createAffiliationUnit", APIs["createAffiliationUnit"].Run)
 	grouter.HandleFunc("/removeAffiliationUnit", removeAffiliationUnit)
 	grouter.HandleFunc("/setAffiliationUnitInfo", APIs["setAffiliationUnitInfo"].Run)
 	grouter.HandleFunc("/getAffiliationUnitMembers", APIs["getAffiliationUnitMembers"].Run)

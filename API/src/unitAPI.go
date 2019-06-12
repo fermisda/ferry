@@ -3,8 +3,6 @@ package main
 import (
 	"errors"
 	"regexp"
-
-	//	"regexp"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -12,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
 	_ "github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
 )
@@ -63,15 +60,22 @@ func IncludeUnitAPIs(c *APICollection) {
 		getAffiliationUnitComputeResources,
 	}
 	c.Add("getAffiliationUnitComputeResources", &getAffiliationUnitComputeResources)
+
+	createAffiliationUnit := BaseAPI {
+		InputModel {
+			Parameter{UnitName, true},
+			Parameter{VOMSURL, false},
+			Parameter{AlternativeName, false},
+			Parameter{UnitType, false},
+		},
+		createAffiliationUnit,
+	}
+	c.Add("createAffiliationUnit", &createAffiliationUnit)
 }
 
 func createAffiliationUnit(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
-	unitName := NewNullAttribute(UnitName)
-	vomsurl  := NewNullAttribute(VOMSURL)
-	altName  := NewNullAttribute(AlternativeName)
-	unitType := NewNullAttribute(UnitType)	
-	unitid 	 := NewNullAttribute(UnitID)
+	unitid := NewNullAttribute(UnitID)
 
 	//only the unit name is actually required; the others can be empty
 	if !i[UnitName].Valid {
@@ -79,64 +83,34 @@ func createAffiliationUnit(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	} 
 	
-	cerr := c.DBtx.QueryRow(`select unitid from affiliation_units where name=$1`, i[UnitName]).Scan(&unitid)
+	err := c.DBtx.QueryRow(`select unitid from affiliation_units where name=$1`,
+	i[UnitName]).Scan(&unitid)
+
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
-	switch {
-	case checkerr == sql.ErrNoRows:
-		// OK, it doesn't exist, let's add it now.
-
-		log.WithFields(QueryFields(r, startTime)).Info("cKey = " + fmt.Sprintf("%d", cKey))
-d
-		_, inserr := DBtx.Exec(`insert into affiliation_units (name, alternative_name, type) values ($1, $2, $3)`, unitName, altName, unitType)
-		if inserr != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error adding " + unitName + " to affiliation_units: " + inserr.Error())
-			if cKey != 0 {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"Error executing DB insert.\" }")
-			}
-			return
-		} else {
-			// check if voms_url was also supplied; insert there too if it was.
-			if voms_url != "" {
-				_, vomserr := DBtx.Exec(`insert into voms_url (unitid, url) values ((select unitid from affiliation_units where name = $1), $2)`, unitName, voms_url)
-				if vomserr != nil {
-					log.WithFields(QueryFields(r, startTime)).Error("Error adding " + unitName + " voms_url: " + vomserr.Error())
-					if cKey != 0 {
-						fmt.Fprintf(w, "{ \"ferry_error\": \"Error executing DB insert.\" }")
-					}
-					return
-				}
-			}
-
-			// error is nil, so it's a success. Commit the transaction and return success.
-			if cKey != 0 {
-				DBtx.Commit(cKey)
-			}
-			log.WithFields(QueryFields(r, startTime)).Info("Successfully added " + unitName + " to affiliation_units.")
-			if cKey != 0 {
-				fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
-			}
-		}
-		//	stmt.Close()
-		return
-	case checkerr != nil:
-		//other weird error
-		log.WithFields(QueryFields(r, startTime)).Error("Cannot create affiliation unit " + unitName + ": " + checkerr.Error())
-		if cKey != 0 {
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Database error; check logs.\" }")
-		}
-		return
-	default:
-		log.WithFields(QueryFields(r, startTime)).Error("Cannot create affiliation unit " + unitName + "; another unit with that name already exists.")
-		if cKey != 0 {
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Unit %s already exists.\" }", unitName)
-		}
-		DBtx.Report("Unit %s already exists.")
-		return
+	//if unitid is valid, the entry is a duplicate
+	if unitid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDuplicateData, UnitName))
+		return nil, apiErr
 	}
+	
+	_, err = c.DBtx.Exec(`insert into affiliation_units (name, alternative_name, type, last_updated) values ($1, $2, $3, NOW())`, i[UnitName], i[AlternativeName], i[UnitType])
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))	
+		return nil, apiErr
+	} else if i[VOMSURL].Valid { //do only after unitid has been created by initial insert
+		_, vomserr := c.DBtx.Exec(`insert into voms_url (unitid, url) values ((select unitid from affiliation_units where name = $1), $2)`, i[UnitName], i[VOMSURL])
+		if vomserr != nil {
+			log.WithFields(QueryFields(c.R, c.StartTime)).Error(vomserr)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))	
+			return nil, apiErr
+		}
+	}
+	return nil, nil
 }
 
 func removeAffiliationUnit(w http.ResponseWriter, r *http.Request) {
@@ -226,10 +200,10 @@ func setAffiliationUnitInfo(c APIContext, i Input) (interface{}, []APIError) {
 		apiErr = append(apiErr, APIError{errors.New("not enough arguments"), ErrorAPIRequirement})
 		return nil, apiErr
 	}
-	tmpID := NewNullAttribute(UnitID)
-	tmpvoms := NewNullAttribute(VOMSURL)
+	tmpID 	   := NewNullAttribute(UnitID)
+	tmpvoms    := NewNullAttribute(VOMSURL)
 	tmpaltName := NewNullAttribute(AlternativeName)
-	tmpType := NewNullAttribute(UnitType)
+	tmpType    := NewNullAttribute(UnitType)
 
 	queryerr := c.DBtx.QueryRow(`select au.unitid, vu.url, au.alternative_name, au.type from affiliation_units as au
 								left join voms_url as vu on au.unitid = vu.unitid where name=$1`,
@@ -303,9 +277,6 @@ func getAffiliationUnitMembers(c APIContext, i Input) (interface{}, []APIError) 
 				UID:		row[UID].Data,
 				UserName:	row[UserName].Data,
 			})		
-		} else {
-			apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UID))
-			return nil, apiErr
 		}
 	}
 	return out, nil
