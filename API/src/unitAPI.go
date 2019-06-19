@@ -55,7 +55,7 @@ func IncludeUnitAPIs(c *APICollection) {
 	getAffiliationUnitComputeResources := BaseAPI {
 		InputModel {
 			Parameter{UnitName, true},
-			Parameter{LastUpdated, true},
+			Parameter{LastUpdated, false},
 		},
 		getAffiliationUnitComputeResources,
 	}
@@ -331,17 +331,29 @@ func getGroupsInAffiliationUnit(c APIContext, i Input) (interface{}, []APIError)
 
 func getGroupLeadersinAffiliationUnit(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
-	if !i[UnitName].Valid {
-		apiErr = append(apiErr, DefaultAPIError(ErrorAPIRequirement, UnitName))
+
+	unitid	:= NewNullAttribute(UnitID)
+
+	err := c.DBtx.QueryRow(`select unitid from affiliation_units where name=$1`, i[UnitName]).Scan(&unitid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
 
-	rows, checkerr := DBptr.Query(`select DISTINCT groups.name, groups.type, user_group.uid, 
-	users.uname  from user_group join users on users.uid = user_group.uid join groups on 
-	groups.groupid = user_group.groupid where is_leader=TRUE and user_group.groupid in 
-	(select groupid from affiliation_unit_group left outer join affiliation_units as au 
-	on affiliation_unit_group.unitid= au.unitid where au.name=$1) order by groups.name, 
-	groups.type`, i[UnitName])
+	if !unitid.Valid && i[UnitName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+		return nil, apiErr
+	}
+
+	rows, checkerr := DBptr.Query(`select name, type, uid, uname from user_group
+								   join users using(uid)
+								   join groups using(groupid)
+								   where is_leader = TRUE and
+								   user_group.groupid in 
+										(select groupid from affiliation_unit_group where unitid = $1)
+								   order by groups.name, groups.type`,
+								  unitid)
 
 	if checkerr != nil && checkerr != sql.ErrNoRows {
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(checkerr)
@@ -350,27 +362,39 @@ func getGroupLeadersinAffiliationUnit(c APIContext, i Input) (interface{}, []API
 	}
 
 	defer rows.Close()
-	type jsonout map[Attribute] interface{}
+	type jsonout  map[Attribute]interface{}
+	type jsonlist []interface{}
+	
 	out := make([]jsonout, 0)
+	prevGroupName := NewNullAttribute(GroupName)
+	prevGroupType := NewNullAttribute(GroupType)
+	var uids, unames jsonlist
+
 
 	for rows.Next() {
 		row := NewMapNullAttribute(GroupName, GroupType, UID, UserName)
 		rows.Scan(row[GroupName], row[GroupType], row[UID], row[UserName])
-		if row[GroupName].Valid && row[UID].Valid && row[UserName].Valid {
-			out = append(out, jsonout {
-				GroupName:	row[GroupName],
-				GroupType:	row[GroupType],
-				UID:		row[UID],
-				UserName:   row[UserName],
-			})
-		} else if !row[GroupName].Valid {
-			apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
-			return nil, apiErr
-		} else if !row[UID].Valid {
-			apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UID))
-			return nil, apiErr
+		if row[GroupName].Valid {
+			if prevGroupName != *row[GroupName]{
+				if prevGroupName.Valid {
+					out = append(out, jsonout {
+						GroupName:	prevGroupName.Data,
+						GroupType:	prevGroupType.Data,
+						UID:		uids,
+						UserName:   unames,
+					})
+				}
+				uids = jsonlist{row[UID].Data}
+				unames = jsonlist{row[UserName].Data}
+				prevGroupName = *row[GroupName]
+				prevGroupType = *row[GroupType]
+			} else {
+				uids   = append(uids, row[UID].Data)
+				unames = append(unames, row[UserName].Data)
+			}
 		}
 	}
+
 	return out, nil
 }
 
@@ -384,18 +408,23 @@ func getAffiliationUnitStorageResources(w http.ResponseWriter, r *http.Request) 
 
 func getAffiliationUnitComputeResources(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
-	if !i[UnitName].Valid {
-		apiErr = append(apiErr, DefaultAPIError(ErrorAPIRequirement, UnitName))
+
+	unitid	:= NewNullAttribute(UnitID)
+
+	err := c.DBtx.QueryRow(`select unitid from affiliation_units where name=$1`, i[UnitName]).Scan(&unitid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
 
-	if !i[LastUpdated].Valid {
-		apiErr = append(apiErr, DefaultAPIError(ErrorAPIRequirement, LastUpdated))
+	if !unitid.Valid && i[UnitName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
 		return nil, apiErr
 	}
 
-	rows, err := c.DBtx.Query(`select cr.name, cr.type, cr.default_shell, cr.default_home_dir from compute_resources as cr 
-	join affiliation_units as au on au.unitid = cr.unitid where au.name=$1 and (cr.last_updated>=$2 or $2 is null) order by name`, i[UnitName], i[LastUpdated])
+	rows, err := c.DBtx.Query(`select name, type, default_shell, default_home_dir from compute_resources
+							   where unitid = $1 and (last_updated>=$2 or $2 is null) order by name`, unitid, i[LastUpdated])
 	if err != nil {
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -409,14 +438,11 @@ func getAffiliationUnitComputeResources(c APIContext, i Input) (interface{}, []A
 		rows.Scan(row[ResourceName], row[ResourceType], row[Shell], row[HomeDir])
 		if row[ResourceName].Valid && row[ResourceType].Valid && row[Shell].Valid && row[HomeDir].Valid {
 			out = append(out, jsonout {
-				ResourceName:	row[ResourceName],
-				ResourceType:	row[ResourceType],
-				Shell:			row[Shell],
-				HomeDir:   		row[HomeDir],
+				ResourceName:	row[ResourceName].Data,
+				ResourceType:	row[ResourceType].Data,
+				Shell:			row[Shell].Data,
+				HomeDir:   		row[HomeDir].Data,
 			})
-		} else if !row[ResourceName].Valid {
-			apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, ResourceName))
-			return nil, apiErr
 		}
 	}
 	return out, nil
