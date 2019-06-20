@@ -231,7 +231,7 @@ func addUsertoExperiment(w http.ResponseWriter, r *http.Request) {
 	setUserAccessToComputeResource(w, R)
 	if !DBtx.Complete() {
 		if !strings.Contains(DBtx.Error().Error(), "The request already exists in the database.") {
-			log.WithFields(QueryFields(r, startTime)).Error("addUserToGroup failed: " + DBtx.Error().Error() )
+			log.WithFields(QueryFields(r, startTime)).Error("setUserAccessToComputeResource failed: " + DBtx.Error().Error() )
 			fmt.Fprintf(w, "{ \"ferry_error\": \"setUserAccessToComputeResource for " + compResource + " failed. Last DB error: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
 			return
 		}
