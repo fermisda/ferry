@@ -107,5 +107,31 @@ stages:
              ferry_status: success
 
 
+---
+test_name: test 7 getUserUname
+stages:
+ - name: testing getUserUname
+   request:
+      url: https://fermicloud033.fnal.gov:8443/getUserUname?uid=6956
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_output: tlevshin
+             ferry_error: []
+             ferry_status: success
 
 
+---
+test_name: test 7 getUserUname
+stages:
+ - name: testing getUserUname
+   request:
+      url: https://fermicloud033.fnal.gov:8443/getUserUID?username=tlevshin
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_output: 6956
+             ferry_error: []
+             ferry_status: success

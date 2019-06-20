@@ -75,3 +75,26 @@ stages:
                 - {"certificates":[{"dn":"/DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Thomas Kobilarcik/CN=UID:kobilarc","unitname":"egp"}],"username":"kobilarc"}
                 - {"certificates":[{"dn":"/DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Adam Lyon/CN=UID:lyon","unitname":"egp"}],"username":"lyon"}
                 - {"certificates":[{"dn":"/DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=Robots/CN=novagpvm01.fnal.gov/CN=cron/CN=Shreyas Bhat123456/CN=UID:sbhat","unitname":"egp"},{"dn":"/DC=org/DC=opensciencegrid/O=Open Science Grid/OU=People/CN=Shreyas Bhat 3733","unitname":"egp"},{"dn":"/DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=usdc/fifeutilgpvm01.fnal.gov","unitname":"egp"},{"dn":"/DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Shreyas Bhat/CN=UID:sbhat","unitname":"egp"}],"username":"sbhat"}
+
+---
+test_name: test 6
+stages:
+ - name: testing getMemberAffiliations
+   request:
+      url: https://fermicloud033.fnal.gov:8443/getMemberAffiliations?username=tlevshin
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_status: "success"
+             ferry_error: []
+             ferry_output:
+                - {"alternativename": "","unitname": "cms"}
+                - {"alternativename": "","unitname": "dune"}
+                - {"alternativename": "","unitname": "ebd"}
+                - {"alternativename": "","unitname": "fermilab"}
+                - {"alternativename": "","unitname": "genie"}
+                - {"alternativename": "","unitname": "mu2e"}
+                - {"alternativename": "","unitname": "nova"}
+                - {"alternativename": "","unitname": "pip-ii"}
+                - {"alternativename": "microboone","unitname": "uboone"}
