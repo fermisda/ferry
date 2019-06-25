@@ -107,7 +107,7 @@ def postToSlack(message, action):
     data["payload"] = data["payload"].replace("$MSG", message)
     data["payload"] = data["payload"].replace("$ACT", action)
     data = bytes(urllib.parse.urlencode(data).encode())
-    urllib.request.urlopen(url, data)
+    url_opener(url, data=data)
 
 def resources(resourcesString):
     resoruces = []
@@ -125,7 +125,7 @@ def writeToFerry(action, params = None):
         url += "?" + urllib.parse.urlencode(params)
     if not opts.dry_run:
         logging.debug(url)
-        jOut = json.loads(urllib.request.urlopen(url, context=ferryContext).read().decode())
+        jOut = json.loads(url_opener(url, context=ferryContext))
         logging.debug(jOut)
         if not "ferry_error" in jOut:
             if not params:
@@ -156,7 +156,7 @@ def fetch_userdb():
     # Parses dates to Ferry format
     files = {}
     totalChangeRatio = 0
-    for f, u in config.items("userdb"):
+    for f, url in config.items("userdb"):
         if f not in ["uid.lis", "gid.lis", "services-users.csv"]:
             logging.error("invalid userdb file %s" % f)
             exit(2)
@@ -165,11 +165,14 @@ def fetch_userdb():
             logging.error("bad %s file detected on a previous cycle" % f)
             postToSlack("Update Script Halted!", "Bad %s file detected on a previous cycle." % f)
             exit(5)
-        logging.debug("Downloading %s: %s" % (f, u))
+        logging.debug("Downloading %s: %s" % (f, url))
+        tmpOut = url_opener(url)
+        if not tmpOut:
+            exit(8)
         if os.path.isfile(files[f]):
             os.rename(files[f], files[f] + ".cache")
         userdbFile = open(files[f], "w")
-        userdbFile.write(urllib.request.urlopen(u).read().decode())
+        userdbFile.write(tmpOut)
         userdbFile.close()
         if os.path.isfile(files[f] + ".cache"):
             userdbLines = open(files[f], "r").readlines()
@@ -291,34 +294,49 @@ def fetch_ferry():
 
     url = source["hostname"] + source["api_get_users"]
     logging.debug("Fetching Ferry users: %s" % url)
-    jUsers = json.loads(urllib.request.urlopen(url, context=ferryContext).read().decode())
+    tmpOut = url_opener(url)
+    if not tmpOut:
+            exit(9)
+    jUsers = json.loads(tmpOut)
     for jUser in jUsers:
         users[str(jUser["uid"])] = User(str(jUser["uid"]), jUser["username"], jUser["full_name"], jUser["status"], dateSwitcher(jUser["expiration_date"]))
         unameUid[jUser["username"]] = str(jUser["uid"])
 
     url = source["hostname"] + source["api_get_certificates"]
     logging.debug("Fetching Ferry certificates: %s" % url)
-    jCerts = json.loads(urllib.request.urlopen(url, context=ferryContext).read().decode())
+    tmpOut = url_opener(url)
+    if not tmpOut:
+            exit(10)
+    jCerts = json.loads(tmpOut)
     for jUser in jCerts:
         for jCert in jUser["certificates"]:
             users[unameUid[jUser["username"]]].certificates.append(jCert["dn"])
 
     url = source["hostname"] + source["api_get_groups"]
     logging.debug("Fetching Ferry groups: %s" % url)
-    jGroups = json.loads(urllib.request.urlopen(url, context=ferryContext).read().decode())
+    tmpOut = url_opener(url)
+    if not tmpOut:
+            exit(11)
+    jGroups = json.loads(tmpOut)
     for jGroup in jGroups:
         groups[str(jGroup["gid"])] = Group(str(jGroup["gid"]), jGroup["name"], jGroup["type"])
 
     url = source["hostname"] + source["api_get_group_members"]
     logging.debug("Fetching Ferry group members: %s" % url)
-    jGroups = json.loads(urllib.request.urlopen(url, context=ferryContext).read().decode())
+    tmpOut = url_opener(url)
+    if not tmpOut:
+            exit(12)
+    jGroups = json.loads(tmpOut)
     for jGroup in jGroups:
         if jGroup["members"] != None:
             for jUser in jGroup["members"]:
                 groups[str(jGroup["gid"])].members.append(jUser["uid"])
 
     url = source["hostname"] + source["api_get_users_fqans"]
-    jFQANs = json.loads(urllib.request.urlopen(url, context=ferryContext).read().decode())
+    tmpOut = url_opener(url)
+    if not tmpOut:
+            exit(13)
+    jFQANs = json.loads(tmpOut)
     for uname, items in jFQANs.items():
         for item in items:
             users[unameUid[uname]].fqans.append((item["fqan"], item["unitname"]))
@@ -327,7 +345,7 @@ def fetch_ferry():
         resource = accessString.split(":")[0]
         url = source["hostname"] + source["api_get_passwd_file"] + "?resourcename=%s" % resource
         logging.debug("Fetching Ferry users access to %s: %s" % (resource, url))
-        jPasswd = json.loads(urllib.request.urlopen(url, context=ferryContext).read().decode())
+        jPasswd = json.loads(url_opener(url, context=ferryContext))
         jPasswd = list(jPasswd.values())[0] # get first affiliation unit
         if resource not in jPasswd["resources"]:
             logging.debug("Resorce %s does not exist." % resource)
@@ -337,6 +355,15 @@ def fetch_ferry():
             users[access["uid"]].addComputeAccess(accessString)
 
     return users, groups
+
+# Checks to see if urls can be accessed successfully
+def url_opener(url, data = None, context = None):
+    try:
+        return (urllib.request.urlopen(url, data=data, context=context).read().decode())
+    except:
+        logging.error("Failed to access remote server: %s", url)
+        return None
+
 
 # Updates users with data from uid.lis and services-users.csv
 def update_users():
