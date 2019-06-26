@@ -5236,3 +5236,76 @@ func createAffiliationUnitLegacy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
+func getBatchPrioritiesLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	uName := strings.TrimSpace(q.Get("unitname"))
+	rName := strings.TrimSpace(q.Get("resourcename"))
+//	expName := strings.TrimSpace(q.Get("unitname"))
+	if uName == "" {
+		uName = "%"
+	}
+	if rName == "" {
+		rName = "%"
+	}	
+	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
+		return
+	}
+
+	rows, err := DBptr.Query(`select cb.name, cb.value, cb.valid_until
+								from compute_batch as cb
+								join compute_resources as cr on cb.compid = cr.compid
+								join affiliation_units as au on cb.unitid = au.unitid
+							  where cb.type = 'priority' and cr.name like $1 and au.name like $2
+							  and (cr.last_updated >= $3 or $3 is null)`,rName, uName, lastupdate)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		log.WithFields(QueryFields(r, startTime)).Error("No resource name specified in DB query: " + err.Error())
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	var tmpName string
+	var tmpTime sql.NullString
+	var tmpVal float64
+	type jsonout struct {
+		Name string `json:"name"`
+		Value float64 `json:"priority"`
+		Validtime string `json:"valid_until,omitempty"`
+	}
+	var tmpout jsonout
+	var Out []jsonout
+	for rows.Next() {
+		rows.Scan(&tmpName,&tmpVal,&tmpTime)
+		tmpout.Name = tmpName
+		tmpout.Value = tmpVal
+		if tmpTime.Valid {
+			tmpout.Validtime = tmpTime.String 
+		}
+		Out = append(Out, tmpout)
+	}
+	var output interface{}	
+	if len(Out) == 0 {
+		type jsonerror struct {
+			Error string `json:"ferry_error"`
+		}
+		var queryErr []jsonerror
+		queryErr = append(queryErr, jsonerror{"Query returned no priorities."})
+		log.WithFields(QueryFields(r, startTime)).Error("Query returned no priorities.")
+		output = queryErr
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonoutput, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+	}
+	fmt.Fprintf(w, string(jsonoutput))
+}

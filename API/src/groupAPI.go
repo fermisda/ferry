@@ -132,6 +132,16 @@ func IncludeGroupAPIs(c *APICollection) {
 		getGroupAccessToResource,
 	}
 	c.Add("getGroupAccessToResource", &getGroupAccessToResource)
+
+	getBatchPriorities := BaseAPI {
+		InputModel {
+			Parameter{UnitName, false},
+			Parameter{ResourceName, false},
+			Parameter{LastUpdated, false},
+		},
+		getBatchPriorities,
+	}
+	c.Add("getBatchPriorities", &getBatchPriorities)
 }
 
 func createGroup(c APIContext, i Input) (interface{}, []APIError) {
@@ -793,77 +803,61 @@ func getGroupUnits(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
-func getBatchPriorities(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
-	uName := strings.TrimSpace(q.Get("unitname"))
-	rName := strings.TrimSpace(q.Get("resourcename"))
-//	expName := strings.TrimSpace(q.Get("unitname"))
-	if uName == "" {
-		uName = "%"
-	}
-	if rName == "" {
-		rName = "%"
-	}	
-	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
-	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
-		return
+func getBatchPriorities(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+
+	unitid := NewNullAttribute(UnitID)
+	compid := NewNullAttribute(ResourceID)
+
+	err := c.DBtx.QueryRow(`select (select unitid from affiliation_units where name = $1),
+								   (select compid from compute_resources where name = $2)`,
+						   i[UnitName], i[ResourceName]).Scan(&unitid, &compid)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	rows, err := DBptr.Query(`select cb.name, cb.value, cb.valid_until
-								from compute_batch as cb
-								join compute_resources as cr on cb.compid = cr.compid
-								join affiliation_units as au on cb.unitid = au.unitid
-							  where cb.type = 'priority' and cr.name like $1 and au.name like $2
-							  and (cr.last_updated >= $3 or $3 is null)`,rName, uName, lastupdate)
+	if i[UnitName].Valid && !unitid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+	}
+	if i[ResourceName].Valid && !compid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, ResourceName))
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	rows, err := DBptr.Query(`select name, value, valid_until from compute_batch
+							  where type = 'priority'
+							  and (compid = $1 or $1 is null)
+							  and (unitid = $2 or $2 is null)
+							  and (last_updated >= $3 or $3 is null)`, compid, unitid, i[LastUpdated])
 	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		log.WithFields(QueryFields(r, startTime)).Error("No resource name specified in DB query: " + err.Error())
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
-		return
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 	defer rows.Close()
 
-	var tmpName string
-	var tmpTime sql.NullString
-	var tmpVal float64
-	type jsonout struct {
-		Name string `json:"name"`
-		Value float64 `json:"priority"`
-		Validtime string `json:"valid_until,omitempty"`
-	}
-	var tmpout jsonout
-	var Out []jsonout
+	type jsonpriority = map[Attribute]interface{}
+	out := make([]jsonpriority, 0)
+
 	for rows.Next() {
-		rows.Scan(&tmpName,&tmpVal,&tmpTime)
-		tmpout.Name = tmpName
-		tmpout.Value = tmpVal
-		if tmpTime.Valid {
-			tmpout.Validtime = tmpTime.String 
+		row := NewMapNullAttribute(CondorGroup, Value, ExpirationDate)
+		rows.Scan(row[CondorGroup], row[Value], row[ExpirationDate])
+		
+		priority := make(jsonpriority)
+		priority[CondorGroup] = row[CondorGroup].Data
+		priority[Value] = row[Value].Data
+		if row[ExpirationDate].Valid {
+			priority[ExpirationDate] = row[ExpirationDate].Data
 		}
-		Out = append(Out, tmpout)
+		
+		out = append(out, priority)
 	}
-	var output interface{}	
-	if len(Out) == 0 {
-		type jsonerror struct {
-			Error string `json:"ferry_error"`
-		}
-		var queryErr []jsonerror
-		queryErr = append(queryErr, jsonerror{"Query returned no priorities."})
-		log.WithFields(QueryFields(r, startTime)).Error("Query returned no priorities.")
-		output = queryErr
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = Out
-	}
-	jsonoutput, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-	}
-	fmt.Fprintf(w, string(jsonoutput))
+	
+	return out, nil
 }
 
 func getCondorQuotas(w http.ResponseWriter, r *http.Request) {

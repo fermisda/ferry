@@ -204,6 +204,7 @@ const (
 	FQAN				Attribute = "fqan"
 	VOMSURL				Attribute = "vomsurl"
 	Role				Attribute = "role"
+	CondorGroup			Attribute = "condorgroup"
 	UID					Attribute = "uid"
 	GID					Attribute = "gid"
 	GroupID				Attribute = "groupid"
@@ -243,6 +244,7 @@ func (a Attribute) Type() (AttributeType) {
 		FQAN:				TypeString,
 		VOMSURL:			TypeString,
 		Role:				TypeString,
+		CondorGroup:		TypeString,
 		UID:				TypeInt,
 		GID:				TypeInt,
 		GroupID:			TypeInt,
