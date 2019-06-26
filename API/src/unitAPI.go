@@ -31,6 +31,7 @@ func IncludeUnitAPIs(c *APICollection) {
 	getAffiliationUnitMembers := BaseAPI {
 		InputModel {
 			Parameter{UnitName, true},
+			Parameter{LastUpdated, false},
 		},
 		getAffiliationUnitMembers,
 	}
