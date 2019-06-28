@@ -5309,3 +5309,187 @@ func getBatchPrioritiesLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, string(jsonoutput))
 }
+
+func createFQANLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	fqan := strings.TrimSpace(q.Get("fqan"))
+	mGroup := strings.TrimSpace(q.Get("mapped_group"))
+	var mUser, unit string
+
+	if fqan == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No fqan specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No fqan specified.\" }")
+		return
+	}
+	if mGroup == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No mapped_group specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No mapped_group specified.\" }")
+		return
+	}
+	if q.Get("mapped_user") != "" {
+		mUser = strings.TrimSpace(q.Get("mapped_user"))
+	} //else {
+	//	mUser = `null`
+	//}
+	if q.Get("unitname") != "" {
+		unit = strings.TrimSpace(q.Get("unitname"))
+		if ok, _ := regexp.MatchString(fmt.Sprintf(`^\/(fermilab\/)?%s\/.*`, unit), fqan); !ok {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid FQAN.")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid FQAN.\" }")
+			return
+		}
+	} //else {
+	//	unit = `null`
+	//}
+
+	authorized, authout := authorize(r)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
+		return
+	}
+
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	defer DBtx.Rollback(cKey)
+
+	var uid, unitid, groupid sql.NullInt64
+	queryerr := DBtx.tx.QueryRow(`select (select unitid from affiliation_units where name = $1), (select uid from users where uname=$2), (select groupid from groups where name=$3 and type = 'UnixGroup')`, unit, mUser, mGroup).Scan(&unitid, &uid, &groupid)
+	if queryerr != nil && queryerr != sql.ErrNoRows {
+		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
+		if cKey != 0 {
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+		}
+		return
+	}
+	if groupid.Valid == false {
+		log.WithFields(QueryFields(r, startTime)).Error("Specified mapped_group does not exist.")
+		DBtx.Report("Specified mapped_group does not exist.")
+		if cKey != 0 {
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Specified mapped_group does not exist.\" }")
+		}
+		return
+	}
+	if uid.Valid == false && mUser != "" {
+		log.WithFields(QueryFields(r, startTime)).Error("Specified mapped_user does not exist.")
+		DBtx.Report("Specified mapped_user does not exist.")
+		if cKey != 0 {
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Specified mapped_user does not exist.\" }")
+		}
+		return
+	}
+
+	// check if the fqan and unit combo is already in the DB. Return an error if so advising the caller to use setFQANMappings instead
+	var tmpfqanid int
+	queryerr = DBtx.tx.QueryRow(`select fqanid from grid_fqan where unitid=$1 and fqan=$2`, unitid, fqan).Scan(&tmpfqanid)
+	if queryerr != nil && queryerr != sql.ErrNoRows {
+		log.WithFields(QueryFields(r, startTime)).Error("Query error: unable to verify whether FQAN/unit combo already in DB." + queryerr.Error())
+		if cKey != 0 {
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Unable to verify whether FQAN/unit combo already in DB. Will not proceed.\" }")
+		} else {
+			DBtx.Report("Unable to verify whether FQAN/unit combo already in DB. Will not proceed.")
+		}
+		return
+	} else if queryerr == nil {
+		// if the error is nil, then it DID find the combo alreayd, and so we should exit.
+		log.WithFields(QueryFields(r, startTime)).Error("Specified FQAN already associated with specified unit. Check specified values. Use setFQANMappings to modify an existing entry.")
+		if cKey != 0 {
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Specified FQAN already associated with this unit. Use setFQANMappings to modify an existing entry.\" }")
+		}
+		DBtx.Report("Specified FQAN already associated with specified unit. Check specified values. Use setFQANMappings to modify an existing entry.")
+		return
+	}
+
+	// Make sure that the user is actually in the unit and group in question, if we provided a user
+	var tmpu, tmpg int
+	if uid.Valid {
+		ingrouperr := DBtx.tx.QueryRow(`select uid, groupid from user_group where uid=$1 and groupid=$2`, uid, groupid).Scan(&tmpu, &tmpg)
+		if ingrouperr == sql.ErrNoRows {
+			log.WithFields(QueryFields(r, startTime)).Error("User not a member of this group.")
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"User not a member of this group.\" }")
+			}
+			DBtx.Report("User not a member of this group.")
+			return
+
+		} else if ingrouperr != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + ingrouperr.Error())
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+			}
+			return
+		}
+		if unitid.Valid {
+			var tmpc bool
+			inuniterr := DBtx.tx.QueryRow(`	select count(*) > 0  from affiliation_unit_user_certificate as ac
+							left join user_certificates as uc on ac.dnid = uc.dnid
+                                   			where ac.unitid = $1 and uid = $2`, unitid, uid).Scan(&tmpc)
+			if inuniterr == sql.ErrNoRows {
+				log.WithFields(QueryFields(r, startTime)).Error("User not a member of this unit.")
+				if cKey != 0 {
+					fmt.Fprintf(w, "{ \"ferry_error\": \"User not a member of this unit.\" }")
+				} else {
+					DBtx.Report("User not a member of this unit.")
+				}
+				return
+
+			} else if inuniterr != nil {
+				log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + inuniterr.Error())
+				if cKey != 0 {
+					fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+				}
+				return
+			}
+		}
+	}
+
+	_, err = DBtx.Exec(`insert into grid_fqan (fqan, unitid, mapped_user, mapped_group, last_updated) values ($1, $2, $3, $4, NOW())`, fqan, unitid, uid, groupid)
+
+	if err == nil {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		if cKey != 0 {
+			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+		}
+	} else {
+		if strings.Contains(err.Error(), `user does not exist`) {
+			log.WithFields(QueryFields(r, startTime)).Error("User doesn't exist.")
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"User doesn't exist.\" }")
+			}
+		} else if strings.Contains(err.Error(), `group does not exist`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Group doesn't exist.")
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"Group doesn't exist.\" }")
+			}
+		} else if strings.Contains(err.Error(), `user does not belong to group`) {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not belong to group.")
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"User does not belong to group.\" }")
+			}
+		} else if strings.Contains(err.Error(), `user does not belong to experiment`) {
+			log.WithFields(QueryFields(r, startTime)).Error("User does not belong to experiment.")
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"User does not belong to experiment.\" }")
+			}
+		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
+			log.WithFields(QueryFields(r, startTime)).Error("FQAN already exists.")
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"FQAN already exists.\" }")
+			}
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			if cKey != 0 {
+				fmt.Fprintf(w, "{ \"ferry_error\": \""+err.Error()+"\" }")
+			}
+		}
+		return
+	}
+	if cKey != 0 {
+		DBtx.Commit(cKey)
+	}
+}

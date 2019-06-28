@@ -273,7 +273,7 @@ func main() {
 	grouter.HandleFunc("/getGroupLeadersinAffiliationUnit", APIs["getGroupLeadersinAffiliationUnit"].Run)
 	grouter.HandleFunc("/getAffiliationUnitStorageResources", getAffiliationUnitStorageResources)
 	grouter.HandleFunc("/getAffiliationUnitComputeResources", APIs["getAffiliationUnitComputeResources"].Run)
-	grouter.HandleFunc("/createFQAN", createFQAN)
+	grouter.HandleFunc("/createFQAN", APIs["createFQAN"].Run)
 	grouter.HandleFunc("/removeFQAN", removeFQAN)
 	grouter.HandleFunc("/setFQANMappings", setFQANMappings)
 	grouter.HandleFunc("/getAllAffiliationUnits", getAllAffiliationUnits)

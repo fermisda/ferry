@@ -512,7 +512,7 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 		//		DBtx.Continue()
 		DBtx.Savepoint("createFQAN_" + role)
 		duplicateCountRef ++
-		createFQAN(w, R)
+		createFQANLegacy(w, R)
 		if !DBtx.Complete() {
 			// do some error handling and rollback 
 			
