@@ -70,6 +70,16 @@ func IncludeMiscAPIs(c *APICollection) {
 	}
 	c.Add("getGroupFile", &getGroupFile)
 
+	getGridMapFile := BaseAPI{
+		InputModel{
+			Parameter{UnitName, false},
+			Parameter{ResourceName, false},
+			Parameter{LastUpdated, false},
+		},
+		getGridMapFile,
+	}
+	c.Add("getGridMapFile", &getGridMapFile)
+
 	getGroupName := BaseAPI{
 		InputModel{
 			Parameter{GID, true},
@@ -318,85 +328,60 @@ func getGroupFile(c APIContext, i Input) (interface{}, []APIError) {
 
 	return out, nil
 }
-func getGridMapFile(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
-	unit := strings.TrimSpace(q.Get("unitname"))
-	if unit == "" {
-		unit = "%"
-	}
-	rName := strings.TrimSpace(q.Get("resourcename"))
+func getGridMapFile(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
-	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
-		return
-	}
-
-	var unitExists, resourceExists bool
-
-	rows, err := DBptr.Query(`select distinct dn, uname, unit_exists, resource_exists from 
-							 (select 1 as key, au.name, uc.dn, us.uname from  affiliation_unit_user_certificate as ac
-								left join user_certificates as uc on ac.dnid = uc.dnid
-								left join users as us on uc.uid = us.uid
-								left join compute_access as ca on us.uid = ca.uid
-								left join affiliation_units as au on ac.unitid = au.unitid
-								left join compute_resources as cr on ca.compid = cr.compid
-								where au.name like $1 and ( ac.last_updated>=$2 or uc.last_updated>=$2 or us.last_updated>=$2 or au.last_updated>=$2 or $2 is null) and (cr.name = $3 or $4)) as t
-	 						  right join (select 1 as key, $1 in (select name from affiliation_units) as unit_exists, ($3 in (select name from compute_resources) or $4) as resource_exists) as c on t.key = c.key`, unit, lastupdate, rName, rName == "")
+	unitid := NewNullAttribute(UnitID)
+	compid := NewNullAttribute(ResourceID)
+	err := c.DBtx.QueryRow(`select (select unitid from affiliation_units where name = $1),
+								   (select compid from compute_resources where name = $2)`,
+						   i[UnitName], i[ResourceName]).Scan(&unitid, &compid)
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		return
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !unitid.Valid && i[UnitName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+	}
+	if !compid.Valid && i[ResourceName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, ResourceName))
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	rows, err := c.DBtx.Query(`select distinct dn, uname 
+								from affiliation_unit_user_certificate as ac
+								left join user_certificates as uc using(dnid)
+								left join users as us using(uid)
+								left join compute_access as ca using(uid)
+							   where (unitid = $1 or $1 is null) and (compid = $2 or $2 is null) and
+									 (ac.last_updated>=$3 or uc.last_updated>=$3 or us.last_updated>=$3 or $3 is null)`,
+							  unitid, compid, i[LastUpdated])
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 	defer rows.Close()
 
-	type jsonentry struct {
-		DN    string `json:"userdn"`
-		Uname string `json:"mapped_uname"`
-	}
-	var dnmap jsonentry
-	var Out []jsonentry
+	type jsondnmap map[Attribute]interface{}
+	var out []jsondnmap
 
 	for rows.Next() {
-		var tmpDN, tmpUname sql.NullString
-		rows.Scan(&tmpDN, &tmpUname, &unitExists, &resourceExists)
-		if tmpDN.Valid {
-			dnmap.DN, dnmap.Uname = tmpDN.String, tmpUname.String
-			Out = append(Out, dnmap)
+		row := NewMapNullAttribute(DN, UserName)
+		rows.Scan(row[DN], row[UserName])
+		if row[DN].Valid {
+			out = append(out, jsondnmap{
+				DN: row[DN].Data,
+				UserName: row[UserName].Data,
+			})
 		}
 	}
 
-	var output interface{}
-	if len(Out) == 0 {
-		type jsonerror struct {
-			Error []string `json:"ferry_error"`
-		}
-		var Err jsonerror
-
-		if !unitExists && unit != "%" {
-			Err.Error = append(Err.Error, "Experiment does not exist.")
-			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
-		} else if !resourceExists && rName != "" {
-			Err.Error = append(Err.Error, "Resource "+rName+" does not exist.")
-			log.WithFields(QueryFields(r, startTime)).Error("Resource " + rName + " does not exist.")
-		}
-		Err.Error = append(Err.Error, "No DNs found.")
-		log.WithFields(QueryFields(r, startTime)).Error("No DNs found.")
-
-		output = Err
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = Out
-	}
-	jsonout, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	fmt.Fprintf(w, string(jsonout))
+	return out, nil
 }
 
 func getGridMapFileByVO(w http.ResponseWriter, r *http.Request) {
