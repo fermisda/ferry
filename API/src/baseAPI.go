@@ -47,11 +47,17 @@ func (b BaseAPI) Run(w http.ResponseWriter, r *http.Request) {
 
 	input := make(Input)
 	parseErr := input.Parse(context, b.InputModel)
+	if input[Help].Valid {
+		output.Out = b.InputModel.Help()
+		output.Status = true
+		return
+	}
 	if parseErr != nil {
 		output.Err = parseErr
 		return
 	}
 
+	queryErr := make([]APIError, 0)
 	out, queryErr := b.QueryFunction(context, input)
 	if len(queryErr) > 0 {
 		var errType ErrorType
@@ -84,6 +90,18 @@ func (i *InputModel) Add(attribute Attribute, optional bool) {
 	*i = append(*i, Parameter{attribute, optional})
 }
 
+// Help describes the InputModel parameters
+func (i InputModel) Help() map[Attribute]map[string]interface{} {
+	out := make(map[Attribute]map[string]interface{})
+	for _, p := range i {
+		out[p.Attribute] = map[string]interface{} {
+			"type": p.Attribute.Type(),
+			"required": p.Required,
+		}
+	}
+	return out
+}
+
 // Input is a dictionary of parsed parameters for an API
 type Input map[Attribute]NullAttribute
 
@@ -91,14 +109,17 @@ type Input map[Attribute]NullAttribute
 func (i Input) Parse(c APIContext, m InputModel) ([]error) {
 	var errs []error
 	q := c.R.URL.Query()
+
+	m.Add(Help, false)
 	
 	for _, p := range m {
 		parsedAttribute := NewNullAttribute(p.Attribute)
 		value := q.Get(string(p.Attribute))
+		_, present := q[string(p.Attribute)]
 		q.Del(string(p.Attribute))
 
 		errString := "parameter %s requires a %s value"
-		if value != "" {
+		if value != "" || present && p.Attribute.Type() == TypeFlag {
 			parsedAttribute.Scan(value)
 			if !parsedAttribute.Valid && !parsedAttribute.AbsoluteNull {
 				errs = append(errs, fmt.Errorf(errString, p.Attribute, p.Attribute.Type()))
@@ -160,7 +181,6 @@ func (o *Output) Parse(c APIContext, w http.ResponseWriter) () {
 		out.Status = "failure"
 	}
 
-	out.Err = make([]string, 0)
 	for _, err := range o.Err {
 		out.Err = append (out.Err, err.Error())
 	}
@@ -220,6 +240,7 @@ const (
 	Experiment			Attribute = "experiment"
 	ExpirationDate		Attribute = "expirationdate"
 	LastUpdated			Attribute = "lastupdated"
+	Help				Attribute = "help"
 )
 
 // Type returns the type of the Attribute
@@ -260,6 +281,7 @@ func (a Attribute) Type() (AttributeType) {
 		Experiment:			TypeBool,
 		ExpirationDate:		TypeDate,
 		LastUpdated:		TypeDate,
+		Help:				TypeFlag,
 	}
 
 	return AttributeType[a]
@@ -276,6 +298,7 @@ const (
 	TypeBool	AttributeType = "boolean"
 	TypeString	AttributeType = "string"
 	TypeDate	AttributeType = "date"
+	TypeFlag	AttributeType = "flag"
 )
 
 // DateFormat represents the default date format
@@ -299,6 +322,12 @@ func (at AttributeType) Parse(value interface{}) (interface{}, bool) {
 		parsedValue, valid = value.(bool)
 	case TypeDate:
 		parsedValue, valid = value.(time.Time)
+	case TypeFlag:
+		if value == nil {
+			parsedValue, valid = nil, true
+		} else {
+			parsedValue, valid = nil, false
+		}
 	}
 	
 	return parsedValue, valid
@@ -339,6 +368,12 @@ func (at AttributeType) ParseString(value string) (interface{}, bool) {
 			}
 		}
 		valid = (err == nil)
+	case TypeFlag:
+		if value == "" {
+			parsedValue, valid = nil, true
+		} else {
+			parsedValue, valid = nil, false
+		}
 	}
 	
 	return parsedValue, valid
