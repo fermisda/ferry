@@ -105,6 +105,14 @@ func IncludeMiscAPIs(c *APICollection) {
 		getGroupName,
 	}
 	c.Add("getGroupName", &getGroupName)
+
+	lookupCertificateDN := BaseAPI{
+		InputModel{
+			Parameter{DN, true},
+		},
+		lookupCertificateDN,
+	}
+	c.Add("lookupCertificateDN", &lookupCertificateDN)
 }
 
 func NotDoneYet(w http.ResponseWriter, r *http.Request, t time.Time) {
@@ -548,81 +556,42 @@ func getGroupName(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
-func lookupCertificateDN(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+func lookupCertificateDN(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	type jsonerror struct {
-		Error string `json:"ferry_error"`
-	}
-	var inputErr []jsonerror
-
-	certdn := q.Get("certificatedn")
-
-	if certdn == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No certificatedn name specified in http query.")
-		inputErr = append(inputErr, jsonerror{"No certificatedn name specified."})
-	} else {
-		dn, err := ExtractValidDN(certdn)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			inputErr = append(inputErr, jsonerror{err.Error()})
-		}
-		certdn = dn
+	dnid := NewNullAttribute(DNID)
+	err := c.DBtx.QueryRow(`select dnid from user_certificates where dn = $1`, i[DN]).Scan(&dnid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	if len(inputErr) > 0 {
-		jsonout, err := json.Marshal(inputErr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
-		}
-		fmt.Fprintf(w, string(jsonout))
-		return
+	if !dnid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, DN))
+		return nil, apiErr
 	}
 
-	rows, err := DBptr.Query(`select u.uid, uname from user_certificates as uc left join users as u on uc.uid = u.uid where dn = $1;`, certdn)
-	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		return
+	row := NewMapNullAttribute(UID, UserName)
+	err = c.DBtx.QueryRow(`select uid, uname from user_certificates join users using(uid) where dnid = $1;`,
+						  dnid).Scan(row[UID], row[UserName])
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
-	defer rows.Close()
 
-	type jsonentry struct {
-		Uid   string `json:"uid"`
-		Uname string `json:"uname"`
-	}
-	var Entry jsonentry
-	var Out []jsonentry
+	type jsonuser map[Attribute]interface{}
+	out := make(jsonuser)
 
-	for rows.Next() {
-		var tmpUid, tmpUname sql.NullString
-		rows.Scan(&tmpUid, &tmpUname)
-
-		if tmpUid.Valid {
-			Entry.Uid = tmpUid.String
-			Entry.Uname = tmpUname.String
-			Out = append(Out, Entry)
+	if row[UID].Valid {
+		out = jsonuser{
+			UID: row[UID].Data,
+			UserName: row[UserName].Data,
 		}
 	}
 
-	var output interface{}
-	if len(Out) == 0 {
-		var queryErr []jsonerror
-		log.WithFields(QueryFields(r, startTime)).Error("Certificate DN does not exist.")
-		queryErr = append(queryErr, jsonerror{"Certificate DN does not exist."})
-		output = queryErr
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = Out
-	}
-	jsonout, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	fmt.Fprintf(w, string(jsonout))
+	return out, nil
 }
 
 func getMappedGidFile(w http.ResponseWriter, r *http.Request) {

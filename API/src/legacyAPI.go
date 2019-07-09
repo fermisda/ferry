@@ -5647,3 +5647,80 @@ func getGroupFileLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
+
+func lookupCertificateDNLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	type jsonerror struct {
+		Error string `json:"ferry_error"`
+	}
+	var inputErr []jsonerror
+
+	certdn := q.Get("certificatedn")
+
+	if certdn == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No certificatedn name specified in http query.")
+		inputErr = append(inputErr, jsonerror{"No certificatedn name specified."})
+	} else {
+		dn, err := ExtractValidDN(certdn)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			inputErr = append(inputErr, jsonerror{err.Error()})
+		}
+		certdn = dn
+	}
+
+	if len(inputErr) > 0 {
+		jsonout, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err)
+		}
+		fmt.Fprintf(w, string(jsonout))
+		return
+	}
+
+	rows, err := DBptr.Query(`select u.uid, uname from user_certificates as uc left join users as u on uc.uid = u.uid where dn = $1;`, certdn)
+	if err != nil {
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	type jsonentry struct {
+		Uid   string `json:"uid"`
+		Uname string `json:"uname"`
+	}
+	var Entry jsonentry
+	var Out []jsonentry
+
+	for rows.Next() {
+		var tmpUid, tmpUname sql.NullString
+		rows.Scan(&tmpUid, &tmpUname)
+
+		if tmpUid.Valid {
+			Entry.Uid = tmpUid.String
+			Entry.Uname = tmpUname.String
+			Out = append(Out, Entry)
+		}
+	}
+
+	var output interface{}
+	if len(Out) == 0 {
+		var queryErr []jsonerror
+		log.WithFields(QueryFields(r, startTime)).Error("Certificate DN does not exist.")
+		queryErr = append(queryErr, jsonerror{"Certificate DN does not exist."})
+		output = queryErr
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonout, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	fmt.Fprintf(w, string(jsonout))
+}
