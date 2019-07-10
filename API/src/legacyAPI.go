@@ -5724,3 +5724,63 @@ func lookupCertificateDNLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
+
+func getMappedGidFileLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+
+	rows, err := DBptr.Query(`select fqan, uname, gid from grid_fqan as gf
+							  left join groups as g on g.groupid = gf.mapped_group
+							  left join users as u on u.uid = gf.mapped_user;`)
+
+	if err != nil {
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	type jsonentry struct {
+		Fqan string `json:"fqan"`
+		User string `json:"mapped_uname"`
+		Gid  string `json:"mapped_gid"`
+	}
+	var Entry jsonentry
+	var Out []jsonentry
+
+	for rows.Next() {
+		var tmpFqan, tmpUser, tmpGid sql.NullString
+		rows.Scan(&tmpFqan, &tmpUser, &tmpGid)
+
+		if tmpFqan.Valid {
+			Entry = jsonentry{tmpFqan.String, tmpUser.String, tmpGid.String}
+			//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+			//!!REMOVE THIS EXCEPTION ONCE DCACHE RESOURCE EXISTS!!
+			//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+			if !((strings.Contains(tmpFqan.String, "Role=Analysis") && tmpUser.String != "") ||
+				(tmpFqan.String == "/des/Role=Production/Capability=NULL" && tmpUser.String == "des")) {
+				Out = append(Out, Entry)
+			}
+		}
+	}
+
+	var output interface{}
+	if len(Out) == 0 {
+		type jsonerror struct {
+			Error string `json:"ferry_error"`
+		}
+		var Err jsonerror
+		Err = jsonerror{"Something went wrong."}
+		log.WithFields(QueryFields(r, startTime)).Error("Something went wrong.")
+		output = Err
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonout, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	fmt.Fprintf(w, string(jsonout))
+}

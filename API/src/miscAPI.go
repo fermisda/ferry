@@ -113,6 +113,12 @@ func IncludeMiscAPIs(c *APICollection) {
 		lookupCertificateDN,
 	}
 	c.Add("lookupCertificateDN", &lookupCertificateDN)
+
+	getMappedGidFile := BaseAPI{
+		InputModel{},
+		getMappedGidFile,
+	}
+	c.Add("getMappedGidFile", &getMappedGidFile)
 }
 
 func NotDoneYet(w http.ResponseWriter, r *http.Request, t time.Time) {
@@ -594,64 +600,42 @@ func lookupCertificateDN(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
-func getMappedGidFile(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+func getMappedGidFile(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	rows, err := DBptr.Query(`select fqan, uname, gid from grid_fqan as gf
-							  left join groups as g on g.groupid = gf.mapped_group
-							  left join users as u on u.uid = gf.mapped_user;`)
-
-	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		return
+	rows, err := c.DBtx.Query(`select fqan, uname, gid from grid_fqan as gf
+							   left join groups as g on g.groupid = gf.mapped_group
+							   left join users as u on u.uid = gf.mapped_user`)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 	defer rows.Close()
 
-	type jsonentry struct {
-		Fqan string `json:"fqan"`
-		User string `json:"mapped_uname"`
-		Gid  string `json:"mapped_gid"`
-	}
-	var Entry jsonentry
-	var Out []jsonentry
+	type jsonmapping map[Attribute]interface{}
+	var out []jsonmapping
 
 	for rows.Next() {
-		var tmpFqan, tmpUser, tmpGid sql.NullString
-		rows.Scan(&tmpFqan, &tmpUser, &tmpGid)
+		row := NewMapNullAttribute(FQAN, UserName, GID)
+		rows.Scan(row[FQAN], row[UserName], row[GID])
 
-		if tmpFqan.Valid {
-			Entry = jsonentry{tmpFqan.String, tmpUser.String, tmpGid.String}
+		if row[FQAN].Valid {
 			//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 			//!!REMOVE THIS EXCEPTION ONCE DCACHE RESOURCE EXISTS!!
 			//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-			if !((strings.Contains(tmpFqan.String, "Role=Analysis") && tmpUser.String != "") ||
-				(tmpFqan.String == "/des/Role=Production/Capability=NULL" && tmpUser.String == "des")) {
-				Out = append(Out, Entry)
+			if !((strings.Contains(row[FQAN].Data.(string), "Role=Analysis") && row[UserName].Valid) ||
+				(row[FQAN].Data.(string) == "/des/Role=Production/Capability=NULL" && row[UserName].Data.(string) == "des")) {
+				out = append(out, jsonmapping{
+					FQAN: row[FQAN].Data,
+					UserName: row[UserName].Data,
+					GID: row[GID].Data,
+				})
 			}
 		}
 	}
 
-	var output interface{}
-	if len(Out) == 0 {
-		type jsonerror struct {
-			Error string `json:"ferry_error"`
-		}
-		var Err jsonerror
-		Err = jsonerror{"Something went wrong."}
-		log.WithFields(QueryFields(r, startTime)).Error("Something went wrong.")
-		output = Err
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = Out
-	}
-	jsonout, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	fmt.Fprintf(w, string(jsonout))
+	return out, nil
 }
 
 func getStorageAuthzDBFile(w http.ResponseWriter, r *http.Request) {

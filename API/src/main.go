@@ -246,7 +246,7 @@ func main() {
 	grouter.HandleFunc("/getGroupGID", APIs["getGroupGID"].Run)
 	grouter.HandleFunc("/getGroupName", APIs["getGroupName"].Run)
 	grouter.HandleFunc("/lookupCertificateDN", APIs["lookupCertificateDN"].Run)
-	grouter.HandleFunc("/getMappedGidFile", getMappedGidFile)
+	grouter.HandleFunc("/getMappedGidFile", APIs["getMappedGidFile"].Run)
 	grouter.HandleFunc("/getStorageAuthzDBFile", getStorageAuthzDBFile)
 	grouter.HandleFunc("/getAffiliationMembersRoles", getAffiliationMembersRoles)
 	grouter.HandleFunc("/getStorageAccessLists", getStorageAccessLists)
