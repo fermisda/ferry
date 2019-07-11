@@ -128,6 +128,15 @@ func IncludeMiscAPIs(c *APICollection) {
 		getStorageAuthzDBFile,
 	}
 	c.Add("getStorageAuthzDBFile", &getStorageAuthzDBFile)
+
+	getAffiliationMembersRoles := BaseAPI{
+		InputModel{
+			Parameter{UnitName, false},
+			Parameter{Role, false},
+		},
+		getAffiliationMembersRoles,
+	}
+	c.Add("getAffiliationMembersRoles", &getAffiliationMembersRoles)
 }
 
 func NotDoneYet(w http.ResponseWriter, r *http.Request, t time.Time) {
@@ -750,91 +759,55 @@ func getStorageAuthzDBFile(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
-func getAffiliationMembersRoles(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+func getAffiliationMembersRoles(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	unit := q.Get("unitname")
-	role := q.Get("rolename")
+	role := i[Role].Default("%")
 
-	if unit == "" {
-		unit = "%"
-	}
-	if role == "" {
-		role = "%"
-	} else {
-		role = "%" + role + "%"
+	unitid := NewNullAttribute(UnitID)
+	err := c.DBtx.QueryRow(`select unitid from affiliation_units where name = $1`, i[UnitName]).Scan(&unitid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	rows, err := DBptr.Query(`select t.name, t.fqan, t.uname, t.full_name, unit_exists, fqan_exists from (
-								select 1 as key, au.name, gf.fqan, u.uname, u.full_name
-								from grid_access as ga
-								left join grid_fqan as gf on ga.fqanid = gf.fqanid
-								left join users as u on ga.uid = u.uid
-								left join affiliation_units as au on gf.unitid = au.unitid
-								where au.name like $1 and gf.fqan like $2
-							) as t right join (
-								select 1 as key,
-								$1 in (select name from affiliation_units) as unit_exists,
-								$2 in (select fqan from grid_fqan) as fqan_exists
-							) as c on t.key = c.key;`, unit, role)
+	if !unitid.Valid && i[UnitName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+		return nil, apiErr
+	}
 
-	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		return
+	rows, err := DBptr.Query(`select name, fqan, uname, full_name
+								from grid_access
+								join grid_fqan using(fqanid)
+								join users using(uid)
+								left join affiliation_units using(unitid)
+							  where (unitid = $1 or $1 is null) and (lower(fqan) like lower($2))`,
+							 unitid, "%/role=" + role.Data.(string) + "/%")
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 	defer rows.Close()
 
-	var unitExists bool
-	var roleExists bool
-
-	type jsonentry struct {
-		Fqan string `json:"fqan"`
-		User string `json:"username"`
-		Name string `json:"commonname"`
-	}
-	Out := make(map[string][]jsonentry)
+	type jsonentry map[Attribute]interface{}
+	out := make(map[string][]jsonentry)
 
 	for rows.Next() {
-		var tmpUnit, tmpFqan, tmpUser, tmpName sql.NullString
-		rows.Scan(&tmpUnit, &tmpFqan, &tmpUser, &tmpName, &unitExists, &roleExists)
+		row := NewMapNullAttribute(UnitName, FQAN, UserName, FullName)
+		rows.Scan(row[UnitName], row[FQAN], row[UserName], row[FullName])
 
-		if tmpFqan.Valid {
-			Out[tmpUnit.String] = append(Out[tmpUnit.String], jsonentry{tmpFqan.String, tmpUser.String, tmpName.String})
+		if row[FQAN].Valid {
+			out[row[UnitName].Data.(string)] = append(out[row[UnitName].Data.(string)], jsonentry {
+				FQAN: row[FQAN].Data,
+				UserName: row[UserName].Data,
+				FullName: row[FullName].Data,
+			})
 		}
 	}
 
-	var output interface{}
-	if len(Out) == 0 {
-		type jsonerror struct {
-			Error []string `json:"ferry_error"`
-		}
-		var Err jsonerror
-		if !unitExists {
-			Err.Error = append(Err.Error, "Experiment does not exist.")
-			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
-		}
-		if !roleExists {
-			Err.Error = append(Err.Error, "Role does not exist.")
-			log.WithFields(QueryFields(r, startTime)).Error("Role does not exist.")
-		}
-		if len(Err.Error) == 0 {
-			Err.Error = append(Err.Error, "No roles were found")
-			log.WithFields(QueryFields(r, startTime)).Error("No roles were found")
-		}
-		output = Err
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = Out
-	}
-	jsonout, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	fmt.Fprintf(w, string(jsonout))
+	return out, nil
 }
 
 func getStorageAccessLists(w http.ResponseWriter, r *http.Request) {

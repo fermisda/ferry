@@ -5962,3 +5962,90 @@ func getStorageAuthzDBFileLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
+
+func getAffiliationMembersRolesLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	unit := q.Get("unitname")
+	role := q.Get("rolename")
+
+	if unit == "" {
+		unit = "%"
+	}
+	if role == "" {
+		role = "%"
+	} else {
+		role = "%" + role + "%"
+	}
+
+	rows, err := DBptr.Query(`select t.name, t.fqan, t.uname, t.full_name, unit_exists, fqan_exists from (
+								select 1 as key, au.name, gf.fqan, u.uname, u.full_name
+								from grid_access as ga
+								left join grid_fqan as gf on ga.fqanid = gf.fqanid
+								left join users as u on ga.uid = u.uid
+								left join affiliation_units as au on gf.unitid = au.unitid
+								where au.name like $1 and gf.fqan like $2
+							) as t right join (
+								select 1 as key,
+								$1 in (select name from affiliation_units) as unit_exists,
+								$2 in (select fqan from grid_fqan) as fqan_exists
+							) as c on t.key = c.key;`, unit, role)
+
+	if err != nil {
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	var unitExists bool
+	var roleExists bool
+
+	type jsonentry struct {
+		Fqan string `json:"fqan"`
+		User string `json:"username"`
+		Name string `json:"commonname"`
+	}
+	Out := make(map[string][]jsonentry)
+
+	for rows.Next() {
+		var tmpUnit, tmpFqan, tmpUser, tmpName sql.NullString
+		rows.Scan(&tmpUnit, &tmpFqan, &tmpUser, &tmpName, &unitExists, &roleExists)
+
+		if tmpFqan.Valid {
+			Out[tmpUnit.String] = append(Out[tmpUnit.String], jsonentry{tmpFqan.String, tmpUser.String, tmpName.String})
+		}
+	}
+
+	var output interface{}
+	if len(Out) == 0 {
+		type jsonerror struct {
+			Error []string `json:"ferry_error"`
+		}
+		var Err jsonerror
+		if !unitExists {
+			Err.Error = append(Err.Error, "Experiment does not exist.")
+			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
+		}
+		if !roleExists {
+			Err.Error = append(Err.Error, "Role does not exist.")
+			log.WithFields(QueryFields(r, startTime)).Error("Role does not exist.")
+		}
+		if len(Err.Error) == 0 {
+			Err.Error = append(Err.Error, "No roles were found")
+			log.WithFields(QueryFields(r, startTime)).Error("No roles were found")
+		}
+		output = Err
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonout, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	fmt.Fprintf(w, string(jsonout))
+}
