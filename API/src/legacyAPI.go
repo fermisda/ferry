@@ -5784,3 +5784,181 @@ func getMappedGidFileLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
+
+func getStorageAuthzDBFileLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	type jsonerror struct {
+		Error []string `json:"ferry_error"`
+	}
+	var inputErr jsonerror
+
+	pMode := false
+	if q.Get("passwdmode") != "" {
+		if pBool, err := strconv.ParseBool(q.Get("passwdmode")); err == nil {
+			pMode = pBool
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
+			inputErr.Error = append(inputErr.Error, "Invalid value for passwdmode. Must be true or false (or omit it from the query).")
+		}
+	}
+	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		inputErr.Error = append(inputErr.Error, "Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.")
+	}
+
+	if len(inputErr.Error) > 0 {
+		jsonout, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err)
+		}
+		fmt.Fprintf(w, string(jsonout))
+		return
+	}
+
+	rows, err := DBptr.Query(`select u.full_name, u.uname, u.uid, g.gid, ug.last_updated from users as u
+							  join user_group as ug on u.uid = ug.uid
+							  join groups as g on ug.groupid = g.groupid
+                              where g.type = 'UnixGroup' and (ug.last_updated>=$1 or $1 is null)
+							  order by u.uname;`, lastupdate)
+
+	if err != nil {
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	authMode := func(rows *sql.Rows) (interface{}, bool) {
+		type jsonentry struct {
+			Decision   string   `json:"decision"`
+			User       string   `json:"username"`
+			Privileges string   `json:"privileges"`
+			Uid        string   `json:"uid"`
+			Gid        []string `json:"gid"`
+			Home       string   `json:"home"`
+			Root       string   `json:"root"`
+			FsPath     string   `json:"fs_path"`
+		}
+		var Entry jsonentry
+		var Out []jsonentry
+
+		prevUser := ""
+		for rows.Next() {
+			var tmpName, tmpUser, tmpUid, tmpGid, tmpTime sql.NullString
+			rows.Scan(&tmpName, &tmpUser, &tmpUid, &tmpGid, &tmpTime)
+
+			if tmpGid.Valid {
+				if prevUser == "" {
+					Entry.Decision = "authorize"
+					Entry.User = tmpUser.String
+					Entry.Privileges = "read-write"
+					Entry.Uid = tmpUid.String
+					Entry.Gid = append(Entry.Gid, tmpGid.String)
+					Entry.Home = "/"
+					Entry.Root = "/pnfs/fnal.gov/usr"
+					Entry.FsPath = "/"
+				} else if prevUser != tmpUser.String {
+					Out = append(Out, Entry)
+					Entry.Decision = "authorize"
+					Entry.User = tmpUser.String
+					Entry.Privileges = "read-write"
+					Entry.Uid = tmpUid.String
+					Entry.Gid = nil
+					Entry.Gid = append(Entry.Gid, tmpGid.String)
+					Entry.Home = "/"
+					Entry.Root = "/pnfs/fnal.gov/usr"
+					Entry.FsPath = "/"
+				} else {
+					Entry.Gid = append(Entry.Gid, tmpGid.String)
+				}
+				prevUser = tmpUser.String
+			}
+		}
+		Out = append(Out, Entry)
+		return Out, len(Out) > 0
+	}
+
+	passwdMode := func(rows *sql.Rows) (interface{}, bool) {
+		type jsonuser struct {
+			Uname string `json:"username"`
+			Uid   string `json:"uid"`
+			Gid   string `json:"gid"`
+			Gecos string `json:"gecos"`
+			Hdir  string `json:"homedir"`
+			Shell string `json:"shell"`
+		}
+		type jsonunit struct {
+			Resources map[string][]jsonuser `json:"resources"`
+			Lasttime  int64                 `json:"last_updated"`
+		}
+		Out := make(map[string]jsonunit)
+
+		tmpMap := make(map[string][]jsonuser)
+		lasttime := int64(0)
+		prevUname := ""
+		for rows.Next() {
+			var tmpName, tmpUser, tmpUid, tmpGid, tmpTime sql.NullString
+			rows.Scan(&tmpName, &tmpUser, &tmpUid, &tmpGid, &tmpTime)
+
+			if tmpTime.Valid {
+				parseTime, parserr := time.Parse(time.RFC3339, tmpTime.String)
+				if parserr != nil {
+					log.WithFields(QueryFields(r, startTime)).Error("Error parsing last updated time of " + tmpTime.String)
+				} else {
+					if lasttime == 0 || (parseTime.Unix() > lasttime) {
+						lasttime = parseTime.Unix()
+					}
+				}
+			} else {
+				log.WithFields(QueryFields(r, startTime)).Debugln("tmpTime is not valid")
+			}
+
+			if tmpUser.String != prevUname {
+				tmpMap["all"] = append(tmpMap["all"], jsonuser{
+					tmpUser.String,
+					tmpUid.String,
+					tmpGid.String,
+					tmpName.String,
+					"/home/" + tmpUser.String,
+					"/sbin/nologin",
+				})
+				prevUname = tmpUser.String
+			}
+		}
+		Out["fermilab"] = jsonunit{tmpMap, lasttime}
+
+		return Out, len(Out) > 0
+	}
+
+	var Out interface{}
+	var ok bool
+	if !pMode {
+		Out, ok = authMode(rows)
+	} else {
+		Out, ok = passwdMode(rows)
+	}
+
+	var output interface{}
+	if !ok {
+		type jsonerror struct {
+			Error string `json:"ferry_error"`
+		}
+		var Err jsonerror
+		Err = jsonerror{"Something went wrong."}
+		log.WithFields(QueryFields(r, startTime)).Error("Something went wrong.")
+		output = Err
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonout, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	fmt.Fprintf(w, string(jsonout))
+}

@@ -241,6 +241,7 @@ const (
 	ExpirationDate		Attribute = "expirationdate"
 	LastUpdated			Attribute = "lastupdated"
 	Help				Attribute = "help"
+	PasswdMode			Attribute = "passwdmode"
 )
 
 // Type returns the type of the Attribute
@@ -282,6 +283,7 @@ func (a Attribute) Type() (AttributeType) {
 		ExpirationDate:		TypeDate,
 		LastUpdated:		TypeDate,
 		Help:				TypeFlag,
+		PasswdMode:			TypeFlag,
 	}
 
 	return AttributeType[a]

@@ -119,6 +119,15 @@ func IncludeMiscAPIs(c *APICollection) {
 		getMappedGidFile,
 	}
 	c.Add("getMappedGidFile", &getMappedGidFile)
+
+	getStorageAuthzDBFile := BaseAPI{
+		InputModel{
+			Parameter{PasswdMode, false},
+			Parameter{LastUpdated, false},
+		},
+		getStorageAuthzDBFile,
+	}
+	c.Add("getStorageAuthzDBFile", &getStorageAuthzDBFile)
 }
 
 func NotDoneYet(w http.ResponseWriter, r *http.Request, t time.Time) {
@@ -638,182 +647,107 @@ func getMappedGidFile(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
-func getStorageAuthzDBFile(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+func getStorageAuthzDBFile(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	type jsonerror struct {
-		Error []string `json:"ferry_error"`
-	}
-	var inputErr jsonerror
-
-	pMode := false
-	if q.Get("passwdmode") != "" {
-		if pBool, err := strconv.ParseBool(q.Get("passwdmode")); err == nil {
-			pMode = pBool
-		} else {
-			log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
-			inputErr.Error = append(inputErr.Error, "Invalid value for passwdmode. Must be true or false (or omit it from the query).")
-		}
-	}
-	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
-	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
-		inputErr.Error = append(inputErr.Error, "Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.")
-	}
-
-	if len(inputErr.Error) > 0 {
-		jsonout, err := json.Marshal(inputErr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
-		}
-		fmt.Fprintf(w, string(jsonout))
-		return
-	}
-
-	rows, err := DBptr.Query(`select u.full_name, u.uname, u.uid, g.gid, ug.last_updated from users as u
-							  join user_group as ug on u.uid = ug.uid
-							  join groups as g on ug.groupid = g.groupid
-                              where g.type = 'UnixGroup' and (ug.last_updated>=$1 or $1 is null)
-							  order by u.uname;`, lastupdate)
-
-	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		return
+	rows, err := c.DBtx.Query(`select full_name, uname, uid, gid, ug.last_updated
+								from users
+								join user_group as ug using(uid)
+								join groups using(groupid)
+                               where type = 'UnixGroup' and (ug.last_updated>=$1 or $1 is null)
+							   order by uname`, i[LastUpdated])
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 	defer rows.Close()
 
-	authMode := func(rows *sql.Rows) (interface{}, bool) {
-		type jsonentry struct {
-			Decision   string   `json:"decision"`
-			User       string   `json:"username"`
-			Privileges string   `json:"privileges"`
-			Uid        string   `json:"uid"`
-			Gid        []string `json:"gid"`
-			Home       string   `json:"home"`
-			Root       string   `json:"root"`
-			FsPath     string   `json:"fs_path"`
-		}
-		var Entry jsonentry
-		var Out []jsonentry
+	authMode := func(rows *sql.Rows) interface{} {
+		const Decision Attribute = "decision"
+		const Privileges Attribute = "privileges"
+		const Groups Attribute = "groups"
+		const Root = "root"
 
-		prevUser := ""
+		type jsonentry map[Attribute]interface{}
+
+		entry := make(jsonentry)
+		out := make([]jsonentry, 0)
+
+		prevUser := NewNullAttribute(UserName)
 		for rows.Next() {
-			var tmpName, tmpUser, tmpUid, tmpGid, tmpTime sql.NullString
-			rows.Scan(&tmpName, &tmpUser, &tmpUid, &tmpGid, &tmpTime)
+			row := NewMapNullAttribute(FullName, UserName, UID, GID, LastUpdated)
+			rows.Scan(row[FullName], row[UserName], row[UID], row[GID], row[LastUpdated])
 
-			if tmpGid.Valid {
-				if prevUser == "" {
-					Entry.Decision = "authorize"
-					Entry.User = tmpUser.String
-					Entry.Privileges = "read-write"
-					Entry.Uid = tmpUid.String
-					Entry.Gid = append(Entry.Gid, tmpGid.String)
-					Entry.Home = "/"
-					Entry.Root = "/pnfs/fnal.gov/usr"
-					Entry.FsPath = "/"
-				} else if prevUser != tmpUser.String {
-					Out = append(Out, Entry)
-					Entry.Decision = "authorize"
-					Entry.User = tmpUser.String
-					Entry.Privileges = "read-write"
-					Entry.Uid = tmpUid.String
-					Entry.Gid = nil
-					Entry.Gid = append(Entry.Gid, tmpGid.String)
-					Entry.Home = "/"
-					Entry.Root = "/pnfs/fnal.gov/usr"
-					Entry.FsPath = "/"
-				} else {
-					Entry.Gid = append(Entry.Gid, tmpGid.String)
-				}
-				prevUser = tmpUser.String
-			}
-		}
-		Out = append(Out, Entry)
-		return Out, len(Out) > 0
-	}
-
-	passwdMode := func(rows *sql.Rows) (interface{}, bool) {
-		type jsonuser struct {
-			Uname string `json:"username"`
-			Uid   string `json:"uid"`
-			Gid   string `json:"gid"`
-			Gecos string `json:"gecos"`
-			Hdir  string `json:"homedir"`
-			Shell string `json:"shell"`
-		}
-		type jsonunit struct {
-			Resources map[string][]jsonuser `json:"resources"`
-			Lasttime  int64                 `json:"last_updated"`
-		}
-		Out := make(map[string]jsonunit)
-
-		tmpMap := make(map[string][]jsonuser)
-		lasttime := int64(0)
-		prevUname := ""
-		for rows.Next() {
-			var tmpName, tmpUser, tmpUid, tmpGid, tmpTime sql.NullString
-			rows.Scan(&tmpName, &tmpUser, &tmpUid, &tmpGid, &tmpTime)
-
-			if tmpTime.Valid {
-				parseTime, parserr := time.Parse(time.RFC3339, tmpTime.String)
-				if parserr != nil {
-					log.WithFields(QueryFields(r, startTime)).Error("Error parsing last updated time of " + tmpTime.String)
-				} else {
-					if lasttime == 0 || (parseTime.Unix() > lasttime) {
-						lasttime = parseTime.Unix()
+			if row[GID].Valid {
+				if prevUser != *row[UserName] {
+					if prevUser.Valid {
+						out = append(out, entry)
+						entry = make(jsonentry)
 					}
+					entry[Decision] = "authorize"
+					entry[UserName] = row[UserName].Data
+					entry[Privileges] = "read-write"
+					entry[UID] = row[UID].Data
+					entry[Groups] = make([]interface{}, 0)
+					entry[HomeDir] = "/"
+					entry[Root] = "/pnfs/fnal.gov/usr"
+					entry[Path] = "/"
 				}
-			} else {
-				log.WithFields(QueryFields(r, startTime)).Debugln("tmpTime is not valid")
+				entry[Groups] = append(entry[Groups].([]interface{}), row[GID].Data)
+				prevUser = *row[UserName]
+			}
+		}
+		out = append(out, entry)
+		return out
+	}
+
+	passwdMode := func(rows *sql.Rows) interface{} {
+		const GECOS Attribute = "gecos"
+		const Resources Attribute = "resources"
+		type jsonmap map[Attribute]interface{}
+
+		out := make(jsonmap)
+
+		tmpMap := make(map[string][]jsonmap)
+		lasttime := int64(0)
+		prevUname := NewNullAttribute(UserName)
+		for rows.Next() {
+			row := NewMapNullAttribute(FullName, UserName, UID, GID, LastUpdated)
+			rows.Scan(row[FullName], row[UserName], row[UID], row[GID], row[LastUpdated])
+
+			if lasttime == 0 || (row[LastUpdated].Data.(time.Time).Unix() > lasttime) {
+				lasttime = row[LastUpdated].Data.(time.Time).Unix()
 			}
 
-			if tmpUser.String != prevUname {
-				tmpMap["all"] = append(tmpMap["all"], jsonuser{
-					tmpUser.String,
-					tmpUid.String,
-					tmpGid.String,
-					tmpName.String,
-					"/home/" + tmpUser.String,
-					"/sbin/nologin",
+			if *row[UserName] != prevUname {
+				tmpMap["all"] = append(tmpMap["all"], jsonmap {
+					UserName: row[UserName].Data,
+					UID: row[UID].Data,
+					GID: row[GID].Data,
+					GECOS: row[FullName].Data,
+					HomeDir: "/home/" + row[UserName].Data.(string),
+					Shell: "/sbin/nologin",
 				})
-				prevUname = tmpUser.String
+				prevUname = *row[UserName]
 			}
 		}
-		Out["fermilab"] = jsonunit{tmpMap, lasttime}
-
-		return Out, len(Out) > 0
-	}
-
-	var Out interface{}
-	var ok bool
-	if !pMode {
-		Out, ok = authMode(rows)
-	} else {
-		Out, ok = passwdMode(rows)
-	}
-
-	var output interface{}
-	if !ok {
-		type jsonerror struct {
-			Error string `json:"ferry_error"`
+		out["fermilab"] = jsonmap{
+			Resources: tmpMap,
+			LastUpdated: lasttime,
 		}
-		var Err jsonerror
-		Err = jsonerror{"Something went wrong."}
-		log.WithFields(QueryFields(r, startTime)).Error("Something went wrong.")
-		output = Err
+
+		return out
+	}
+
+	var out interface{}
+	if !i[PasswdMode].Valid {
+		out = authMode(rows)
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = Out
+		out = passwdMode(rows)
 	}
-	jsonout, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	fmt.Fprintf(w, string(jsonout))
+
+	return out, nil
 }
 
 func getAffiliationMembersRoles(w http.ResponseWriter, r *http.Request) {
