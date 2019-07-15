@@ -429,7 +429,7 @@ func createExperiment(w http.ResponseWriter, r *http.Request) {
 	DBtx.Savepoint("createComputeResource")
 //	DBtx.Continue()
 	duplicateCountRef ++
-	createComputeResource(w,R)
+	createComputeResourceLegacy(w,R)
 	if !DBtx.Complete() {
 		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") &&
 		   !strings.Contains(DBtx.Error().Error(), "already exists") {

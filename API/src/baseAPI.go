@@ -57,7 +57,6 @@ func (b BaseAPI) Run(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	queryErr := make([]APIError, 0)
 	out, queryErr := b.QueryFunction(context, input)
 	if len(queryErr) > 0 {
 		var errType ErrorType
@@ -181,6 +180,7 @@ func (o *Output) Parse(c APIContext, w http.ResponseWriter) () {
 		out.Status = "failure"
 	}
 
+	out.Err = make([]string, 0)
 	for _, err := range o.Err {
 		out.Err = append (out.Err, err.Error())
 	}
