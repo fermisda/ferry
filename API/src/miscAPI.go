@@ -157,6 +157,18 @@ func IncludeMiscAPIs(c *APICollection) {
 		createComputeResource,
 	}
 	c.Add("createComputeResource", &createComputeResource)
+
+	setComputeResourceInfo := BaseAPI{
+		InputModel{
+			Parameter{ResourceName, true},
+			Parameter{ResourceType, false},
+			Parameter{HomeDir, false},
+			Parameter{Shell, false},
+			Parameter{UnitName, false},
+		},
+		setComputeResourceInfo,
+	}
+	c.Add("setComputeResourceInfo", &setComputeResourceInfo)
 }
 
 func NotDoneYet(w http.ResponseWriter, r *http.Request, t time.Time) {
@@ -915,128 +927,50 @@ func createComputeResource(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
-func setComputeResourceInfo(w http.ResponseWriter, r *http.Request) {
+func setComputeResourceInfo(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
-
-	rName := strings.TrimSpace(q.Get("resourcename"))
-	unitName := strings.TrimSpace(q.Get("unitname"))
-	rType := strings.TrimSpace(q.Get("type"))
-	shell := strings.TrimSpace(q.Get("defaultshell"))
-	homedir := strings.TrimSpace(q.Get("defaulthomedir"))
-
-	if rName == "" {
-		log.WithFields(QueryFields(r, startTime)).Print("No resource name specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No resourcename specified.\" }")
-		return
-	}
-	if strings.ToUpper(strings.TrimSpace(rType)) == "NULL" {
-		log.WithFields(QueryFields(r, startTime)).Print("'NULL' is an invalid resource type.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Resource type of NULL is not allowed.\" }")
-		return
-	}
-
-	//require auth
-	authorized, authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
-		return
-	}
-
-	var (
-		nullshell, nullhomedir sql.NullString
-		unitID                 sql.NullInt64
-		currentType            string
-		compid                 int
-	)
-
-	//transaction start, and update command
-	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	unitid := NewNullAttribute(UnitID)
+	compid := NewNullAttribute(ResourceID)
+	err := c.DBtx.QueryRow(`select (select unitid from affiliation_units where name = $1),
+								   (select compid from compute_resources where name = $2)`,
+						   i[UnitName], i[ResourceName]).Scan(&unitid, &compid)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error starting database transaction.\" }")
-		return
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
-	defer DBtx.Rollback(cKey)
 
-	// check if resource exists and grab existing values of everything if so
-	err = DBtx.tx.QueryRow(`select distinct compid, default_shell, unitid, default_home_dir, type from compute_resources where name=$1`, rName).Scan(&compid, &nullshell, &unitID, &nullhomedir, &currentType)
-	switch {
-	case err == sql.ErrNoRows:
-		// nothing returned from the select, so the resource does not exist.
-		log.WithFields(QueryFields(r, startTime)).Print("compute resource with name " + rName + " not found in compute_resources table. Exiting.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"resource does not exist. Use createComputeResource to add a new resource.\" }")
-		return
-	case err != nil:
-		w.WriteHeader(http.StatusNotFound)
-		log.WithFields(QueryFields(r, startTime)).Print("Error in DB query: " + err.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		return
-	default:
+	if !compid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, ResourceName))
+	}
+	if !unitid.Valid && i[UnitName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+	}
+	if i[ResourceType].AbsoluteNull {
+		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, ResourceType))
+	}
+	if !i[UnitName].Valid && !i[Shell].Valid && !i[HomeDir].Valid && !i[ResourceType].Valid {
+		apiErr = append(apiErr, APIError{errors.New("not enough arguments"), ErrorAPIRequirement})
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
 
-		//actually change stuff
-		// if you specfied a new type in the API call (not NULL, as checked for earlier), change it here. Otherwise we keep the existing one
-		if rType != "" {
-			currentType = rType
-		}
-		// if you are changing the shell type, do it here. Variations of "NULL" as the string will assume you want it to be null in the database. If you did not specify shell in the query, then we keep the existing value.
-		if shell != "" {
-			if strings.ToUpper(strings.TrimSpace(shell)) != "NULL" {
-				nullshell.Valid = true
-				nullshell.String = shell
-			} else {
-				nullshell.Valid = false
-				nullshell.String = ""
-			}
-		}
+	_, err = c.DBtx.Exec(`update compute_resources set
+							unitid = coalesce($1, unitid),
+							default_shell = coalesce($2, default_shell),
+							default_home_dir = coalesce($3, default_home_dir),
+							type = coalesce($4, type),
+							last_updated = NOW()
+						  where compid = $5`, unitid, i[Shell], i[HomeDir], i[ResourceType], compid)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
 
-		// and the same for default_home_dir, following the same rule as shell.
-		if homedir != "" {
-			if strings.ToUpper(strings.TrimSpace(homedir)) != "NULL" {
-				nullhomedir.Valid = true
-				nullhomedir.String = homedir
-			} else {
-				nullhomedir.Valid = false
-				nullhomedir.String = ""
-			}
-		}
-
-		// if you specified a new affiliation unit, find the new ID and change it. Otherwise keep whatever the select returned, even if it is null
-		if unitName != "" {
-			if strings.ToUpper(strings.TrimSpace(unitName)) != "NULL" {
-				var tmpunitid sql.NullInt64
-				iderr := DBtx.tx.QueryRow(`select unitid from affiliation_units where name=$1`, unitName).Scan(&tmpunitid)
-				// FIX THIS
-				if iderr != nil && iderr != sql.ErrNoRows {
-					//some error selecting the new unit ID. Keep the old one!
-				} else {
-					unitID = tmpunitid
-				}
-			} else {
-				//ah, so the "new" unitName is some variation of NULL, so that means you want to set unitid to null in the DB. Do that by setting unitID.Valid to false
-				unitID.Valid = false
-			}
-		} // end if unitName != ""
-
-		_, commerr := DBtx.Exec(`update compute_resources set default_shell=$1, unitid=$2, last_updated=NOW(), default_home_dir=$3, type=$4 where name=$5`, nullshell, unitID, nullhomedir, currentType, rName)
-		if commerr != nil {
-			w.WriteHeader(http.StatusNotFound)
-			log.WithFields(QueryFields(r, startTime)).Error("Error during DB update " + commerr.Error())
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Database error during update.\" }")
-			return
-		} else {
-			// if no error, commit and all that. If this is being called as part of a wrapper, however, cKey will be 0. So only commit if cKey is non-zero
-			if cKey != 0 {
-				DBtx.Commit(cKey)
-			}
-			log.WithFields(QueryFields(r, startTime)).Info("Successfully updated " + unitName + ".")
-			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
-		}
-	} //end switch
+	return nil, nil
 }
 
 func createStorageResource(w http.ResponseWriter, r *http.Request) {
