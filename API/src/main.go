@@ -249,7 +249,7 @@ func main() {
 	grouter.HandleFunc("/getMappedGidFile", APIs["getMappedGidFile"].Run)
 	grouter.HandleFunc("/getStorageAuthzDBFile", APIs["getStorageAuthzDBFile"].Run)
 	grouter.HandleFunc("/getAffiliationMembersRoles", APIs["getAffiliationMembersRoles"].Run)
-	grouter.HandleFunc("/getStorageAccessLists", getStorageAccessLists)
+	grouter.HandleFunc("/getStorageAccessLists", APIs["getStorageAccessLists"].Run)
 	grouter.HandleFunc("/createComputeResource", createComputeResource)
 	grouter.HandleFunc("/setComputeResourceInfo", setComputeResourceInfo)
 	grouter.HandleFunc("/createStorageResource", createStorageResource)

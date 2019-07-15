@@ -6049,3 +6049,72 @@ func getAffiliationMembersRolesLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
+
+func getStorageAccessListsLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	resource := q.Get("resourcename")
+
+	if resource == "" {
+		resource = "%"
+	}
+	/*if resource == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No resourcename specified in http query.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No resourcename specified.\" }")
+		return
+	}*/
+
+	rows, err := DBptr.Query(`select server, volume, access_level, host from nas_storage where server like $1;`, resource)
+
+	if err != nil {
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	type jsonhost struct {
+		Host   string `json:"host"`
+		Access string `json:"accesslevel"`
+	}
+	Out := make(map[string][]map[string][]jsonhost)
+	Entry := make(map[string][]jsonhost)
+
+	prevServer := ""
+	for rows.Next() {
+		var tmpServer, tmpVolume, tmpAccess, tmpHost sql.NullString
+		rows.Scan(&tmpServer, &tmpVolume, &tmpAccess, &tmpHost)
+
+		if tmpVolume.Valid {
+			if prevServer != "" && prevServer != tmpServer.String {
+				Out[prevServer] = append(Out[prevServer], Entry)
+				Entry = make(map[string][]jsonhost)
+			}
+			Entry[tmpVolume.String] = append(Entry[tmpVolume.String], jsonhost{tmpHost.String, tmpAccess.String})
+		}
+		prevServer = tmpServer.String
+	}
+	Out[prevServer] = append(Out[prevServer], Entry)
+
+	var output interface{}
+	if prevServer == "" {
+		type jsonerror struct {
+			Error string `json:"ferry_error"`
+		}
+		var Err jsonerror
+		Err = jsonerror{"Storage resource does not exist."}
+		log.WithFields(QueryFields(r, startTime)).Error("Storage resource does not exist.")
+		output = Err
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonout, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	fmt.Fprintf(w, string(jsonout))
+}

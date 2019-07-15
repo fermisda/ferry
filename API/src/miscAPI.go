@@ -137,6 +137,14 @@ func IncludeMiscAPIs(c *APICollection) {
 		getAffiliationMembersRoles,
 	}
 	c.Add("getAffiliationMembersRoles", &getAffiliationMembersRoles)
+
+	getStorageAccessLists := BaseAPI{
+		InputModel{
+			Parameter{ResourceName, false},
+		},
+		getStorageAccessLists,
+	}
+	c.Add("getStorageAccessLists", &getStorageAccessLists)
 }
 
 func NotDoneYet(w http.ResponseWriter, r *http.Request, t time.Time) {
@@ -810,38 +818,25 @@ func getAffiliationMembersRoles(c APIContext, i Input) (interface{}, []APIError)
 	return out, nil
 }
 
-func getStorageAccessLists(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+func getStorageAccessLists(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	resource := q.Get("resourcename")
-
-	if resource == "" {
-		resource = "%"
-	}
-	/*if resource == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No resourcename specified in http query.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No resourcename specified.\" }")
-		return
-	}*/
+	resource := i[ResourceName].Default("%")
 
 	rows, err := DBptr.Query(`select server, volume, access_level, host from nas_storage where server like $1;`, resource)
-
-	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		return
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 	defer rows.Close()
 
-	type jsonhost struct {
-		Host   string `json:"host"`
-		Access string `json:"accesslevel"`
-	}
-	Out := make(map[string][]map[string][]jsonhost)
-	Entry := make(map[string][]jsonhost)
+	const Host Attribute = "host"
+	const AccessLevel Attribute = "accesslevel"
+	type jsonhost map[Attribute]interface{}
+
+	out := make(map[string][]map[string][]jsonhost)
+	entry := make(map[string][]jsonhost)
 
 	prevServer := ""
 	for rows.Next() {
@@ -850,33 +845,21 @@ func getStorageAccessLists(w http.ResponseWriter, r *http.Request) {
 
 		if tmpVolume.Valid {
 			if prevServer != "" && prevServer != tmpServer.String {
-				Out[prevServer] = append(Out[prevServer], Entry)
-				Entry = make(map[string][]jsonhost)
+				out[prevServer] = append(out[prevServer], entry)
+				entry = make(map[string][]jsonhost)
 			}
-			Entry[tmpVolume.String] = append(Entry[tmpVolume.String], jsonhost{tmpHost.String, tmpAccess.String})
+			entry[tmpVolume.String] = append(entry[tmpVolume.String], jsonhost{
+				Host: tmpHost.String,
+				AccessLevel: tmpAccess.String,
+			})
 		}
 		prevServer = tmpServer.String
 	}
-	Out[prevServer] = append(Out[prevServer], Entry)
+	if prevServer != "" {
+		out[prevServer] = append(out[prevServer], entry)
+	}
 
-	var output interface{}
-	if prevServer == "" {
-		type jsonerror struct {
-			Error string `json:"ferry_error"`
-		}
-		var Err jsonerror
-		Err = jsonerror{"Storage resource does not exist."}
-		log.WithFields(QueryFields(r, startTime)).Error("Storage resource does not exist.")
-		output = Err
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = Out
-	}
-	jsonout, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	fmt.Fprintf(w, string(jsonout))
+	return out, nil
 }
 
 func createComputeResource(w http.ResponseWriter, r *http.Request) {
