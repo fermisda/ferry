@@ -1,0 +1,58 @@
+# createAffiliationUnit (String unitname, [String type, String voms_url, String alternative_name])
+# setAffiliationUnitInfo (String unitname, [String type, String voms_url, String alternative_name])
+# getAffiliationUnitMembers (String unitname, [int last_updated])
+# getAffiliationUnitComputeResources (String unitname, [int last_updated])
+# Not implemented removeAffiliationUnit (String unitname)
+# Not implemented getAllAffiliationUnits([int last_updated])
+# Not implemented getAffiliationUnitStorageResources (String unitname, [int last_updated])
+# Not implemented createFQAN (String fqan, [String unitname], [String mapped_user], String mapped_group)
+# Not implemented removeFQAN (String fqan)
+# Not implemented setFQANMappings (String fqan, [String mapped_user, String mapped_group])
+#
+#
+#
+#
+
+includes:
+  - !include common.yaml
+
+test_name: test getAffiliationUnitComputeResources
+stages:
+ - name: testing ping
+   request:
+      url: https:{base_url}/getAffiliationUnitComputeResources?unitname=egp&lastupdated={current_time}
+      method: GET
+   response:
+      status_code: 200
+      body:
+      body:
+             ferry_output: 
+                - {"homedir": "/nashome","resourcename": "egp","resourcetype": "Interactive","shell": "/bin/bash"}
+             ferry_error: [] 
+             ferry_status: success
+
+---
+test_name: test getAffiliationUnitMembers
+stages:
+ - name: testing ping
+   request:
+      url: https:{base_url}/getAffiliationUnitMembers?unitname=egp&lastupdated={current_time}
+      method: GET
+   response:
+      status_code: 200
+      body:
+      body:
+             ferry_error: []
+             ferry_status: success
+             ferry_output:
+                - {"uid": 2384,"username": "kobilarc"}
+                - {"uid": 4395,"username": "boyd"}
+                - {"uid": 5049,"username": "lyon"} 
+                - {"uid": 6706,"username": "bross"}
+                - {"uid": 10610,"username": "sbhat"}
+                - {"uid": 11469,"username": "kherner"}
+                - {"uid": 44549,"username": "ehrlich"}
+                - {"uid": 54624,"username": "egp"}
+                - {"uid": 54625,"username": "egpana"}
+                - {"uid": 54626,"username": "egppro"}
+                - {"uid": 54627,"username": "egpgli"}

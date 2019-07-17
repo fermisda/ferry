@@ -1,0 +1,13 @@
+test_name: test 1
+stages:
+ - name: testing getAllUsersFQANs  
+   request:
+      url: https://fermicloud033.fnal.gov:8443/getAllUsersFQANs 
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_status: "success"
+             ferry_error: []
+             ferry_output: !anything
+
