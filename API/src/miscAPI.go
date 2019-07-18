@@ -70,6 +70,34 @@ func IncludeMiscAPIs(c *APICollection) {
 	}
 	c.Add("getGroupFile", &getGroupFile)
 
+	getGridMapFile := BaseAPI{
+		InputModel{
+			Parameter{UnitName, false},
+			Parameter{ResourceName, false},
+			Parameter{LastUpdated, false},
+		},
+		getGridMapFile,
+	}
+	c.Add("getGridMapFile", &getGridMapFile)
+
+	getGridMapFileByVO := BaseAPI{
+		InputModel{
+			Parameter{UnitName, false},
+			Parameter{LastUpdated, false},
+		},
+		getGridMapFileByVO,
+	}
+	c.Add("getGridMapFileByVO", &getGridMapFileByVO)
+
+	getVORoleMapFile := BaseAPI{
+		InputModel{
+			Parameter{ResourceName, false},
+			Parameter{LastUpdated, false},
+		},
+		getVORoleMapFile,
+	}
+	c.Add("getVORoleMapFile", &getVORoleMapFile)
+
 	getGroupName := BaseAPI{
 		InputModel{
 			Parameter{GID, true},
@@ -77,6 +105,70 @@ func IncludeMiscAPIs(c *APICollection) {
 		getGroupName,
 	}
 	c.Add("getGroupName", &getGroupName)
+
+	lookupCertificateDN := BaseAPI{
+		InputModel{
+			Parameter{DN, true},
+		},
+		lookupCertificateDN,
+	}
+	c.Add("lookupCertificateDN", &lookupCertificateDN)
+
+	getMappedGidFile := BaseAPI{
+		InputModel{},
+		getMappedGidFile,
+	}
+	c.Add("getMappedGidFile", &getMappedGidFile)
+
+	getStorageAuthzDBFile := BaseAPI{
+		InputModel{
+			Parameter{PasswdMode, false},
+			Parameter{LastUpdated, false},
+		},
+		getStorageAuthzDBFile,
+	}
+	c.Add("getStorageAuthzDBFile", &getStorageAuthzDBFile)
+
+	getAffiliationMembersRoles := BaseAPI{
+		InputModel{
+			Parameter{UnitName, false},
+			Parameter{Role, false},
+		},
+		getAffiliationMembersRoles,
+	}
+	c.Add("getAffiliationMembersRoles", &getAffiliationMembersRoles)
+
+	getStorageAccessLists := BaseAPI{
+		InputModel{
+			Parameter{ResourceName, false},
+		},
+		getStorageAccessLists,
+	}
+	c.Add("getStorageAccessLists", &getStorageAccessLists)
+
+	createComputeResource := BaseAPI{
+		InputModel{
+			Parameter{ResourceName, true},
+			Parameter{ResourceType, true},
+			Parameter{HomeDir, true},
+			Parameter{Shell, false},
+			Parameter{UnitName, false},
+		},
+		createComputeResource,
+	}
+	c.Add("createComputeResource", &createComputeResource)
+
+	setComputeResourceInfo := BaseAPI{
+		InputModel{
+			Parameter{ResourceName, true},
+			Parameter{ResourceType, false},
+			Parameter{HomeDir, false},
+			Parameter{Shell, false},
+			Parameter{UnitName, false},
+		},
+		setComputeResourceInfo,
+	}
+	c.Add("setComputeResourceInfo", &setComputeResourceInfo)
 }
 
 func NotDoneYet(w http.ResponseWriter, r *http.Request, t time.Time) {
@@ -318,246 +410,156 @@ func getGroupFile(c APIContext, i Input) (interface{}, []APIError) {
 
 	return out, nil
 }
-func getGridMapFile(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
-	unit := strings.TrimSpace(q.Get("unitname"))
-	if unit == "" {
-		unit = "%"
-	}
-	rName := strings.TrimSpace(q.Get("resourcename"))
+func getGridMapFile(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
-	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
-		return
-	}
-
-	var unitExists, resourceExists bool
-
-	rows, err := DBptr.Query(`select distinct dn, uname, unit_exists, resource_exists from 
-							 (select 1 as key, au.name, uc.dn, us.uname from  affiliation_unit_user_certificate as ac
-								left join user_certificates as uc on ac.dnid = uc.dnid
-								left join users as us on uc.uid = us.uid
-								left join compute_access as ca on us.uid = ca.uid
-								left join affiliation_units as au on ac.unitid = au.unitid
-								left join compute_resources as cr on ca.compid = cr.compid
-								where au.name like $1 and ( ac.last_updated>=$2 or uc.last_updated>=$2 or us.last_updated>=$2 or au.last_updated>=$2 or $2 is null) and (cr.name = $3 or $4)) as t
-	 						  right join (select 1 as key, $1 in (select name from affiliation_units) as unit_exists, ($3 in (select name from compute_resources) or $4) as resource_exists) as c on t.key = c.key`, unit, lastupdate, rName, rName == "")
+	unitid := NewNullAttribute(UnitID)
+	compid := NewNullAttribute(ResourceID)
+	err := c.DBtx.QueryRow(`select (select unitid from affiliation_units where name = $1),
+								   (select compid from compute_resources where name = $2)`,
+						   i[UnitName], i[ResourceName]).Scan(&unitid, &compid)
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		return
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !unitid.Valid && i[UnitName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+	}
+	if !compid.Valid && i[ResourceName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, ResourceName))
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	rows, err := c.DBtx.Query(`select distinct dn, uname 
+								from affiliation_unit_user_certificate as ac
+								left join user_certificates as uc using(dnid)
+								left join users as us using(uid)
+								left join compute_access as ca using(uid)
+							   where (unitid = $1 or $1 is null) and (compid = $2 or $2 is null) and
+									 (ac.last_updated>=$3 or uc.last_updated>=$3 or us.last_updated>=$3 or $3 is null)`,
+							  unitid, compid, i[LastUpdated])
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 	defer rows.Close()
 
-	type jsonentry struct {
-		DN    string `json:"userdn"`
-		Uname string `json:"mapped_uname"`
-	}
-	var dnmap jsonentry
-	var Out []jsonentry
+	type jsondnmap map[Attribute]interface{}
+	var out []jsondnmap
 
 	for rows.Next() {
-		var tmpDN, tmpUname sql.NullString
-		rows.Scan(&tmpDN, &tmpUname, &unitExists, &resourceExists)
-		if tmpDN.Valid {
-			dnmap.DN, dnmap.Uname = tmpDN.String, tmpUname.String
-			Out = append(Out, dnmap)
+		row := NewMapNullAttribute(DN, UserName)
+		rows.Scan(row[DN], row[UserName])
+		if row[DN].Valid {
+			out = append(out, jsondnmap{
+				DN: row[DN].Data,
+				UserName: row[UserName].Data,
+			})
 		}
 	}
 
-	var output interface{}
-	if len(Out) == 0 {
-		type jsonerror struct {
-			Error []string `json:"ferry_error"`
-		}
-		var Err jsonerror
-
-		if !unitExists && unit != "%" {
-			Err.Error = append(Err.Error, "Experiment does not exist.")
-			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
-		} else if !resourceExists && rName != "" {
-			Err.Error = append(Err.Error, "Resource "+rName+" does not exist.")
-			log.WithFields(QueryFields(r, startTime)).Error("Resource " + rName + " does not exist.")
-		}
-		Err.Error = append(Err.Error, "No DNs found.")
-		log.WithFields(QueryFields(r, startTime)).Error("No DNs found.")
-
-		output = Err
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = Out
-	}
-	jsonout, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	fmt.Fprintf(w, string(jsonout))
+	return out, nil
 }
 
-func getGridMapFileByVO(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
-	unit := strings.TrimSpace(q.Get("unitname"))
-	if unit == "" {
-		unit = "%"
+func getGridMapFileByVO(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+
+	unitid := NewNullAttribute(UnitID)
+	err := c.DBtx.QueryRow(`select unitid from affiliation_units where name = $1`, i[UnitName]).Scan(&unitid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
-	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
-		return
+	if !unitid.Valid && i[UnitName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+		return nil, apiErr
 	}
 
-	var unitExists bool
-
-	rows, err := DBptr.Query(`select name, dn, uname, unit_exists from 
-							 (select 1 as key, au.name, uc.dn, us.uname from  affiliation_unit_user_certificate as ac
-								left join user_certificates as uc on ac.dnid = uc.dnid
-								left join users as us on uc.uid = us.uid
-								left join affiliation_units as au on ac.unitid = au.unitid
-								where au.name like $1 and ( ac.last_updated>=$2 or uc.last_updated>=$2 or us.last_updated>=$2 or au.last_updated>=$2 or $2 is null)) as t
-	 						  right join (select 1 as key, $1 in (select name from affiliation_units) as unit_exists) as c on t.key = c.key`, unit, lastupdate)
+	rows, err := c.DBtx.Query(`select name, dn, uname 
+								from  affiliation_unit_user_certificate as ac
+								left join user_certificates as uc using(dnid)
+								left join users as us using(uid)
+								left join affiliation_units as au using(unitid)
+								where (unitid = $1 or $1 is null) and (ac.last_updated >= $2 or uc.last_updated >= $2 or
+									   us.last_updated >= $2 or au.last_updated >= $2 or $2 is null)`,
+							  unitid, i[LastUpdated])
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		return
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 	defer rows.Close()
 
-	type jsonentry struct {
-		DN    string `json:"userdn"`
-		Uname string `json:"mapped_uname"`
-	}
-	var dnmap jsonentry
-	Out := make(map[string][]jsonentry)
+	type jsondnmap map[Attribute]interface{}
+	out := make(map[string][]jsondnmap)
 
 	for rows.Next() {
-		var tmpAname, tmpDN, tmpUname sql.NullString
-		rows.Scan(&tmpAname, &tmpDN, &tmpUname, &unitExists)
-		if tmpDN.Valid {
-			dnmap.DN, dnmap.Uname = tmpDN.String, tmpUname.String
-			Out[tmpAname.String] = append(Out[tmpAname.String], dnmap)
+		row := NewMapNullAttribute(UnitName, DN, UserName)
+		rows.Scan(row[UnitName], row[DN], row[UserName])
+		if row[DN].Valid {
+			out[row[UnitName].Data.(string)] = append(out[row[UnitName].Data.(string)], jsondnmap{
+				DN: row[DN].Data,
+				UserName: row[UserName].Data,
+			})
 		}
 	}
 
-	var output interface{}
-	if len(Out) == 0 {
-		type jsonerror struct {
-			Error []string `json:"ferry_error"`
-		}
-		var Err jsonerror
-
-		if !unitExists && unit != "%" {
-			Err.Error = append(Err.Error, "Experiment does not exist.")
-			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
-		}
-		Err.Error = append(Err.Error, "No DNs found.")
-		log.WithFields(QueryFields(r, startTime)).Error("No DNs found.")
-
-		output = Err
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = Out
-	}
-	jsonout, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	fmt.Fprintf(w, string(jsonout))
+	return out, nil
 }
 
-func getVORoleMapFile(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+func getVORoleMapFile(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	type jsonerror struct {
-		Error []string `json:"ferry_error"`
-	}
-	var inputErr jsonerror
-
-	rName := strings.TrimSpace(q.Get("resourcename"))
-
-	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
-	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
-		inputErr.Error = append(inputErr.Error, "Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.")
-		return
+	compid := NewNullAttribute(UnitID)
+	err := c.DBtx.QueryRow(`select compid from compute_resources where name = $1`, i[ResourceName]).Scan(&compid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	if len(inputErr.Error) > 0 {
-		jsonout, err := json.Marshal(inputErr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
-		}
-		fmt.Fprintf(w, string(jsonout))
-		return
+	if !compid.Valid && i[UnitName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, compid))
+		return nil, apiErr
 	}
 
-	rows, err := DBptr.Query(`select distinct t.fqan, t.uname, t.name, c.resource_exists from
-							  (select 1 as key, fqan, uname, au.name from grid_fqan as gf
-							   join users as u on gf.mapped_user = u.uid
-							   join compute_access_group as cag on (cag.groupid=gf.mapped_group and gf.mapped_user=cag.uid)
-							   join compute_resources as cr on cag.compid=cr.compid
-							   left join affiliation_units as au on gf.unitid = au.unitid
-							   where ($1 or cr.name=$2) and (gf.last_updated >= $3 or u.last_updated >= $3 or $3 is null)
-							  ) as t
-							  right join (
-							   select 1 as key, $2 in (select name from compute_resources) as resource_exists
-							  ) as c on t.key = c.key order by t.fqan`, rName == "", rName, lastupdate)
-	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		return
+	rows, err := DBptr.Query(`select distinct fqan, uname, name
+								from grid_fqan as gf
+								join users as u on gf.mapped_user = u.uid
+								join compute_access_group as cag on (cag.groupid=gf.mapped_group and gf.mapped_user=cag.uid)
+								left join affiliation_units using(unitid)
+							  where (compid = $1 or $1 is null) and (gf.last_updated >= $2 or u.last_updated >= $2 or $2 is null)`,
+							 compid, i[LastUpdated])
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 	defer rows.Close()
 
-	var resourceExists bool
-
-	type jsonentry struct {
-		DN    string `json:"fqan"`
-		Uname string `json:"mapped_uname"`
-		Aname string `json:"unitname"`
-	}
-	var Out []jsonentry
+	type jsonmapping map[Attribute]interface{}
+	var out []jsonmapping
 
 	for rows.Next() {
-		var tmpFQAN, tmpUname, tmpAname sql.NullString
-		rows.Scan(&tmpFQAN, &tmpUname, &tmpAname, &resourceExists)
-		if tmpFQAN.Valid {
-			Out = append(Out, jsonentry{tmpFQAN.String, tmpUname.String, tmpAname.String})
+		row := NewMapNullAttribute(FQAN, UserName, UnitName)
+		rows.Scan(row[FQAN], row[UserName], row[UnitName])
+		if row[FQAN].Valid {
+			out = append(out, jsonmapping{
+				FQAN: row[FQAN].Data,
+				UserName: row[UserName].Data,
+				UnitName: row[UnitName].Data,
+			})
 		}
 	}
 
-	var output interface{}
-	if len(Out) == 0 || (!resourceExists && rName != "") {
-		var queryErr jsonerror
-		if !resourceExists && rName != "" {
-			queryErr.Error = append(queryErr.Error, "Resource does not exist.")
-			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
-		} else {
-			queryErr.Error = append(queryErr.Error, "No FQANs found.")
-			log.WithFields(QueryFields(r, startTime)).Error("No FQANs found.")
-		}
-		output = queryErr
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = Out
-	}
-	jsonoutput, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-	}
-	fmt.Fprintf(w, string(jsonoutput))
+	return out, nil
 }
 
 func getGroupGID(c APIContext, i Input) (interface{}, []APIError) {
@@ -610,440 +612,255 @@ func getGroupName(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
-func lookupCertificateDN(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+func lookupCertificateDN(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	type jsonerror struct {
-		Error string `json:"ferry_error"`
-	}
-	var inputErr []jsonerror
-
-	certdn := q.Get("certificatedn")
-
-	if certdn == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No certificatedn name specified in http query.")
-		inputErr = append(inputErr, jsonerror{"No certificatedn name specified."})
-	} else {
-		dn, err := ExtractValidDN(certdn)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			inputErr = append(inputErr, jsonerror{err.Error()})
-		}
-		certdn = dn
+	dnid := NewNullAttribute(DNID)
+	err := c.DBtx.QueryRow(`select dnid from user_certificates where dn = $1`, i[DN]).Scan(&dnid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	if len(inputErr) > 0 {
-		jsonout, err := json.Marshal(inputErr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
-		}
-		fmt.Fprintf(w, string(jsonout))
-		return
+	if !dnid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, DN))
+		return nil, apiErr
 	}
 
-	rows, err := DBptr.Query(`select u.uid, uname from user_certificates as uc left join users as u on uc.uid = u.uid where dn = $1;`, certdn)
-	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		return
+	row := NewMapNullAttribute(UID, UserName)
+	err = c.DBtx.QueryRow(`select uid, uname from user_certificates join users using(uid) where dnid = $1;`,
+						  dnid).Scan(row[UID], row[UserName])
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
-	defer rows.Close()
 
-	type jsonentry struct {
-		Uid   string `json:"uid"`
-		Uname string `json:"uname"`
-	}
-	var Entry jsonentry
-	var Out []jsonentry
+	type jsonuser map[Attribute]interface{}
+	out := make(jsonuser)
 
-	for rows.Next() {
-		var tmpUid, tmpUname sql.NullString
-		rows.Scan(&tmpUid, &tmpUname)
-
-		if tmpUid.Valid {
-			Entry.Uid = tmpUid.String
-			Entry.Uname = tmpUname.String
-			Out = append(Out, Entry)
+	if row[UID].Valid {
+		out = jsonuser{
+			UID: row[UID].Data,
+			UserName: row[UserName].Data,
 		}
 	}
 
-	var output interface{}
-	if len(Out) == 0 {
-		var queryErr []jsonerror
-		log.WithFields(QueryFields(r, startTime)).Error("Certificate DN does not exist.")
-		queryErr = append(queryErr, jsonerror{"Certificate DN does not exist."})
-		output = queryErr
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = Out
-	}
-	jsonout, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	fmt.Fprintf(w, string(jsonout))
+	return out, nil
 }
 
-func getMappedGidFile(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+func getMappedGidFile(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	rows, err := DBptr.Query(`select fqan, uname, gid from grid_fqan as gf
-							  left join groups as g on g.groupid = gf.mapped_group
-							  left join users as u on u.uid = gf.mapped_user;`)
-
-	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		return
+	rows, err := c.DBtx.Query(`select fqan, uname, gid from grid_fqan as gf
+							   left join groups as g on g.groupid = gf.mapped_group
+							   left join users as u on u.uid = gf.mapped_user`)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 	defer rows.Close()
 
-	type jsonentry struct {
-		Fqan string `json:"fqan"`
-		User string `json:"mapped_uname"`
-		Gid  string `json:"mapped_gid"`
-	}
-	var Entry jsonentry
-	var Out []jsonentry
+	type jsonmapping map[Attribute]interface{}
+	var out []jsonmapping
 
 	for rows.Next() {
-		var tmpFqan, tmpUser, tmpGid sql.NullString
-		rows.Scan(&tmpFqan, &tmpUser, &tmpGid)
+		row := NewMapNullAttribute(FQAN, UserName, GID)
+		rows.Scan(row[FQAN], row[UserName], row[GID])
 
-		if tmpFqan.Valid {
-			Entry = jsonentry{tmpFqan.String, tmpUser.String, tmpGid.String}
+		if row[FQAN].Valid {
 			//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 			//!!REMOVE THIS EXCEPTION ONCE DCACHE RESOURCE EXISTS!!
 			//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-			if !((strings.Contains(tmpFqan.String, "Role=Analysis") && tmpUser.String != "") ||
-				(tmpFqan.String == "/des/Role=Production/Capability=NULL" && tmpUser.String == "des")) {
-				Out = append(Out, Entry)
-			}
-		}
-	}
-
-	var output interface{}
-	if len(Out) == 0 {
-		type jsonerror struct {
-			Error string `json:"ferry_error"`
-		}
-		var Err jsonerror
-		Err = jsonerror{"Something went wrong."}
-		log.WithFields(QueryFields(r, startTime)).Error("Something went wrong.")
-		output = Err
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = Out
-	}
-	jsonout, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	fmt.Fprintf(w, string(jsonout))
-}
-
-func getStorageAuthzDBFile(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
-
-	type jsonerror struct {
-		Error []string `json:"ferry_error"`
-	}
-	var inputErr jsonerror
-
-	pMode := false
-	if q.Get("passwdmode") != "" {
-		if pBool, err := strconv.ParseBool(q.Get("passwdmode")); err == nil {
-			pMode = pBool
-		} else {
-			log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
-			inputErr.Error = append(inputErr.Error, "Invalid value for passwdmode. Must be true or false (or omit it from the query).")
-		}
-	}
-	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
-	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
-		inputErr.Error = append(inputErr.Error, "Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.")
-	}
-
-	if len(inputErr.Error) > 0 {
-		jsonout, err := json.Marshal(inputErr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
-		}
-		fmt.Fprintf(w, string(jsonout))
-		return
-	}
-
-	rows, err := DBptr.Query(`select u.full_name, u.uname, u.uid, g.gid, ug.last_updated from users as u
-							  join user_group as ug on u.uid = ug.uid
-							  join groups as g on ug.groupid = g.groupid
-                              where g.type = 'UnixGroup' and (ug.last_updated>=$1 or $1 is null)
-							  order by u.uname;`, lastupdate)
-
-	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		return
-	}
-	defer rows.Close()
-
-	authMode := func(rows *sql.Rows) (interface{}, bool) {
-		type jsonentry struct {
-			Decision   string   `json:"decision"`
-			User       string   `json:"username"`
-			Privileges string   `json:"privileges"`
-			Uid        string   `json:"uid"`
-			Gid        []string `json:"gid"`
-			Home       string   `json:"home"`
-			Root       string   `json:"root"`
-			FsPath     string   `json:"fs_path"`
-		}
-		var Entry jsonentry
-		var Out []jsonentry
-
-		prevUser := ""
-		for rows.Next() {
-			var tmpName, tmpUser, tmpUid, tmpGid, tmpTime sql.NullString
-			rows.Scan(&tmpName, &tmpUser, &tmpUid, &tmpGid, &tmpTime)
-
-			if tmpGid.Valid {
-				if prevUser == "" {
-					Entry.Decision = "authorize"
-					Entry.User = tmpUser.String
-					Entry.Privileges = "read-write"
-					Entry.Uid = tmpUid.String
-					Entry.Gid = append(Entry.Gid, tmpGid.String)
-					Entry.Home = "/"
-					Entry.Root = "/pnfs/fnal.gov/usr"
-					Entry.FsPath = "/"
-				} else if prevUser != tmpUser.String {
-					Out = append(Out, Entry)
-					Entry.Decision = "authorize"
-					Entry.User = tmpUser.String
-					Entry.Privileges = "read-write"
-					Entry.Uid = tmpUid.String
-					Entry.Gid = nil
-					Entry.Gid = append(Entry.Gid, tmpGid.String)
-					Entry.Home = "/"
-					Entry.Root = "/pnfs/fnal.gov/usr"
-					Entry.FsPath = "/"
-				} else {
-					Entry.Gid = append(Entry.Gid, tmpGid.String)
-				}
-				prevUser = tmpUser.String
-			}
-		}
-		Out = append(Out, Entry)
-		return Out, len(Out) > 0
-	}
-
-	passwdMode := func(rows *sql.Rows) (interface{}, bool) {
-		type jsonuser struct {
-			Uname string `json:"username"`
-			Uid   string `json:"uid"`
-			Gid   string `json:"gid"`
-			Gecos string `json:"gecos"`
-			Hdir  string `json:"homedir"`
-			Shell string `json:"shell"`
-		}
-		type jsonunit struct {
-			Resources map[string][]jsonuser `json:"resources"`
-			Lasttime  int64                 `json:"last_updated"`
-		}
-		Out := make(map[string]jsonunit)
-
-		tmpMap := make(map[string][]jsonuser)
-		lasttime := int64(0)
-		prevUname := ""
-		for rows.Next() {
-			var tmpName, tmpUser, tmpUid, tmpGid, tmpTime sql.NullString
-			rows.Scan(&tmpName, &tmpUser, &tmpUid, &tmpGid, &tmpTime)
-
-			if tmpTime.Valid {
-				parseTime, parserr := time.Parse(time.RFC3339, tmpTime.String)
-				if parserr != nil {
-					log.WithFields(QueryFields(r, startTime)).Error("Error parsing last updated time of " + tmpTime.String)
-				} else {
-					if lasttime == 0 || (parseTime.Unix() > lasttime) {
-						lasttime = parseTime.Unix()
-					}
-				}
-			} else {
-				log.WithFields(QueryFields(r, startTime)).Debugln("tmpTime is not valid")
-			}
-
-			if tmpUser.String != prevUname {
-				tmpMap["all"] = append(tmpMap["all"], jsonuser{
-					tmpUser.String,
-					tmpUid.String,
-					tmpGid.String,
-					tmpName.String,
-					"/home/" + tmpUser.String,
-					"/sbin/nologin",
+			if !((strings.Contains(row[FQAN].Data.(string), "Role=Analysis") && row[UserName].Valid) ||
+				(row[FQAN].Data.(string) == "/des/Role=Production/Capability=NULL" && row[UserName].Data.(string) == "des")) {
+				out = append(out, jsonmapping{
+					FQAN: row[FQAN].Data,
+					UserName: row[UserName].Data,
+					GID: row[GID].Data,
 				})
-				prevUname = tmpUser.String
 			}
 		}
-		Out["fermilab"] = jsonunit{tmpMap, lasttime}
-
-		return Out, len(Out) > 0
 	}
 
-	var Out interface{}
-	var ok bool
-	if !pMode {
-		Out, ok = authMode(rows)
-	} else {
-		Out, ok = passwdMode(rows)
-	}
-
-	var output interface{}
-	if !ok {
-		type jsonerror struct {
-			Error string `json:"ferry_error"`
-		}
-		var Err jsonerror
-		Err = jsonerror{"Something went wrong."}
-		log.WithFields(QueryFields(r, startTime)).Error("Something went wrong.")
-		output = Err
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = Out
-	}
-	jsonout, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	fmt.Fprintf(w, string(jsonout))
+	return out, nil
 }
 
-func getAffiliationMembersRoles(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+func getStorageAuthzDBFile(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	unit := q.Get("unitname")
-	role := q.Get("rolename")
-
-	if unit == "" {
-		unit = "%"
-	}
-	if role == "" {
-		role = "%"
-	} else {
-		role = "%" + role + "%"
-	}
-
-	rows, err := DBptr.Query(`select t.name, t.fqan, t.uname, t.full_name, unit_exists, fqan_exists from (
-								select 1 as key, au.name, gf.fqan, u.uname, u.full_name
-								from grid_access as ga
-								left join grid_fqan as gf on ga.fqanid = gf.fqanid
-								left join users as u on ga.uid = u.uid
-								left join affiliation_units as au on gf.unitid = au.unitid
-								where au.name like $1 and gf.fqan like $2
-							) as t right join (
-								select 1 as key,
-								$1 in (select name from affiliation_units) as unit_exists,
-								$2 in (select fqan from grid_fqan) as fqan_exists
-							) as c on t.key = c.key;`, unit, role)
-
-	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		return
+	rows, err := c.DBtx.Query(`select full_name, uname, uid, gid, ug.last_updated
+								from users
+								join user_group as ug using(uid)
+								join groups using(groupid)
+                               where type = 'UnixGroup' and (ug.last_updated>=$1 or $1 is null)
+							   order by uname`, i[LastUpdated])
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 	defer rows.Close()
 
-	var unitExists bool
-	var roleExists bool
+	authMode := func(rows *sql.Rows) interface{} {
+		const Decision Attribute = "decision"
+		const Privileges Attribute = "privileges"
+		const Groups Attribute = "groups"
+		const Root = "root"
 
-	type jsonentry struct {
-		Fqan string `json:"fqan"`
-		User string `json:"username"`
-		Name string `json:"commonname"`
+		type jsonentry map[Attribute]interface{}
+
+		entry := make(jsonentry)
+		out := make([]jsonentry, 0)
+
+		prevUser := NewNullAttribute(UserName)
+		for rows.Next() {
+			row := NewMapNullAttribute(FullName, UserName, UID, GID, LastUpdated)
+			rows.Scan(row[FullName], row[UserName], row[UID], row[GID], row[LastUpdated])
+
+			if row[GID].Valid {
+				if prevUser != *row[UserName] {
+					if prevUser.Valid {
+						out = append(out, entry)
+						entry = make(jsonentry)
+					}
+					entry[Decision] = "authorize"
+					entry[UserName] = row[UserName].Data
+					entry[Privileges] = "read-write"
+					entry[UID] = row[UID].Data
+					entry[Groups] = make([]interface{}, 0)
+					entry[HomeDir] = "/"
+					entry[Root] = "/pnfs/fnal.gov/usr"
+					entry[Path] = "/"
+				}
+				entry[Groups] = append(entry[Groups].([]interface{}), row[GID].Data)
+				prevUser = *row[UserName]
+			}
+		}
+		out = append(out, entry)
+		return out
 	}
-	Out := make(map[string][]jsonentry)
+
+	passwdMode := func(rows *sql.Rows) interface{} {
+		const GECOS Attribute = "gecos"
+		const Resources Attribute = "resources"
+		type jsonmap map[Attribute]interface{}
+
+		out := make(jsonmap)
+
+		tmpMap := make(map[string][]jsonmap)
+		lasttime := int64(0)
+		prevUname := NewNullAttribute(UserName)
+		for rows.Next() {
+			row := NewMapNullAttribute(FullName, UserName, UID, GID, LastUpdated)
+			rows.Scan(row[FullName], row[UserName], row[UID], row[GID], row[LastUpdated])
+
+			if lasttime == 0 || (row[LastUpdated].Data.(time.Time).Unix() > lasttime) {
+				lasttime = row[LastUpdated].Data.(time.Time).Unix()
+			}
+
+			if *row[UserName] != prevUname {
+				tmpMap["all"] = append(tmpMap["all"], jsonmap {
+					UserName: row[UserName].Data,
+					UID: row[UID].Data,
+					GID: row[GID].Data,
+					GECOS: row[FullName].Data,
+					HomeDir: "/home/" + row[UserName].Data.(string),
+					Shell: "/sbin/nologin",
+				})
+				prevUname = *row[UserName]
+			}
+		}
+		out["fermilab"] = jsonmap{
+			Resources: tmpMap,
+			LastUpdated: lasttime,
+		}
+
+		return out
+	}
+
+	var out interface{}
+	if !i[PasswdMode].Valid {
+		out = authMode(rows)
+	} else {
+		out = passwdMode(rows)
+	}
+
+	return out, nil
+}
+
+func getAffiliationMembersRoles(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+
+	role := i[Role].Default("%")
+
+	unitid := NewNullAttribute(UnitID)
+	err := c.DBtx.QueryRow(`select unitid from affiliation_units where name = $1`, i[UnitName]).Scan(&unitid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !unitid.Valid && i[UnitName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+		return nil, apiErr
+	}
+
+	rows, err := DBptr.Query(`select name, fqan, uname, full_name
+								from grid_access
+								join grid_fqan using(fqanid)
+								join users using(uid)
+								left join affiliation_units using(unitid)
+							  where (unitid = $1 or $1 is null) and (lower(fqan) like lower($2))`,
+							 unitid, "%/role=" + role.Data.(string) + "/%")
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+	defer rows.Close()
+
+	type jsonentry map[Attribute]interface{}
+	out := make(map[string][]jsonentry)
 
 	for rows.Next() {
-		var tmpUnit, tmpFqan, tmpUser, tmpName sql.NullString
-		rows.Scan(&tmpUnit, &tmpFqan, &tmpUser, &tmpName, &unitExists, &roleExists)
+		row := NewMapNullAttribute(UnitName, FQAN, UserName, FullName)
+		rows.Scan(row[UnitName], row[FQAN], row[UserName], row[FullName])
 
-		if tmpFqan.Valid {
-			Out[tmpUnit.String] = append(Out[tmpUnit.String], jsonentry{tmpFqan.String, tmpUser.String, tmpName.String})
+		if row[FQAN].Valid {
+			out[row[UnitName].Data.(string)] = append(out[row[UnitName].Data.(string)], jsonentry {
+				FQAN: row[FQAN].Data,
+				UserName: row[UserName].Data,
+				FullName: row[FullName].Data,
+			})
 		}
 	}
 
-	var output interface{}
-	if len(Out) == 0 {
-		type jsonerror struct {
-			Error []string `json:"ferry_error"`
-		}
-		var Err jsonerror
-		if !unitExists {
-			Err.Error = append(Err.Error, "Experiment does not exist.")
-			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
-		}
-		if !roleExists {
-			Err.Error = append(Err.Error, "Role does not exist.")
-			log.WithFields(QueryFields(r, startTime)).Error("Role does not exist.")
-		}
-		if len(Err.Error) == 0 {
-			Err.Error = append(Err.Error, "No roles were found")
-			log.WithFields(QueryFields(r, startTime)).Error("No roles were found")
-		}
-		output = Err
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = Out
-	}
-	jsonout, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	fmt.Fprintf(w, string(jsonout))
+	return out, nil
 }
 
-func getStorageAccessLists(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+func getStorageAccessLists(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	resource := q.Get("resourcename")
-
-	if resource == "" {
-		resource = "%"
-	}
-	/*if resource == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No resourcename specified in http query.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No resourcename specified.\" }")
-		return
-	}*/
+	resource := i[ResourceName].Default("%")
 
 	rows, err := DBptr.Query(`select server, volume, access_level, host from nas_storage where server like $1;`, resource)
-
-	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		return
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 	defer rows.Close()
 
-	type jsonhost struct {
-		Host   string `json:"host"`
-		Access string `json:"accesslevel"`
-	}
-	Out := make(map[string][]map[string][]jsonhost)
-	Entry := make(map[string][]jsonhost)
+	const Host Attribute = "host"
+	const AccessLevel Attribute = "accesslevel"
+	type jsonhost map[Attribute]interface{}
+
+	out := make(map[string][]map[string][]jsonhost)
+	entry := make(map[string][]jsonhost)
 
 	prevServer := ""
 	for rows.Next() {
@@ -1052,288 +869,108 @@ func getStorageAccessLists(w http.ResponseWriter, r *http.Request) {
 
 		if tmpVolume.Valid {
 			if prevServer != "" && prevServer != tmpServer.String {
-				Out[prevServer] = append(Out[prevServer], Entry)
-				Entry = make(map[string][]jsonhost)
+				out[prevServer] = append(out[prevServer], entry)
+				entry = make(map[string][]jsonhost)
 			}
-			Entry[tmpVolume.String] = append(Entry[tmpVolume.String], jsonhost{tmpHost.String, tmpAccess.String})
+			entry[tmpVolume.String] = append(entry[tmpVolume.String], jsonhost{
+				Host: tmpHost.String,
+				AccessLevel: tmpAccess.String,
+			})
 		}
 		prevServer = tmpServer.String
 	}
-	Out[prevServer] = append(Out[prevServer], Entry)
+	if prevServer != "" {
+		out[prevServer] = append(out[prevServer], entry)
+	}
 
-	var output interface{}
-	if prevServer == "" {
-		type jsonerror struct {
-			Error string `json:"ferry_error"`
-		}
-		var Err jsonerror
-		Err = jsonerror{"Storage resource does not exist."}
-		log.WithFields(QueryFields(r, startTime)).Error("Storage resource does not exist.")
-		output = Err
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = Out
-	}
-	jsonout, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	fmt.Fprintf(w, string(jsonout))
+	return out, nil
 }
 
-func createComputeResource(w http.ResponseWriter, r *http.Request) {
+func createComputeResource(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+	shell := i[Shell].Default("/sbin/nologin")
 
-	rName := q.Get("resourcename")
-	unitName := q.Get("unitname")
-	rType := q.Get("type")
-	shell := q.Get("defaultshell")
-	homedir := q.Get("defaulthomedir")
-
-	var nullhomedir sql.NullString
-	if rName == "" {
-		log.WithFields(QueryFields(r, startTime)).Print("No resource name specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No resourcename specified.\" }")
-		return
-	}
-	if rType == "" {
-		log.WithFields(QueryFields(r, startTime)).Print("No resource type specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No type specified.\" }")
-		return
-	} else if strings.ToUpper(rType) == "NULL" {
-		log.WithFields(QueryFields(r, startTime)).Print("'NULL' is an invalid resource type.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Resource type of NULL is not allowed.\" }")
-		return
-	}
-	//	if unitName == "" {
-	//		unitName = "NULL"
-	//		}
-	if shell == "" || strings.ToUpper(strings.TrimSpace(shell)) == "NULL" {
-		shell = "default"
-	}
-	if homedir == "" || strings.ToUpper(strings.TrimSpace(homedir)) == "NULL" {
-		nullhomedir.Valid = false
-		log.WithFields(QueryFields(r, startTime)).Print("No defaulthomedir specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No defaulthomedir specified.\" }")
-		return
-	} else {
-		nullhomedir.Valid = true
-		nullhomedir.String = homedir
-	}
-
-	//require auth
-	authorized, authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
-		return
-	}
-
-	var unitID sql.NullInt64
-
-	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	unitid := NewNullAttribute(UnitID)
+	compid := NewNullAttribute(ResourceID)
+	err := c.DBtx.QueryRow(`select (select unitid from affiliation_units where name = $1),
+								   (select compid from compute_resources where name = $2)`,
+						   i[UnitName], i[ResourceName]).Scan(&unitid, &compid)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error starting database transaction.\" }")
-		return
-	}
-	defer DBtx.Rollback(cKey)
-
-	//figure out the unitID if we need it
-
-	if unitName != "" {
-		uniterr := DBtx.tx.QueryRow(`select unitid from affiliation_units where name=$1`, unitName).Scan(&unitID)
-		if uniterr != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error determining unitid for " + unitName + ": " + uniterr.Error())
-			if cKey != 0 {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"Error determining unitID for "+unitName+". You cannot add a unit name that does not already exist in affiliation_units.\" }")
-			}
-			DBtx.Report("Error determining unitID for " + unitName + ".")
-			return
-		}
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	//now, make sure the the resource does not already exist. If it does, bail out. If it does not, do the insertion
-
-	var compId int
-	checkerr := DBtx.tx.QueryRow(`select compid from  compute_resources where name=$1`, rName).Scan(&compId)
-
-	switch {
-	case checkerr == sql.ErrNoRows:
-		// OK, it does not already exist, so we start a transaction
-
-		//	addstr := fmt.Sprintf(`do declare cmpid bigint;  begin select compid into cmpid from compute_resources order by compid desc limit 1; if exists (select name from compute_resources where name=$1) then raise 'resource already exists'; else insert into compute_resources (compid, name, default_shell, unitid, last_updated, default_home_dir, type) values (cmpid+1,$1,$2,$3,NOW(),$4,$5); end if ;  end ;`)
-		var addstr string
-		if shell == "default" {
-			addstr = fmt.Sprintf(`insert into compute_resources (name, default_shell, unitid, last_updated, default_home_dir, type) values ($1, '/sbin/nologin', $2, NOW(), $3, $4)`)
-			_, err = DBtx.Exec(addstr, rName, unitID, nullhomedir, rType)
-		} else {
-			addstr = fmt.Sprintf(`insert into compute_resources (name, default_shell, unitid, last_updated, default_home_dir, type) values ($1, $2, $3, NOW(), $4, $5)`)
-			_, err = DBtx.Exec(addstr, rName, shell, unitID, nullhomedir, rType)
-		}
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
-			w.WriteHeader(http.StatusNotFound)
-			if cKey != 0 {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"Error in database transaction.\" }")
-			}
-			return
-		} else {
-			if cKey != 0 {
-				DBtx.Commit(cKey)
-			}
-			log.WithFields(QueryFields(r, startTime)).Error("Added " + rName + " to compute_resources.")
-			if cKey != 0 {
-				fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
-			}
-			return
-		}
-
-	case checkerr != nil:
-		//some other error, exit with status 500
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + checkerr.Error())
-		w.WriteHeader(http.StatusNotFound)
-		if cKey != 0 {
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in database check.\" }")
-		}
-		return
-	default:
-		// if we get here, it means that the unit already exists. Bail out.
-		log.WithFields(QueryFields(r, startTime)).Error("Resource " + rName + " already exists.")
-		if cKey != 0 {
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Resource already exists.\" }")
-		}
-		DBtx.Report("Resource already exists.")
-		return
+	if compid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDuplicateData, ResourceName))
+	}
+	if !unitid.Valid && i[UnitName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+	}
+	if i[ResourceType].AbsoluteNull {
+		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, ResourceType))
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
 	}
 
+	_, err = c.DBtx.Exec(`insert into compute_resources (name, default_shell, unitid, last_updated, default_home_dir, type)
+						  values ($1, $2, $3, NOW(), $4, $5)`,
+						 i[ResourceName], shell, unitid, i[HomeDir], i[ResourceType])
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	return nil, nil
 }
 
-func setComputeResourceInfo(w http.ResponseWriter, r *http.Request) {
+func setComputeResourceInfo(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
-
-	rName := strings.TrimSpace(q.Get("resourcename"))
-	unitName := strings.TrimSpace(q.Get("unitname"))
-	rType := strings.TrimSpace(q.Get("type"))
-	shell := strings.TrimSpace(q.Get("defaultshell"))
-	homedir := strings.TrimSpace(q.Get("defaulthomedir"))
-
-	if rName == "" {
-		log.WithFields(QueryFields(r, startTime)).Print("No resource name specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No resourcename specified.\" }")
-		return
-	}
-	if strings.ToUpper(strings.TrimSpace(rType)) == "NULL" {
-		log.WithFields(QueryFields(r, startTime)).Print("'NULL' is an invalid resource type.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Resource type of NULL is not allowed.\" }")
-		return
-	}
-
-	//require auth
-	authorized, authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
-		return
-	}
-
-	var (
-		nullshell, nullhomedir sql.NullString
-		unitID                 sql.NullInt64
-		currentType            string
-		compid                 int
-	)
-
-	//transaction start, and update command
-	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	unitid := NewNullAttribute(UnitID)
+	compid := NewNullAttribute(ResourceID)
+	err := c.DBtx.QueryRow(`select (select unitid from affiliation_units where name = $1),
+								   (select compid from compute_resources where name = $2)`,
+						   i[UnitName], i[ResourceName]).Scan(&unitid, &compid)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error starting database transaction.\" }")
-		return
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
-	defer DBtx.Rollback(cKey)
 
-	// check if resource exists and grab existing values of everything if so
-	err = DBtx.tx.QueryRow(`select distinct compid, default_shell, unitid, default_home_dir, type from compute_resources where name=$1`, rName).Scan(&compid, &nullshell, &unitID, &nullhomedir, &currentType)
-	switch {
-	case err == sql.ErrNoRows:
-		// nothing returned from the select, so the resource does not exist.
-		log.WithFields(QueryFields(r, startTime)).Print("compute resource with name " + rName + " not found in compute_resources table. Exiting.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"resource does not exist. Use createComputeResource to add a new resource.\" }")
-		return
-	case err != nil:
-		w.WriteHeader(http.StatusNotFound)
-		log.WithFields(QueryFields(r, startTime)).Print("Error in DB query: " + err.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		return
-	default:
+	if !compid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, ResourceName))
+	}
+	if !unitid.Valid && i[UnitName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+	}
+	if i[ResourceType].AbsoluteNull {
+		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, ResourceType))
+	}
+	if !i[UnitName].Valid && !i[Shell].Valid && !i[HomeDir].Valid && !i[ResourceType].Valid {
+		apiErr = append(apiErr, APIError{errors.New("not enough arguments"), ErrorAPIRequirement})
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
 
-		//actually change stuff
-		// if you specfied a new type in the API call (not NULL, as checked for earlier), change it here. Otherwise we keep the existing one
-		if rType != "" {
-			currentType = rType
-		}
-		// if you are changing the shell type, do it here. Variations of "NULL" as the string will assume you want it to be null in the database. If you did not specify shell in the query, then we keep the existing value.
-		if shell != "" {
-			if strings.ToUpper(strings.TrimSpace(shell)) != "NULL" {
-				nullshell.Valid = true
-				nullshell.String = shell
-			} else {
-				nullshell.Valid = false
-				nullshell.String = ""
-			}
-		}
+	_, err = c.DBtx.Exec(`update compute_resources set
+							unitid = coalesce($1, unitid),
+							default_shell = coalesce($2, default_shell),
+							default_home_dir = coalesce($3, default_home_dir),
+							type = coalesce($4, type),
+							last_updated = NOW()
+						  where compid = $5`, unitid, i[Shell], i[HomeDir], i[ResourceType], compid)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
 
-		// and the same for default_home_dir, following the same rule as shell.
-		if homedir != "" {
-			if strings.ToUpper(strings.TrimSpace(homedir)) != "NULL" {
-				nullhomedir.Valid = true
-				nullhomedir.String = homedir
-			} else {
-				nullhomedir.Valid = false
-				nullhomedir.String = ""
-			}
-		}
-
-		// if you specified a new affiliation unit, find the new ID and change it. Otherwise keep whatever the select returned, even if it is null
-		if unitName != "" {
-			if strings.ToUpper(strings.TrimSpace(unitName)) != "NULL" {
-				var tmpunitid sql.NullInt64
-				iderr := DBtx.tx.QueryRow(`select unitid from affiliation_units where name=$1`, unitName).Scan(&tmpunitid)
-				// FIX THIS
-				if iderr != nil && iderr != sql.ErrNoRows {
-					//some error selecting the new unit ID. Keep the old one!
-				} else {
-					unitID = tmpunitid
-				}
-			} else {
-				//ah, so the "new" unitName is some variation of NULL, so that means you want to set unitid to null in the DB. Do that by setting unitID.Valid to false
-				unitID.Valid = false
-			}
-		} // end if unitName != ""
-
-		_, commerr := DBtx.Exec(`update compute_resources set default_shell=$1, unitid=$2, last_updated=NOW(), default_home_dir=$3, type=$4 where name=$5`, nullshell, unitID, nullhomedir, currentType, rName)
-		if commerr != nil {
-			w.WriteHeader(http.StatusNotFound)
-			log.WithFields(QueryFields(r, startTime)).Error("Error during DB update " + commerr.Error())
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Database error during update.\" }")
-			return
-		} else {
-			// if no error, commit and all that. If this is being called as part of a wrapper, however, cKey will be 0. So only commit if cKey is non-zero
-			if cKey != 0 {
-				DBtx.Commit(cKey)
-			}
-			log.WithFields(QueryFields(r, startTime)).Info("Successfully updated " + unitName + ".")
-			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
-		}
-	} //end switch
+	return nil, nil
 }
 
 func createStorageResource(w http.ResponseWriter, r *http.Request) {

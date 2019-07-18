@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"regexp"
 	"fmt"
 	"context"
@@ -89,6 +90,12 @@ func (t *Transaction) RollbackToSavepoint(savepoint string) error {
 func (t *Transaction) Query(query string, args ...interface{}) (*sql.Rows, error) {
 	if t.commitKey != 0 {
 		var rows *sql.Rows
+
+		// [EXPERIMENTAL] Tries to automatically order queries by the first column
+		if !strings.Contains(query, "order by") && !strings.Contains(query, ";") {
+			query = fmt.Sprintf("select * from (%s) as t order by 1", query)
+		}
+
 		rows, t.err = t.tx.Query(query, args...)
 		return rows, t.err
 	}
