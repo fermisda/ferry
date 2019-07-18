@@ -98,6 +98,17 @@ class Group:
             diff.append("members")
         return diff
 
+def postToSlack(message, action):
+    if "slack" not in config:
+        return
+    target = dict(config.items("slack"))
+    url = target["url"]
+    data = {"payload": target["payload"]}
+    data["payload"] = data["payload"].replace("$MSG", message)
+    data["payload"] = data["payload"].replace("$ACT", action)
+    data = bytes(urllib.parse.urlencode(data).encode())
+    urllib.request.urlopen(url, data)
+
 def resources(resourcesString):
     resoruces = []
     for resource, _ in re.findall(r"(\w+):[\w$]+,[\w\/\$\-]+,[\w\/\$\-]+,(true|false);", resourcesString):
@@ -105,6 +116,9 @@ def resources(resourcesString):
     return resoruces
 
 def writeToFerry(action, params = None):
+    for item in ["username", "groupname"]:
+        if params and item in params and params[item] in skipList:
+            return
     target = dict(config.items("ferry"))
     url = target["hostname"] + target[action]
     if params:
@@ -118,7 +132,12 @@ def writeToFerry(action, params = None):
                 params = ""
             logging.info("action: %s(%s)" % (action, params))
             return True
-        logging.error(jOut["ferry_error"])
+        logging.error("message: %s action: %s(%s)" % (jOut["ferry_error"], action, params))
+        postToSlack(jOut["ferry_error"], "action: %s(%s)" % (action, params))
+        if jOut["ferry_error"] in target["skip_user_errors"]:
+            skipList.append(params["username"])
+        if jOut["ferry_error"] in target["skip_group_errors"]:
+            skipList.append(params["groupname"])
         return False
     else:
         params = ", ".join(["%s=%s" % (x, y) for x, y in params.items()])
@@ -144,6 +163,7 @@ def fetch_userdb():
         files[f] = "%s/%s" % (cacheDir, f)
         if os.path.isfile(files[f] + ".error"):
             logging.error("bad %s file detected on a previous cycle" % f)
+            postToSlack("Update Script Halted!", "Bad %s file detected on a previous cycle." % f)
             exit(5)
         logging.debug("Downloading %s: %s" % (f, u))
         if os.path.isfile(files[f]):
@@ -161,6 +181,7 @@ def fetch_userdb():
             totalChangeRatio += changeRatio
             if changeRatio > float(config.get("general", "cache_max_diff")):
                 logging.error("file %s has too many changes" % f)
+                postToSlack("Update Script Halted!", "File %s has too many changes." % f)
                 os.rename(files[f], files[f] + ".error")
                 os.rename(files[f] + ".cache", files[f])
                 exit(4)
@@ -232,11 +253,13 @@ def fetch_userdb():
     complete = complete and bool(loadedUsers)
     if not complete:
         logging.error("file services-users.csv seem truncated")
+        postToSlack("Update Script Halted!", "File services-users.csv seem truncated")
         os.rename(files["services-users.csv"], files["services-users.csv"] + ".error")
         os.rename(files["services-users.csv"] + ".cache", files[f])
         exit(6)
     if int(loadedUsers.group(1)) != len(servicesUsersLines):
         logging.error("file services-users.csv is missing users")
+        postToSlack("Update Script Halted!", "File services-users.csv seem truncated")
         os.rename(files["services-users.csv"], files["services-users.csv"] + ".error")
         os.rename(files["services-users.csv"] + ".cache", files[f])
         exit(7)
@@ -487,6 +510,8 @@ if __name__ == "__main__":
 
     if "FERRY_API_HOST" in os.environ:
         config.set("ferry", "hostname", os.environ["FERRY_API_HOST"])
+    if "FERRY_SLACK_HOOK" in os.environ:
+        config.set("slack", "url", os.environ["FERRY_SLACK_HOOK"])
 
     rootDir = os.path.dirname(os.path.realpath(__file__))
     if config.has_option("general", "cache_dir"):
@@ -515,6 +540,8 @@ if __name__ == "__main__":
     ferryContext.verify_mode = ssl.CERT_REQUIRED
     ferryContext.load_cert_chain(config.get("ferry", "cert"), config.get("ferry", "key"))
     ferryContext.load_verify_locations(capath=config.get("ferry", "ca"))
+
+    skipList = []
 
     logging.info("Starting Ferry User Update")
 

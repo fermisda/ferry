@@ -42,6 +42,7 @@ services:
       dockerfile: Dockerfile-cron
     environment:
     - FERRY_API_HOST=https://${FERRY_API_HOST}:${FERRY_API_PORT}/
+    - FERRY_SLACK_HOOK=${FERRY_SLACK_HOOK}
     volumes:
     - ~/certs/ferry_cert.pem:/home/ferry/hostcert.pem
     - ~/certs/ferry_key.pem:/home/ferry/hostkey.pem
