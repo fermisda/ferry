@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strconv"
 	"errors"
 	"database/sql"
 	"fmt"
@@ -1996,7 +1997,6 @@ func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIEr
 		primary.Scan(true)
 	}
 
-<<<<<<< HEAD
 	if primary.Data.(bool) {
 		_, err = c.DBtx.Exec(`update compute_access_group set is_primary = false where uid = $1 and compid = $2 and is_primary`,
 							uid, compid)
@@ -2004,121 +2004,6 @@ func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIEr
 			log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 			return nil, apiErr
-=======
-
-	//We need to check whether the user is in the requested group. If not, add now, or the subsequent steps will fail.
-	err = DBtx.tx.QueryRow(`select uid, groupid from user_group join users using(uid) join groups using (groupid) where users.uname=$1 and groups.name=$2 and groups.type='UnixGroup'`,uname,gName).Scan(&uid,&grpid)
-	if err == sql.ErrNoRows {
-		// do the insertion now
-		_, ugerr := DBtx.Exec(`insert into user_group (uid, groupid) values ((select uid from users where uname=$1),(select groupid from groups where name=$2 and type='UnixGroup'))`,uname,gName)
-		if ugerr != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error inserting into user_group: " + ugerr.Error())
-			if cKey != 0 {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"Error checking user_group table. Aborting.\" }")	
-			}
-			return	
-		}
-	} else if err != nil {
-		
-		log.WithFields(QueryFields(r, startTime)).Error("Error checking user_group: " + err.Error())
-		if cKey != 0 {
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		}
-		return
-	}
-	
-	// OK, now we deal with compute_access in much the same way.
-	// In this case we have shell and home directory to deal with though instead of is_primary
-	
-	err = DBtx.tx.QueryRow(`select ca.uid, ca.compid, ca.shell, ca.home_dir from compute_access as ca
-						   join users as u on u.uid=ca.uid
-						   join compute_resources as cr on cr.compid=ca.compid
-						   where cr.name=$1 and u.uname=$2`,rName,uname).Scan(&uid,&compid,&defShell,&defhome)
-	
-	switch {
-	case err == sql.ErrNoRows:
-		
-		//grab the default home dir and shell paths for the given compid
-		
-		checkerr := DBtx.tx.QueryRow(`select default_shell, default_home_dir from compute_resources as cr where cr.name=$1`,rName).Scan(&defShell,&defhome)
-		if checkerr == sql.ErrNoRows {
-			// the given compid does not exist in this case. Exit accordingly.	
-			log.WithFields(QueryFields(r, startTime)).Error("resource " + rName + " does not exist.")
-			if cKey != 0 {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
-			}
-			return	
-		}
-		//check if the query specified a shell or directory value
-		if shell != "" {
-			defShell.Valid = true
-			defShell.String = strings.TrimSpace(shell)
-		}
-		//if homedir was provided, use it exactly
-		if homedir != "" {
-			defhome.Valid = true
-			defhome.String = strings.TrimSpace(homedir)
-		} else {
-			// it was not provided, so we are going to assume the home dir is default_home_dir/username.
-			// If default_home_dir is /nashome, we will do /nashome/first letter of username/username
-			if defhome.String == "/nashome" || defhome.String == "/nashome/" {
-				defhome. Valid = true
-				defhome.String = "/nashome/" + uname[0:1]
-			} 
-			defhome.String = defhome.String + "/" + uname
-		}
-		// now, do the actual insert
-		
-		_, inserr := DBtx.Exec(`insert into compute_access (compid, uid, shell, home_dir)
-								values ((select compid from compute_resources where name = $1),
-										(select uid from users where uname = $2), $3, $4)`,
-			rName, uname, defShell, defhome)
-		if inserr != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + inserr.Error())
-			// now we also need to do a bunch of other checks here
-			if strings.Contains(inserr.Error(),"null value in column \"compid\"") {
-				if cKey != 0 {
-					fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
-				}
-				return	
-				
-			} else if strings.Contains(inserr.Error(),"null value in column \"uid\"") {
-				if cKey != 0 {
-					fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-				}
-				return	
-			} else {
-				w.WriteHeader(http.StatusNotFound)
-				if cKey != 0 {
-					fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB insert.\" }")
-				}
-				return		
-			}
-		} else {
-			log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully inserted (%s,%s,%s,%s) into compute_access.",rName, uname, defShell, defhome))		
-		}
-		
-	case err != nil:
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error()) 
-		if cKey != 0 {
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		}
-		return		
-		
-	default: // OK, we already have this resource. We now need to check if the call is trying to change the shell or home dir.
-		
-		if "" != shell || "" != homedir {
-			_, moderr := DBtx.Exec(`update compute_access set shell=$1,home_dir=$2,last_updated=NOW() where uid=$3 and compid=$4`,defShell,defhome,uid,compid)
-			if moderr != nil {
-				log.WithFields(QueryFields(r, startTime)).Error("Error in DB update: " + err.Error()) 
-				if cKey != 0 {
-					fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB update.\" }")
-				}
-				return		
-			} else {
-				log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully updated (%s,%s,%s,%s) in compute_access.",rName, uname, defShell, defhome))			
-			}
->>>>>>> origin
 		}
 	}
 
