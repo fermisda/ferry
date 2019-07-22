@@ -1,0 +1,118 @@
+#Tests set/get user shell and home dir
+test_name: test 1 getUserShellAndHomeDir 
+stages: 
+ - name: testing getUserShellAndHomeDir
+   request:
+      url: https://fermicloud033.fnal.gov:8443/getUserShellAndHomeDir?username=tlevshin&resourcename=dune 
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_status: "success"
+             ferry_error: []
+             ferry_output:  {"shell": "/bin/bash","homedir": "/nashome/t/tlevshin"} 
+
+---
+test_name: test 2 
+stages:
+ - name: "testing  setUserShell: change default setting"
+   request:
+      url: https://fermicloud033.fnal.gov:8443/setUserShell?resourcename=dune&username=tlevshin&shell=/bin/ksh
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_status: "success"
+             ferry_error: []
+             ferry_output: null
+
+---
+test_name: test 3 getUserShellAndHomeDir
+stages:
+ - name: "testing getUserShellAndHomeDir for failure: username not found"
+   request:
+      url: https://fermicloud033.fnal.gov:8443/getUserShellAndHomeDir?username=tlevshinx&resourcename=dune 
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_status: "failure"
+             ferry_error: 
+                - "username not found"
+             ferry_output: null
+
+---
+test_name: test 4 getUserShellAndHomeDir
+stages:
+ - name: "testing getUserShellAndHomeDir for multiple failures"
+   request:
+      url: https://fermicloud033.fnal.gov:8443/getUserShellAndHomeDir?username=tlevshinx&resourcename=dunex
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_status: "failure"
+             ferry_error:
+                - "username not found" 
+                - "resourcename not found" 
+             ferry_output: null
+
+---
+test_name: test 5 setUserShell  
+stages:
+ - name: "testing  setUserShell: set default setting"
+   request:
+      url: https://fermicloud033.fnal.gov:8443/setUserShell?resourcename=dune&username=tlevshin&shell=/bin/bash
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_status: "success"
+             ferry_error: []
+             ferry_output: null
+---
+test_name: test 6 setUserShell  
+stages:
+ - name: "testing setUserShell for failure"
+   request: 
+      url: https://fermicloud033.fnal.gov:8443/setUserShell?username=tlevshin&shell=/bin/bash
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_status: "failure"
+             ferry_error: 
+                - "required parameter resourcename not provided"
+             ferry_output: null
+
+
+
+---
+test_name: test 7 getUserShellAndHomeDir
+stages:
+ - name: "testing getUserShellAndHomeDir for failure"
+   request:
+      url: https://fermicloud033.fnal.gov:8443/getUserShellAndHomeDir?username=tlevshin
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_status: "failure"
+             ferry_error: 
+                - "required parameter resourcename not provided"
+             ferry_output: null 
+
+---
+test_name: test 8 getUserShellAndHomeDir
+stages:
+ - name: testing getUserShellAndHomeDir
+   request:
+      url: https://fermicloud033.fnal.gov:8443/getUserShellAndHomeDir?username=tlevshin&resourcename=dune
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_status: "success"
+             ferry_error: []
+             ferry_output:  {"shell": "/bin/bash","homedir": "/nashome/t/tlevshin"}
+

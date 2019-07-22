@@ -2198,3 +2198,90 @@ func getAllUsersFQANs(c APIContext, i Input) (interface{}, []APIError) {
 
 	return out, nil
 }
+
+func setUserGridAccess(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	uName := strings.TrimSpace(q.Get("username"))
+	unitName := strings.TrimSpace(q.Get("unitname"))
+	suspend := strings.TrimSpace(q.Get("suspend"))
+
+	var suspBool bool
+
+	if uName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
+		return
+	}
+	if unitName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
+		return
+	}
+	if suspend == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No suspend specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No suspend specified.\" }")
+		return
+	}
+	if parsedbool, err := strconv.ParseBool(suspend) ; err == nil {
+		suspBool = parsedbool
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Error("Invalid value for active.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid value for active. Must be true or false (or omit it from the query).\" }")
+		return
+	}
+
+	authorized, authout := authorize(r)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
+		return
+	}
+
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	defer DBtx.Rollback(cKey)
+
+	var uid, unitid int
+	queryerr := DBtx.QueryRow(`select uid from users where uname=$1 for update`, uName).Scan(&uid)
+	if queryerr == sql.ErrNoRows {
+		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"User does not exist.\" }")
+		return
+	}
+	if queryerr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
+		return	
+	}
+
+	queryerr = DBtx.QueryRow(`select unitid from affiliation_units where name=$1 for update`, unitName).Scan(&unitid)
+	if queryerr == sql.ErrNoRows {
+		log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Affiliation unit does not exist.\" }")
+		return
+	}
+	if queryerr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
+		return	
+	}
+
+	_, err = DBtx.Exec(`update grid_access set is_banned = $1, last_updated = NOW()
+						where uid = $2 and fqanid in (select fqanid from grid_fqan where unitid = $3)`,
+					   suspBool, uid, unitid)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
+		return
+	}
+
+	log.WithFields(QueryFields(r, startTime)).Info("Success!")
+	fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+	
+	DBtx.Commit(cKey)
+}

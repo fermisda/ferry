@@ -1,0 +1,130 @@
+test_name: test 1
+stages:
+ - name: testing getGroupsInAffiliationUnit 
+   request:
+      url: https://fermicloud033.fnal.gov:8443/getGroupsInAffiliationUnit?unitname=egp
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_status: "success"
+             ferry_error: []
+             ferry_output: 
+                - {"gid": 8783,"groupname": "egp","grouptype": "UnixGroup","primary": true}
+---
+test_name: test 2
+stages:
+ - name: testing getGroupsUnits
+   request:
+      url: https://fermicloud033.fnal.gov:8443/getGroupUnits?groupname=numix
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_status: "success"
+             ferry_error: []
+             ferry_output: 
+               - {"alternativename": "t-962","unitname": "argoneut","unittype": "","vomsurl": "https://voms.fnal.gov:8443/voms/fermilab/argoneut"}
+               - {"alternativename": "","unitname": "gm2","unittype": "","vomsurl": "https://voms.fnal.gov:8443/voms/fermilab/gm2"}
+               - {"alternativename": "e938","unitname": "minerva","unittype": "","vomsurl": "https://voms.fnal.gov:8443/voms/fermilab/minerva"}
+               - {"alternativename": "e898","unitname": "miniboone","unittype": "","vomsurl": "https://voms.fnal.gov:8443/voms/fermilab/miniboone"}
+               - {"alternativename": "e875","unitname": "minos","unittype": "","vomsurl": "https://voms.fnal.gov:8443/voms/fermilab/minos"}
+               - {"alternativename": "","unitname": "mu2e","unittype": "","vomsurl": "https://voms.fnal.gov:8443/voms/fermilab/mu2e"}
+               - {"alternativename": "","unitname": "nova","unittype": "","vomsurl": "https://voms.fnal.gov:8443/voms/fermilab/nova"}
+               - {"alternativename": "","unitname": "numix","unittype": "","vomsurl": "https://voms.fnal.gov:8443/voms/fermilab/numix"}
+               - {"alternativename": "e-906","unitname": "seaquest","unittype": "","vomsurl": "https://voms.fnal.gov:8443/voms/fermilab/seaquest"}
+               - {"alternativename": "microboone","unitname": "uboone","unittype": "","vomsurl": "https://voms.fnal.gov:8443/voms/fermilab/uboone"}
+               - {"alternativename": "","unitname": "larrand","unittype": "","vomsurl": ""}
+               - {"alternativename": "","unitname": "lbne","unittype": "","vomsurl": ""}
+
+---
+
+test_name: test 3
+stages:
+ - name: testing  addGroupToUnit 
+   request:
+      url: https://fermicloud033.fnal.gov:8443/addGroupToUnit?groupname=numix&grouptype=UnixGroup&unitname=egp
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_status: "success"
+             ferry_error: []
+             ferry_output: null
+---
+test_name: test 4
+stages:
+ - name: testing getGroupsInAffiliationUnit
+   request:
+      url: https://fermicloud033.fnal.gov:8443/getGroupsInAffiliationUnit?unitname=egp
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_status: "success"
+             ferry_error: []
+             ferry_output:
+                - {"gid": 8783,"groupname": "egp","grouptype": "UnixGroup","primary": true}
+                - {"gid": 9276,"groupname": "numix","grouptype": "UnixGroup","primary": false}
+---
+
+test_name: test 5
+stages:
+ - name: testing getGroupLeadersinAffiliationUnit  
+   request:
+      url: https://fermicloud033.fnal.gov:8443/getGroupLeadersinAffiliationUnit?unitname=egp
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_status: "success"
+             ferry_error: []
+             ferry_output: null 
+
+---
+
+test_name: test 6
+stages:
+ - name: reversing changes  setPrimaryStatusGroup
+   request:
+      url: https://fermicloud033.fnal.gov:8443/setPrimaryStatusGroup?unitname=egp&groupname=egp
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_status: "success"
+             ferry_error: [] 
+             ferry_output: null
+---
+test_name: test 7
+stages:
+ - name: checking  that the change was removed getGroupsInAffiliationUnit
+   request:
+      url: https://fermicloud033.fnal.gov:8443/getGroupsInAffiliationUnit?unitname=egp
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_status: "success"
+             ferry_error: []
+             ferry_output:
+               - {"gid": 9276,"groupname": "numix","grouptype": "UnixGroup","primary": false}
+               - {"gid": 8783,"groupname": "egp","grouptype": "UnixGroup","primary": true}
+
+---
+# using an old API to remove group
+test_name: test 8
+stages:
+ - name: remove the group numix  from egp affliation unit
+   request:
+      url: https://fermicloud033.fnal.gov:8443/removeGroupFromUnit?unitname=egp&groupname=numix&grouptype=UnixGroup 
+      method: GET
+   response:
+      status_code: 200
+      body:
+             ferry_status: "success"
+
+
+
+
+#addLPCCollaborationGroup
