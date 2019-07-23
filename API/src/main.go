@@ -253,7 +253,7 @@ func main() {
 	grouter.HandleFunc("/getStorageAccessLists", APIs["getStorageAccessLists"].Run)
 	grouter.HandleFunc("/createComputeResource", APIs["createComputeResource"].Run)
 	grouter.HandleFunc("/setComputeResourceInfo", APIs["setComputeResourceInfo"].Run)
-	grouter.HandleFunc("/createStorageResource", createStorageResource)
+	grouter.HandleFunc("/createStorageResource", APIs["createStorageResource"].Run)
 	grouter.HandleFunc("/setStorageResourceInfo", setStorageResourceInfo)
 	grouter.HandleFunc("/getStorageResourceInfo", getStorageResourceInfo)
 	grouter.HandleFunc("/getAllComputeResources", getAllComputeResources)
