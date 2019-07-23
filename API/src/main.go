@@ -210,7 +210,7 @@ func main() {
 	grouter.HandleFunc("/getAllUsers", APIs["getAllUsers"].Run)
 	grouter.HandleFunc("/getAllUsersFQANs", APIs["getAllUsersFQANs"].Run)
 	grouter.HandleFunc("/getAllUsersCertificateDNs", APIs["getAllUsersCertificateDNs"].Run)
-	grouter.HandleFunc("/setUserGridAccess", setUserGridAccess)
+	grouter.HandleFunc("/setUserGridAccess", APIs["setUserGridAccess"].Run)
 
 	//group API calls
 	grouter.HandleFunc("/getgroupmembers", APIs["getGroupMembers"].Run)

@@ -238,6 +238,7 @@ const (
 	Leader				Attribute = "leader"
 	GroupAccount  		Attribute = "groupaccount"
 	Experiment			Attribute = "experiment"
+	Suspend				Attribute = "suspend"
 	ExpirationDate		Attribute = "expirationdate"
 	LastUpdated			Attribute = "lastupdated"
 	Help				Attribute = "help"
@@ -280,6 +281,7 @@ func (a Attribute) Type() (AttributeType) {
 		Leader:				TypeBool,
 		GroupAccount:		TypeBool,
 		Experiment:			TypeBool,
+		Suspend:			TypeBool,
 		ExpirationDate:		TypeDate,
 		LastUpdated:		TypeDate,
 		Help:				TypeFlag,
