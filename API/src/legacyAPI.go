@@ -6574,3 +6574,132 @@ func createStorageResourceLegacy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
+func setStorageResourceInfoLegacy(w http.ResponseWriter, r *http.Request) {
+
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	rName := strings.TrimSpace(q.Get("resourcename"))
+	defunit := strings.TrimSpace(strings.ToUpper(q.Get("default_unit")))
+	rType := strings.TrimSpace(strings.ToLower(q.Get("type")))
+
+	defpath := strings.TrimSpace(q.Get("default_path"))
+	defquota := strings.TrimSpace(q.Get("default_quota"))
+
+	if rName == "" {
+		log.WithFields(QueryFields(r, startTime)).Print("No resource name specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No resourcename specified.\" }")
+		return
+	}
+	if rType == "null" {
+		log.WithFields(QueryFields(r, startTime)).Print("'null' is an invalid resource type.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Resource type of null is not allowed.\" }")
+		return
+	}
+
+	//require auth
+	authorized, authout := authorize(r)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
+		return
+	}
+
+	var (
+		nullpath, nullunit sql.NullString
+		nullquota          sql.NullInt64
+		currentType        string
+		storageid          int
+	)
+	// check if resource exists and grab existing values of everything if so
+	err := DBptr.QueryRow(`select distinct storageid, default_path, default_quota, default_unit, type from storage_resources where name=$1`, rName).Scan(&storageid, &nullpath, &nullquota, &nullunit, &currentType)
+
+	switch {
+	case err == sql.ErrNoRows:
+		// nothing returned from the select, so the resource does not exist.
+		log.WithFields(QueryFields(r, startTime)).Print("Storage resource with name " + rName + " not found in compute_resources table. Exiting.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"resource does not exist. Use createStorageResource to add a new resource.\" }")
+		return
+	case err != nil:
+		w.WriteHeader(http.StatusNotFound)
+		log.WithFields(QueryFields(r, startTime)).Print("Error in DB query: " + err.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	default:
+
+		//actually change stuff
+		// if you specfied a new type in the API call (not NULL, as checked for earlier), change it here. Otherwise we keep the existing one
+		if rType != "" {
+			currentType = rType
+		}
+		// if you are changing the default path, do it here. Variations of "NULL" as the string will assume you want it to be null in the database. If you did not specify shell in the query, then we keep the existing value.
+		if defpath != "" {
+			if strings.ToUpper(defpath) != "NULL" {
+				nullpath.Valid = true
+				nullpath.String = defpath
+			} else {
+				nullpath.Valid = false
+				nullpath.String = ""
+			}
+		}
+
+		// and the same for default_home_dir, following the same rule as path.
+		if defquota != "" {
+			if strings.ToUpper(defquota) != "NULL" {
+				nullquota.Valid = true
+				convquota, converr := strconv.ParseInt(defquota, 10, 64)
+				if converr != nil {
+					log.WithFields(QueryFields(r, startTime)).Error("Error converting default_quota to int: " + converr.Error())
+					fmt.Fprintf(w, "{ \"ferry_error\": \"Error converting default_quota to int. Check format.\" }")
+					return
+				}
+				nullquota.Int64 = convquota
+			} else {
+				nullquota.Valid = false
+			}
+		}
+
+		// if you specified a new default unit, change it, following the same rule as path.
+		if defunit != "" {
+			if strings.ToUpper(defunit) != "NULL" {
+				if checkUnits(defunit) {
+					nullunit.Valid = true
+					nullunit.String = strings.ToUpper(defunit)
+				} else {
+					log.WithFields(QueryFields(r, startTime)).Error("Invalid value for default unit. Allowed values are B,KB,KIB,MB,MIB,GB,GIB,TB,TIB.)")
+					fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid value for default_unit.\" }")
+					return
+				}
+			} else {
+				nullunit.Valid = false
+				nullunit.String = ""
+			}
+		} // end if unitName != ""
+
+		//transaction start, and update command
+		DBtx, cKey, err := LoadTransaction(r, DBptr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Error starting database transaction.\" }")
+			return
+		}
+		defer DBtx.Rollback(cKey)
+
+		_, commerr := DBtx.Exec(`update storage_resources set default_path=$1, default_quota=$2, last_updated=NOW(), default_unit=$3, type=$4 where name=$5`, nullpath, nullquota, nullunit, currentType, rName)
+		if commerr != nil {
+			w.WriteHeader(http.StatusNotFound)
+			log.WithFields(QueryFields(r, startTime)).Error("Error during DB update: " + commerr.Error())
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Database error during update.\" }")
+			return
+		} else {
+			// if no error, commit and all that
+			DBtx.Commit(cKey)
+			log.WithFields(QueryFields(r, startTime)).Info("Successfully updated " + rName + ".")
+			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+		}
+	} //end switch
+
+}
