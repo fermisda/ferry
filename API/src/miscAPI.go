@@ -201,6 +201,14 @@ func IncludeMiscAPIs(c *APICollection) {
 		getStorageResourceInfo,
 	}
 	c.Add("getStorageResourceInfo", &getStorageResourceInfo)
+
+	getAllComputeResources := BaseAPI{
+		InputModel{
+			Parameter{LastUpdated, false},
+		},
+		getAllComputeResources,
+	}
+	c.Add("getAllComputeResources", &getAllComputeResources)
 }
 
 func NotDoneYet(w http.ResponseWriter, r *http.Request, t time.Time) {
@@ -1146,62 +1154,37 @@ func setStorageResourceInfo(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
-func getAllComputeResources(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+func getAllComputeResources(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
-	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
-		return
-	}
-
-	rows, err := DBptr.Query(`select cr.name, cr.default_shell, cr.default_home_dir, cr.type, au.name as affiliation_unit
-							  from compute_resources as cr left join affiliation_units as au on cr.unitid = au.unitid where (cr.last_updated>=$1 or $1 is null);`, lastupdate)
-	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		return
+	rows, err := DBptr.Query(`select cr.name, default_shell, default_home_dir, cr.type, au.name
+							  from compute_resources as cr
+							  left join affiliation_units as au using(unitid)
+							  where (cr.last_updated>=$1 or $1 is null);`, i[LastUpdated])
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 	defer rows.Close()
 
-	type computeResource struct {
-		Name  string `json:"name"`
-		Shell string `json:"default_shell"`
-		Home  string `json:"default_home_dir"`
-		Type  string `json:"type"`
-		Unit  string `json:"affiliation_unit"`
-	}
-	var Out []computeResource
-	var tmpName, tmpShell, tmpHome, tmpType, tmpUnit sql.NullString
+	type jsonresource map[Attribute]interface{}
+
+	out := make([]jsonresource, 0)
 
 	for rows.Next() {
-		rows.Scan(&tmpName, &tmpShell, &tmpHome, &tmpType, &tmpUnit)
-		Out = append(Out, computeResource{tmpName.String, tmpShell.String, tmpHome.String,
-			tmpType.String, tmpUnit.String})
+		row := NewMapNullAttribute(ResourceName, Shell, HomeDir, ResourceType, UnitName)
+		rows.Scan(row[ResourceName], row[Shell], row[HomeDir], row[ResourceType], row[UnitName])
+		out = append(out, jsonresource {
+			ResourceName: row[ResourceName].Data,
+			Shell: row[Shell].Data,
+			HomeDir: row[HomeDir].Data,
+			ResourceType: row[ResourceType].Data,
+			UnitName: row[UnitName].Data,
+		})
 	}
 
-	var output interface{}
-	if len(Out) == 0 {
-		type jsonerror struct {
-			Error string `json:"ferry_error"`
-		}
-		var queryErr []jsonerror
-		queryErr = append(queryErr, jsonerror{"Query returned no compute resources."})
-		log.WithFields(QueryFields(r, startTime)).Error("Query returned no compute resources.")
-		output = queryErr
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = Out
-	}
-	jsonoutput, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-	}
-	fmt.Fprintf(w, string(jsonoutput))
+	return out, nil
 }
 
 func ping(w http.ResponseWriter, r *http.Request) {
