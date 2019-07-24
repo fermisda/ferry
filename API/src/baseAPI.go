@@ -321,7 +321,11 @@ func (at AttributeType) Parse(value interface{}) (interface{}, bool) {
 	case TypeUint:
 		parsedValue, valid = value.(uint)
 	case TypeFloat:
-		parsedValue, valid = value.(float64)
+		if intValue, valid := value.(int64); valid {
+			parsedValue = float64(intValue)
+		} else {
+			parsedValue, valid = value.(float64)
+		}
 	case TypeBool:
 		parsedValue, valid = value.(bool)
 	case TypeDate:
