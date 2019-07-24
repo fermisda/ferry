@@ -193,6 +193,14 @@ func IncludeMiscAPIs(c *APICollection) {
 		setStorageResourceInfo,
 	}
 	c.Add("setStorageResourceInfo", &setStorageResourceInfo)
+
+	getStorageResourceInfo := BaseAPI{
+		InputModel{
+			Parameter{ResourceName, false},
+		},
+		getStorageResourceInfo,
+	}
+	c.Add("getStorageResourceInfo", &getStorageResourceInfo)
 }
 
 func NotDoneYet(w http.ResponseWriter, r *http.Request, t time.Time) {
@@ -1043,63 +1051,51 @@ func createStorageResource(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
-func getStorageResourceInfo(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+func getStorageResourceInfo(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	type jsonerror struct {
-		Error string `json:"ferry_error"`
+	storageid := NewNullAttribute(ResourceID)
+	err := c.DBtx.QueryRow(`select storageid from storage_resources where name = $1`,
+						   i[ResourceName]).Scan(&storageid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	name := q.Get("resourcename")
-
-	if name == "" {
-		name = "%"
+	if !storageid.Valid && i[ResourceName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, ResourceName))
+		return nil, apiErr
 	}
 
-	rows, err := DBptr.Query(`select name, default_path, default_quota, default_unit, type from storage_resources where name like $1 order by name`, name)
-	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		return
+	rows, err := c.DBtx.Query(`select name, default_path, default_quota, default_unit, type from storage_resources
+							   where storageid = $1 or $1 is null order by name`, storageid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 	defer rows.Close()
 
-	type jsonentry struct {
-		Name  string `json:"name"`
-		Path  string `json:"default_path"`
-		Quota string `json:"default_quota"`
-		Unit  string `json:"default_unit"`
-		Type  string `json:"type"`
-	}
-	var Entry jsonentry
-	var Out []jsonentry
+	type jsonresource map[Attribute]interface{}
+	out := make([]jsonresource, 0)
 
 	for rows.Next() {
-		rows.Scan(&Entry.Name, &Entry.Path, &Entry.Quota, &Entry.Unit, &Entry.Type)
+		row := NewMapNullAttribute(ResourceName, Path, Quota, QuotaUnit, ResourceType)
+		rows.Scan(row[ResourceName], row[Path], row[Quota], row[QuotaUnit], row[ResourceType])
 
-		if Entry.Name != "" {
-			Out = append(Out, Entry)
+		if row[ResourceName].Valid {
+			out = append(out, jsonresource {
+				ResourceName: row[ResourceName].Data,
+				Path: row[Path].Data,
+				Quota: row[Quota].Data,
+				QuotaUnit: row[QuotaUnit].Data,
+				ResourceType: row[ResourceType].Data,
+			})
 		}
 	}
 
-	var output interface{}
-	if len(Out) == 0 {
-		var queryErr []jsonerror
-		log.WithFields(QueryFields(r, startTime)).Error("No storage resources found for this query.")
-		queryErr = append(queryErr, jsonerror{"No storage resources found for this query."})
-		output = queryErr
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = Out
-	}
-	jsonout, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	fmt.Fprintf(w, string(jsonout))
+	return out, nil
 }
 
 func setStorageResourceInfo(c APIContext, i Input) (interface{}, []APIError) {
