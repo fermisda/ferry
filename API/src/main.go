@@ -257,7 +257,7 @@ func main() {
 	grouter.HandleFunc("/setStorageResourceInfo", APIs["setStorageResourceInfo"].Run)
 	grouter.HandleFunc("/getStorageResourceInfo", APIs["getStorageResourceInfo"].Run)
 	grouter.HandleFunc("/getAllComputeResources", APIs["getAllComputeResources"].Run)
-	grouter.HandleFunc("/getVOUserMap", getVOUserMap)
+	grouter.HandleFunc("/getVOUserMap", APIs["getVOUserMap"].Run)
 	grouter.HandleFunc("/setStorageQuota", APIs["setStorageQuota"].Run)
 	grouter.HandleFunc("/cleanStorageQuotas", cleanStorageQuotas)
 	grouter.HandleFunc("/cleanCondorQuotas", cleanCondorQuotas)
