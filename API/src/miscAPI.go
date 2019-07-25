@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -219,6 +218,16 @@ func IncludeMiscAPIs(c *APICollection) {
 		getVOUserMap,
 	}
 	c.Add("getVOUserMap", &getVOUserMap)
+
+	getPasswdFile := BaseAPI{
+		InputModel{
+			Parameter{UnitName, false},
+			Parameter{ResourceName, false},
+			Parameter{LastUpdated, false},
+		},
+		getPasswdFile,
+	}
+	c.Add("getPasswdFile", &getPasswdFile)
 }
 
 func NotDoneYet(w http.ResponseWriter, r *http.Request, t time.Time) {
@@ -226,154 +235,121 @@ func NotDoneYet(w http.ResponseWriter, r *http.Request, t time.Time) {
 	log.WithFields(QueryFields(r, t)).Error("This function is not done yet!")
 }
 
-func getPasswdFile(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+func getPasswdFile(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	unit := strings.TrimSpace(q.Get("unitname"))
-	comp := strings.TrimSpace(q.Get("resourcename"))
-
-	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
-	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
-		return
+	unitid := NewNullAttribute(UnitID)
+	compid := NewNullAttribute(ResourceID)
+	err := c.DBtx.QueryRow(`select (select unitid from affiliation_units where name = $1),
+								   (select compid from compute_resources where name = $2)`,
+						   i[UnitName], i[ResourceName]).Scan(&unitid, &compid)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	rows, err := DBptr.Query(`select aname, rname, uname, uid, gid, full_name, home_dir, shell, unit_exists, comp_exists, last_updated from (
-                                                              select 1 as key, au.name as aname, u.uname, u.uid, g.gid, u.full_name, ca.home_dir, ca.shell, cr.name as rname, cag.last_updated as last_updated
-                                                              from compute_access_group as cag 
-                                                              left join compute_access as ca using (compid, uid) 
-                                                              join groups as g on g.groupid=cag.groupid 
-                                                              join compute_resources as cr on cr.compid=cag.compid 
-                                                              left join affiliation_units as au on au.unitid=cr.unitid 
-                                                              join users as u on u.uid=cag.uid
-                                                              where  cag.is_primary = true and (au.name = $1 or $3) and (cr.name = $2 or $4) and (ca.last_updated>=$5 or u.last_updated>=$5 or au.last_updated>=$5 or cr.last_updated>=$5 or g.last_updated>=$5 or $5 is null) order by au.name, cr.name
-							) as t
-								right join (select 1 as key,
-								$1 in (select name from affiliation_units) as unit_exists,
-								$2 in (select name from compute_resources) as comp_exists
-							) as c on t.key = c.key;`, unit, comp, unit == "", comp == "", lastupdate)
+	if !unitid.Valid && i[UnitName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+	}
+	if !compid.Valid && i[ResourceName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, ResourceName))
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
 
+	rows, err := c.DBtx.Query(`select au.name, cr.name, uname, uid, gid, full_name, home_dir, shell, cag.last_updated
+							   from compute_access_group as cag 
+                               left join compute_access as ca using(compid, uid) 
+                               join groups as g using(groupid) 
+                               join compute_resources as cr using(compid) 
+                        	   left join affiliation_units as au using(unitid)
+                               join users as u using(uid)
+							   where cag.is_primary = true
+							   and (unitid = $1 or $1 is null)
+							   and (compid = $2 or $2 is null)
+							   and (ca.last_updated>=$3 or u.last_updated>=$3
+								or au.last_updated>=$3 or cr.last_updated>=$3
+								or g.last_updated>=$3 or $3 is null)
+							   order by au.name, cr.name`, unitid, compid, i[LastUpdated])
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		return
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 	defer rows.Close()
 
-	var unitExists bool
-	var compExists bool
+	const GECOS Attribute = "gecos"
+	const Resources Attribute = "resources"
+	type jsonmap map[Attribute]interface{}
+	
+	out := make(map[string]jsonmap)
 
-	type jsonuser struct {
-		Uname string `json:"username"`
-		Uid   string `json:"uid"`
-		Gid   string `json:"gid"`
-		Gecos string `json:"gecos"`
-		Hdir  string `json:"homedir"`
-		Shell string `json:"shell"`
-	}
-	type jsonunit struct {
-		Resources map[string][]jsonuser `json:"resources"`
-		Lasttime  int64                 `json:"last_updated"`
-	}
-	Out := make(map[string]jsonunit)
-
-	lasttime := int64(0)
-	prevAname := ""
-	prevRname := ""
-	tmpResources := make(map[string][]jsonuser, 0)
-	tmpUsers := make([]jsonuser, 0)
+	lastTime := int64(0)
+	prevUname := NewNullAttribute(UnitName)
+	prevRname := NewNullAttribute(ResourceName)
+	tmpResources := make(map[string][]jsonmap, 0)
+	tmpUsers := make([]jsonmap, 0)
 	for rows.Next() {
-		var tmpAname, tmpRname, tmpUname, tmpUid, tmpGid, tmpGecos, tmpHdir, tmpShell, tmpTime sql.NullString
-		rows.Scan(&tmpAname, &tmpRname, &tmpUname, &tmpUid, &tmpGid, &tmpGecos, &tmpHdir, &tmpShell, &unitExists, &compExists, &tmpTime)
-		log.WithFields(QueryFields(r, startTime)).Debugln(tmpAname.String + " " + tmpRname.String + " " + tmpUname.String)
+		row := NewMapNullAttribute(UnitName, ResourceName, UserName, UID, GID, FullName, HomeDir, Shell, LastUpdated)
+		rows.Scan(row[UnitName], row[ResourceName], row[UserName], row[UID], row[GID], row[FullName], row[HomeDir], row[Shell], row[LastUpdated])
 
-		if !tmpRname.Valid {
+		if !row[ResourceName].Valid {
 			continue
 		}
 
-		if !tmpAname.Valid {
-			tmpAname.Valid = true
-			tmpAname.String = "null"
+		*row[UnitName] = row[UnitName].Default("null")
+		
+		if !prevRname.Valid {
+			prevRname = *row[ResourceName]
 		}
-		if prevRname == "" {
-			prevRname = tmpRname.String
-		}
-		if prevAname == "" {
-			prevAname = tmpAname.String
+		if !prevUname.Valid {
+			prevUname = *row[UnitName]
 		}
 
-		if tmpRname.Valid {
-			if prevRname != tmpRname.String {
-				tmpResources[prevRname] = tmpUsers
-				tmpUsers = make([]jsonuser, 0)
-				prevRname = tmpRname.String
+		if row[ResourceName].Valid {
+			if prevRname != *row[ResourceName] {
+				tmpResources[prevRname.Data.(string)] = tmpUsers
+				tmpUsers = make([]jsonmap, 0)
+				prevRname = *row[ResourceName]
 			}
-			if prevAname != tmpAname.String {
-				Out[prevAname] = jsonunit{tmpResources, lasttime}
-				tmpResources = make(map[string][]jsonuser, 0)
-				lasttime = 0
-				if tmpAname.Valid {
-					prevAname = tmpAname.String
-				} else {
-					prevAname = "null"
+			if prevUname != *row[UnitName] {
+				out[prevUname.Data.(string)] = jsonmap{
+					Resources: tmpResources,
+					LastUpdated: lastTime,
 				}
+				tmpResources = make(map[string][]jsonmap, 0)
+				lastTime = 0
+				prevUname = *row[UnitName]
 
 			}
-			if tmpTime.Valid {
-				log.WithFields(QueryFields(r, startTime)).Debugln("tmpTime is valid" + tmpTime.String)
-
-				parseTime, parserr := time.Parse(time.RFC3339, tmpTime.String)
-				if parserr != nil {
-					log.WithFields(QueryFields(r, startTime)).Error("Error parsing last updated time of " + tmpTime.String)
-				} else {
-					if lasttime == 0 || (parseTime.Unix() > lasttime) {
-						lasttime = parseTime.Unix()
-					}
+			if row[LastUpdated].Valid {
+				if lastTime == 0 || (row[LastUpdated].Data.(time.Time).Unix() > lastTime) {
+					lastTime = row[LastUpdated].Data.(time.Time).Unix()
 				}
-			} else {
-				log.WithFields(QueryFields(r, startTime)).Debugln("tmpTime is not valid")
 			}
-			tmpUsers = append(tmpUsers, jsonuser{tmpUname.String, tmpUid.String, tmpGid.String, tmpGecos.String, tmpHdir.String, tmpShell.String})
+			tmpUsers = append(tmpUsers, jsonmap{
+				UserName: row[UserName].Data,
+				UID: row[UID].Data,
+				GID: row[GID].Data,
+				GECOS: row[FullName].Data,
+				HomeDir: row[HomeDir].Data,
+				Shell: row[Shell].Data,
+			})
 		}
 	}
-	if prevAname != "" {
-		tmpResources[prevRname] = tmpUsers
-		Out[prevAname] = jsonunit{tmpResources, lasttime}
+	if prevUname.Valid {
+		tmpResources[prevRname.Data.(string)] = tmpUsers
+		out[prevUname.Data.(string)] = jsonmap{
+			Resources: tmpResources,
+			LastUpdated: lastTime,
+		}
 	}
 
-	var output interface{}
-	if len(Out) == 0 {
-		type jsonerror struct {
-			Error string `json:"ferry_error"`
-		}
-		var Err []jsonerror
-		if !unitExists && unit != "" {
-			Err = append(Err, jsonerror{"Affiliation unit does not exist."})
-			log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
-		}
-		if !compExists && comp != "" {
-			Err = append(Err, jsonerror{"Resource does not exist."})
-			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
-		}
-		if len(Err) == 0 {
-			Err = append(Err, jsonerror{"No entries were found for this query."})
-			log.WithFields(QueryFields(r, startTime)).Error("No entries were found for this query.")
-		}
-		output = Err
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = Out
-	}
-	jsonout, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	fmt.Fprintf(w, string(jsonout))
+	return out, nil
 }
+
 func getGroupFile(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 

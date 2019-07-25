@@ -6878,3 +6878,152 @@ func getVOUserMapLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
+
+func getPasswdFileLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	unit := strings.TrimSpace(q.Get("unitname"))
+	comp := strings.TrimSpace(q.Get("resourcename"))
+
+	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
+		return
+	}
+
+	rows, err := DBptr.Query(`select aname, rname, uname, uid, gid, full_name, home_dir, shell, unit_exists, comp_exists, last_updated from (
+                                                              select 1 as key, au.name as aname, u.uname, u.uid, g.gid, u.full_name, ca.home_dir, ca.shell, cr.name as rname, cag.last_updated as last_updated
+                                                              from compute_access_group as cag 
+                                                              left join compute_access as ca using (compid, uid) 
+                                                              join groups as g on g.groupid=cag.groupid 
+                                                              join compute_resources as cr on cr.compid=cag.compid 
+                                                              left join affiliation_units as au on au.unitid=cr.unitid 
+                                                              join users as u on u.uid=cag.uid
+                                                              where  cag.is_primary = true and (au.name = $1 or $3) and (cr.name = $2 or $4) and (ca.last_updated>=$5 or u.last_updated>=$5 or au.last_updated>=$5 or cr.last_updated>=$5 or g.last_updated>=$5 or $5 is null) order by au.name, cr.name
+							) as t
+								right join (select 1 as key,
+								$1 in (select name from affiliation_units) as unit_exists,
+								$2 in (select name from compute_resources) as comp_exists
+							) as c on t.key = c.key;`, unit, comp, unit == "", comp == "", lastupdate)
+
+	if err != nil {
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	var unitExists bool
+	var compExists bool
+
+	type jsonuser struct {
+		Uname string `json:"username"`
+		Uid   string `json:"uid"`
+		Gid   string `json:"gid"`
+		Gecos string `json:"gecos"`
+		Hdir  string `json:"homedir"`
+		Shell string `json:"shell"`
+	}
+	type jsonunit struct {
+		Resources map[string][]jsonuser `json:"resources"`
+		Lasttime  int64                 `json:"last_updated"`
+	}
+	Out := make(map[string]jsonunit)
+
+	lasttime := int64(0)
+	prevAname := ""
+	prevRname := ""
+	tmpResources := make(map[string][]jsonuser, 0)
+	tmpUsers := make([]jsonuser, 0)
+	for rows.Next() {
+		var tmpAname, tmpRname, tmpUname, tmpUid, tmpGid, tmpGecos, tmpHdir, tmpShell, tmpTime sql.NullString
+		rows.Scan(&tmpAname, &tmpRname, &tmpUname, &tmpUid, &tmpGid, &tmpGecos, &tmpHdir, &tmpShell, &unitExists, &compExists, &tmpTime)
+		log.WithFields(QueryFields(r, startTime)).Debugln(tmpAname.String + " " + tmpRname.String + " " + tmpUname.String)
+
+		if !tmpRname.Valid {
+			continue
+		}
+
+		if !tmpAname.Valid {
+			tmpAname.Valid = true
+			tmpAname.String = "null"
+		}
+		if prevRname == "" {
+			prevRname = tmpRname.String
+		}
+		if prevAname == "" {
+			prevAname = tmpAname.String
+		}
+
+		if tmpRname.Valid {
+			if prevRname != tmpRname.String {
+				tmpResources[prevRname] = tmpUsers
+				tmpUsers = make([]jsonuser, 0)
+				prevRname = tmpRname.String
+			}
+			if prevAname != tmpAname.String {
+				Out[prevAname] = jsonunit{tmpResources, lasttime}
+				tmpResources = make(map[string][]jsonuser, 0)
+				lasttime = 0
+				if tmpAname.Valid {
+					prevAname = tmpAname.String
+				} else {
+					prevAname = "null"
+				}
+
+			}
+			if tmpTime.Valid {
+				log.WithFields(QueryFields(r, startTime)).Debugln("tmpTime is valid" + tmpTime.String)
+
+				parseTime, parserr := time.Parse(time.RFC3339, tmpTime.String)
+				if parserr != nil {
+					log.WithFields(QueryFields(r, startTime)).Error("Error parsing last updated time of " + tmpTime.String)
+				} else {
+					if lasttime == 0 || (parseTime.Unix() > lasttime) {
+						lasttime = parseTime.Unix()
+					}
+				}
+			} else {
+				log.WithFields(QueryFields(r, startTime)).Debugln("tmpTime is not valid")
+			}
+			tmpUsers = append(tmpUsers, jsonuser{tmpUname.String, tmpUid.String, tmpGid.String, tmpGecos.String, tmpHdir.String, tmpShell.String})
+		}
+	}
+	if prevAname != "" {
+		tmpResources[prevRname] = tmpUsers
+		Out[prevAname] = jsonunit{tmpResources, lasttime}
+	}
+
+	var output interface{}
+	if len(Out) == 0 {
+		type jsonerror struct {
+			Error string `json:"ferry_error"`
+		}
+		var Err []jsonerror
+		if !unitExists && unit != "" {
+			Err = append(Err, jsonerror{"Affiliation unit does not exist."})
+			log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
+		}
+		if !compExists && comp != "" {
+			Err = append(Err, jsonerror{"Resource does not exist."})
+			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
+		}
+		if len(Err) == 0 {
+			Err = append(Err, jsonerror{"No entries were found for this query."})
+			log.WithFields(QueryFields(r, startTime)).Error("No entries were found for this query.")
+		}
+		output = Err
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonout, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	fmt.Fprintf(w, string(jsonout))
+}

@@ -239,7 +239,7 @@ func main() {
 	grouter.HandleFunc("/getGroupAccessToResource", APIs["getGroupAccessToResource"].Run)
 
 	// misc API cals
-	grouter.HandleFunc("/getPasswdFile", getPasswdFile)
+	grouter.HandleFunc("/getPasswdFile", APIs["getPasswdFile"].Run)
 	grouter.HandleFunc("/getGroupFile", APIs["getGroupFile"].Run)
 	grouter.HandleFunc("/getGridMapFile", APIs["getGridMapFile"].Run)
 	grouter.HandleFunc("/getGridMapFileByVO", APIs["getGridMapFileByVO"].Run)
