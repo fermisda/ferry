@@ -1,0 +1,10 @@
+# common includes
+#
+#
+
+name: common variables
+description: include yaml
+
+variables:
+       base_url: "//fermicloud033.fnal.gov:8443"
+       current_time: 15590000 

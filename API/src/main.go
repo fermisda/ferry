@@ -210,6 +210,7 @@ func main() {
 	grouter.HandleFunc("/getAllUsers", APIs["getAllUsers"].Run)
 	grouter.HandleFunc("/getAllUsersFQANs", APIs["getAllUsersFQANs"].Run)
 	grouter.HandleFunc("/getAllUsersCertificateDNs", APIs["getAllUsersCertificateDNs"].Run)
+	grouter.HandleFunc("/setUserGridAccess", APIs["setUserGridAccess"].Run)
 
 	//group API calls
 	grouter.HandleFunc("/getgroupmembers", APIs["getGroupMembers"].Run)
@@ -238,7 +239,7 @@ func main() {
 	grouter.HandleFunc("/getGroupAccessToResource", APIs["getGroupAccessToResource"].Run)
 
 	// misc API cals
-	grouter.HandleFunc("/getPasswdFile", getPasswdFile)
+	grouter.HandleFunc("/getPasswdFile", APIs["getPasswdFile"].Run)
 	grouter.HandleFunc("/getGroupFile", APIs["getGroupFile"].Run)
 	grouter.HandleFunc("/getGridMapFile", APIs["getGridMapFile"].Run)
 	grouter.HandleFunc("/getGridMapFileByVO", APIs["getGridMapFileByVO"].Run)
@@ -252,11 +253,11 @@ func main() {
 	grouter.HandleFunc("/getStorageAccessLists", APIs["getStorageAccessLists"].Run)
 	grouter.HandleFunc("/createComputeResource", APIs["createComputeResource"].Run)
 	grouter.HandleFunc("/setComputeResourceInfo", APIs["setComputeResourceInfo"].Run)
-	grouter.HandleFunc("/createStorageResource", createStorageResource)
-	grouter.HandleFunc("/setStorageResourceInfo", setStorageResourceInfo)
-	grouter.HandleFunc("/getStorageResourceInfo", getStorageResourceInfo)
-	grouter.HandleFunc("/getAllComputeResources", getAllComputeResources)
-	grouter.HandleFunc("/getVOUserMap", getVOUserMap)
+	grouter.HandleFunc("/createStorageResource", APIs["createStorageResource"].Run)
+	grouter.HandleFunc("/setStorageResourceInfo", APIs["setStorageResourceInfo"].Run)
+	grouter.HandleFunc("/getStorageResourceInfo", APIs["getStorageResourceInfo"].Run)
+	grouter.HandleFunc("/getAllComputeResources", APIs["getAllComputeResources"].Run)
+	grouter.HandleFunc("/getVOUserMap", APIs["getVOUserMap"].Run)
 	grouter.HandleFunc("/setStorageQuota", APIs["setStorageQuota"].Run)
 	grouter.HandleFunc("/cleanStorageQuotas", cleanStorageQuotas)
 	grouter.HandleFunc("/cleanCondorQuotas", cleanCondorQuotas)

@@ -6373,3 +6373,657 @@ func setComputeResourceInfoLegacy(w http.ResponseWriter, r *http.Request) {
 		}
 	} //end switch
 }
+
+func setUserGridAccessLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	uName := strings.TrimSpace(q.Get("username"))
+	unitName := strings.TrimSpace(q.Get("unitname"))
+	suspend := strings.TrimSpace(q.Get("suspend"))
+
+	var suspBool bool
+
+	if uName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
+		return
+	}
+	if unitName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
+		return
+	}
+	if suspend == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No suspend specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No suspend specified.\" }")
+		return
+	}
+	if parsedbool, err := strconv.ParseBool(suspend) ; err == nil {
+		suspBool = parsedbool
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Error("Invalid value for active.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid value for active. Must be true or false (or omit it from the query).\" }")
+		return
+	}
+
+	authorized, authout := authorize(r)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
+		return
+	}
+
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	defer DBtx.Rollback(cKey)
+
+	var uid, unitid int
+	queryerr := DBtx.QueryRow(`select uid from users where uname=$1 for update`, uName).Scan(&uid)
+	if queryerr == sql.ErrNoRows {
+		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"User does not exist.\" }")
+		return
+	}
+	if queryerr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
+		return	
+	}
+
+	queryerr = DBtx.QueryRow(`select unitid from affiliation_units where name=$1 for update`, unitName).Scan(&unitid)
+	if queryerr == sql.ErrNoRows {
+		log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Affiliation unit does not exist.\" }")
+		return
+	}
+	if queryerr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
+		return	
+	}
+
+	_, err = DBtx.Exec(`update grid_access set is_banned = $1, last_updated = NOW()
+						where uid = $2 and fqanid in (select fqanid from grid_fqan where unitid = $3)`,
+					   suspBool, uid, unitid)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
+		return
+	}
+
+	log.WithFields(QueryFields(r, startTime)).Info("Success!")
+	fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+	
+	DBtx.Commit(cKey)
+}
+
+func createStorageResourceLegacy(w http.ResponseWriter, r *http.Request) {
+
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	rName := strings.TrimSpace(q.Get("resourcename"))
+	defunit := strings.TrimSpace(q.Get("default_unit"))
+	rType := strings.TrimSpace(q.Get("type"))
+
+	defpath := strings.TrimSpace(q.Get("default_path"))
+	defquota := strings.TrimSpace(q.Get("default_quota"))
+
+	if rName == "" {
+		log.WithFields(QueryFields(r, startTime)).Print("No resource name specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No resourcename specified.\" }")
+		return
+	}
+	if rType == "" {
+		log.WithFields(QueryFields(r, startTime)).Print("No resource type specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No type specified.\" }")
+		return
+	} else if strings.ToUpper(strings.TrimSpace(rType)) == "NULL" {
+		log.WithFields(QueryFields(r, startTime)).Print("'NULL' is an invalid resource type.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Resource type of NULL is not allowed.\" }")
+		return
+	}
+	var (
+		nullpath, nullunit sql.NullString
+		nullquota          sql.NullInt64
+	)
+	if defpath != "" && strings.ToUpper(defpath) != "NULL" {
+		nullpath.Valid = true
+		nullpath.String = defpath
+	}
+	if defquota != "" && strings.ToUpper(defquota) != "NULL" {
+		nullquota.Valid = true
+		convquota, converr := strconv.ParseInt(defquota, 10, 64)
+		if converr != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error converting default_quota to int: " + converr.Error())
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Error converting default_quota to int. Check format.\" }")
+			return
+		}
+		nullquota.Int64 = convquota
+	}
+	if defpath != "" && strings.ToUpper(defpath) != "NULL" {
+		nullpath.Valid = true
+		nullpath.String = defpath
+	}
+	if defunit != "" && strings.ToUpper(defunit) != "NULL" {
+
+		if checkUnits(defunit) {
+			nullunit.Valid = true
+			nullunit.String = defunit
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid value for default unit. Allowed values are B,KB,KIB,MB,MIB,GB,GIB,TB,TIB.)")
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid value for default_unit.\" }")
+			return
+		}
+	}
+
+	//require auth
+	authorized, authout := authorize(r)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
+		return
+	}
+
+	// CHECK IF UNIT already exists; add if not
+	var storageid int
+	checkerr := DBptr.QueryRow(`select storageid from storage_resources where name=$1`, rName).Scan(&storageid)
+	switch {
+	case checkerr == sql.ErrNoRows:
+		// OK, it does not already exist, so we start a transaction
+		DBtx, cKey, err := LoadTransaction(r, DBptr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Error starting database transaction.\" }")
+			return
+		}
+		defer DBtx.Rollback(cKey)
+		_, inserterr := DBtx.tx.Exec(`insert into storage_resources (
+										name, default_path, default_quota, last_updated, default_unit, type
+									  ) values ($1,$2,$3,NOW(),$4,$5)`,
+			rName, nullpath, nullquota, nullunit, rType)
+
+		if inserterr != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insertionn: " + inserterr.Error())
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in database transaction.\" }")
+			//	DBtx.Rollback(cKey)
+			return
+		} else {
+			DBtx.Commit(cKey)
+			log.WithFields(QueryFields(r, startTime)).Error("Added " + rName + " to compute_resources.")
+			fmt.Fprintf(w, "{ \"result\": \"success.\" }")
+			return
+		}
+	case checkerr != nil:
+		//some other error, exit with status 500
+		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + checkerr.Error())
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in database check.\" }")
+		return
+	default:
+		// if we get here, it means that the unit already exists. Bail out.
+		log.WithFields(QueryFields(r, startTime)).Error("Resource " + rName + " already exists.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Resource already exists.\" }")
+		return
+	}
+}
+
+func setStorageResourceInfoLegacy(w http.ResponseWriter, r *http.Request) {
+
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	rName := strings.TrimSpace(q.Get("resourcename"))
+	defunit := strings.TrimSpace(strings.ToUpper(q.Get("default_unit")))
+	rType := strings.TrimSpace(strings.ToLower(q.Get("type")))
+
+	defpath := strings.TrimSpace(q.Get("default_path"))
+	defquota := strings.TrimSpace(q.Get("default_quota"))
+
+	if rName == "" {
+		log.WithFields(QueryFields(r, startTime)).Print("No resource name specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No resourcename specified.\" }")
+		return
+	}
+	if rType == "null" {
+		log.WithFields(QueryFields(r, startTime)).Print("'null' is an invalid resource type.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Resource type of null is not allowed.\" }")
+		return
+	}
+
+	//require auth
+	authorized, authout := authorize(r)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
+		return
+	}
+
+	var (
+		nullpath, nullunit sql.NullString
+		nullquota          sql.NullInt64
+		currentType        string
+		storageid          int
+	)
+	// check if resource exists and grab existing values of everything if so
+	err := DBptr.QueryRow(`select distinct storageid, default_path, default_quota, default_unit, type from storage_resources where name=$1`, rName).Scan(&storageid, &nullpath, &nullquota, &nullunit, &currentType)
+
+	switch {
+	case err == sql.ErrNoRows:
+		// nothing returned from the select, so the resource does not exist.
+		log.WithFields(QueryFields(r, startTime)).Print("Storage resource with name " + rName + " not found in compute_resources table. Exiting.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"resource does not exist. Use createStorageResource to add a new resource.\" }")
+		return
+	case err != nil:
+		w.WriteHeader(http.StatusNotFound)
+		log.WithFields(QueryFields(r, startTime)).Print("Error in DB query: " + err.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	default:
+
+		//actually change stuff
+		// if you specfied a new type in the API call (not NULL, as checked for earlier), change it here. Otherwise we keep the existing one
+		if rType != "" {
+			currentType = rType
+		}
+		// if you are changing the default path, do it here. Variations of "NULL" as the string will assume you want it to be null in the database. If you did not specify shell in the query, then we keep the existing value.
+		if defpath != "" {
+			if strings.ToUpper(defpath) != "NULL" {
+				nullpath.Valid = true
+				nullpath.String = defpath
+			} else {
+				nullpath.Valid = false
+				nullpath.String = ""
+			}
+		}
+
+		// and the same for default_home_dir, following the same rule as path.
+		if defquota != "" {
+			if strings.ToUpper(defquota) != "NULL" {
+				nullquota.Valid = true
+				convquota, converr := strconv.ParseInt(defquota, 10, 64)
+				if converr != nil {
+					log.WithFields(QueryFields(r, startTime)).Error("Error converting default_quota to int: " + converr.Error())
+					fmt.Fprintf(w, "{ \"ferry_error\": \"Error converting default_quota to int. Check format.\" }")
+					return
+				}
+				nullquota.Int64 = convquota
+			} else {
+				nullquota.Valid = false
+			}
+		}
+
+		// if you specified a new default unit, change it, following the same rule as path.
+		if defunit != "" {
+			if strings.ToUpper(defunit) != "NULL" {
+				if checkUnits(defunit) {
+					nullunit.Valid = true
+					nullunit.String = strings.ToUpper(defunit)
+				} else {
+					log.WithFields(QueryFields(r, startTime)).Error("Invalid value for default unit. Allowed values are B,KB,KIB,MB,MIB,GB,GIB,TB,TIB.)")
+					fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid value for default_unit.\" }")
+					return
+				}
+			} else {
+				nullunit.Valid = false
+				nullunit.String = ""
+			}
+		} // end if unitName != ""
+
+		//transaction start, and update command
+		DBtx, cKey, err := LoadTransaction(r, DBptr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Error starting database transaction.\" }")
+			return
+		}
+		defer DBtx.Rollback(cKey)
+
+		_, commerr := DBtx.Exec(`update storage_resources set default_path=$1, default_quota=$2, last_updated=NOW(), default_unit=$3, type=$4 where name=$5`, nullpath, nullquota, nullunit, currentType, rName)
+		if commerr != nil {
+			w.WriteHeader(http.StatusNotFound)
+			log.WithFields(QueryFields(r, startTime)).Error("Error during DB update: " + commerr.Error())
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Database error during update.\" }")
+			return
+		} else {
+			// if no error, commit and all that
+			DBtx.Commit(cKey)
+			log.WithFields(QueryFields(r, startTime)).Info("Successfully updated " + rName + ".")
+			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+		}
+	} //end switch
+
+}
+
+func getAllComputeResourcesLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
+		return
+	}
+
+	rows, err := DBptr.Query(`select cr.name, cr.default_shell, cr.default_home_dir, cr.type, au.name as affiliation_unit
+							  from compute_resources as cr left join affiliation_units as au on cr.unitid = au.unitid where (cr.last_updated>=$1 or $1 is null);`, lastupdate)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	type computeResource struct {
+		Name  string `json:"name"`
+		Shell string `json:"default_shell"`
+		Home  string `json:"default_home_dir"`
+		Type  string `json:"type"`
+		Unit  string `json:"affiliation_unit"`
+	}
+	var Out []computeResource
+	var tmpName, tmpShell, tmpHome, tmpType, tmpUnit sql.NullString
+
+	for rows.Next() {
+		rows.Scan(&tmpName, &tmpShell, &tmpHome, &tmpType, &tmpUnit)
+		Out = append(Out, computeResource{tmpName.String, tmpShell.String, tmpHome.String,
+			tmpType.String, tmpUnit.String})
+	}
+
+	var output interface{}
+	if len(Out) == 0 {
+		type jsonerror struct {
+			Error string `json:"ferry_error"`
+		}
+		var queryErr []jsonerror
+		queryErr = append(queryErr, jsonerror{"Query returned no compute resources."})
+		log.WithFields(QueryFields(r, startTime)).Error("Query returned no compute resources.")
+		output = queryErr
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonoutput, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+	}
+	fmt.Fprintf(w, string(jsonoutput))
+}
+
+func getVOUserMapLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	user := strings.TrimSpace(q.Get("username"))
+	unit := strings.TrimSpace(q.Get("unitname"))
+	fqan := strings.TrimSpace(q.Get("fqan"))
+
+	if user == "" {
+		user = "%"
+	}
+	if unit == "" {
+		unit = "%"
+	}
+	if fqan == "" {
+		fqan = "%"
+	}
+
+	var userExists, unitExists, fqanExists bool
+	err := DBptr.QueryRow(`SELECT
+							$1 IN (SELECT uname FROM users),
+							$2 IN (SELECT name FROM affiliation_units),
+							$3 IN (SELECT fqan FROM grid_fqan)`,
+		user, unit, fqan).Scan(&userExists, &unitExists, &fqanExists)
+	if err != nil {
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	}
+
+	type jsonerror struct {
+		Error string `json:"ferry_error"`
+	}
+	var inputErr []jsonerror
+
+	if !userExists && user != "%" {
+		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		inputErr = append(inputErr, jsonerror{"User does not exist."})
+	}
+	if !unitExists && unit != "%" {
+		log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
+		inputErr = append(inputErr, jsonerror{"Affiliation unit does not exist."})
+	}
+	if !fqanExists && fqan != "%" {
+		log.WithFields(QueryFields(r, startTime)).Error("FQAN does not exist.")
+		inputErr = append(inputErr, jsonerror{"FQAN does not exist."})
+	}
+
+	if len(inputErr) > 0 {
+		jsonout, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err)
+		}
+		fmt.Fprintf(w, string(jsonout))
+		return
+	}
+
+	rows, err := DBptr.Query(`SELECT DISTINCT
+								u1.uname AS username,
+								au.name AS unitname,
+								gf.fqan AS fqan,
+								COALESCE(u2.uname, u1.uname) AS mapped_user
+							  FROM     
+								grid_access g 
+								INNER JOIN users u1 ON g.uid = u1.uid 
+								INNER JOIN grid_fqan gf ON gf.fqanid = g.fqanid 
+								INNER JOIN affiliation_units au ON au.unitid = gf.unitid
+								LEFT OUTER JOIN users u2 ON gf.mapped_user = u2.uid 
+							  WHERE 
+								u1.uname like $1 
+								AND au.name like $2
+								AND gf.fqan like $3
+							  ORDER BY u1.uname`, user, unit, fqan)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	voUserMap := make(map[string]map[string]map[string]string)
+
+	for rows.Next() {
+		var tmpUser, tmpUnit, tmpFQAN, tmpMappedUser sql.NullString
+		rows.Scan(&tmpUser, &tmpUnit, &tmpFQAN, &tmpMappedUser)
+
+		if tmpUser.Valid {
+			if _, ok := voUserMap[tmpUser.String]; !ok {
+				voUserMap[tmpUser.String] = make(map[string]map[string]string)
+			}
+			if _, ok := voUserMap[tmpUser.String][tmpUnit.String]; !ok {
+				voUserMap[tmpUser.String][tmpUnit.String] = make(map[string]string)
+			}
+			voUserMap[tmpUser.String][tmpUnit.String][tmpFQAN.String] = tmpMappedUser.String
+		}
+	}
+
+	var output interface{}
+	if len(voUserMap) == 0 {
+		var queryErr []jsonerror
+		log.WithFields(QueryFields(r, startTime)).Error("No mappings found.")
+		queryErr = append(queryErr, jsonerror{"No mappings found."})
+		output = queryErr
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = voUserMap
+	}
+	jsonout, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	fmt.Fprintf(w, string(jsonout))
+}
+
+func getPasswdFileLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	unit := strings.TrimSpace(q.Get("unitname"))
+	comp := strings.TrimSpace(q.Get("resourcename"))
+
+	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
+		return
+	}
+
+	rows, err := DBptr.Query(`select aname, rname, uname, uid, gid, full_name, home_dir, shell, unit_exists, comp_exists, last_updated from (
+                                                              select 1 as key, au.name as aname, u.uname, u.uid, g.gid, u.full_name, ca.home_dir, ca.shell, cr.name as rname, cag.last_updated as last_updated
+                                                              from compute_access_group as cag 
+                                                              left join compute_access as ca using (compid, uid) 
+                                                              join groups as g on g.groupid=cag.groupid 
+                                                              join compute_resources as cr on cr.compid=cag.compid 
+                                                              left join affiliation_units as au on au.unitid=cr.unitid 
+                                                              join users as u on u.uid=cag.uid
+                                                              where  cag.is_primary = true and (au.name = $1 or $3) and (cr.name = $2 or $4) and (ca.last_updated>=$5 or u.last_updated>=$5 or au.last_updated>=$5 or cr.last_updated>=$5 or g.last_updated>=$5 or $5 is null) order by au.name, cr.name
+							) as t
+								right join (select 1 as key,
+								$1 in (select name from affiliation_units) as unit_exists,
+								$2 in (select name from compute_resources) as comp_exists
+							) as c on t.key = c.key;`, unit, comp, unit == "", comp == "", lastupdate)
+
+	if err != nil {
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	var unitExists bool
+	var compExists bool
+
+	type jsonuser struct {
+		Uname string `json:"username"`
+		Uid   string `json:"uid"`
+		Gid   string `json:"gid"`
+		Gecos string `json:"gecos"`
+		Hdir  string `json:"homedir"`
+		Shell string `json:"shell"`
+	}
+	type jsonunit struct {
+		Resources map[string][]jsonuser `json:"resources"`
+		Lasttime  int64                 `json:"last_updated"`
+	}
+	Out := make(map[string]jsonunit)
+
+	lasttime := int64(0)
+	prevAname := ""
+	prevRname := ""
+	tmpResources := make(map[string][]jsonuser, 0)
+	tmpUsers := make([]jsonuser, 0)
+	for rows.Next() {
+		var tmpAname, tmpRname, tmpUname, tmpUid, tmpGid, tmpGecos, tmpHdir, tmpShell, tmpTime sql.NullString
+		rows.Scan(&tmpAname, &tmpRname, &tmpUname, &tmpUid, &tmpGid, &tmpGecos, &tmpHdir, &tmpShell, &unitExists, &compExists, &tmpTime)
+		log.WithFields(QueryFields(r, startTime)).Debugln(tmpAname.String + " " + tmpRname.String + " " + tmpUname.String)
+
+		if !tmpRname.Valid {
+			continue
+		}
+
+		if !tmpAname.Valid {
+			tmpAname.Valid = true
+			tmpAname.String = "null"
+		}
+		if prevRname == "" {
+			prevRname = tmpRname.String
+		}
+		if prevAname == "" {
+			prevAname = tmpAname.String
+		}
+
+		if tmpRname.Valid {
+			if prevRname != tmpRname.String {
+				tmpResources[prevRname] = tmpUsers
+				tmpUsers = make([]jsonuser, 0)
+				prevRname = tmpRname.String
+			}
+			if prevAname != tmpAname.String {
+				Out[prevAname] = jsonunit{tmpResources, lasttime}
+				tmpResources = make(map[string][]jsonuser, 0)
+				lasttime = 0
+				if tmpAname.Valid {
+					prevAname = tmpAname.String
+				} else {
+					prevAname = "null"
+				}
+
+			}
+			if tmpTime.Valid {
+				log.WithFields(QueryFields(r, startTime)).Debugln("tmpTime is valid" + tmpTime.String)
+
+				parseTime, parserr := time.Parse(time.RFC3339, tmpTime.String)
+				if parserr != nil {
+					log.WithFields(QueryFields(r, startTime)).Error("Error parsing last updated time of " + tmpTime.String)
+				} else {
+					if lasttime == 0 || (parseTime.Unix() > lasttime) {
+						lasttime = parseTime.Unix()
+					}
+				}
+			} else {
+				log.WithFields(QueryFields(r, startTime)).Debugln("tmpTime is not valid")
+			}
+			tmpUsers = append(tmpUsers, jsonuser{tmpUname.String, tmpUid.String, tmpGid.String, tmpGecos.String, tmpHdir.String, tmpShell.String})
+		}
+	}
+	if prevAname != "" {
+		tmpResources[prevRname] = tmpUsers
+		Out[prevAname] = jsonunit{tmpResources, lasttime}
+	}
+
+	var output interface{}
+	if len(Out) == 0 {
+		type jsonerror struct {
+			Error string `json:"ferry_error"`
+		}
+		var Err []jsonerror
+		if !unitExists && unit != "" {
+			Err = append(Err, jsonerror{"Affiliation unit does not exist."})
+			log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
+		}
+		if !compExists && comp != "" {
+			Err = append(Err, jsonerror{"Resource does not exist."})
+			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
+		}
+		if len(Err) == 0 {
+			Err = append(Err, jsonerror{"No entries were found for this query."})
+			log.WithFields(QueryFields(r, startTime)).Error("No entries were found for this query.")
+		}
+		output = Err
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonout, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	fmt.Fprintf(w, string(jsonout))
+}

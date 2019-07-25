@@ -156,7 +156,6 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 	primary := NewNullAttribute(Primary)
 	primary.Scan(true)
 
-<<<<<<< HEAD
 	input = Input {
 		UserName: i[UserName],
 		GroupName: compGroup,
@@ -169,19 +168,6 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 	_, apiErr = setUserAccessToComputeResource(c, input)
 	if len(apiErr) > 0 {
 		return nil, apiErr
-=======
-	duplicateCountRef ++
-	DBtx.Savepoint("setUserAccessToComputeResource_" + compResource)
-	setUserAccessToComputeResource(w, R)
-	if !DBtx.Complete() {
-		if !strings.Contains(DBtx.Error().Error(), "The request already exists in the database.") {
-			log.WithFields(QueryFields(r, startTime)).Error("setUserAccessToComputeResource failed: " + DBtx.Error().Error() )
-			fmt.Fprintf(w, "{ \"ferry_error\": \"setUserAccessToComputeResource for " + compResource + " failed. Last DB error: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
-			return
-		}
-		DBtx.RollbackToSavepoint("setUserAccessToComputeResource_" + compResource)
-		duplicateCount ++
->>>>>>> origin
 	}
 	
 	if i[UnitName].Data.(string) == "cms" {
