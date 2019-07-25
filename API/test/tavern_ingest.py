@@ -3,24 +3,25 @@ import json
 import ssl
 import configparser
 import logging
-import yaml
-import subprocess
+import pytest
 import os
 import argparse
 import sys
 import datetime
-
-#connects to ferry and gets 
+import copy
+import subprocess
+from tavern.core import run
+import yaml 
+#connects to ferry and gets parameters for an API
 def jsonImportHelp(api):
     target = dict(config.items("ferry"))
     url = target["hostname"] + api + "?help"
-    jOut = json.loads(urllib.request.urlopen(url, context=ferryContext).read().decode())
-    if not jOut['ferry_error']:
-            logging.info("action: %s" %api)
-            return jOut
-    logging.error("%s" % jOut["ferry_error"])
-    return None
-
+    try:
+        jOut = json.loads(urllib.request.urlopen(url, context=ferryContext).read().decode())
+    except:
+        return None
+    logging.info("action: %s" %api)
+    return jOut
 #finds all combinations of length n in list lst    
 def combo2(lst,n):
     if n==0:
@@ -33,13 +34,17 @@ def combo2(lst,n):
             l.append([m]+p)
     return l
 
-def testUrlCreator(api, jOut):
-    url = api
+def testUrlCreator(url, jOut):
     #saved url to check if it has changed
     savedUrl = url
     notRequiredAttributes = []
     tmpIdx = 0
     testCount = 0
+    expectedNumberTests = 0
+    #checks base call without parameters, whether error checking or valid
+    if not yamlWriter(url):
+            testCount += 1
+    expectedNumberTests += 1
     for attribute in jOut['ferry_output']:
         strCastAttribute = str(attribute)
         if jOut['ferry_output'][strCastAttribute]['required'] == "true":
@@ -49,24 +54,35 @@ def testUrlCreator(api, jOut):
                 url += "?"
             else:
                 url += "&"
+            #checks every combination of potentially wrong parameters to verify error checking, yamlWriter returns 0 on success
+            if not yamlWriter(url + strCastAttribute + "=True"):
+                testCount += 1
+            if not yamlWriter(url + strCastAttribute + "=900000"):
+                testCount += 1  
+            if not yamlWriter(url + strCastAttribute + "=2027-07-11"):
+                testCount += 1
+            if not yamlWriter(url + strCastAttribute + "=test"):
+                testCount += 1
+            expectedNumberTests += 4
+            #makes the correct url parameter addition otherwise
             if atrbType == "string":
-                url += strCastAttribute + "=cms"
+                url += strCastAttribute + "=test"
             elif atrbType == "boolean":
                 url += strCastAttribute + "=True"
             elif atrbType == "date":
-                url += strCastAttribute + "=2019-07-11"
+                url += strCastAttribute + "=2027-07-11"
             elif atrbType == "integer":
-                url += strCastAttribute[j][k]) + "666"
+                url += strCastAttribute + "=9000000"
+            #tests with all combinations of parameters (or lack of parameters), makes sure API error checking is correct
         #creation of array with each non-required attribute, also a count of these
         else:
             notRequiredAttributes.append(strCastAttribute)
             tmpIdx += 1
 
-    #number of tests computed with 2^n, where n is number of non-required attributes
-    expectedNumberTests = 2 ** tmpIdx   
-    if not yamlWriter(url):
-        testCount += 1
-    if len(notRequiredAttributes) == 0 and testCount == expectedNumberTests:
+    #number of tests computed with 2^n, where n is number of non-required attributes + # of already performed tests, -1 to account for overlap
+    expectedNumberTests = (2 ** tmpIdx) + expectedNumberTests - 1
+    #if no non-required attributes, they should be equal (2^0 - 1 = 0)
+    if testCount == expectedNumberTests:
         return 
     #second url variable to account for the initial changes wrought by required parameters
     savedUrl2 = url
@@ -84,21 +100,17 @@ def testUrlCreator(api, jOut):
                 else:
                     url += "&"
                 if atrbType == "string":
-                    url += str(attributeCombos[j][k]) + "=cms"
+                    url += str(attributeCombos[j][k]) + "=test"
                 elif atrbType == "boolean":
                     url += str(attributeCombos[j][k]) + "=True"
                 elif atrbType == "date":
-                    url += str(attributeCombos[j][k]) + "=2019-07-11"
+                    url += str(attributeCombos[j][k]) + "=2027-07-11"
                 elif atrbType == "integer":
-                    url += str(attributeCombos[j][k]) + "=666"
+                    url += str(attributeCombos[j][k]) + "=9001"
             if not yamlWriter(url):
                 testCount += 1
             url = savedUrl2
-    if expectedNumberTests != testCount:
-        logging.error("%d/%d tests were performed" % (testCount, expectedNumberTests))
-        exit(4)
-    else:
-        logging.info("%d/%d tests were performed successfully" % (testCount, expectedNumberTests))
+    logging.critical("%d/%d tests were successfully performed for %s" % (testCount, expectedNumberTests, api))
         
 #creates a custom tavern.yaml file for a set an api and a combination of its parameters
 def yamlWriter(urlparameters):
@@ -110,7 +122,7 @@ def yamlWriter(urlparameters):
 
     if len(jOut) == 0:
         logging.error("Something went wrong loading the output from %s" % hostUrl)
-        exit(3)
+        return -1
 
     testFileName = "test_" + urlparameters + ".tavern.yaml"
     tavernTest = open(testFileName, "w")
@@ -120,7 +132,6 @@ def yamlWriter(urlparameters):
     tavernYaml["stages"] = []
     tavernYaml["stages"].append({})
     tavernYaml["stages"][0]["name"] = urlparameters
-
     tavernYaml["stages"][0]["request"] = {}
     tavernYaml["stages"][0]["request"]["url"] = testHostUrl
     tavernYaml["stages"][0]["request"]["method"] = "GET"
@@ -133,35 +144,24 @@ def yamlWriter(urlparameters):
     tavernYaml["stages"][0]["response"]["status_code"] =  200
     tavernYaml["stages"][0]["response"]["body"] =  {}
     tavernYaml["stages"][0]["response"]["body"]["ferry_status"] = jOut["ferry_status"]
-    tavernYaml["stages"][0]["response"]["body"]["ferry_error"] = []
-    
 
-    if jOut["ferry_error"] != None:
-        tavernYaml["stages"][0]["response"]["body"]["ferry_error"] = []
-        for i in range(0, len(jOut['ferry_error'])):
-            tavernYaml["stages"][0]["response"]["body"]["ferry_error"].append(jOut['ferry_error'][i])
-    else:
-        tavernYaml["stages"][0]["response"]["body"]["ferry_error"] = jOut['ferry_error']
-
-    if jOut['ferry_output'] != None:
-        tavernYaml["stages"][0]["response"]["body"]["ferry_output"] = []
-        for i in range(0, len(jOut['ferry_output'])):
-            tavernYaml["stages"][0]["response"]["body"]["ferry_output"].append(jOut['ferry_output'][i])
-    else:
-        tavernYaml["stages"][0]["response"]["body"]["ferry_output"] = jOut['ferry_output']
+    #thank god for python and its libraries
+    tavernYaml["stages"][0]["response"]["body"]["ferry_error"] = copy.deepcopy(jOut['ferry_error'])
+    tavernYaml["stages"][0]["response"]["body"]["ferry_output"] = copy.deepcopy(jOut['ferry_output'])
     
     yaml.dump(tavernYaml, tavernTest)
-    try:
-        subprocess.run(['tavern-ci', "--tavern-beta-new-traceback", testFileName], check = True, text = True)
-    except:
+    logging.info("Testing %s" % urlparameters)
+    #tavern run function returns 0 on success
+    if not run(testFileName):
+        return 0
+    else:
         return -1
-    return 0
-
+    
     
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = "Script to test an API")
     parser.add_argument("-c", "--config", metavar = "PATH", action = "store", help = "path to configuration file")
-    parser.add_argument("-n", "--api", action = "store", help = "passed api name")
+    parser.add_argument("-n", "--api", action = "store", help = "passed api name/all apis")
     opts = parser.parse_args()
     try:
         config = configparser.ConfigParser()
@@ -186,19 +186,35 @@ if __name__ == "__main__":
     else:
         logArgs["level"] = logging.DEBUG
     if config.has_option("log", "file"):
+        fd = open(config.get("log", "file"), 'w')
         logArgs["filename"] = config.get("log", "file")
     else:
         logArgs["stream"] = sys.stdout
-
+    
     logging.basicConfig(**logArgs)
-
+    #subprocess.run(['git-pull.sh', config.get("ferry", "repositoryroot"), config.get("ferry", "ferryapiroot"), config.get("ferry", "ferryapiexecutable"), config.get("ferry", "ferryuser")], check = True, text = True)
     ferryContext = ssl.SSLContext(protocol=ssl.PROTOCOL_TLSv1_2)
     ferryContext.verify_mode = ssl.CERT_REQUIRED
     ferryContext.load_cert_chain(config.get("ferry", "cert"), config.get("ferry", "key"))
     ferryContext.load_verify_locations(capath=config.get("ferry", "ca"))
-    
-    jOut = jsonImportHelp(opts.api)
-    if jOut == None:
-        logging.error("%s help details could not be acquired" % opts.api)
-        exit(2)
-    testUrlCreator(opts.api, jOut)
+    current_dir = os.path.dirname(os.path.abspath(__file__)) 
+    if opts.api == "all":
+        with open('api_names') as openfileobject:
+            for line in openfileobject:
+                jOut = jsonImportHelp(line)
+                if jOut == None:
+                    logging.error("%s help details could not be acquired" % line)
+                    continue
+                testUrlCreator(line, jOut)
+    else:
+        jOut = jsonImportHelp(opts.api)
+        if jOut == None:
+            logging.error("%s help details could not be acquired" % opts.api)
+            exit(2)
+        testUrlCreator(opts.api, jOut)
+    if config.has_option("log", "file"):
+        fd = open(config.get("log", "file"), 'r')
+        filterOutput = open("tavern_output", 'w')
+        filterOutput.truncate(0)
+        filterOutput.writelines([ line for line in fd if 'Testing' in line or 'ERROR' in line or 'CRITICAL' in line])
+        fd.close()

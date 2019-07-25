@@ -1,0 +1,5 @@
+[07/25/2019 15:36:24][INFO] Testing getUserAccessToComputeResources
+[07/25/2019 15:36:27][INFO] Testing getUserAccessToComputeResources?lastupdated=2027-07-11
+[07/25/2019 15:36:28][INFO] Testing getUserAccessToComputeResources?username=test
+[07/25/2019 15:36:28][INFO] Testing getUserAccessToComputeResources?lastupdated=2027-07-11&username=test
+[07/25/2019 15:36:28][CRITICAL] 4/4 tests were successfully performed for getUserAccessToComputeResources
