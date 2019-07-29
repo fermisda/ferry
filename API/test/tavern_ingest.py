@@ -72,7 +72,9 @@ def testUrlCreator(url, jOut):
             elif atrbType == "date":
                 url += strCastAttribute + "=2027-07-11"
             elif atrbType == "integer":
-                url += strCastAttribute + "=9000000"
+                url += strCastAttribute + "=9001"
+            else:
+                url += strCastAttribute + "=-1"
             #tests with all combinations of parameters (or lack of parameters), makes sure API error checking is correct
         #creation of array with each non-required attribute, also a count of these
         else:
@@ -110,7 +112,7 @@ def testUrlCreator(url, jOut):
             if not yamlWriter(url):
                 testCount += 1
             url = savedUrl2
-    logging.critical("%d/%d tests were successfully performed for %s" % (testCount, expectedNumberTests, api))
+    logging.critical("%d/%d tests were successfully performed for %s" % (testCount, expectedNumberTests, url))
         
 #creates a custom tavern.yaml file for a set an api and a combination of its parameters
 def yamlWriter(urlparameters):
@@ -123,11 +125,10 @@ def yamlWriter(urlparameters):
     if len(jOut) == 0:
         logging.error("Something went wrong loading the output from %s" % hostUrl)
         return -1
-
+    #yaml dictionary creation
     testFileName = "test_" + urlparameters + ".tavern.yaml"
     tavernTest = open(testFileName, "w")
     tavernYaml = {}
-
     tavernYaml["test_name"] = testFileName
     tavernYaml["stages"] = []
     tavernYaml["stages"].append({})
@@ -145,17 +146,14 @@ def yamlWriter(urlparameters):
     tavernYaml["stages"][0]["response"]["body"] =  {}
     tavernYaml["stages"][0]["response"]["body"]["ferry_status"] = jOut["ferry_status"]
 
-    #thank god for python and its libraries
+    #hiring someone else to read a dictionary
     tavernYaml["stages"][0]["response"]["body"]["ferry_error"] = copy.deepcopy(jOut['ferry_error'])
     tavernYaml["stages"][0]["response"]["body"]["ferry_output"] = copy.deepcopy(jOut['ferry_output'])
     
     yaml.dump(tavernYaml, tavernTest)
     logging.info("Testing %s" % urlparameters)
     #tavern run function returns 0 on success
-    if not run(testFileName):
-        return 0
-    else:
-        return -1
+    return run(testFileName)
     
     
 if __name__ == "__main__":
@@ -190,17 +188,20 @@ if __name__ == "__main__":
         logArgs["filename"] = config.get("log", "file")
     else:
         logArgs["stream"] = sys.stdout
-    
     logging.basicConfig(**logArgs)
-    #subprocess.run(['git-pull.sh', config.get("ferry", "repositoryroot"), config.get("ferry", "ferryapiroot"), config.get("ferry", "ferryapiexecutable"), config.get("ferry", "ferryuser")], check = True, text = True)
+
+    #sets up ferry connection
     ferryContext = ssl.SSLContext(protocol=ssl.PROTOCOL_TLSv1_2)
     ferryContext.verify_mode = ssl.CERT_REQUIRED
     ferryContext.load_cert_chain(config.get("ferry", "cert"), config.get("ferry", "key"))
     ferryContext.load_verify_locations(capath=config.get("ferry", "ca"))
     current_dir = os.path.dirname(os.path.abspath(__file__)) 
+    subprocess.call("./db_connect_test_cleanup.sh", shell = True)
+    #reads in all API names
     if opts.api == "all":
         with open('api_names') as openfileobject:
             for line in openfileobject:
+                subprocess.call("./db_refresh.sh", shell = True)
                 jOut = jsonImportHelp(line)
                 if jOut == None:
                     logging.error("%s help details could not be acquired" % line)
@@ -212,9 +213,10 @@ if __name__ == "__main__":
             logging.error("%s help details could not be acquired" % opts.api)
             exit(2)
         testUrlCreator(opts.api, jOut)
+    #cleans up test output
     if config.has_option("log", "file"):
         fd = open(config.get("log", "file"), 'r')
-        filterOutput = open("tavern_output", 'w')
+        filterOutput = open("concise_output", 'w')
         filterOutput.truncate(0)
         filterOutput.writelines([ line for line in fd if 'Testing' in line or 'ERROR' in line or 'CRITICAL' in line])
         fd.close()
