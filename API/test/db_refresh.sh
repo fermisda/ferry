@@ -1,0 +1,1 @@
+(source dbpass; psql --host fermicloud033.fnal.gov -U postgres -w ferry < ferry-prd-db_NEW.sql)
