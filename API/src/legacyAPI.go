@@ -3497,7 +3497,7 @@ func getAllUsersFQANsLegacy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := DBptr.Query(`select uname, fqan, name from grid_access as ga
+	rows, err := DBptr.Query(`select uname, fqan, name, is_banned from grid_access as ga
 							  join grid_fqan as gf on ga.fqanid = gf.fqanid
 							  join users as u on ga.uid = u.uid
 							  join affiliation_units as au on gf.unitid = au.unitid
@@ -3512,15 +3512,16 @@ func getAllUsersFQANsLegacy(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 	
 	type jsonfqan struct {
-		FQAN string `json:"fqan"`
-		Unit string `json:"unitname"`
+		FQAN 	string `json:"fqan"`
+		Unit 	string `json:"unitname"`
+		Suspend	string `json:"suspend"`
 	} 
 	Out := make(map[string][]jsonfqan)
 	
 	for rows.Next() {
-		var tmpUname, tmpFQAN, tmpUnit sql.NullString
-		rows.Scan(&tmpUname, &tmpFQAN, &tmpUnit)
-		Out[tmpUname.String] = append(Out[tmpUname.String], jsonfqan{tmpFQAN.String, tmpUnit.String})
+		var tmpUname, tmpFQAN, tmpUnit, tmpSuspend sql.NullString
+		rows.Scan(&tmpUname, &tmpFQAN, &tmpUnit, &tmpSuspend)
+		Out[tmpUname.String] = append(Out[tmpUname.String], jsonfqan{tmpFQAN.String, tmpUnit.String, tmpSuspend.String})
 	}
 
 	var output interface{}	

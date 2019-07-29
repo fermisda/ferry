@@ -2065,7 +2065,7 @@ func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 func getAllUsersFQANs(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	rows, err := DBptr.Query(`select uname, fqan, name from grid_access as ga
+	rows, err := DBptr.Query(`select uname, fqan, name, is_banned from grid_access as ga
 							  join grid_fqan as gf using(fqanid)
 							  join users as u using(uid)
 							  join affiliation_units as au using(unitid)
@@ -2082,11 +2082,12 @@ func getAllUsersFQANs(c APIContext, i Input) (interface{}, []APIError) {
 	out := make(map[string][]jsonfqan)
 	
 	for rows.Next() {
-		row := NewMapNullAttribute(UserName, FQAN, UnitName)
-		rows.Scan(row[UserName], row[FQAN], row[UnitName])
+		row := NewMapNullAttribute(UserName, FQAN, UnitName, Suspend)
+		rows.Scan(row[UserName], row[FQAN], row[UnitName], row[Suspend])
 		out[row[UserName].Data.(string)] = append(out[row[UserName].Data.(string)], jsonfqan{
 			FQAN: row[FQAN].Data,
 			UnitName: row[UnitName].Data,
+			Suspend: row[Suspend].Data,
 		})
 	}
 
