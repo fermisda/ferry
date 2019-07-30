@@ -3489,8 +3489,20 @@ func getAllUsersFQANsLegacy(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
+
+	suspend := q.Get("suspend")
+
+	var suspendBool bool
+	if suspend != "" {
+		var err error
+		if suspendBool, err = strconv.ParseBool(suspend); err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid value for suspend. Must be true or false (or omit it from the query).\"}")
+			return
+		}
+	}
 	
-	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
 		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
@@ -3502,7 +3514,8 @@ func getAllUsersFQANsLegacy(w http.ResponseWriter, r *http.Request) {
 							  join users as u on ga.uid = u.uid
 							  join affiliation_units as au on gf.unitid = au.unitid
 							  where (ga.last_updated>=$1 or gf.last_updated>=$1 or
-									  u.last_updated>=$1 or au.last_updated>=$1 or $1 is null) order by uname;`, lastupdate)
+									  u.last_updated>=$1 or au.last_updated>=$1 or $1 is null)
+							  and (is_banned = $2 or $3) order by uname;`, lastupdate, suspendBool, suspend == "")
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
