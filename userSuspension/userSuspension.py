@@ -64,6 +64,10 @@ ferryOut = urllib2.urlopen(url, context=ferryContext).read().decode()
 if not ferryOut:
     logging.error("could not contact ferry")
     exit(1)
+if "Query returned no FQANs." in ferryOut:
+    logging.debug("no suspended users")
+    exit(0)
+
 suspendedUsers = json.loads(ferryOut)
 constraints = []
 for user, items in suspendedUsers.items():
