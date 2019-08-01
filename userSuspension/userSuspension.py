@@ -101,7 +101,10 @@ if not opts.dry_run:
             logging.info(line.strip())
     for line in err.readlines():
         if line != "\n":
-            logging.error(line.strip())
+            if "Couldn't find/hold all jobs matching constraint" in line:
+                logging.debug(line.strip())
+            else:
+                logging.error(line.strip())
     
     os.remove(".tmpout")
     os.remove(".tmperr")
