@@ -164,6 +164,18 @@ func IncludeGroupAPIs(c *APICollection) {
 		setCondorQuota,
 	}
 	c.Add("setCondorQuota", &setCondorQuota)
+
+	getGroupStorageQuota := BaseAPI {
+		InputModel {
+			Parameter{GroupName, true},
+			Parameter{ResourceName, true},
+			Parameter{UnitName, true},
+			Parameter{QuotaUnit, false},
+			Parameter{LastUpdated, false},
+		},
+		getGroupStorageQuota,
+	}
+	c.Add("getGroupStorageQuota", &getGroupStorageQuota)
 }
 
 func createGroup(c APIContext, i Input) (interface{}, []APIError) {
@@ -1115,136 +1127,78 @@ func removeCondorQuota(w http.ResponseWriter, r *http.Request) {
 	DBtx.Commit(cKey)
 }
 
-func getGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+func getGroupStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	type jsonerror struct {
-		Error string `json:"ferry_error"`
-	}
-	var inputErr []jsonerror
+	groupid := NewNullAttribute(GroupID)
+	storageid := NewNullAttribute(ResourceID)
+	unitid := NewNullAttribute(UnitID)
 
-	groupname := q.Get("groupname")
-	resource := q.Get("resourcename")
-	exptname := q.Get("unitname")
-	quota_unit := strings.TrimSpace(strings.ToUpper(q.Get("quota_unit")))
-	if quota_unit != "" {
-	okunit := checkUnits(quota_unit)	
-		if !okunit {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid unit specified in http query.")
-			inputErr = append(inputErr, jsonerror{"Invalid unit specified."})	
-		}
-	}
-	if groupname == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
-		inputErr = append(inputErr, jsonerror{"No groupname specified."})
-	}
-	if resource == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No resourcename specified in http query.")
-		inputErr = append(inputErr, jsonerror{"No resourcename specified."})
-	}
-	if exptname == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
-		inputErr = append(inputErr, jsonerror{"No unitname name specified."})
-	}
-
-	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
-	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
-		inputErr = append(inputErr, jsonerror{"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time."})
-	}
-
-	if len(inputErr) > 0 {
-		jsonout, err := json.Marshal(inputErr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
-		}
-		fmt.Fprintf(w, string(jsonout))
-		return
-	}
-
-	rows, err := DBptr.Query(`select value, unit, valid_until, group_exists, resource_exists, unit_exists from (
-								select 1 as key, sq.value, sq.unit, sq.valid_until from storage_quota sq
-							  	join affiliation_units on affiliation_units.unitid = sq.unitid
-							  	join storage_resources on storage_resources.storageid = sq.storageid
-							  	join groups on groups.groupid = sq.groupid
-								where affiliation_units.name = $4 AND storage_resources.name = $3 and (groups.name, groups.type) = ($1, $2)
-								and (valid_until is null or valid_until >= NOW()) and (sq.last_updated>=$5 or $5 is null)
-								order by valid_until desc
-							) as t right join (
-								select 1 as key, 
-								($1, $2) in (select name, type from groups) as group_exists,
-								$3 in (select name from storage_resources) as resource_exists,
-								$4 in (select name from affiliation_units) as unit_exists
-							) as c on t.key = c.key;`, groupname, "UnixGroup", resource, exptname, lastupdate)
+	err := c.DBtx.QueryRow(`select (select groupid from groups where name = $1 and type = 'UnixGroup'),
+								   (select storageid from storage_resources where name = $2),
+								   (select unitid from affiliation_units where name = $3)`,
+						   i[GroupName], i[ResourceName], i[UnitName]).Scan(&groupid, &storageid, &unitid)
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Print("Error in DB query: " + err.Error())
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
-		
-		return
-	}		
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !groupid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
+	}
+	if !storageid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, ResourceName))
+	}
+	if !unitid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+	}
+	if i[QuotaUnit].Valid {
+		ok := checkUnits(i[QuotaUnit].Data.(string))	
+			if !ok {
+				apiErr = append(apiErr, APIError{errors.New("invalid quotaunit specified in http query"), ErrorAPIRequirement})
+			}
+		}
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	rows, err := DBptr.Query(`select value, unit, valid_until from storage_quota
+							  where groupid = $1 and storageid = $2 and unitid = $3
+							  and (valid_until is null or valid_until >= NOW()) and (last_updated>=$4 or $4 is null)
+							  order by valid_until desc`,
+							 groupid, storageid, unitid, i[LastUpdated])
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
 	defer rows.Close()	
 	
-	type jsonentry struct {
-		Value string `json:"value"`
-		Unit string `json:"quota_unit"`
-		ValidUntil string `json:"valid_until"`
-	}
-	var Out jsonentry
-	var groupExists, resourceExists, unitExists bool
+	type jsonentry map[Attribute]interface{}
+	out := make(jsonentry)
 	
 	for rows.Next() {
-		var tmpValue,tmpUnit,tmpValid sql.NullString
-		rows.Scan(&tmpValue, &tmpUnit, &tmpValid, &groupExists, &resourceExists, &unitExists)
-		if tmpValue.Valid {
-			
-			if quota_unit != "" && quota_unit != tmpUnit.String {
-				newval, converr := convertValue(tmpValue.String,tmpUnit.String,quota_unit)
-				if converr != nil {
-					log.WithFields(QueryFields(r, startTime)).Error("Error converting quota value: " + converr.Error())
-					inputErr = append(inputErr, jsonerror{"Error converting quota value to desired unit."})	
-				} else {
-					tmpValue.String = strconv.FormatFloat(newval, 'f', -1, 64)
+		row := NewMapNullAttribute(Quota, QuotaUnit, ExpirationDate)
+		rows.Scan(row[Quota], row[QuotaUnit], row[ExpirationDate])
+
+		if row[Quota].Valid {
+			if i[QuotaUnit].Valid && i[QuotaUnit].Data.(string) != row[QuotaUnit].Data.(string) {
+				newQuota, err := convertValue(row[Quota].Data, row[QuotaUnit].Data.(string), i[QuotaUnit].Data.(string))
+				if err == nil {
+					row[Quota].Scan(newQuota)
+					row[QuotaUnit].Scan(strings.ToUpper(i[QuotaUnit].Data.(string)))
 				}
 			}
-			Out = jsonentry{tmpValue.String, tmpUnit.String, tmpValid.String}
+			out = jsonentry{
+				Quota: row[Quota].Data,
+				QuotaUnit: row[QuotaUnit].Data,
+				ExpirationDate: row[ExpirationDate].Data,
+			}
 		}
-		}
+	}
 	
-	var output interface{}
-	if Out.Value == "" {
-		type jsonerror struct {
-			Error string `json:"ferry_error"`
-		}
-		var queryErr []jsonerror
-		if !groupExists {
-			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
-			queryErr = append(queryErr, jsonerror{"Group does not exist."})
-		}
-		if !resourceExists {
-			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
-			queryErr = append(queryErr, jsonerror{"Resource does not exist."})
-		}
-		if !unitExists {
-			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
-			queryErr = append(queryErr, jsonerror{"Experiment does not exist."})
-		}
-		if len(queryErr) == 0 {
-			log.WithFields(QueryFields(r, startTime)).Error("Group has no quotas registered.")
-			queryErr = append(queryErr, jsonerror{"Group has no quotas registered."})
-		}
-		output = queryErr
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = Out
-	}
-	jsonoutput, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-	}
-	fmt.Fprintf(w, string(jsonoutput))
+	return out, nil
 }
 
 func removeUserAccessFromResource(w http.ResponseWriter, r *http.Request) {
