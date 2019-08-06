@@ -1,5 +1,6 @@
 package main
 import (
+	"math"
 	"regexp"
 	"strings"
 	"database/sql"
@@ -151,6 +152,18 @@ func IncludeGroupAPIs(c *APICollection) {
 		getCondorQuotas,
 	}
 	c.Add("getCondorQuotas", &getCondorQuotas)
+
+	setCondorQuota := BaseAPI {
+		InputModel {
+			Parameter{CondorGroup, true},
+			Parameter{ResourceName, true},
+			Parameter{Quota, true},
+			Parameter{ExpirationDate, false},
+			Parameter{Surplus, false},
+		},
+		setCondorQuota,
+	}
+	c.Add("setCondorQuota", &setCondorQuota)
 }
 
 func createGroup(c APIContext, i Input) (interface{}, []APIError) {
@@ -962,144 +975,72 @@ func setGroupBatchPriority(w http.ResponseWriter, r *http.Request) {
 
 	NotDoneYet(w, r, startTime)
 }
-func setCondorQuota(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+func setCondorQuota(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	group := strings.TrimSpace(q.Get("condorgroup"))
-	comp  := strings.TrimSpace(q.Get("resourcename"))
-	quota := strings.TrimSpace(q.Get("quota"))
-	until := strings.TrimSpace(q.Get("validuntil"))
-	splus := strings.TrimSpace(q.Get("surplus"))
+	var quota string
+	var quotaType string
+	var baseQuota bool
 
-	authorized,authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
-		return
+	unitid := NewNullAttribute(UnitID)
+	compid := NewNullAttribute(ResourceID)
+
+	unitName := strings.Split(i[CondorGroup].Data.(string), ".")[0]
+	condorGroup := i[CondorGroup].Data.(string)
+
+	err := c.DBtx.QueryRow(`select (select unitid from affiliation_units where name = $1),
+								   (select compid from compute_resources where name = $2),
+								   (select $1 in (select name from compute_batch))`,
+						   unitName, i[ResourceName]).Scan(&unitid, &compid, &baseQuota)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	if group == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No condorgroup specified in http query.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No condorgroup specified.\" }")
-		return
-	}
-	if comp == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No resourcename specified in http query.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No resourcename specified.\" }")
-		return
-	}
-	if quota == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No quota specified in http query.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No quota specified.\" }")
-		return
-	}
-	if until == "" {
-		until = "null"
-	} else {
-		until = "'" + until + "'"
-	}
-
-	uName := strings.Split(group, ".")[0]
-	name := group
-
-	var qType string
-	if strings.Contains(group, ".") {
-		qType = "dynamic"
-		fQuota, err := strconv.ParseFloat(quota, 64)
-		if err != nil || fQuota < 0 || fQuota > 1 {
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Subgroup quota must be a float between 0 and 1.\" }")
-			return
+	if strings.Contains(condorGroup, ".") {
+		quotaType = "dynamic"
+		fQuota, _ := i[Quota].Data.(float64)
+		if fQuota < 0 || fQuota > 1 {
+			apiErr = append(apiErr, APIError{errors.New("subgroup quota must be a float between 0 and 1"), ErrorAPIRequirement})
 		}
 		quota = strconv.FormatFloat(fQuota, 'f', 2, 64)
 	} else {
-		qType = "static"
-		_, err := strconv.ParseInt(quota, 10, 64)
-		if err != nil {
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Top-level quota must be an integer.\" }")
-			return
+		quotaType = "static"
+		m := math.Mod(i[Quota].Data.(float64), 1)
+		iQuota := int64(i[Quota].Data.(float64))
+		if m != 0 {
+			apiErr = append(apiErr, APIError{errors.New("top-level quota must be an integer"), ErrorAPIRequirement})
+		}
+		quota = strconv.FormatInt(iQuota, 10)
+	}
+	if quotaType == "dynamic" {
+		if !unitid.Valid {
+			apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+		}
+		if !baseQuota {
+			apiErr = append(apiErr, APIError{errors.New("base level quota does not exist"), ErrorAPIRequirement})
 		}
 	}
-
-	if splus != "" {
-		if splusBool, err := strconv.ParseBool(splus); err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid value for surplus. Must be true or false (or omit it from the query).")
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid value for surplus. Must be true or false (or omit it from the query).\" }")
-		} else {
-			splus = strconv.FormatBool(splusBool)
-		}
-	} else {
-		splus = "null"
+	if !compid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, ResourceName))
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
 	}
 
-	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	_, err = c.DBtx.Exec(`insert into compute_batch (compid, name, value, type, unitid, surplus, valid_until, last_updated)
+						  values ($1, $2, $3, $4, $5, coalesce($6, true), $7, NOW())
+						  on conflict (compid, name) where (valid_until is null) = ($7 is null) do
+						  update set value = $3, valid_until = $7, surplus = coalesce($6, compute_batch.surplus), last_updated = NOW()`,
+						 compid, condorGroup, quota, quotaType, unitid, i[Surplus], i[ExpirationDate])
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	defer DBtx.Rollback(cKey)
-
-	_, err = DBtx.Exec(fmt.Sprintf(`do $$
-									declare 
-									    v_unitid 	int;
-										v_compid 	int;
-										v_permanet	bool;
-											
-										c_uname constant text := '%s';
-										c_compres constant text := '%s';
-										c_qname constant text := '%s';
-										c_qvalue constant numeric := %s;
-										c_qtype constant text := '%s';
-										c_splus constant bool := %s;
-										c_valid constant date := %s;
-									begin
-										select unitid into v_unitid from affiliation_units where name = c_uname;
-										select compid into v_compid from compute_resources where name = c_compres;
-										select c_valid is null into v_permanet;
-
-										if v_compid is null then raise 'null value in column "compid"'; end if;
-
-										if c_qtype = 'dynamic' and c_uname not in (select name from compute_batch) then
-											raise 'no base level quota';
-										end if;
-										
-										if (v_compid, c_qname) not in (select compid, name from compute_batch where (valid_until is null = v_permanet)) then
-										    insert into compute_batch (compid, name, value, type, unitid, surplus, valid_until, last_updated)
-															   values (v_compid, c_qname, c_qvalue, c_qtype, v_unitid, coalesce(c_splus, true), c_valid, NOW());
-										else
-											update compute_batch set value = c_qvalue, valid_until = c_valid, surplus = coalesce(c_splus, surplus), last_updated = NOW()
-											where compid = v_compid and name = c_qname and (valid_until is null = v_permanet);
-										end if;
-
-										if v_permanet then
-											delete from compute_batch where compid = v_compid and name = c_qname and valid_until is not null;
-										end if;
-									end $$;`, uName, comp, name, quota, qType, splus, until))
-
-	if err == nil {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
-	} else {
-		if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
-			log.WithFields(QueryFields(r, startTime)).Error("This quota already exists.")
-			fmt.Fprintf(w,"{ \"ferry_error\": \"This quota already exists.\" }")
-		} else if strings.Contains(err.Error(), `null value in column "compid"`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Resource does not exist.\" }")
-		} else if strings.Contains(err.Error(), `invalid input syntax for type date`) ||
-				  strings.Contains(err.Error(), `date/time field value out of range`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid expiration date.")
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid expiration date.\" }")
-		} else if strings.Contains(err.Error(), `no base level quota`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Base level quota does not exist.")
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Base level quota does not exist.\" }")
-		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Something went wrong.\" }")
-		}
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	DBtx.Commit(cKey)
+	return nil, nil
 }
 
 func removeCondorQuota(w http.ResponseWriter, r *http.Request) {
