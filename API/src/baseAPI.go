@@ -225,6 +225,7 @@ const (
 	VOMSURL				Attribute = "vomsurl"
 	Role				Attribute = "role"
 	CondorGroup			Attribute = "condorgroup"
+	VOName				Attribute = "voname"
 	UID					Attribute = "uid"
 	GID					Attribute = "gid"
 	GroupID				Attribute = "groupid"
@@ -239,6 +240,7 @@ const (
 	GroupAccount  		Attribute = "groupaccount"
 	Experiment			Attribute = "experiment"
 	Suspend				Attribute = "suspend"
+	Surplus				Attribute = "surplus"
 	ExpirationDate		Attribute = "expirationdate"
 	LastUpdated			Attribute = "lastupdated"
 	Help				Attribute = "help"
@@ -268,6 +270,7 @@ func (a Attribute) Type() (AttributeType) {
 		VOMSURL:			TypeString,
 		Role:				TypeString,
 		CondorGroup:		TypeString,
+		VOName:				TypeString,
 		UID:				TypeInt,
 		GID:				TypeInt,
 		GroupID:			TypeInt,
@@ -282,6 +285,7 @@ func (a Attribute) Type() (AttributeType) {
 		GroupAccount:		TypeBool,
 		Experiment:			TypeBool,
 		Suspend:			TypeBool,
+		Surplus:			TypeBool,
 		ExpirationDate:		TypeDate,
 		LastUpdated:		TypeDate,
 		Help:				TypeFlag,

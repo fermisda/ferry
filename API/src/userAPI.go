@@ -254,6 +254,7 @@ func IncludeUserAPIs(c *APICollection) {
 
 	getAllUsersFQANs := BaseAPI {
 		InputModel {
+			Parameter{Suspend, false},
 			Parameter{LastUpdated, false},
 		},
 		getAllUsersFQANs,
@@ -2069,8 +2070,10 @@ func getAllUsersFQANs(c APIContext, i Input) (interface{}, []APIError) {
 							  join grid_fqan as gf using(fqanid)
 							  join users as u using(uid)
 							  join affiliation_units as au using(unitid)
-							  where (ga.last_updated>=$1 or gf.last_updated>=$1 or
-									  u.last_updated>=$1 or au.last_updated>=$1 or $1 is null) order by uname;`, i[LastUpdated])
+							  where (ga.last_updated>=$2 or gf.last_updated>=$2 or
+									  u.last_updated>=$2 or au.last_updated>=$2 or $2 is null)
+									and (is_banned = $1 or $1 is null)  order by uname`,
+							 i[Suspend], i[LastUpdated])
 	if err != nil {
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
