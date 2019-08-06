@@ -277,7 +277,7 @@ func main() {
 	grouter.HandleFunc("/createFQAN", APIs["createFQAN"].Run)
 	grouter.HandleFunc("/removeFQAN", removeFQAN)
 	grouter.HandleFunc("/setFQANMappings", APIs["setFQANMappings"].Run)
-	grouter.HandleFunc("/getAllAffiliationUnits", getAllAffiliationUnits)
+	grouter.HandleFunc("/getAllAffiliationUnits", APIs["getAllAffiliationUnits"].Run)
 
 	//wrapper API calls
 	grouter.HandleFunc("/testWrapper", testWrapper)
