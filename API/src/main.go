@@ -191,7 +191,7 @@ func main() {
 	grouter.HandleFunc("/setUserAccessToComputeResource", APIs["setUserAccessToComputeResource"].Run)
 	grouter.HandleFunc("/removeUserAccessFromResource", removeUserAccessFromResource)
 	grouter.HandleFunc("/getUserStorageQuota", APIs["getUserStorageQuota"].Run)
-	grouter.HandleFunc("/setUserStorageQuota", APIs["setStorageQuota"].Run)
+	grouter.HandleFunc("/setUserStorageQuota", APIs["setStorageQuota"].Run) //Legacy
 	grouter.HandleFunc("/getUserExternalAffiliationAttributes", APIs["getUserExternalAffiliationAttributes"].Run)
 	grouter.HandleFunc("/addCertificateDNToUser", APIs["addCertificateDNToUser"].Run)
 	grouter.HandleFunc("/setSuperUser", setSuperUser)
@@ -232,8 +232,8 @@ func main() {
 	grouter.HandleFunc("/setGroupBatchPriority", setGroupBatchPriority)
 	grouter.HandleFunc("/setCondorQuota", APIs["setCondorQuota"].Run)
 	grouter.HandleFunc("/removeCondorQuota", removeCondorQuota)
-	grouter.HandleFunc("/getGroupStorageQuota", getGroupStorageQuota)
-	grouter.HandleFunc("/setGroupStorageQuota", setGroupStorageQuota)
+	grouter.HandleFunc("/getGroupStorageQuota", APIs["getGroupStorageQuota"].Run)
+	grouter.HandleFunc("/setGroupStorageQuota", setGroupStorageQuota) //Legacy
 	grouter.HandleFunc("/getAllGroups", APIs["getAllGroups"].Run)
 	grouter.HandleFunc("/getAllGroupsMembers", APIs["getAllGroupsMembers"].Run)
 	grouter.HandleFunc("/getGroupAccessToResource", APIs["getGroupAccessToResource"].Run)
