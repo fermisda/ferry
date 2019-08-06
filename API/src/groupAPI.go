@@ -1538,7 +1538,7 @@ func getAllGroupsMembers(c APIContext, i Input) (interface{}, []APIError) {
 							  join users using(uid)
 							  right join groups as g using(groupid)
 							  where ug.last_updated >= $1 or g.last_updated >= $1 or $1 is null
-							  order by name, type;`, i[LastUpdated])
+							  order by name, type`, i[LastUpdated])
 	if err != nil {
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
