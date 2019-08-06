@@ -239,6 +239,7 @@ const (
 	GroupAccount  		Attribute = "groupaccount"
 	Experiment			Attribute = "experiment"
 	Suspend				Attribute = "suspend"
+	Surplus				Attribute = "surplus"
 	ExpirationDate		Attribute = "expirationdate"
 	LastUpdated			Attribute = "lastupdated"
 	Help				Attribute = "help"
@@ -282,6 +283,7 @@ func (a Attribute) Type() (AttributeType) {
 		GroupAccount:		TypeBool,
 		Experiment:			TypeBool,
 		Suspend:			TypeBool,
+		Surplus:			TypeBool,
 		ExpirationDate:		TypeDate,
 		LastUpdated:		TypeDate,
 		Help:				TypeFlag,

@@ -228,7 +228,7 @@ func main() {
 	grouter.HandleFunc("/removeGroupLeader", APIs["removeGroupLeader"].Run)
 	grouter.HandleFunc("/getGroupUnits", APIs["getGroupUnits"].Run) //don't remove the last leader
 	grouter.HandleFunc("/getBatchPriorities", APIs["getBatchPriorities"].Run)
-	grouter.HandleFunc("/getCondorQuotas", getCondorQuotas)
+	grouter.HandleFunc("/getCondorQuotas", APIs["getCondorQuotas"].Run)
 	grouter.HandleFunc("/setGroupBatchPriority", setGroupBatchPriority)
 	grouter.HandleFunc("/setCondorQuota", setCondorQuota)
 	grouter.HandleFunc("/removeCondorQuota", removeCondorQuota)
