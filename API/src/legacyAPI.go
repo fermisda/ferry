@@ -3489,8 +3489,20 @@ func getAllUsersFQANsLegacy(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
+
+	suspend := q.Get("suspend")
+
+	var suspendBool bool
+	if suspend != "" {
+		var err error
+		if suspendBool, err = strconv.ParseBool(suspend); err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid value for suspend. Must be true or false (or omit it from the query).\"}")
+			return
+		}
+	}
 	
-	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
 		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
@@ -3502,7 +3514,8 @@ func getAllUsersFQANsLegacy(w http.ResponseWriter, r *http.Request) {
 							  join users as u on ga.uid = u.uid
 							  join affiliation_units as au on gf.unitid = au.unitid
 							  where (ga.last_updated>=$1 or gf.last_updated>=$1 or
-									  u.last_updated>=$1 or au.last_updated>=$1 or $1 is null) order by uname;`, lastupdate)
+									  u.last_updated>=$1 or au.last_updated>=$1 or $1 is null)
+							  and (is_banned = $2 or $3) order by uname;`, lastupdate, suspendBool, suspend == "")
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
@@ -7027,4 +7040,489 @@ func getPasswdFileLegacy(w http.ResponseWriter, r *http.Request) {
 		log.WithFields(QueryFields(r, startTime)).Error(err)
 	}
 	fmt.Fprintf(w, string(jsonout))
+}
+
+func getCondorQuotasLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+
+	type jsonstatus struct {
+		Status string `json:"ferry_status,omitempty"`
+		Error string `json:"ferry_error,omitempty"`
+	}
+
+	q := r.URL.Query()
+	uName := strings.TrimSpace(q.Get("unitname"))
+	rName := strings.TrimSpace(q.Get("resourcename"))
+
+	if uName == "" {
+		uName = "%"
+	}
+	if rName == "" {
+		rName = "%"
+	}
+
+	query := `select resourcename, unitname, condorgroup, value, type, surplus, valid_until, unit_exists, resource_exists from (
+				select 1 as key, cr.name as resourcename, au.name as unitname, cb.name as condorgroup, cb.value, cb.type, cb.surplus, cb.valid_until as valid_until
+				from compute_batch as cb
+				left join affiliation_units as au on cb.unitid = au.unitid
+				join compute_resources as cr on cb.compid = cr.compid
+				where cb.type in ('static', 'dynamic') and (au.name like $1 or $1 = '%' and au.name is null) and cr.name like $2 and (valid_until is null or valid_until >= NOW())
+				order by condorgroup, valid_until desc
+			  ) as T right join (
+				select 1 as key,
+				$1 in (select name from affiliation_units) as unit_exists,
+				$2 in (select name from compute_resources) as resource_exists
+			  ) as C on T.key = C.key;`
+	re := regexp.MustCompile(`[\s\t\n]+`)
+	log.Debug(re.ReplaceAllString(query, " "))
+
+	rows, err := DBptr.Query(query, uName, rName)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		log.WithFields(QueryFields(r, startTime)).Error("No resource name specified in DB query: " + err.Error())
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	}
+	defer rows.Close()
+
+	type jsonquota struct {
+		Group string `json:"condorgroup"`
+		Value float64 `json:"value"`
+		Qtype string `json:"type"`
+		Unit  string `json:"unitname"`
+		Splus bool `json:"surplus"`
+		Vuntil string `json:"valid_until"`
+	}
+	out := make(map[string][]jsonquota)
+
+	var tmpRname, tmpUname, tmpGroup, tmpType, tmpValid sql.NullString
+	var tmpValue sql.NullFloat64
+	var tmpSplus, unitExists, resourceExists bool
+
+	prevGroup := ""
+	for rows.Next() {
+		rows.Scan(&tmpRname, &tmpUname, &tmpGroup, &tmpValue, &tmpType, &tmpSplus, &tmpValid, &unitExists, &resourceExists)
+		if tmpGroup.Valid {
+			if tmpGroup.String != prevGroup {
+				out[tmpRname.String] = append(out[tmpRname.String], jsonquota{tmpGroup.String, tmpValue.Float64, tmpType.String, tmpUname.String, tmpSplus, tmpValid.String})
+			} else {
+				out[tmpRname.String][len(out[tmpRname.String]) - 1] = jsonquota{tmpGroup.String, tmpValue.Float64, tmpType.String, tmpUname.String, tmpSplus, tmpValid.String}
+			}
+		}
+		prevGroup = tmpGroup.String
+	}
+
+	var output interface{}
+	if len(out) == 0 {
+		type jsonerror struct {
+			Error []string `json:"ferry_error"`
+		}
+		var queryErr jsonerror
+		if !unitExists && uName != "%" {
+			log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
+			queryErr.Error = append(queryErr.Error, "Affiliation unit does not exist.")
+		}
+		if !resourceExists && rName != "%" {
+			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
+			queryErr.Error = append(queryErr.Error, "Resource does not exist.")
+		}
+		if len(queryErr.Error) == 0 {
+			log.WithFields(QueryFields(r, startTime)).Error("Query returned no quotas.")
+			queryErr.Error = append(queryErr.Error, "Query returned no quotas.")
+		}
+		output = queryErr
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = out
+	}
+	jsonoutput, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+	}
+	fmt.Fprintf(w, string(jsonoutput))
+}
+
+func setCondorQuotaLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	group := strings.TrimSpace(q.Get("condorgroup"))
+	comp  := strings.TrimSpace(q.Get("resourcename"))
+	quota := strings.TrimSpace(q.Get("quota"))
+	until := strings.TrimSpace(q.Get("validuntil"))
+	splus := strings.TrimSpace(q.Get("surplus"))
+
+	authorized,authout := authorize(r)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
+		return
+	}
+
+	if group == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No condorgroup specified in http query.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No condorgroup specified.\" }")
+		return
+	}
+	if comp == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No resourcename specified in http query.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No resourcename specified.\" }")
+		return
+	}
+	if quota == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No quota specified in http query.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No quota specified.\" }")
+		return
+	}
+	if until == "" {
+		until = "null"
+	} else {
+		until = "'" + until + "'"
+	}
+
+	uName := strings.Split(group, ".")[0]
+	name := group
+
+	var qType string
+	if strings.Contains(group, ".") {
+		qType = "dynamic"
+		fQuota, err := strconv.ParseFloat(quota, 64)
+		if err != nil || fQuota < 0 || fQuota > 1 {
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Subgroup quota must be a float between 0 and 1.\" }")
+			return
+		}
+		quota = strconv.FormatFloat(fQuota, 'f', 2, 64)
+	} else {
+		qType = "static"
+		_, err := strconv.ParseInt(quota, 10, 64)
+		if err != nil {
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Top-level quota must be an integer.\" }")
+			return
+		}
+	}
+
+	if splus != "" {
+		if splusBool, err := strconv.ParseBool(splus); err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid value for surplus. Must be true or false (or omit it from the query).")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid value for surplus. Must be true or false (or omit it from the query).\" }")
+		} else {
+			splus = strconv.FormatBool(splusBool)
+		}
+	} else {
+		splus = "null"
+	}
+
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	defer DBtx.Rollback(cKey)
+
+	_, err = DBtx.Exec(fmt.Sprintf(`do $$
+									declare 
+									    v_unitid 	int;
+										v_compid 	int;
+										v_permanet	bool;
+											
+										c_uname constant text := '%s';
+										c_compres constant text := '%s';
+										c_qname constant text := '%s';
+										c_qvalue constant numeric := %s;
+										c_qtype constant text := '%s';
+										c_splus constant bool := %s;
+										c_valid constant date := %s;
+									begin
+										select unitid into v_unitid from affiliation_units where name = c_uname;
+										select compid into v_compid from compute_resources where name = c_compres;
+										select c_valid is null into v_permanet;
+
+										if v_compid is null then raise 'null value in column "compid"'; end if;
+
+										if c_qtype = 'dynamic' and c_uname not in (select name from compute_batch) then
+											raise 'no base level quota';
+										end if;
+										
+										if (v_compid, c_qname) not in (select compid, name from compute_batch where (valid_until is null = v_permanet)) then
+										    insert into compute_batch (compid, name, value, type, unitid, surplus, valid_until, last_updated)
+															   values (v_compid, c_qname, c_qvalue, c_qtype, v_unitid, coalesce(c_splus, true), c_valid, NOW());
+										else
+											update compute_batch set value = c_qvalue, valid_until = c_valid, surplus = coalesce(c_splus, surplus), last_updated = NOW()
+											where compid = v_compid and name = c_qname and (valid_until is null = v_permanet);
+										end if;
+
+										if v_permanet then
+											delete from compute_batch where compid = v_compid and name = c_qname and valid_until is not null;
+										end if;
+									end $$;`, uName, comp, name, quota, qType, splus, until))
+
+	if err == nil {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
+	} else {
+		if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
+			log.WithFields(QueryFields(r, startTime)).Error("This quota already exists.")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"This quota already exists.\" }")
+		} else if strings.Contains(err.Error(), `null value in column "compid"`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Resource does not exist.\" }")
+		} else if strings.Contains(err.Error(), `invalid input syntax for type date`) ||
+				  strings.Contains(err.Error(), `date/time field value out of range`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid expiration date.")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid expiration date.\" }")
+		} else if strings.Contains(err.Error(), `no base level quota`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Base level quota does not exist.")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Base level quota does not exist.\" }")
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Something went wrong.\" }")
+		}
+	}
+
+	DBtx.Commit(cKey)
+}
+
+func getGroupStorageQuotaLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	type jsonerror struct {
+		Error string `json:"ferry_error"`
+	}
+	var inputErr []jsonerror
+
+	groupname := q.Get("groupname")
+	resource := q.Get("resourcename")
+	exptname := q.Get("unitname")
+	quota_unit := strings.TrimSpace(strings.ToUpper(q.Get("quota_unit")))
+	if quota_unit != "" {
+	okunit := checkUnits(quota_unit)	
+		if !okunit {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid unit specified in http query.")
+			inputErr = append(inputErr, jsonerror{"Invalid unit specified."})	
+		}
+	}
+	if groupname == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
+		inputErr = append(inputErr, jsonerror{"No groupname specified."})
+	}
+	if resource == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No resourcename specified in http query.")
+		inputErr = append(inputErr, jsonerror{"No resourcename specified."})
+	}
+	if exptname == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
+		inputErr = append(inputErr, jsonerror{"No unitname name specified."})
+	}
+
+	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
+	if parserr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		inputErr = append(inputErr, jsonerror{"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time."})
+	}
+
+	if len(inputErr) > 0 {
+		jsonout, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err)
+		}
+		fmt.Fprintf(w, string(jsonout))
+		return
+	}
+
+	rows, err := DBptr.Query(`select value, unit, valid_until, group_exists, resource_exists, unit_exists from (
+								select 1 as key, sq.value, sq.unit, sq.valid_until from storage_quota sq
+							  	join affiliation_units on affiliation_units.unitid = sq.unitid
+							  	join storage_resources on storage_resources.storageid = sq.storageid
+							  	join groups on groups.groupid = sq.groupid
+								where affiliation_units.name = $4 AND storage_resources.name = $3 and (groups.name, groups.type) = ($1, $2)
+								and (valid_until is null or valid_until >= NOW()) and (sq.last_updated>=$5 or $5 is null)
+								order by valid_until desc
+							) as t right join (
+								select 1 as key, 
+								($1, $2) in (select name, type from groups) as group_exists,
+								$3 in (select name from storage_resources) as resource_exists,
+								$4 in (select name from affiliation_units) as unit_exists
+							) as c on t.key = c.key;`, groupname, "UnixGroup", resource, exptname, lastupdate)
+	if err != nil {
+		defer log.WithFields(QueryFields(r, startTime)).Print("Error in DB query: " + err.Error())
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+		
+		return
+	}		
+	defer rows.Close()	
+	
+	type jsonentry struct {
+		Value string `json:"value"`
+		Unit string `json:"quota_unit"`
+		ValidUntil string `json:"valid_until"`
+	}
+	var Out jsonentry
+	var groupExists, resourceExists, unitExists bool
+	
+	for rows.Next() {
+		var tmpValue,tmpUnit,tmpValid sql.NullString
+		rows.Scan(&tmpValue, &tmpUnit, &tmpValid, &groupExists, &resourceExists, &unitExists)
+		if tmpValue.Valid {
+			
+			if quota_unit != "" && quota_unit != tmpUnit.String {
+				newval, converr := convertValue(tmpValue.String,tmpUnit.String,quota_unit)
+				if converr != nil {
+					log.WithFields(QueryFields(r, startTime)).Error("Error converting quota value: " + converr.Error())
+					inputErr = append(inputErr, jsonerror{"Error converting quota value to desired unit."})	
+				} else {
+					tmpValue.String = strconv.FormatFloat(newval, 'f', -1, 64)
+				}
+			}
+			Out = jsonentry{tmpValue.String, tmpUnit.String, tmpValid.String}
+		}
+		}
+	
+	var output interface{}
+	if Out.Value == "" {
+		type jsonerror struct {
+			Error string `json:"ferry_error"`
+		}
+		var queryErr []jsonerror
+		if !groupExists {
+			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+			queryErr = append(queryErr, jsonerror{"Group does not exist."})
+		}
+		if !resourceExists {
+			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
+			queryErr = append(queryErr, jsonerror{"Resource does not exist."})
+		}
+		if !unitExists {
+			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
+			queryErr = append(queryErr, jsonerror{"Experiment does not exist."})
+		}
+		if len(queryErr) == 0 {
+			log.WithFields(QueryFields(r, startTime)).Error("Group has no quotas registered.")
+			queryErr = append(queryErr, jsonerror{"Group has no quotas registered."})
+		}
+		output = queryErr
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = Out
+	}
+	jsonoutput, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+	}
+	fmt.Fprintf(w, string(jsonoutput))
+}
+
+func setFQANMappingsLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	fqan := strings.TrimSpace(q.Get("fqan"))
+	mUser := strings.TrimSpace(q.Get("mapped_user"))
+	mGroup := strings.TrimSpace(q.Get("mapped_group"))
+
+	var values []string
+	var uid, groupid sql.NullInt64
+
+	type jsonerror struct {
+		Error []string `json:"ferry_error"`
+	}
+	var inputErr jsonerror
+
+	if fqan == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No fqan specified in http query.")
+		inputErr.Error = append(inputErr.Error, "No fqan specified.")
+	}
+	if mUser != "" {
+		if strings.ToLower(mUser) != "null" {
+			DBptr.QueryRow("select uid from users where uname = $1", mUser).Scan(&uid)
+			if uid.Valid {
+				values = append(values, fmt.Sprintf("mapped_user = %d", uid.Int64))
+			} else {
+				log.WithFields(QueryFields(r, startTime)).Error("User doesn't exist.")
+				inputErr.Error = append(inputErr.Error, "User doesn't exist.")
+			}
+		} else {
+			values = append(values, "mapped_user = NULL")
+		}
+	}
+	if mGroup != "" {
+		if strings.ToLower(mGroup) != "null" {
+			DBptr.QueryRow("select groupid from groups where name = $1 and type = 'UnixGroup'", mGroup).Scan(&groupid)
+			if groupid.Valid {
+				values = append(values, fmt.Sprintf("mapped_group = %d", groupid.Int64))
+			} else {
+				log.WithFields(QueryFields(r, startTime)).Error("Group doesn't exist.")
+				inputErr.Error = append(inputErr.Error, "Group doesn't exist.")
+			}
+		} else {
+			values = append(values, "mapped_group = NULL")
+		}
+	}
+	if mUser == "" && mGroup == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No mapped_user or mapped_group specified in http query.")
+		inputErr.Error = append(inputErr.Error, "No mapped_user or mapped_group specified.")
+	}
+
+	if len(inputErr.Error) > 0 {
+		out, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		}
+		fmt.Fprintf(w, string(out))
+		return
+	}
+
+	authorized, authout := authorize(r)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
+		return
+	}
+
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	defer DBtx.Rollback(cKey)
+
+	var res sql.Result
+	var rowsErr error
+	var rows int64
+	res, err = DBtx.Exec(`update grid_fqan set `+strings.Join(values, ", ")+`  where fqan = $1`, fqan)
+	if err == nil {
+		rows, rowsErr = res.RowsAffected()
+		if rowsErr != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		}
+	} else {
+		rows = 0
+	}
+
+	if rows == 1 {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+	} else {
+		var queryErr jsonerror
+		if rows == 0 && err == nil {
+			log.WithFields(QueryFields(r, startTime)).Error("FQAN doesn't exist.")
+			queryErr.Error = append(queryErr.Error, "FQAN doesn't exist.")
+		} else if strings.Contains(err.Error(), `null value in column "mapped_group" violates not-null constraint`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Attribute mapped_group can not be NULL.")
+			queryErr.Error = append(queryErr.Error, "Attribute mapped_group can not be NULL.")
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			queryErr.Error = append(queryErr.Error, err.Error())
+		}
+		out, err := json.Marshal(queryErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		}
+		fmt.Fprintf(w, string(out))
+	}
+
+	DBtx.Commit(cKey)
 }

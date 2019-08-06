@@ -1,5 +1,6 @@
 package main
 import (
+	"math"
 	"regexp"
 	"strings"
 	"database/sql"
@@ -142,6 +143,39 @@ func IncludeGroupAPIs(c *APICollection) {
 		getBatchPriorities,
 	}
 	c.Add("getBatchPriorities", &getBatchPriorities)
+
+	getCondorQuotas := BaseAPI {
+		InputModel {
+			Parameter{UnitName, false},
+			Parameter{ResourceName, false},
+		},
+		getCondorQuotas,
+	}
+	c.Add("getCondorQuotas", &getCondorQuotas)
+
+	setCondorQuota := BaseAPI {
+		InputModel {
+			Parameter{CondorGroup, true},
+			Parameter{ResourceName, true},
+			Parameter{Quota, true},
+			Parameter{ExpirationDate, false},
+			Parameter{Surplus, false},
+		},
+		setCondorQuota,
+	}
+	c.Add("setCondorQuota", &setCondorQuota)
+
+	getGroupStorageQuota := BaseAPI {
+		InputModel {
+			Parameter{GroupName, true},
+			Parameter{ResourceName, true},
+			Parameter{UnitName, true},
+			Parameter{QuotaUnit, false},
+			Parameter{LastUpdated, false},
+		},
+		getGroupStorageQuota,
+	}
+	c.Add("getGroupStorageQuota", &getGroupStorageQuota)
 }
 
 func createGroup(c APIContext, i Input) (interface{}, []APIError) {
@@ -860,105 +894,79 @@ func getBatchPriorities(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
-func getCondorQuotas(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+func getCondorQuotas(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	type jsonstatus struct {
-		Status string `json:"ferry_status,omitempty"`
-		Error string `json:"ferry_error,omitempty"`
-	}
+	unitid := NewNullAttribute(UnitID)
+	compid := NewNullAttribute(ResourceID)
 
-	q := r.URL.Query()
-	uName := strings.TrimSpace(q.Get("unitname"))
-	rName := strings.TrimSpace(q.Get("resourcename"))
-
-	if uName == "" {
-		uName = "%"
-	}
-	if rName == "" {
-		rName = "%"
-	}
-
-	query := `select resourcename, unitname, condorgroup, value, type, surplus, valid_until, unit_exists, resource_exists from (
-				select 1 as key, cr.name as resourcename, au.name as unitname, cb.name as condorgroup, cb.value, cb.type, cb.surplus, cb.valid_until as valid_until
-				from compute_batch as cb
-				left join affiliation_units as au on cb.unitid = au.unitid
-				join compute_resources as cr on cb.compid = cr.compid
-				where cb.type in ('static', 'dynamic') and (au.name like $1 or $1 = '%' and au.name is null) and cr.name like $2 and (valid_until is null or valid_until >= NOW())
-				order by condorgroup, valid_until desc
-			  ) as T right join (
-				select 1 as key,
-				$1 in (select name from affiliation_units) as unit_exists,
-				$2 in (select name from compute_resources) as resource_exists
-			  ) as C on T.key = C.key;`
-	re := regexp.MustCompile(`[\s\t\n]+`)
-	log.Debug(re.ReplaceAllString(query, " "))
-
-	rows, err := DBptr.Query(query, uName, rName)
+	err := c.DBtx.QueryRow(`select (select unitid from affiliation_units where name = $1),
+								   (select compid from compute_resources where name = $2)`,
+						   i[UnitName], i[ResourceName]).Scan(&unitid, &compid)
 	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		log.WithFields(QueryFields(r, startTime)).Error("No resource name specified in DB query: " + err.Error())
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
-		return
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if i[UnitName].Valid && !unitid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+	}
+	if i[ResourceName].Valid && !compid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, ResourceName))
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	rows, err := c.DBtx.Query(`select cr.name, au.name, cb.name, value, cb.type, surplus, cb.valid_until
+								from compute_batch as cb
+								left join affiliation_units as au using(unitid)
+								join compute_resources as cr using(compid)
+							   where cb.type in ('static', 'dynamic')
+								and (cb.unitid = $1 or $1 is null)
+								and (cb.compid = $2 or $2 is null)
+								and (valid_until is null or valid_until >= NOW())
+							   order by cb.name, valid_until desc`, unitid, compid)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 	defer rows.Close()
 
-	type jsonquota struct {
-		Group string `json:"condorgroup"`
-		Value float64 `json:"value"`
-		Qtype string `json:"type"`
-		Unit  string `json:"unitname"`
-		Splus bool `json:"surplus"`
-		Vuntil string `json:"valid_until"`
-	}
+	type jsonquota map[Attribute]interface{}
 	out := make(map[string][]jsonquota)
 
-	var tmpRname, tmpUname, tmpGroup, tmpType, tmpValid sql.NullString
-	var tmpValue sql.NullFloat64
-	var tmpSplus, unitExists, resourceExists bool
-
-	prevGroup := ""
+	prevGroup := NewNullAttribute(CondorGroup)
 	for rows.Next() {
-		rows.Scan(&tmpRname, &tmpUname, &tmpGroup, &tmpValue, &tmpType, &tmpSplus, &tmpValid, &unitExists, &resourceExists)
-		if tmpGroup.Valid {
-			if tmpGroup.String != prevGroup {
-				out[tmpRname.String] = append(out[tmpRname.String], jsonquota{tmpGroup.String, tmpValue.Float64, tmpType.String, tmpUname.String, tmpSplus, tmpValid.String})
+		row := NewMapNullAttribute(ResourceName, UnitName, CondorGroup, Value, ResourceType, Surplus, ExpirationDate)
+		rows.Scan(row[ResourceName], row[UnitName], row[CondorGroup], row[Value], row[ResourceType], row[Surplus], row[ExpirationDate])
+		if row[CondorGroup].Valid {
+			if *row[CondorGroup] != prevGroup {
+				out[row[ResourceName].Data.(string)] = append(out[row[ResourceName].Data.(string)], jsonquota{
+					CondorGroup: row[CondorGroup].Data,
+					Value: row[Value].Data,
+					ResourceType: row[ResourceType].Data,
+					UnitName: row[UnitName].Data,
+					Surplus: row[Surplus].Data,
+					ExpirationDate: row[ExpirationDate].Data,
+				})
 			} else {
-				out[tmpRname.String][len(out[tmpRname.String]) - 1] = jsonquota{tmpGroup.String, tmpValue.Float64, tmpType.String, tmpUname.String, tmpSplus, tmpValid.String}
+				out[row[ResourceName].Data.(string)][len(out[row[ResourceName].Data.(string)]) - 1] = jsonquota{
+					CondorGroup: row[CondorGroup].Data,
+					Value: row[Value].Data,
+					ResourceType: row[ResourceType].Data,
+					UnitName: row[UnitName].Data,
+					Surplus: row[Surplus].Data,
+					ExpirationDate: row[ExpirationDate].Data,
+				}
 			}
 		}
-		prevGroup = tmpGroup.String
+		prevGroup = *row[CondorGroup]
 	}
 
-	var output interface{}
-	if len(out) == 0 {
-		type jsonerror struct {
-			Error []string `json:"ferry_error"`
-		}
-		var queryErr jsonerror
-		if !unitExists && uName != "%" {
-			log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
-			queryErr.Error = append(queryErr.Error, "Affiliation unit does not exist.")
-		}
-		if !resourceExists && rName != "%" {
-			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
-			queryErr.Error = append(queryErr.Error, "Resource does not exist.")
-		}
-		if len(queryErr.Error) == 0 {
-			log.WithFields(QueryFields(r, startTime)).Error("Query returned no quotas.")
-			queryErr.Error = append(queryErr.Error, "Query returned no quotas.")
-		}
-		output = queryErr
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = out
-	}
-	jsonoutput, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-	}
-	fmt.Fprintf(w, string(jsonoutput))
+	return out, nil
 }
 
 func setGroupBatchPriority(w http.ResponseWriter, r *http.Request) {
@@ -979,144 +987,81 @@ func setGroupBatchPriority(w http.ResponseWriter, r *http.Request) {
 
 	NotDoneYet(w, r, startTime)
 }
-func setCondorQuota(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+func setCondorQuota(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	group := strings.TrimSpace(q.Get("condorgroup"))
-	comp  := strings.TrimSpace(q.Get("resourcename"))
-	quota := strings.TrimSpace(q.Get("quota"))
-	until := strings.TrimSpace(q.Get("validuntil"))
-	splus := strings.TrimSpace(q.Get("surplus"))
+	var quota string
+	var quotaType string
+	var baseQuota bool
 
-	authorized,authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
-		return
+	unitid := NewNullAttribute(UnitID)
+	compid := NewNullAttribute(ResourceID)
+
+	unitName := strings.Split(i[CondorGroup].Data.(string), ".")[0]
+	condorGroup := i[CondorGroup].Data.(string)
+
+	err := c.DBtx.QueryRow(`select (select unitid from affiliation_units where name = $1),
+								   (select compid from compute_resources where name = $2),
+								   (select $1 in (select name from compute_batch))`,
+						   unitName, i[ResourceName]).Scan(&unitid, &compid, &baseQuota)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	if group == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No condorgroup specified in http query.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No condorgroup specified.\" }")
-		return
-	}
-	if comp == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No resourcename specified in http query.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No resourcename specified.\" }")
-		return
-	}
-	if quota == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No quota specified in http query.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No quota specified.\" }")
-		return
-	}
-	if until == "" {
-		until = "null"
-	} else {
-		until = "'" + until + "'"
-	}
-
-	uName := strings.Split(group, ".")[0]
-	name := group
-
-	var qType string
-	if strings.Contains(group, ".") {
-		qType = "dynamic"
-		fQuota, err := strconv.ParseFloat(quota, 64)
-		if err != nil || fQuota < 0 || fQuota > 1 {
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Subgroup quota must be a float between 0 and 1.\" }")
-			return
+	if strings.Contains(condorGroup, ".") {
+		quotaType = "dynamic"
+		fQuota, _ := i[Quota].Data.(float64)
+		if fQuota < 0 || fQuota > 1 {
+			apiErr = append(apiErr, APIError{errors.New("subgroup quota must be a float between 0 and 1"), ErrorAPIRequirement})
 		}
 		quota = strconv.FormatFloat(fQuota, 'f', 2, 64)
 	} else {
-		qType = "static"
-		_, err := strconv.ParseInt(quota, 10, 64)
-		if err != nil {
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Top-level quota must be an integer.\" }")
-			return
+		quotaType = "static"
+		m := math.Mod(i[Quota].Data.(float64), 1)
+		iQuota := int64(i[Quota].Data.(float64))
+		if m != 0 {
+			apiErr = append(apiErr, APIError{errors.New("top-level quota must be an integer"), ErrorAPIRequirement})
+		}
+		quota = strconv.FormatInt(iQuota, 10)
+	}
+	if quotaType == "dynamic" {
+		if !unitid.Valid {
+			apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+		}
+		if !baseQuota {
+			apiErr = append(apiErr, APIError{errors.New("base level quota does not exist"), ErrorAPIRequirement})
 		}
 	}
-
-	if splus != "" {
-		if splusBool, err := strconv.ParseBool(splus); err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid value for surplus. Must be true or false (or omit it from the query).")
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid value for surplus. Must be true or false (or omit it from the query).\" }")
-		} else {
-			splus = strconv.FormatBool(splusBool)
-		}
-	} else {
-		splus = "null"
+	if !compid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, ResourceName))
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
 	}
 
-	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	_, err = c.DBtx.Exec(`insert into compute_batch (compid, name, value, type, unitid, surplus, valid_until, last_updated)
+						  values ($1, $2, $3, $4, $5, coalesce($6, true), $7, NOW())
+						  on conflict (compid, name) where (valid_until is null) = ($7 is null) do
+						  update set value = $3, valid_until = $7, surplus = coalesce($6, compute_batch.surplus), last_updated = NOW()`,
+						 compid, condorGroup, quota, quotaType, unitid, i[Surplus], i[ExpirationDate])
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
-	defer DBtx.Rollback(cKey)
 
-	_, err = DBtx.Exec(fmt.Sprintf(`do $$
-									declare 
-									    v_unitid 	int;
-										v_compid 	int;
-										v_permanet	bool;
-											
-										c_uname constant text := '%s';
-										c_compres constant text := '%s';
-										c_qname constant text := '%s';
-										c_qvalue constant numeric := %s;
-										c_qtype constant text := '%s';
-										c_splus constant bool := %s;
-										c_valid constant date := %s;
-									begin
-										select unitid into v_unitid from affiliation_units where name = c_uname;
-										select compid into v_compid from compute_resources where name = c_compres;
-										select c_valid is null into v_permanet;
-
-										if v_compid is null then raise 'null value in column "compid"'; end if;
-
-										if c_qtype = 'dynamic' and c_uname not in (select name from compute_batch) then
-											raise 'no base level quota';
-										end if;
-										
-										if (v_compid, c_qname) not in (select compid, name from compute_batch where (valid_until is null = v_permanet)) then
-										    insert into compute_batch (compid, name, value, type, unitid, surplus, valid_until, last_updated)
-															   values (v_compid, c_qname, c_qvalue, c_qtype, v_unitid, coalesce(c_splus, true), c_valid, NOW());
-										else
-											update compute_batch set value = c_qvalue, valid_until = c_valid, surplus = coalesce(c_splus, surplus), last_updated = NOW()
-											where compid = v_compid and name = c_qname and (valid_until is null = v_permanet);
-										end if;
-
-										if v_permanet then
-											delete from compute_batch where compid = v_compid and name = c_qname and valid_until is not null;
-										end if;
-									end $$;`, uName, comp, name, quota, qType, splus, until))
-
-	if err == nil {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
-	} else {
-		if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
-			log.WithFields(QueryFields(r, startTime)).Error("This quota already exists.")
-			fmt.Fprintf(w,"{ \"ferry_error\": \"This quota already exists.\" }")
-		} else if strings.Contains(err.Error(), `null value in column "compid"`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Resource does not exist.\" }")
-		} else if strings.Contains(err.Error(), `invalid input syntax for type date`) ||
-				  strings.Contains(err.Error(), `date/time field value out of range`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid expiration date.")
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid expiration date.\" }")
-		} else if strings.Contains(err.Error(), `no base level quota`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Base level quota does not exist.")
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Base level quota does not exist.\" }")
-		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Something went wrong.\" }")
+	if !i[ExpirationDate].Valid {
+		_, err = c.DBtx.Exec(`delete from compute_batch where compid = $1 and name = $2 and valid_until is not null`, compid, condorGroup)
+		if err != nil {
+			log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+			return nil, apiErr
 		}
 	}
 
-	DBtx.Commit(cKey)
+	return nil, nil
 }
 
 func removeCondorQuota(w http.ResponseWriter, r *http.Request) {
@@ -1191,136 +1136,78 @@ func removeCondorQuota(w http.ResponseWriter, r *http.Request) {
 	DBtx.Commit(cKey)
 }
 
-func getGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+func getGroupStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	type jsonerror struct {
-		Error string `json:"ferry_error"`
-	}
-	var inputErr []jsonerror
+	groupid := NewNullAttribute(GroupID)
+	storageid := NewNullAttribute(ResourceID)
+	unitid := NewNullAttribute(UnitID)
 
-	groupname := q.Get("groupname")
-	resource := q.Get("resourcename")
-	exptname := q.Get("unitname")
-	quota_unit := strings.TrimSpace(strings.ToUpper(q.Get("quota_unit")))
-	if quota_unit != "" {
-	okunit := checkUnits(quota_unit)	
-		if !okunit {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid unit specified in http query.")
-			inputErr = append(inputErr, jsonerror{"Invalid unit specified."})	
-		}
-	}
-	if groupname == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
-		inputErr = append(inputErr, jsonerror{"No groupname specified."})
-	}
-	if resource == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No resourcename specified in http query.")
-		inputErr = append(inputErr, jsonerror{"No resourcename specified."})
-	}
-	if exptname == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
-		inputErr = append(inputErr, jsonerror{"No unitname name specified."})
-	}
-
-	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
-	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
-		inputErr = append(inputErr, jsonerror{"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time."})
-	}
-
-	if len(inputErr) > 0 {
-		jsonout, err := json.Marshal(inputErr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
-		}
-		fmt.Fprintf(w, string(jsonout))
-		return
-	}
-
-	rows, err := DBptr.Query(`select value, unit, valid_until, group_exists, resource_exists, unit_exists from (
-								select 1 as key, sq.value, sq.unit, sq.valid_until from storage_quota sq
-							  	join affiliation_units on affiliation_units.unitid = sq.unitid
-							  	join storage_resources on storage_resources.storageid = sq.storageid
-							  	join groups on groups.groupid = sq.groupid
-								where affiliation_units.name = $4 AND storage_resources.name = $3 and (groups.name, groups.type) = ($1, $2)
-								and (valid_until is null or valid_until >= NOW()) and (sq.last_updated>=$5 or $5 is null)
-								order by valid_until desc
-							) as t right join (
-								select 1 as key, 
-								($1, $2) in (select name, type from groups) as group_exists,
-								$3 in (select name from storage_resources) as resource_exists,
-								$4 in (select name from affiliation_units) as unit_exists
-							) as c on t.key = c.key;`, groupname, "UnixGroup", resource, exptname, lastupdate)
+	err := c.DBtx.QueryRow(`select (select groupid from groups where name = $1 and type = 'UnixGroup'),
+								   (select storageid from storage_resources where name = $2),
+								   (select unitid from affiliation_units where name = $3)`,
+						   i[GroupName], i[ResourceName], i[UnitName]).Scan(&groupid, &storageid, &unitid)
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Print("Error in DB query: " + err.Error())
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
-		
-		return
-	}		
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !groupid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
+	}
+	if !storageid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, ResourceName))
+	}
+	if !unitid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+	}
+	if i[QuotaUnit].Valid {
+		ok := checkUnits(i[QuotaUnit].Data.(string))	
+			if !ok {
+				apiErr = append(apiErr, APIError{errors.New("invalid quotaunit specified in http query"), ErrorAPIRequirement})
+			}
+		}
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	rows, err := DBptr.Query(`select value, unit, valid_until from storage_quota
+							  where groupid = $1 and storageid = $2 and unitid = $3
+							  and (valid_until is null or valid_until >= NOW()) and (last_updated>=$4 or $4 is null)
+							  order by valid_until desc`,
+							 groupid, storageid, unitid, i[LastUpdated])
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
 	defer rows.Close()	
 	
-	type jsonentry struct {
-		Value string `json:"value"`
-		Unit string `json:"quota_unit"`
-		ValidUntil string `json:"valid_until"`
-	}
-	var Out jsonentry
-	var groupExists, resourceExists, unitExists bool
+	type jsonentry map[Attribute]interface{}
+	out := make(jsonentry)
 	
 	for rows.Next() {
-		var tmpValue,tmpUnit,tmpValid sql.NullString
-		rows.Scan(&tmpValue, &tmpUnit, &tmpValid, &groupExists, &resourceExists, &unitExists)
-		if tmpValue.Valid {
-			
-			if quota_unit != "" && quota_unit != tmpUnit.String {
-				newval, converr := convertValue(tmpValue.String,tmpUnit.String,quota_unit)
-				if converr != nil {
-					log.WithFields(QueryFields(r, startTime)).Error("Error converting quota value: " + converr.Error())
-					inputErr = append(inputErr, jsonerror{"Error converting quota value to desired unit."})	
-				} else {
-					tmpValue.String = strconv.FormatFloat(newval, 'f', -1, 64)
+		row := NewMapNullAttribute(Quota, QuotaUnit, ExpirationDate)
+		rows.Scan(row[Quota], row[QuotaUnit], row[ExpirationDate])
+
+		if row[Quota].Valid {
+			if i[QuotaUnit].Valid && i[QuotaUnit].Data.(string) != row[QuotaUnit].Data.(string) {
+				newQuota, err := convertValue(row[Quota].Data, row[QuotaUnit].Data.(string), i[QuotaUnit].Data.(string))
+				if err == nil {
+					row[Quota].Scan(newQuota)
+					row[QuotaUnit].Scan(strings.ToUpper(i[QuotaUnit].Data.(string)))
 				}
 			}
-			Out = jsonentry{tmpValue.String, tmpUnit.String, tmpValid.String}
+			out = jsonentry{
+				Quota: row[Quota].Data,
+				QuotaUnit: row[QuotaUnit].Data,
+				ExpirationDate: row[ExpirationDate].Data,
+			}
 		}
-		}
+	}
 	
-	var output interface{}
-	if Out.Value == "" {
-		type jsonerror struct {
-			Error string `json:"ferry_error"`
-		}
-		var queryErr []jsonerror
-		if !groupExists {
-			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
-			queryErr = append(queryErr, jsonerror{"Group does not exist."})
-		}
-		if !resourceExists {
-			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
-			queryErr = append(queryErr, jsonerror{"Resource does not exist."})
-		}
-		if !unitExists {
-			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
-			queryErr = append(queryErr, jsonerror{"Experiment does not exist."})
-		}
-		if len(queryErr) == 0 {
-			log.WithFields(QueryFields(r, startTime)).Error("Group has no quotas registered.")
-			queryErr = append(queryErr, jsonerror{"Group has no quotas registered."})
-		}
-		output = queryErr
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = Out
-	}
-	jsonoutput, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-	}
-	fmt.Fprintf(w, string(jsonoutput))
+	return out, nil
 }
 
 func removeUserAccessFromResource(w http.ResponseWriter, r *http.Request) {
@@ -1651,7 +1538,7 @@ func getAllGroupsMembers(c APIContext, i Input) (interface{}, []APIError) {
 							  join users using(uid)
 							  right join groups as g using(groupid)
 							  where ug.last_updated >= $1 or g.last_updated >= $1 or $1 is null
-							  order by name, type;`, i[LastUpdated])
+							  order by name, type`, i[LastUpdated])
 	if err != nil {
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
