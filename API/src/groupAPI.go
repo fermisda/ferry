@@ -1052,6 +1052,15 @@ func setCondorQuota(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
+	if !i[ExpirationDate].Valid {
+		_, err = c.DBtx.Exec(`delete from compute_batch where compid = $1 and name = $2 and valid_until is not null`, compid, condorGroup)
+		if err != nil {
+			log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+			return nil, apiErr
+		}
+	}
+
 	return nil, nil
 }
 
