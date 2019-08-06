@@ -12,16 +12,22 @@ import copy
 import subprocess
 from tavern.core import run
 import yaml 
+import string
+
 #connects to ferry and gets parameters for an API
 def jsonImportHelp(api):
     target = dict(config.items("ferry"))
     url = target["hostname"] + api + "?help"
+    logging.info("action: %s" % url)
     try:
         jOut = json.loads(urllib.request.urlopen(url, context=ferryContext).read().decode())
+        #valid calls with help should return empty lists for "ferry_error", len was required for some reason
+        if jOut["ferry_error"]:
+            return None
     except:
         return None
-    logging.info("action: %s" %api)
     return jOut
+
 #finds all combinations of length n in list lst    
 def combo2(lst,n):
     if n==0:
@@ -34,13 +40,12 @@ def combo2(lst,n):
             l.append([m]+p)
     return l
 
+
 def testUrlCreator(url, jOut):
     #saved url to check if it has changed
     savedUrl = url
     notRequiredAttributes = []
-    tmpIdx = 0
-    testCount = 0
-    expectedNumberTests = 0
+    notRequiredCount, testCount, expectedNumberTests = 0, 0, 0
     #checks base call without parameters, whether error checking or valid
     if not yamlWriter(url):
             testCount += 1
@@ -57,14 +62,16 @@ def testUrlCreator(url, jOut):
             #checks every combination of potentially wrong parameters to verify error checking, yamlWriter returns 0 on success
             if not yamlWriter(url + strCastAttribute + "=True"):
                 testCount += 1
-            if not yamlWriter(url + strCastAttribute + "=900000"):
+            if not yamlWriter(url + strCastAttribute + "=12345678"):
                 testCount += 1  
             if not yamlWriter(url + strCastAttribute + "=2027-07-11"):
                 testCount += 1
             if not yamlWriter(url + strCastAttribute + "=test"):
                 testCount += 1
-            expectedNumberTests += 4
-            #makes the correct url parameter addition otherwise
+            if not yamlWriter(url + strCastAttribute + "=9.001"):
+                testCount += 1
+            expectedNumberTests += 5
+            #correct parameter appending
             if atrbType == "string":
                 url += strCastAttribute + "=test"
             elif atrbType == "boolean":
@@ -72,28 +79,27 @@ def testUrlCreator(url, jOut):
             elif atrbType == "date":
                 url += strCastAttribute + "=2027-07-11"
             elif atrbType == "integer":
-                url += strCastAttribute + "=9001"
-            else:
-                url += strCastAttribute + "=-1"
-            #tests with all combinations of parameters (or lack of parameters), makes sure API error checking is correct
+                url += strCastAttribute + "=12345678"
+            elif atrbType == "float":
+                url += strCastAttribute + "=9.001"
         #creation of array with each non-required attribute, also a count of these
         else:
             notRequiredAttributes.append(strCastAttribute)
-            tmpIdx += 1
+            notRequiredCount += 1
 
     #number of tests computed with 2^n, where n is number of non-required attributes + # of already performed tests, -1 to account for overlap
-    expectedNumberTests = (2 ** tmpIdx) + expectedNumberTests - 1
+    expectedNumberTests = (2 ** notRequiredCount) + expectedNumberTests - 1
     #if no non-required attributes, they should be equal (2^0 - 1 = 0)
     if testCount == expectedNumberTests:
-        return 
-    #second url variable to account for the initial changes wrought by required parameters
+        return 0
+    #second url variable to account for the initial changes from required parameters appended above
     savedUrl2 = url
     #calls combination function, creates url and test for each combination
     for i in range(1, len(notRequiredAttributes)+1):
         attributeCombos =  combo2(notRequiredAttributes, i)
-        #this for loop refers to separate combinations
+        #loop for separate combinations
         for j in range(0, len(attributeCombos)):
-            #this for loop is for separate attributes within the combination
+            #loop is for separate attributes within the combination
             for k in range(0, len(attributeCombos[j])):
                 #same operation of appending to url as above
                 atrbType = str(jOut['ferry_output'][attributeCombos[j][k]]['type'])
@@ -108,12 +114,23 @@ def testUrlCreator(url, jOut):
                 elif atrbType == "date":
                     url += str(attributeCombos[j][k]) + "=2027-07-11"
                 elif atrbType == "integer":
-                    url += str(attributeCombos[j][k]) + "=9001"
+                    url += str(attributeCombos[j][k]) + "=12345678"
+                elif atrbType == "float":
+                    url += str(attributeCombos[j][k]) + "=9.001"
             if not yamlWriter(url):
                 testCount += 1
             url = savedUrl2
-    logging.critical("%d/%d tests were successfully performed for %s" % (testCount, expectedNumberTests, url))
-        
+    logging.info("Testing for %s completed for %d/%d tests" % (url, testCount, expectedNumberTests))
+    return 0
+
+def order_dict(dictionary):
+    result = {}
+    for k, v in sorted(dictionary.items()):
+        if isinstance(v, dict):
+            result[k] = order_dict(v)
+        else:
+            result[k] = v
+    return result
 #creates a custom tavern.yaml file for a set an api and a combination of its parameters
 def yamlWriter(urlparameters):
     target = dict(config.items("ferry"))
@@ -149,13 +166,28 @@ def yamlWriter(urlparameters):
     #hiring someone else to read a dictionary
     tavernYaml["stages"][0]["response"]["body"]["ferry_error"] = copy.deepcopy(jOut['ferry_error'])
     tavernYaml["stages"][0]["response"]["body"]["ferry_output"] = copy.deepcopy(jOut['ferry_output'])
-    
+    order_dict(tavernYaml)
     yaml.dump(tavernYaml, tavernTest)
     logging.info("Testing %s" % urlparameters)
     #tavern run function returns 0 on success
     return run(testFileName)
     
-    
+def logFaultOnly():
+    fd = open("concise_output", 'r')
+    filterLog = open("fault_output", 'w')
+    filterLog.truncate(0)
+    filterLog.writelines([line for line in fd if 'ERROR' in line or 'CRITICAL' in line])
+    fd.close()
+        
+def logCleaner():
+    if config.has_option("log", "file"):
+        fd = open(config.get("log", "file"), 'r')
+        filterOutput = open("concise_output", 'w')
+        filterOutput.truncate(0)
+        filterOutput.writelines([ line for line in fd if 'Testing' in line or 'ERROR' in line or 'CRITICAL' in line])
+        fd.close()
+        logFaultOnly()
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = "Script to test an API")
     parser.add_argument("-c", "--config", metavar = "PATH", action = "store", help = "path to configuration file")
@@ -200,23 +232,24 @@ if __name__ == "__main__":
     #reads in all API names
     if opts.api == "all":
         with open('api_names') as openfileobject:
+            subprocess.call("./db_refresh.sh", shell = True)
             for line in openfileobject:
-                subprocess.call("./db_refresh.sh", shell = True)
+                line = line.translate({ord(c): None for c in string.whitespace})
                 jOut = jsonImportHelp(line)
                 if jOut == None:
                     logging.error("%s help details could not be acquired" % line)
                     continue
-                testUrlCreator(line, jOut)
+                else:
+                    testUrlCreator(line, jOut)
+                    logCleaner()
+                    subprocess.call("./db_refresh.sh", shell = True)
+                    
     else:
         jOut = jsonImportHelp(opts.api)
         if jOut == None:
             logging.error("%s help details could not be acquired" % opts.api)
             exit(2)
-        testUrlCreator(opts.api, jOut)
-    #cleans up test output
-    if config.has_option("log", "file"):
-        fd = open(config.get("log", "file"), 'r')
-        filterOutput = open("concise_output", 'w')
-        filterOutput.truncate(0)
-        filterOutput.writelines([ line for line in fd if 'Testing' in line or 'ERROR' in line or 'CRITICAL' in line])
-        fd.close()
+        else:
+            testUrlCreator(opts.api, jOut)
+            logCleaner()
+        
