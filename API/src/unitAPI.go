@@ -83,6 +83,16 @@ func IncludeUnitAPIs(c *APICollection) {
 		createFQAN,
 	}
 	c.Add("createFQAN", &createFQAN)
+
+	setFQANMappings := BaseAPI {
+		InputModel {
+			Parameter{FQAN, true},
+			Parameter{GroupName, false},
+			Parameter{UserName, false},
+		},
+		setFQANMappings,
+	}
+	c.Add("setFQANMappings", &setFQANMappings)
 }
 
 func createAffiliationUnit(c APIContext, i Input) (interface{}, []APIError) {
@@ -624,116 +634,57 @@ func removeFQAN(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, string(out))
 }
 
-func setFQANMappings(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+func setFQANMappings(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	fqan := strings.TrimSpace(q.Get("fqan"))
-	mUser := strings.TrimSpace(q.Get("mapped_user"))
-	mGroup := strings.TrimSpace(q.Get("mapped_group"))
+	groupid := NewNullAttribute(GroupID)
+	uid := NewNullAttribute(UID)
 
-	var values []string
-	var uid, groupid sql.NullInt64
+	var validFQAN bool
 
-	type jsonerror struct {
-		Error []string `json:"ferry_error"`
-	}
-	var inputErr jsonerror
-
-	if fqan == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No fqan specified in http query.")
-		inputErr.Error = append(inputErr.Error, "No fqan specified.")
-	}
-	if mUser != "" {
-		if strings.ToLower(mUser) != "null" {
-			DBptr.QueryRow("select uid from users where uname = $1", mUser).Scan(&uid)
-			if uid.Valid {
-				values = append(values, fmt.Sprintf("mapped_user = %d", uid.Int64))
-			} else {
-				log.WithFields(QueryFields(r, startTime)).Error("User doesn't exist.")
-				inputErr.Error = append(inputErr.Error, "User doesn't exist.")
-			}
-		} else {
-			values = append(values, "mapped_user = NULL")
-		}
-	}
-	if mGroup != "" {
-		if strings.ToLower(mGroup) != "null" {
-			DBptr.QueryRow("select groupid from groups where name = $1 and type = 'UnixGroup'", mGroup).Scan(&groupid)
-			if groupid.Valid {
-				values = append(values, fmt.Sprintf("mapped_group = %d", groupid.Int64))
-			} else {
-				log.WithFields(QueryFields(r, startTime)).Error("Group doesn't exist.")
-				inputErr.Error = append(inputErr.Error, "Group doesn't exist.")
-			}
-		} else {
-			values = append(values, "mapped_group = NULL")
-		}
-	}
-	if mUser == "" && mGroup == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No mapped_user or mapped_group specified in http query.")
-		inputErr.Error = append(inputErr.Error, "No mapped_user or mapped_group specified.")
-	}
-
-	if len(inputErr.Error) > 0 {
-		out, err := json.Marshal(inputErr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-		}
-		fmt.Fprintf(w, string(out))
-		return
-	}
-
-	authorized, authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
-		return
-	}
-
-	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	err := c.DBtx.QueryRow(`select (select $1 in (select fqan from grid_fqan)),
+								   (select groupid from groups where name = $2 and type = 'UnixGroup'),
+								   (select uid from users where uname = $3)`,
+						   i[FQAN], i[GroupName], i[UserName]).Scan(&validFQAN, &groupid, &uid)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	defer DBtx.Rollback(cKey)
-
-	var res sql.Result
-	var rowsErr error
-	var rows int64
-	res, err = DBtx.Exec(`update grid_fqan set `+strings.Join(values, ", ")+`  where fqan = $1`, fqan)
-	if err == nil {
-		rows, rowsErr = res.RowsAffected()
-		if rowsErr != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-		}
-	} else {
-		rows = 0
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	if rows == 1 {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
-	} else {
-		var queryErr jsonerror
-		if rows == 0 && err == nil {
-			log.WithFields(QueryFields(r, startTime)).Error("FQAN doesn't exist.")
-			queryErr.Error = append(queryErr.Error, "FQAN doesn't exist.")
-		} else if strings.Contains(err.Error(), `null value in column "mapped_group" violates not-null constraint`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Attribute mapped_group can not be NULL.")
-			queryErr.Error = append(queryErr.Error, "Attribute mapped_group can not be NULL.")
-		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			queryErr.Error = append(queryErr.Error, err.Error())
-		}
-		out, err := json.Marshal(queryErr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-		}
-		fmt.Fprintf(w, string(out))
+	if !validFQAN {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, FQAN))
+	}
+	if !i[UserName].Valid && !i[UserName].AbsoluteNull && !i[GroupName].Valid && !i[GroupName].AbsoluteNull {
+		apiErr = append(apiErr, APIError{errors.New("no username or groupname specified in http query"), ErrorAPIRequirement})
+		return nil, apiErr
+	}
+	if i[GroupName].AbsoluteNull {
+		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, GroupName))
+	}
+	if !groupid.Valid && i[GroupName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
+	}
+	if !uid.Valid && i[UserName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
 	}
 
-	DBtx.Commit(cKey)
+	_, err = c.DBtx.Exec(`update grid_fqan set
+							mapped_user = case when $1 then $2 else coalesce($2, mapped_user) end,
+							mapped_group = coalesce($3, mapped_group),
+							last_updated = NOW()
+						  where fqan = $4`,
+						 i[UserName].AbsoluteNull, uid, groupid, i[FQAN])
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	return nil, nil
 }
 
 func getAllAffiliationUnits(w http.ResponseWriter, r *http.Request) {
