@@ -7414,3 +7414,115 @@ func getGroupStorageQuotaLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, string(jsonoutput))
 }
+
+func setFQANMappingsLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	fqan := strings.TrimSpace(q.Get("fqan"))
+	mUser := strings.TrimSpace(q.Get("mapped_user"))
+	mGroup := strings.TrimSpace(q.Get("mapped_group"))
+
+	var values []string
+	var uid, groupid sql.NullInt64
+
+	type jsonerror struct {
+		Error []string `json:"ferry_error"`
+	}
+	var inputErr jsonerror
+
+	if fqan == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No fqan specified in http query.")
+		inputErr.Error = append(inputErr.Error, "No fqan specified.")
+	}
+	if mUser != "" {
+		if strings.ToLower(mUser) != "null" {
+			DBptr.QueryRow("select uid from users where uname = $1", mUser).Scan(&uid)
+			if uid.Valid {
+				values = append(values, fmt.Sprintf("mapped_user = %d", uid.Int64))
+			} else {
+				log.WithFields(QueryFields(r, startTime)).Error("User doesn't exist.")
+				inputErr.Error = append(inputErr.Error, "User doesn't exist.")
+			}
+		} else {
+			values = append(values, "mapped_user = NULL")
+		}
+	}
+	if mGroup != "" {
+		if strings.ToLower(mGroup) != "null" {
+			DBptr.QueryRow("select groupid from groups where name = $1 and type = 'UnixGroup'", mGroup).Scan(&groupid)
+			if groupid.Valid {
+				values = append(values, fmt.Sprintf("mapped_group = %d", groupid.Int64))
+			} else {
+				log.WithFields(QueryFields(r, startTime)).Error("Group doesn't exist.")
+				inputErr.Error = append(inputErr.Error, "Group doesn't exist.")
+			}
+		} else {
+			values = append(values, "mapped_group = NULL")
+		}
+	}
+	if mUser == "" && mGroup == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No mapped_user or mapped_group specified in http query.")
+		inputErr.Error = append(inputErr.Error, "No mapped_user or mapped_group specified.")
+	}
+
+	if len(inputErr.Error) > 0 {
+		out, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		}
+		fmt.Fprintf(w, string(out))
+		return
+	}
+
+	authorized, authout := authorize(r)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
+		return
+	}
+
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	defer DBtx.Rollback(cKey)
+
+	var res sql.Result
+	var rowsErr error
+	var rows int64
+	res, err = DBtx.Exec(`update grid_fqan set `+strings.Join(values, ", ")+`  where fqan = $1`, fqan)
+	if err == nil {
+		rows, rowsErr = res.RowsAffected()
+		if rowsErr != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		}
+	} else {
+		rows = 0
+	}
+
+	if rows == 1 {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+	} else {
+		var queryErr jsonerror
+		if rows == 0 && err == nil {
+			log.WithFields(QueryFields(r, startTime)).Error("FQAN doesn't exist.")
+			queryErr.Error = append(queryErr.Error, "FQAN doesn't exist.")
+		} else if strings.Contains(err.Error(), `null value in column "mapped_group" violates not-null constraint`) {
+			log.WithFields(QueryFields(r, startTime)).Error("Attribute mapped_group can not be NULL.")
+			queryErr.Error = append(queryErr.Error, "Attribute mapped_group can not be NULL.")
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			queryErr.Error = append(queryErr.Error, err.Error())
+		}
+		out, err := json.Marshal(queryErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		}
+		fmt.Fprintf(w, string(out))
+	}
+
+	DBtx.Commit(cKey)
+}
