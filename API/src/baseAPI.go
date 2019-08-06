@@ -225,6 +225,7 @@ const (
 	VOMSURL				Attribute = "vomsurl"
 	Role				Attribute = "role"
 	CondorGroup			Attribute = "condorgroup"
+	VOName				Attribute = "voname"
 	UID					Attribute = "uid"
 	GID					Attribute = "gid"
 	GroupID				Attribute = "groupid"
@@ -269,6 +270,7 @@ func (a Attribute) Type() (AttributeType) {
 		VOMSURL:			TypeString,
 		Role:				TypeString,
 		CondorGroup:		TypeString,
+		VOName:				TypeString,
 		UID:				TypeInt,
 		GID:				TypeInt,
 		GroupID:			TypeInt,

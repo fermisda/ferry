@@ -93,6 +93,15 @@ func IncludeUnitAPIs(c *APICollection) {
 		setFQANMappings,
 	}
 	c.Add("setFQANMappings", &setFQANMappings)
+
+	getAllAffiliationUnits := BaseAPI {
+		InputModel {
+			Parameter{VOName, false},
+			Parameter{LastUpdated, false},
+		},
+		getAllAffiliationUnits,
+	}
+	c.Add("getAllAffiliationUnits", &getAllAffiliationUnits)
 }
 
 func createAffiliationUnit(c APIContext, i Input) (interface{}, []APIError) {
@@ -687,64 +696,47 @@ func setFQANMappings(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
-func getAllAffiliationUnits(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
-	voname := strings.TrimSpace(q.Get("voname"))
+func getAllAffiliationUnits(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	//	querystr := `select name, voms_url from affiliation_units where voms_url is not null`
-	//	if voname != "" {
-	//		querystr := `select name, voms_url from affiliation_units where voms_url is not null and voms_url like %$1%`
-	//	}
-	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
-	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
-		return
+	var countURLs int
+
+	err := c.DBtx.QueryRow(`select count(*) from voms_url
+							where url like concat('%voms/', $1::text) or url like concat('%voms/', $1::text, '/%')`,
+						   i[VOName]).Scan(&countURLs)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	rows, err := DBptr.Query(`select name, url from affiliation_units as au left join voms_url as vu on au.unitid = vu.unitid
-							  where url is not null and url like $1 and (au.last_updated>=$2 or $2 is null)`, "%"+voname+"%", lastupdate)
+	if countURLs < 1 && i[VOName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, VOName))
+		return nil, apiErr
+	}
+
+	rows, err := DBptr.Query(`select name, url from affiliation_units au left join voms_url using(unitid)
+							  where url is not null and (url like concat('%voms/', $1::text) or url like concat('%voms/', $1::text, '/%') or $1 is null)
+							  and (au.last_updated>=$2 or $2 is null)`,
+							 i[VOName], i[LastUpdated])
 	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		return
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 	defer rows.Close()
 
-	type jsonout struct {
-		Uname string `json:"name"`
-		//		Unitid int `json:"unitid"`
-		Voms string `json:"voms_url,omitempty"`
-	}
-
-	var tmpout jsonout
-	var Out []jsonout
+	type jsonout map[Attribute]interface{}
+	out := make([]jsonout, 0)
 
 	for rows.Next() {
-		//	rows.Scan(&tmpout.Uname,&tmpout.Unitid)
-		rows.Scan(&tmpout.Uname, &tmpout.Voms)
-		Out = append(Out, tmpout)
+		row := NewMapNullAttribute(UnitName, VOMSURL)
+		rows.Scan(row[UnitName], row[VOMSURL])
+		out = append(out, jsonout{
+			UnitName: row[UnitName].Data,
+			VOMSURL: row[VOMSURL].Data,
+		})
 	}
 
-	var output interface{}
-	if len(Out) == 0 {
-		type jsonerror struct {
-			Error string `json:"ferry_error"`
-		}
-		var queryErr []jsonerror
-		queryErr = append(queryErr, jsonerror{"Query returned no units."})
-		log.WithFields(QueryFields(r, startTime)).Error("Query returned no units.")
-		output = queryErr
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = Out
-	}
-	jsonoutput, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-	}
-	fmt.Fprintf(w, string(jsonoutput))
+	return out, nil
 }
