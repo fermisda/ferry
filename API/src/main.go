@@ -191,11 +191,8 @@ func main() {
 	grouter.HandleFunc("/setUserAccessToComputeResource", APIs["setUserAccessToComputeResource"].Run)
 	grouter.HandleFunc("/removeUserAccessFromResource", removeUserAccessFromResource)
 	grouter.HandleFunc("/getUserStorageQuota", APIs["getUserStorageQuota"].Run)
-	grouter.HandleFunc("/setUserStorageQuota", APIs["setStorageQuota"].Run) //Legacy
 	grouter.HandleFunc("/getUserExternalAffiliationAttributes", APIs["getUserExternalAffiliationAttributes"].Run)
 	grouter.HandleFunc("/addCertificateDNToUser", APIs["addCertificateDNToUser"].Run)
-	grouter.HandleFunc("/setSuperUser", setSuperUser)
-	grouter.HandleFunc("/removeSuperUser", removeSuperUser)
 	grouter.HandleFunc("/removeUserCertificateDN", removeUserCertificateDN)
 	grouter.HandleFunc("/setUserInfo", APIs["setUserInfo"].Run)
 	grouter.HandleFunc("/setUserExternalAffiliationAttribute", APIs["setUserExternalAffiliationAttribute"].Run)
@@ -216,12 +213,9 @@ func main() {
 	grouter.HandleFunc("/getgroupmembers", APIs["getGroupMembers"].Run)
 	grouter.HandleFunc("/getGroupMembers", APIs["getGroupMembers"].Run)
 	grouter.HandleFunc("/createGroup", APIs["createGroup"].Run)
-	grouter.HandleFunc("/deleteGroupt", deleteGroupt)
-	grouter.HandleFunc("/deleteGroup", deleteGroup)
 	grouter.HandleFunc("/addGroupToUnit", APIs["addGroupToUnit"].Run)
 	grouter.HandleFunc("/removeGroupFromUnit", removeGroupFromUnit)
 	grouter.HandleFunc("/setPrimaryStatusGroup", APIs["setPrimaryStatusGroup"].Run)
-	grouter.HandleFunc("/removePrimaryStatusfromGroup", removePrimaryStatusfromGroup)
 	grouter.HandleFunc("/IsUserLeaderOfGroup", APIs["isUserLeaderOfGroup"].Run)
 	grouter.HandleFunc("/IsUserMemberOfGroup", APIs["isUserMemberOfGroup"].Run)
 	grouter.HandleFunc("/setGroupLeader", APIs["setGroupLeader"].Run) //add user to group
@@ -229,11 +223,9 @@ func main() {
 	grouter.HandleFunc("/getGroupUnits", APIs["getGroupUnits"].Run) //don't remove the last leader
 	grouter.HandleFunc("/getBatchPriorities", APIs["getBatchPriorities"].Run)
 	grouter.HandleFunc("/getCondorQuotas", APIs["getCondorQuotas"].Run)
-	grouter.HandleFunc("/setGroupBatchPriority", setGroupBatchPriority)
 	grouter.HandleFunc("/setCondorQuota", APIs["setCondorQuota"].Run)
 	grouter.HandleFunc("/removeCondorQuota", removeCondorQuota)
 	grouter.HandleFunc("/getGroupStorageQuota", APIs["getGroupStorageQuota"].Run)
-	grouter.HandleFunc("/setGroupStorageQuota", setGroupStorageQuota) //Legacy
 	grouter.HandleFunc("/getAllGroups", APIs["getAllGroups"].Run)
 	grouter.HandleFunc("/getAllGroupsMembers", APIs["getAllGroupsMembers"].Run)
 	grouter.HandleFunc("/getGroupAccessToResource", APIs["getGroupAccessToResource"].Run)
@@ -272,7 +264,6 @@ func main() {
 	grouter.HandleFunc("/getAffiliationUnitMembers", APIs["getAffiliationUnitMembers"].Run)
 	grouter.HandleFunc("/getGroupsInAffiliationUnit", APIs["getGroupsInAffiliationUnit"].Run)
 	grouter.HandleFunc("/getGroupLeadersinAffiliationUnit", APIs["getGroupLeadersinAffiliationUnit"].Run)
-	grouter.HandleFunc("/getAffiliationUnitStorageResources", getAffiliationUnitStorageResources)
 	grouter.HandleFunc("/getAffiliationUnitComputeResources", APIs["getAffiliationUnitComputeResources"].Run)
 	grouter.HandleFunc("/createFQAN", APIs["createFQAN"].Run)
 	grouter.HandleFunc("/removeFQAN", removeFQAN)
@@ -287,6 +278,19 @@ func main() {
 	grouter.HandleFunc("/addLPCConvener", addLPCConvener)
 	grouter.HandleFunc("/removeLPCConvener", removeLPCConvener)
 	grouter.HandleFunc("/addLPCCollaborationGroup", APIs["addLPCCollaborationGroup"].Run)
+
+	//legacy API calls
+	grouter.HandleFunc("/setSuperUser", setSuperUser)
+	grouter.HandleFunc("/removeSuperUser", removeSuperUser)
+	grouter.HandleFunc("/setUserStorageQuota", APIs["setStorageQuota"].Run)
+	grouter.HandleFunc("/setGroupStorageQuota", setGroupStorageQuota)
+
+	//never implemented API calls
+	grouter.HandleFunc("/setGroupBatchPriority", setGroupBatchPriority)
+	grouter.HandleFunc("/getAffiliationUnitStorageResources", getAffiliationUnitStorageResources)
+	grouter.HandleFunc("/deleteGroupt", deleteGroupt)
+	grouter.HandleFunc("/deleteGroup", deleteGroup)
+	grouter.HandleFunc("/removePrimaryStatusfromGroup", removePrimaryStatusfromGroup)
 
 	srvConfig := viper.GetStringMapString("server")
 	Mainsrv = &http.Server{
