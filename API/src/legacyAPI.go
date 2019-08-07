@@ -10,6 +10,7 @@ import (
 	"time"
 	"net/http"
 	log "github.com/sirupsen/logrus"
+	"errors"
 )
 
 func getUserInfoLegacy(w http.ResponseWriter, r *http.Request) {
@@ -4208,6 +4209,115 @@ func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
 	DBtx.Commit(cKey)
 }
 
+func setGroupStorageQuotaDB(tx *Transaction, gName, unitname, rName, groupquota, quotaunit, valid_until string) (error) {
+
+	// since this function is not directly web accessible we don't do as much parameter checking/validation here.
+	// We assume that the inputs have already been sanitized by the calling function.
+	// 2018-07-20 Let's not make that a blanket assumption
+		
+		// quotaunit is known to be OK because it is explicitly set to "B" for internal DB storeage.
+		// ditto groupquota because the value passed in is derived from the unit conversion function already
+		
+		var reterr error
+		var vSid, vGid, vUnitid sql.NullInt64
+		
+		reterr = nil
+		
+		queryerr := tx.tx.QueryRow(`select	(select storageid from storage_resources where name = $1),
+											(select groupid from groups where name = $2 and type = 'UnixGroup'),
+											(select unitid from affiliation_units where name = $3)`,
+									rName, gName, unitname).Scan(&vSid, &vGid, &vUnitid)
+		if queryerr != nil && queryerr != sql.ErrNoRows {
+			return queryerr	
+		}
+		
+		if !vSid.Valid {
+			reterr = errors.New("Resource does not exist.")
+		}
+		if !vGid.Valid {
+			reterr  = errors.New("Group does not exist.")
+		}
+		if !vUnitid.Valid {
+			reterr  = errors.New("Unit does not exist.")
+		}
+		
+		if reterr != nil {
+			return reterr
+		}
+		
+		var vValid sql.NullString
+		if valid_until != "" && strings.ToUpper(valid_until) != "NULL" {
+			queryerr = tx.tx.QueryRow(`select valid_until from storage_quota where storageid = $1 and unitid = $2 and groupid = $3 and valid_until is not null`,vSid, vUnitid, vGid).Scan(&vValid)
+		} else {
+			queryerr = tx.tx.QueryRow(`select valid_until from storage_quota where storageid = $1 and unitid = $2 and groupid = $3 and valid_until is null`,vSid, vUnitid, vGid).Scan(&vValid)		
+		}
+		
+		if queryerr == sql.ErrNoRows {
+			// we did not have this comb in the DB, so it is an insert
+			if valid_until != "" && strings.ToUpper(valid_until) != "NULL" {
+				vValid.Valid = true
+				vValid.String = valid_until
+				
+				_, reterr = tx.Exec(`insert into storage_quota (storageid, groupid, unitid, value, unit, valid_until)
+							 values ($1, $2, $3, $4, $5, $6)`, vSid, vGid, vUnitid, groupquota, quotaunit, vValid)
+			} else {
+				_, reterr = tx.Exec(`insert into storage_quota (storageid, groupid, unitid, value, unit)
+							 values ($1, $2, $3, $4, $5)`, vSid, vGid, vUnitid, groupquota, quotaunit)
+			}
+		} else if queryerr != nil {
+			//some other odd problem, fall back
+			return queryerr
+		} else {
+			// we need to update the existing DB entry
+			if valid_until != "" && strings.ToUpper(valid_until) != "NULL" {
+				vValid.Valid = true
+				vValid.String = valid_until
+				
+				_, reterr = tx.Exec(`update storage_quota set value = $1, unit = $2, valid_until = $6, last_updated = NOW()
+					   where storageid = $3 and groupid = $4 and unitid = $5 and valid_until is not null`, groupquota, quotaunit, vSid, vGid, vUnitid, vValid)
+			} else {
+	
+		_, reterr = tx.Exec(`update storage_quota set value = $1, unit = $2, last_updated = NOW()
+					   where storageid = $3 and groupid = $4 and unitid = $5 and valid_until is null`, groupquota, quotaunit, vSid, vGid, vUnitid)
+	} 
+		}
+		
+	
+	//	_, err := tx.Exec(fmt.Sprintf(`do $$
+	//							declare 
+	//								vSid int;
+	//								vGid int;
+	//								vUnitid int;
+	//
+	//								cSname constant text := '%s';
+	//								cGname constant text := '%s';
+	//								cGtype constant groups_group_type := '%s';
+	//								cUname constant text := '%s';
+	//								cValue constant text := '%s';
+	//								cUnit constant text := '%s';
+	//								cVuntil constant date := %s;
+	//							begin
+	//								select storageid into vSid from storage_resources where name = cSname;
+	//								select groupid into vGid from groups where (name, type) = (cGname, cGtype);
+	//								select unitid into vUnitid from affiliation_units where name = cUname;
+	//
+	//								if vSid is null then raise 'Resource does not exist.'; end if;
+	//								if vGid is null then raise 'Group does not exist.'; end if;
+	//								if vUnitid is null then raise 'Unit does not exist.'; end if;
+	//								
+	//								if (vSid, vGid, vUnitid) in (select storageid, groupid, unitid from storage_quota) and cVuntil is NULL then
+	//									update storage_quota set value = cValue, unit = cUnit, valid_until = cVuntil, last_updated = NOW()
+	//									where storageid = vSid and groupid = vGid and unitid = vUnitid and valid_until is NULL;
+	//								else
+	//									insert into storage_quota (storageid, groupid, unitid, value, unit, valid_until)
+	//									values (vSid, vGid, vUnitid, cValue, cUnit, cVuntil);
+	//								end if;
+	//							end $$;`, rName, gName, "UnixGroup", unitname, groupquota, quotaunit, valid_until))
+	//	
+		//move all error handling to the outside calling function and just return the err itself here
+		return reterr
+	}
+
 func addLPCCollaborationGroupLegacy(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
@@ -7525,4 +7635,194 @@ func setFQANMappingsLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	DBtx.Commit(cKey)
+}
+
+func setSuperUser(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+
+	//call authorize function
+	authorized, authout := authorize(r)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
+		return
+	}
+
+	q := r.URL.Query()
+	uName := strings.TrimSpace(q.Get("username"))
+	unitName := strings.TrimSpace(q.Get("unitname"))
+	if uName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No user name specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
+		return
+	}
+	if unitName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No unit name specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
+		return
+	}
+
+	var uid,unitid sql.NullInt64
+	var member bool
+ 
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Unable to start database transaction.\" }")
+		return
+	}
+	defer DBtx.Rollback(cKey)
+
+	queryerr := DBtx.tx.QueryRow(`select (select uid from users where uname=$1),
+										 (select unitid from affiliation_units au where au.name=$2),
+										 (select ($1, $2) in (select distinct uname, name from users as u
+																join grid_access as ga on u.uid = ga.uid
+																join grid_fqan as gf on ga.fqanid = gf.fqanid
+																join affiliation_units as au on gf.unitid = au.unitid) as member
+															 )`, uName, unitName).Scan(&uid, &unitid, &member)
+	
+	if queryerr == sql.ErrNoRows {
+		log.WithFields(QueryFields(r, startTime)).Error("User and unit names do not exist.")
+		if cKey != 0 {
+			fmt.Fprintf(w, "{ \"ferry_error\": \"User and unit names do not exist.\" }")
+		} else {
+			DBtx.Report("User and unit names do not exist.")
+		}
+		return
+	} else if queryerr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error: " + queryerr.Error())
+		if cKey !=0 {
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
+		} 
+		return
+	}
+	if ! uid.Valid {
+		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		if cKey != 0 {
+			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+		} else {
+			DBtx.Report("User does not exist.")	
+		}
+		return
+	} 
+	if ! unitid.Valid {
+		log.WithFields(QueryFields(r, startTime)).Error("Unit does not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Unit does not exist.\" }")
+		return
+	}
+	if ! member {
+		log.WithFields(QueryFields(r, startTime)).Error("User does not belong to unit.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not belong to unit.\" }")
+		return
+	}
+
+	_, err = DBtx.Exec(`update grid_access set is_superuser = true, last_updated = NOW() 
+						where uid = $1 and fqanid in (select fqanid from grid_fqan  
+						where unitid = $2)`, uid.Int64, unitid.Int64)
+
+	if err == nil {
+		if cKey != 0 { DBtx.Commit(cKey) }
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Error("Error: " + err.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
+	}
+}
+
+func removeSuperUser(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+
+	//call authorize function
+	authorized, authout := authorize(r)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
+		return
+	}
+
+	q := r.URL.Query()
+	uName := strings.TrimSpace(q.Get("username"))
+	unitName := strings.TrimSpace(q.Get("unitname"))
+	if uName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No user name specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
+		return
+	}
+	if unitName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No unit name specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
+		return
+	}
+
+	var uid,unitid sql.NullInt64
+	var member bool
+ 
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Unable to start database transaction.\" }")
+		return
+	}
+	defer DBtx.Rollback(cKey)
+
+	queryerr := DBtx.tx.QueryRow(`select (select uid from users where uname=$1),
+										 (select unitid from affiliation_units au where au.name=$2),
+										 (select ($1, $2) in (select distinct uname, name from users as u
+																join grid_access as ga on u.uid = ga.uid
+																join grid_fqan as gf on ga.fqanid = gf.fqanid
+																join affiliation_units as au on gf.unitid = au.unitid) as member
+															 )`, uName, unitName).Scan(&uid, &unitid, &member)
+	
+	if queryerr == sql.ErrNoRows {
+		log.WithFields(QueryFields(r, startTime)).Error("User and unit names do not exist.")
+		if cKey != 0 {
+			fmt.Fprintf(w, "{ \"ferry_error\": \"User and unit names do not exist.\" }")
+		} else {
+			DBtx.Report("User and unit names do not exist.")
+		}
+		return
+	} else if queryerr != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error: " + queryerr.Error())
+		if cKey !=0 {
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
+		} 
+		return
+	}
+	if ! uid.Valid {
+		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		if cKey != 0 {
+			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+		} else {
+			DBtx.Report("User does not exist.")	
+		}
+		return
+	} 
+	if ! unitid.Valid {
+		log.WithFields(QueryFields(r, startTime)).Error("Unit does not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Unit does not exist.\" }")
+		return
+	}
+	if ! member {
+		log.WithFields(QueryFields(r, startTime)).Error("User does not belong to unit.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not belong to unit.\" }")
+		return
+	}
+
+	_, err = DBtx.Exec(`update grid_access set is_superuser = false, last_updated = NOW() 
+						where uid = $1 and fqanid in (select fqanid from grid_fqan  
+						where unitid = $2)`, uid.Int64, unitid.Int64)
+
+	if err == nil {
+		if cKey != 0 { DBtx.Commit(cKey) }
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Error("Error: " + err.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
+	}
 }
