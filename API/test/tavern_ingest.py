@@ -120,7 +120,7 @@ def testUrlCreator(url, jOut):
             if not yamlWriter(url):
                 testCount += 1
             url = savedUrl2
-    logging.info("Testing for %s completed for %d/%d tests" % (url, testCount, expectedNumberTests))
+    logging.info("Testing for %s successfully completed for %d/%d tests" % (url, testCount, expectedNumberTests))
     return 0
 
 def order_dict(dictionary):
@@ -174,7 +174,7 @@ def yamlWriter(urlparameters):
     
 def logFaultOnly():
     fd = open("concise_output", 'r')
-    filterLog = open("fault_output", 'w')
+    filterLog = open("full_output", 'w')
     filterLog.truncate(0)
     filterLog.writelines([line for line in fd if 'ERROR' in line or 'CRITICAL' in line])
     fd.close()
