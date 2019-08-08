@@ -193,7 +193,7 @@ func main() {
 	grouter.HandleFunc("/getUserStorageQuota", APIs["getUserStorageQuota"].Run)
 	grouter.HandleFunc("/getUserExternalAffiliationAttributes", APIs["getUserExternalAffiliationAttributes"].Run)
 	grouter.HandleFunc("/addCertificateDNToUser", APIs["addCertificateDNToUser"].Run)
-	grouter.HandleFunc("/removeUserCertificateDN", removeUserCertificateDN)
+	grouter.HandleFunc("/removeUserCertificateDN", APIs["removeUserCertificateDN"].Run)
 	grouter.HandleFunc("/setUserInfo", APIs["setUserInfo"].Run)
 	grouter.HandleFunc("/setUserExternalAffiliationAttribute", APIs["setUserExternalAffiliationAttribute"].Run)
 	grouter.HandleFunc("/removeUserExternalAffiliationAttribute", removeUserExternalAffiliationAttribute)
