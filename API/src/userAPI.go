@@ -280,6 +280,15 @@ func IncludeUserAPIs(c *APICollection) {
 		setUserGridAccess,
 	}
 	c.Add("setUserGridAccess", &setUserGridAccess)
+
+	removeUserCertificateDN := BaseAPI {
+		InputModel {
+			Parameter{UserName, true},
+			Parameter{DN, true},
+		},
+		removeUserCertificateDN,
+	}
+	c.Add("removeUserCertificateDN", &removeUserCertificateDN)
 }
 
 func getUserCertificateDNs(c APIContext, i Input) (interface{}, []APIError) {
@@ -1242,112 +1251,74 @@ func addCertificateDNToUser(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
-func removeUserCertificateDN(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+func removeUserCertificateDN(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	authorized, authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
-		return
-	}
-
-	q := r.URL.Query()
-	uName := strings.TrimSpace(q.Get("username"))
-	subjDN := strings.TrimSpace(q.Get("dn"))
-	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
-		return
-	}
-	if subjDN == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No DN specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No dn specified.\" }")
-		return
-	} else {
-		dn, err := ExtractValidDN(subjDN)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			fmt.Fprintf(w, "{ \"ferry_error\": \"%s\" }", err.Error())
-			return
-		}
-		subjDN = dn
-	}
-
-	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	// DN validation
+	dn, err := ExtractValidDN(i[DN].Data.(string))
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	defer DBtx.Rollback(cKey)
-
-	var uid, dnid sql.NullInt64
-	queryerr := DBtx.tx.QueryRow(`select us.uid, uc.dnid from (select 1 as key, uid from users where uname=$1 for update) as us full outer join (select 1 as key, dnid from user_certificates where dn=$2 for update) as uc on uc.key=us.key`,uName, subjDN).Scan(&uid,&dnid)
-	if queryerr == sql.ErrNoRows {
-		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-		return
-	} else if queryerr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query. Check logs.\" }")
-		return
-	}
-	if ! uid.Valid {
-		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-		return		
-	}
-	if ! dnid.Valid {
-		log.WithFields(QueryFields(r, startTime)).Error("DN does not exist.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"DN does not exist.\" }")
-		return		
-	}
-	_, err = DBtx.Exec(fmt.Sprintf(`do $$ 	
-										declare  u_uid constant int := %d;
-										declare  u_dnid constant int := %d;
-										declare  v_count int;
-									
-									begin
-
-										if (u_dnid, u_uid) not in (select dnid, uid from user_certificates) then
-											raise 'dnid uid association does not exist';
-										end if;
-
-										select count(*) into v_count from
-											 (select uid, unitid, count(unitid)
-											  from affiliation_unit_user_certificate as ac
-											  join user_certificates as uc on ac.dnid = uc.dnid
-											  where uid = u_uid and unitid in (select unitid
-																			   from affiliation_unit_user_certificate
-																			   where dnid = u_dnid)
-											  group by unitid, uid order by uid, unitid, count) as c
-										where c.count = 1;
-
-										if v_count > 0 then
-											raise 'unique dnid unitid association';
-										end if;
-
-										delete from affiliation_unit_user_certificate where dnid=u_dnid;
-										delete from user_certificates where dnid=u_dnid and uid=u_uid;
-									end $$;`, uid.Int64, dnid.Int64))
-	if err == nil {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
-	} else {
-		if strings.Contains(err.Error(), `dnid uid association does not exist`) {
-			log.WithFields(QueryFields(r, startTime)).Error("USER DN association does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"USER DN association does not exist.\" }")
-		} else if strings.Contains(err.Error(), `unique dnid unitid association`) {
-			log.WithFields(QueryFields(r, startTime)).Error("This certificate is unique for the user in one or more affiliation units.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"This certificate is unique for the user in one or more affiliation units.\" }")
-		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
-			return
-		}
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err.Error())
+		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, DN))
+		return nil, apiErr
 	}
 
-	DBtx.Commit(cKey)
+	uid    := NewNullAttribute(UID)
+	dnid   := NewNullAttribute(DNID)
+
+	var countUnique int64
+
+	err = c.DBtx.QueryRow(`select (select uid from users where uname = $1),
+								  (select dnid from user_certificates where dn=$2)`,
+						  i[UserName], dn).Scan(&uid, &dnid)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+	err = c.DBtx.QueryRow(`select count(*) from
+							(select uid, unitid, count(unitid)
+							 from affiliation_unit_user_certificate as ac
+							 join user_certificates as uc on ac.dnid = uc.dnid
+						     where uid = $1 and unitid in
+								(select unitid from affiliation_unit_user_certificate
+								 join user_certificates using(dnid) where uid = $1 and dnid = $2)
+							 group by unitid, uid order by uid, unitid, count) as c
+						   where c.count = 1`,
+						  uid, dnid).Scan(&countUnique)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !uid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
+	}
+	if !dnid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, DN))
+	}
+	if countUnique > 0 {
+		apiErr = append(apiErr, APIError{errors.New("this certificate is unique for the user in one or more affiliation units"), ErrorAPIRequirement})
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	_, err = c.DBtx.Exec(`delete from affiliation_unit_user_certificate where dnid = $1`, dnid)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	_, err = c.DBtx.Exec(`delete from user_certificates where dnid = $1`, dnid)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	return nil, nil
 }
 
 func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
