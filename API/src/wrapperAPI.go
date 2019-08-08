@@ -643,7 +643,7 @@ func removeLPCConvener(w http.ResponseWriter, r *http.Request) {
 		R.URL.RawQuery = q.Encode()
 
 		DBtx.Continue()
-		removeUserAccessFromResource(w, R)
+		removeUserAccessFromResourceLegacy(w, R)
 		if !DBtx.Complete() {
 			if !strings.Contains(DBtx.Error().Error(), `The request already exists in the database`) {
 				log.WithFields(QueryFields(r, startTime)).Error("setUserAccessToComputeResource failed.")

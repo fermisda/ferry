@@ -1,7 +1,6 @@
 package main
 import (
 	"math"
-	"regexp"
 	"strings"
 	"database/sql"
 	"fmt"
@@ -176,6 +175,16 @@ func IncludeGroupAPIs(c *APICollection) {
 		getGroupStorageQuota,
 	}
 	c.Add("getGroupStorageQuota", &getGroupStorageQuota)
+
+	removeUserAccessFromResource := BaseAPI {
+		InputModel {
+			Parameter{UserName, true},
+			Parameter{GroupName, true},
+			Parameter{ResourceName, true},
+		},
+		removeUserAccessFromResource,
+	}
+	c.Add("removeUserAccessFromResource", &removeUserAccessFromResource)
 }
 
 func createGroup(c APIContext, i Input) (interface{}, []APIError) {
@@ -1210,161 +1219,73 @@ func getGroupStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
-func removeUserAccessFromResource(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
-	
-	type jsonstatus struct {
-		Status string `json:"ferry_status,omitempty"`
-		Error string `json:"ferry_error,omitempty"`
-	}
-	var inputErr []jsonstatus
+func removeUserAccessFromResource(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	uName := q.Get("username")
-	gName := q.Get("groupname")
-	rName := q.Get("resourcename")
+	uid := NewNullAttribute(UID)
+	groupid := NewNullAttribute(GroupID)
+	compid := NewNullAttribute(ResourceID)
 
-	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
-		inputErr = append(inputErr, jsonstatus{"", "No username specified."})
-	}
-	if gName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
-		inputErr = append(inputErr, jsonstatus{"", "No groupname specified."})
-	}
-	if rName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No resourcename specified in http query.")
-		inputErr = append(inputErr, jsonstatus{"", "No resourcename name specified."})
-	}
+	var isPrimary sql.NullBool
+	var groupCount int64
 
-	if len(inputErr) > 0 {
-		jsonout, err := json.Marshal(inputErr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
-		}
-		fmt.Fprintf(w, string(jsonout))
-		return
-	}
-	
-	//require auth	
-	authorized,authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
-		return
-	}
-
-	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	err := c.DBtx.QueryRow(`select (select uid from users where uname = $1),
+								   (select groupid from groups where name = $2 and type = 'UnixGroup'),
+								   (select compid from compute_resources where name = $3),
+								   (select is_primary from compute_access_group
+									join users using(uid)
+									join groups g using(groupid)
+									join compute_resources cr using(compid)
+									where uname = $1 and g.name = $2 and cr.name = $3),
+								   (select count(*) from compute_access_group as cg
+									join users as u on cg.uid = u.uid
+									join compute_resources as cr on cg.compid = cr.compid
+									where u.uname = $1 and cr.name = $3)`,
+						   i[UserName], i[GroupName], i[ResourceName]).Scan(&uid, &groupid, &compid, &isPrimary, &groupCount)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
-		return
-	}
-	defer DBtx.Rollback(cKey)
-
-	query := `select $1 in (select uname from users),
-					 $2 in (select name from groups),
-					 $3 in (select name from compute_resources),
-					 (select is_primary from compute_access_group as cg
-										join users as u on cg.uid = u.uid
-										join groups as g on cg.groupid = g.groupid
-										join compute_resources as cr on cg.compid = cr.compid
-										where u.uname = $1 and g.name = $2 and cr.name = $3),
-					 (select count(*) from compute_access_group as cg
-										join users as u on cg.uid = u.uid
-										join compute_resources as cr on cg.compid = cr.compid
-										where u.uname = $1 and cr.name = $3)`
-
-	re := regexp.MustCompile(`[\s\t\n]+`)
-	log.Debug(re.ReplaceAllString(query, " "))
-	var rows *sql.Rows
-	rows, err = DBtx.Query(query, uName, gName, rName)
-	if err != nil {	
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
-		return
-	}
-	var userExists, groupExists, resourceExists, isPrimary bool
-	var groupCount int
-	if rows.Next() {
-		rows.Scan(&userExists, &groupExists, &resourceExists, &isPrimary, &groupCount)
-	}
-	rows.Close()
-
-	if isPrimary && groupCount > 1 {
-		log.Error("Trying to remove a primary group.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Trying to remove a primary group. Set another group as primary or remove other groups prior to this one.\" }")
-		return
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	query = `delete from compute_access_group where
-				uid = (select uid from users where uname = $1) and
-				groupid = (select groupid from groups where name = $2 and type = 'UnixGroup') and
-				compid = (select compid from compute_resources where name = $3);`
-	log.Debug(re.ReplaceAllString(query, " "))
+	if !uid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
+	}
+	if !groupid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
+	}
+	if !compid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, ResourceName))
+	}
+	if isPrimary.Bool && groupCount > 1 {
+		apiErr = append(apiErr, APIError{errors.New("trying to remove a primary group"), ErrorAPIRequirement})
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
 
-	var res sql.Result
-	res, err = DBtx.Exec(query, uName, gName, rName)
+	res, err := c.DBtx.Exec(`delete from compute_access_group where uid = $1 and groupid = $2 and compid = $3`, uid, groupid, compid)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
 	var nRows int64
 	if err == nil {
 		nRows, _ = res.RowsAffected()
 	}
 
-	if err == nil && nRows > 0 {
-		query = `select * from compute_access_group where
-				uid = (select uid from users where uname = $1) and
-				compid = (select compid from compute_resources where name = $2);`
-		log.Debug(re.ReplaceAllString(query, " "))
-		rows, err = DBtx.Query(query, uName, rName)
-		
-		if !rows.Next() {
-			query = `delete from compute_access where
-					uid = (select uid from users where uname = $1) and
-					compid = (select compid from compute_resources where name = $2);`
-			log.Debug(re.ReplaceAllString(query, " "))
-			_, err = DBtx.Exec(query, uName, rName)
+	if nRows == groupCount{
+		_, err := c.DBtx.Exec(`delete from compute_access where uid = $1 and compid = $2`, uid, compid)
+		if err != nil {
+			log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+			return nil, apiErr
 		}
 	}
 
-	var output interface{}
-	if err != nil || nRows == 0 {
-		var queryStatus []jsonstatus
-		if userExists && groupExists && resourceExists {
-			queryStatus = append(queryStatus, jsonstatus{"", "User does not have access to this group in the compute resource."})
-			log.WithFields(QueryFields(r, startTime)).Error("User does not have access to this group in the compute resource.")
-		}
-		if !userExists {
-			queryStatus = append(queryStatus, jsonstatus{"", "User does not exist."})
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-		}
-		if !groupExists {
-			queryStatus = append(queryStatus, jsonstatus{"", "Group does not exist."})
-			log.WithFields(QueryFields(r, startTime)).Error("Grpup does not exist.")
-		}
-		if !resourceExists {
-			queryStatus = append(queryStatus, jsonstatus{"", "Compute resource does not exist."})
-			log.WithFields(QueryFields(r, startTime)).Error("Compute resource does not exist.")
-		}
-		output = queryStatus
-	} else {
-		log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully deleted (%s,%s,%s) from compute_access.", uName, gName, rName))
-		if cKey != 0 {
-			log.WithFields(QueryFields(r, startTime)).Info("Success!")
-			output = jsonstatus{"success", ""}
-		}
-		DBtx.Commit(cKey)
-	}
-
-	jsonoutput, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-	}
-	if cKey != 0 {
-		fmt.Fprintf(w, string(jsonoutput))
-	}
+	return nil, nil
 }
 
 func setGroupAccessToResource(w http.ResponseWriter, r *http.Request) {

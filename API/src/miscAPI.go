@@ -228,6 +228,12 @@ func IncludeMiscAPIs(c *APICollection) {
 		getPasswdFile,
 	}
 	c.Add("getPasswdFile", &getPasswdFile)
+
+	ping := BaseAPI{
+		nil,
+		ping,
+	}
+	c.Add("ping", &ping)
 }
 
 func NotDoneYet(w http.ResponseWriter, r *http.Request, t time.Time) {
@@ -1173,10 +1179,11 @@ func getAllComputeResources(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
-func ping(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	fmt.Fprintf(w, `[{ "ferry_status": "success"}, { "release_version" : "`+release_ver+`"}, {"build_date" : "`+build_date+`"}]`)
-	return
+func ping(c APIContext, i Input) (interface{}, []APIError) {
+	const ReleaseVersion Attribute = "releaseversion"
+	const BuildDate Attribute = "builddate"
+
+	return map[Attribute]interface{} {ReleaseVersion: release_ver, BuildDate: build_date}, nil
 }
 
 func getVOUserMap(c APIContext, i Input) (interface{}, []APIError) {

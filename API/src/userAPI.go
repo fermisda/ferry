@@ -575,9 +575,9 @@ func getUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 	if len(out) == 0 {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
 		return nil, apiErr
-	} else {
-		return out, nil
 	}
+
+	return out, nil
 }
 
 func addUserToGroup(c APIContext, i Input) (interface{}, []APIError) {
