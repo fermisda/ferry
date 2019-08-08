@@ -289,6 +289,15 @@ func IncludeUserAPIs(c *APICollection) {
 		removeUserCertificateDN,
 	}
 	c.Add("removeUserCertificateDN", &removeUserCertificateDN)
+
+	removeUserExternalAffiliationAttribute := BaseAPI {
+		InputModel {
+			Parameter{UserName, true},
+			Parameter{UserAttribute, true},
+		},
+		removeUserExternalAffiliationAttribute,
+	}
+	c.Add("removeUserExternalAffiliationAttribute", &removeUserExternalAffiliationAttribute)
 }
 
 func getUserCertificateDNs(c APIContext, i Input) (interface{}, []APIError) {
@@ -1046,102 +1055,40 @@ func setUserExternalAffiliationAttribute(c APIContext, i Input) (interface{}, []
 
 	return nil, nil
 }
-func removeUserExternalAffiliationAttribute(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+func removeUserExternalAffiliationAttribute(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	uName := strings.TrimSpace(q.Get("username"))
-	attribute := strings.TrimSpace(q.Get("attribute"))
-
-	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
-		return
-	}
-	if attribute == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No attribute specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No attribute specified.\" }")
-		return
+	var validAttribute bool
+	uid := NewNullAttribute(UID)
+	err := c.DBtx.QueryRow(`select (select uid from users where uname = $1),
+								   (select $2 = any (enum_range(null::external_affiliation_attribute_attribute_type)::text[]))`,
+						   i[UserName], i[UserAttribute]).Scan(&uid, &validAttribute)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	authorized, authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
-		return
+	if !uid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
 	}
-
-	DBtx, cKey, err := LoadTransaction(r, DBptr)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	defer DBtx.Rollback(cKey)
-
-	var uid int
-	var att sql.NullString
-
-	queryerr := DBtx.tx.QueryRow(`select us.uid,eaa.attribute from (select uid from users where uname = $1) as us left join (select uid, attribute from external_affiliation_attribute where attribute = $2) as eaa on us.uid=eaa.uid`,uName, attribute).Scan(&uid,&att)
-	if queryerr != nil {
-		if queryerr == sql.ErrNoRows {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-			return
-		} else if strings.Contains(queryerr.Error(), "invalid input value for enum") {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid attribute.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid attribute.\" }")
-			return
-		} else {
-			log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query. Check logs.\" }")
-			return
-		}
-	}
-
-	if !att.Valid {
-		log.WithFields(QueryFields(r, startTime)).Error("User doesn't have this attribute.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"User doesn't have this attribute.\" }")
-		return	
+	if !validAttribute {
+		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, UserAttribute))
 	}
 	
-	//	_, err = DBtx.Exec(fmt.Sprintf(`do $$
-	//									declare v_uid int;
-//									
-//									declare c_uname text = '%s';
-//									declare c_attribute text = '%s';
-//
-//									begin
-//										select uid into v_uid from users where uname = c_uname;
-//										if v_uid is null then
-//											raise 'uname does not exist';
-//										end if;
-//
-//										if (v_uid, c_attribute) not in (select uid, attribute from external_affiliation_attribute) then
-//											raise 'attribute does not exist';
-//										end if;
-//
-//										delete from external_affiliation_attribute where uid = v_uid and attribute = c_attribute;
-//									end $$;`, uName, attribute))
-//
-	_, err = DBtx.Exec(`delete from external_affiliation_attribute where uid = $1 and attribute = $2`, uid, att.String)
-
-	if err == nil {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
-	} else {
-		if strings.Contains(err.Error(), `uname does not exist`) {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-		} else if strings.Contains(err.Error(), `attribute does not exist`) {
-			log.WithFields(QueryFields(r, startTime)).Error("External affiliation attribute does not exist.")
-			fmt.Fprintf(w, "{ \"ferry_error\": \"External affiliation attribute does not exist.\" }")
-		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
-		}
+	if len(apiErr) > 0 {
+		return nil, apiErr
 	}
 
-	DBtx.Commit(cKey)
+	_, err = c.DBtx.Exec(`delete from external_affiliation_attribute where uid = $1 and attribute = $2`,
+						 uid, i[UserAttribute])
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	return nil, nil
 }
 func getUserExternalAffiliationAttributes(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
