@@ -21,10 +21,8 @@ server:
   cas: /etc/grid-security/certificates/
 
 certificates:
-  - /etc/grid-security/certificates/cilogon-osg.pem
   - /etc/grid-security/certificates/cilogon-basic.pem
   - /etc/grid-security/certificates/InCommon-IGTF-Server-CA.pem
-# - /etc/pki/tls/certs/ca-bundle.crt  
 
 ip_whitelist:
   - 131.225.108.61      # fermi-snow-dev.fnal.gov
