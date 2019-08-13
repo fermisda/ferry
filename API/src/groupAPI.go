@@ -1473,7 +1473,7 @@ func getAllGroupsMembers(c APIContext, i Input) (interface{}, []APIError) {
 	group := jsonentry {
 		GroupName: 	"",
 		GroupType: 	"",
-		GID:		0,
+		GID:		nil,
 		Members:	make([]jsonentry, 0),
 	}
 	out := make([]jsonentry, 0)
@@ -1488,8 +1488,12 @@ func getAllGroupsMembers(c APIContext, i Input) (interface{}, []APIError) {
 			group = jsonentry {
 				GroupName: 	row[GroupName].Data,
 				GroupType: 	row[GroupType].Data,
-				GID:		row[GID].Data,
 				Members:	make([]jsonentry, 0),
+			}
+			if row[GroupType].Data.(string) == "UnixGroup" {
+				group[GID] = row[GID].Data
+			} else {
+				group[GID] = nil
 			}
 			if row[UserName].Data != "" {
 				group[Members] = append(group[Members].([]jsonentry), jsonentry {
