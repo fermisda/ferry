@@ -234,6 +234,12 @@ func IncludeMiscAPIs(c *APICollection) {
 		ping,
 	}
 	c.Add("ping", &ping)
+
+	cleanStorageQuotas := BaseAPI{
+		nil,
+		cleanStorageQuotas,
+	}
+	c.Add("cleanStorageQuotas", &cleanStorageQuotas)
 }
 
 func NotDoneYet(w http.ResponseWriter, r *http.Request, t time.Time) {
@@ -1260,20 +1266,11 @@ func getVOUserMap(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
-func cleanStorageQuotas(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+func cleanStorageQuotas(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	DBtx, cKey, err := LoadTransaction(r, DBptr)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error starting database transaction.\" }")
-		return
-	}
-	defer DBtx.Rollback(cKey)
-
-	_, err = DBtx.Exec(`DO $$
-					   	BEGIN
+	_, err := c.DBtx.Exec(`DO $$
+					   	   BEGIN
 
 						   	UPDATE storage_quota AS q
 						   	SET last_updated = t.valid_until
@@ -1292,18 +1289,15 @@ func cleanStorageQuotas(w http.ResponseWriter, r *http.Request) {
 						   	DELETE FROM storage_quota
 						   	WHERE valid_until < NOW();
 
-					   	END $$;`)
+							  END $$;`)
+
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		return
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	DBtx.Commit(cKey)
-
-	log.WithFields(QueryFields(r, startTime)).Info("Success!")
-	fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+	return nil, nil
 }
 
 func cleanCondorQuotas(w http.ResponseWriter, r *http.Request) {
