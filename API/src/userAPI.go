@@ -945,18 +945,20 @@ func getUserShellAndHomeDir(c APIContext, i Input) (interface{}, []APIError) {
 	err = c.DBtx.QueryRow(`select shell, home_dir from compute_access
 						   where uid = $1 and compid = $2 and (last_updated >= $3 or $3 is null)`,
 						  uid, resourceid, i[LastUpdated]).Scan(row[Shell], row[HomeDir])
-	if err != nil {
+	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
 
 	type jsonout map[Attribute]interface{}
-	var out jsonout
+	out := make(jsonout)
 
-	out = jsonout{
-		Shell:	 row[Shell].Data,
-		HomeDir: row[HomeDir].Data,
+	if row[Shell].Valid {
+		out = jsonout{
+			Shell:	 row[Shell].Data,
+			HomeDir: row[HomeDir].Data,
+		}
 	}
 
 	return out, nil
