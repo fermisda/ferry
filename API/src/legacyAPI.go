@@ -8189,3 +8189,121 @@ func removeUserExternalAffiliationAttributeLegacy(w http.ResponseWriter, r *http
 
 	DBtx.Commit(cKey)
 }
+
+func removeGroupFromUnitLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+
+	type jsonstatus struct {
+		Status string `json:"ferry_status,omitempty"`
+		Error []string `json:"ferry_error,omitempty"`
+	}
+	var inputErr jsonstatus
+
+	q := r.URL.Query()
+	gName := strings.TrimSpace(q.Get("groupname"))
+	gType := strings.TrimSpace(q.Get("grouptype"))
+	uName := strings.TrimSpace(q.Get("unitname"))
+
+	if gName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
+		inputErr.Error = append(inputErr.Error, "No groupname specified.")
+	}
+	if gType == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No grouptype specified in http query.")
+		inputErr.Error = append(inputErr.Error, "No grouptype specified.")
+	}
+	if uName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
+		inputErr.Error = append(inputErr.Error, "No unitname specified.")
+	}
+	if len(inputErr.Error) > 0 {
+		jsonout, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err)
+		}
+		fmt.Fprintf(w, string(jsonout))
+		return
+	}
+
+	//require auth	
+	authorized,authout := authorize(r)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
+		return
+	}
+
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	defer DBtx.Rollback(cKey)
+
+	typeExists := true
+	var groupExists, unitExists bool
+	rows, err := DBtx.Query(`select ($1, $2) in (select name, type from groups),
+					   $3 in (select name from affiliation_units);`, gName, gType, uName)
+	if err != nil {	
+		if strings.Contains(err.Error(), "invalid input value for enum") {
+			typeExists = false
+		} else {
+			defer log.WithFields(QueryFields(r, startTime)).Error(err)
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
+			return
+		}
+	} else {
+		if rows.Next() {
+			rows.Scan(&groupExists, &unitExists)
+		}
+		rows.Close()
+	}
+
+	aRows := int64(0)
+	if typeExists {
+		res, err := DBtx.Exec(`delete from affiliation_unit_group
+							where groupid = (select groupid from groups where (name, type) = ($1, $2))
+							and   unitid = (select unitid from affiliation_units where name = $3);`, gName, gType, uName);
+		if err == nil {
+			aRows, _ = res.RowsAffected()
+		}
+	}
+
+	var output interface{}
+	if aRows == 1 {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		output = jsonstatus{"success", nil}
+		if cKey != 0 {
+			DBtx.Commit(cKey)
+		} else {
+			return
+		}
+	} else {
+		var out jsonstatus
+		if !typeExists {
+			log.WithFields(QueryFields(r, startTime)).Error("Invalid group type.")
+			out.Error = append(out.Error, "Invalid group type.")
+		} else {
+			if !groupExists {
+				log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+				out.Error = append(out.Error, "Group does not exist.")
+			}
+			if !unitExists {
+				log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
+				out.Error = append(out.Error, "Affiliation unit does not exist.")
+			}
+			if groupExists && unitExists {
+				log.WithFields(QueryFields(r, startTime)).Error("Group does not belong to affiliation unit.")
+				out.Error = append(out.Error, "Group does not belong to affiliation unit.")
+			}
+		}
+		output = out
+	}
+
+	out, err := json.Marshal(output)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+	}
+	fmt.Fprintf(w, string(out))
+}

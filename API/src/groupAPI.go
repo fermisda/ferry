@@ -37,6 +37,16 @@ func IncludeGroupAPIs(c *APICollection) {
 	}
 	c.Add("addGroupToUnit", &addGroupToUnit)
 
+	removeGroupFromUnit := BaseAPI {
+		InputModel {
+			Parameter{GroupName, true},
+			Parameter{GroupType, true},
+			Parameter{UnitName, true},
+		},
+		removeGroupFromUnit,
+	}
+	c.Add("removeGroupFromUnit", &removeGroupFromUnit)
+
 	setPrimaryStatusGroup := BaseAPI {
 		InputModel {
 			Parameter{GroupName, true},
@@ -310,122 +320,65 @@ func addGroupToUnit(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
-func removeGroupFromUnit(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+func removeGroupFromUnit(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	type jsonstatus struct {
-		Status string `json:"ferry_status,omitempty"`
-		Error []string `json:"ferry_error,omitempty"`
-	}
-	var inputErr jsonstatus
+	groupid	:= NewNullAttribute(GroupID)
+	unitid	:= NewNullAttribute(UnitID)
+	primary	:= NewNullAttribute(Primary)
+	
+	var validType bool
 
-	q := r.URL.Query()
-	gName := strings.TrimSpace(q.Get("groupname"))
-	gType := strings.TrimSpace(q.Get("grouptype"))
-	uName := strings.TrimSpace(q.Get("unitname"))
-
-	if gName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
-		inputErr.Error = append(inputErr.Error, "No groupname specified.")
-	}
-	if gType == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No grouptype specified in http query.")
-		inputErr.Error = append(inputErr.Error, "No grouptype specified.")
-	}
-	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
-		inputErr.Error = append(inputErr.Error, "No unitname specified.")
-	}
-	if len(inputErr.Error) > 0 {
-		jsonout, err := json.Marshal(inputErr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
-		}
-		fmt.Fprintf(w, string(jsonout))
-		return
-	}
-
-	//require auth	
-	authorized,authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
-		return
-	}
-
-	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, i[GroupType]).Scan(&validType)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	defer DBtx.Rollback(cKey)
-
-	typeExists := true
-	var groupExists, unitExists bool
-	rows, err := DBtx.Query(`select ($1, $2) in (select name, type from groups),
-					   $3 in (select name from affiliation_units);`, gName, gType, uName)
-	if err != nil {	
-		if strings.Contains(err.Error(), "invalid input value for enum") {
-			typeExists = false
-		} else {
-			defer log.WithFields(QueryFields(r, startTime)).Error(err)
-			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
-			return
-		}
-	} else {
-		if rows.Next() {
-			rows.Scan(&groupExists, &unitExists)
-		}
-		rows.Close()
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	aRows := int64(0)
-	if typeExists {
-		res, err := DBtx.Exec(`delete from affiliation_unit_group
-							where groupid = (select groupid from groups where (name, type) = ($1, $2))
-							and   unitid = (select unitid from affiliation_units where name = $3);`, gName, gType, uName);
-		if err == nil {
-			aRows, _ = res.RowsAffected()
-		}
+	if !validType {
+		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, GroupType))
+		return nil, apiErr
 	}
 
-	var output interface{}
-	if aRows == 1 {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = jsonstatus{"success", nil}
-		if cKey != 0 {
-			DBtx.Commit(cKey)
-		} else {
-			return
-		}
-	} else {
-		var out jsonstatus
-		if !typeExists {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid group type.")
-			out.Error = append(out.Error, "Invalid group type.")
-		} else {
-			if !groupExists {
-				log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
-				out.Error = append(out.Error, "Group does not exist.")
-			}
-			if !unitExists {
-				log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
-				out.Error = append(out.Error, "Affiliation unit does not exist.")
-			}
-			if groupExists && unitExists {
-				log.WithFields(QueryFields(r, startTime)).Error("Group does not belong to affiliation unit.")
-				out.Error = append(out.Error, "Group does not belong to affiliation unit.")
-			}
-		}
-		output = out
-	}
-
-	out, err := json.Marshal(output)
+	err = c.DBtx.QueryRow(`select (select groupid from groups where name = $1 and type = $2),
+								  (select unitid from affiliation_units where name = $3)`,
+						  i[GroupName], i[GroupType], i[UnitName]).Scan(&groupid, &unitid)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
-	fmt.Fprintf(w, string(out))
+
+	err = c.DBtx.QueryRow(`select is_primary from affiliation_unit_group where groupid = $1 and unitid = $2`,
+						  groupid, unitid).Scan(&primary)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !unitid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+	}
+	if !groupid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
+	}
+	if primary.Valid && primary.Data.(bool) {
+		apiErr = append(apiErr, APIError{errors.New("this is the primary group for the unit"), ErrorAPIRequirement})
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	_, err = c.DBtx.Exec(`delete from affiliation_unit_group where groupid = $1 and unitid = $2`, groupid, unitid)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	return nil, nil
 }
 
 func setPrimaryStatusGroup(c APIContext, i Input) (interface{}, []APIError) {
