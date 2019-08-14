@@ -8307,3 +8307,75 @@ func removeGroupFromUnitLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, string(out))
 }
+
+func removeCondorQuotaLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	group := strings.TrimSpace(q.Get("condorgroup"))
+	comp  := strings.TrimSpace(q.Get("resourcename"))
+
+	authorized,authout := authorize(r)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
+		return
+	}
+
+	type jsonerror struct {
+		Error []string `json:"ferry_error"`
+	}
+
+	var inputErr jsonerror
+
+	if group == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No condorgroup specified in http query.")
+		inputErr.Error = append(inputErr.Error, "No condorgroup specified.")
+	}
+	if comp == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No resourcename specified in http query.")
+		inputErr.Error = append(inputErr.Error, "No resourcename specified.")
+	}
+
+	if len(inputErr.Error) > 0 {
+		jsonout, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err)
+		}
+		fmt.Fprintf(w, string(jsonout))
+		return
+	}
+
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err)
+	}
+	defer DBtx.Rollback(cKey)
+
+	res, err := DBtx.Exec(`DELETE FROM compute_batch
+						   WHERE compid = (SELECT compid FROM compute_resources WHERE name = $1)
+						   AND name = $2;`, comp, group)
+
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Something went wrong.\" }")
+		return
+	} else {
+		n, err := res.RowsAffected()
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error counting rows affected.\" }")
+			return
+		}
+		if n == 0 {
+			log.WithFields(QueryFields(r, startTime)).Error("Quota does not exist.")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Quota does not exist.\" }")
+			return
+		}
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
+	}
+
+	DBtx.Commit(cKey)
+}

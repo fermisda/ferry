@@ -224,7 +224,7 @@ func main() {
 	grouter.HandleFunc("/getBatchPriorities", APIs["getBatchPriorities"].Run)
 	grouter.HandleFunc("/getCondorQuotas", APIs["getCondorQuotas"].Run)
 	grouter.HandleFunc("/setCondorQuota", APIs["setCondorQuota"].Run)
-	grouter.HandleFunc("/removeCondorQuota", removeCondorQuota)
+	grouter.HandleFunc("/removeCondorQuota", APIs["removeCondorQuota"].Run)
 	grouter.HandleFunc("/getGroupStorageQuota", APIs["getGroupStorageQuota"].Run)
 	grouter.HandleFunc("/getAllGroups", APIs["getAllGroups"].Run)
 	grouter.HandleFunc("/getAllGroupsMembers", APIs["getAllGroupsMembers"].Run)

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	_ "github.com/lib/pq"
 	"net/http"
-	"encoding/json"
 	"time"
 	log "github.com/sirupsen/logrus"
 	"strconv"
@@ -173,6 +172,15 @@ func IncludeGroupAPIs(c *APICollection) {
 		setCondorQuota,
 	}
 	c.Add("setCondorQuota", &setCondorQuota)
+
+	removeCondorQuota := BaseAPI {
+		InputModel {
+			Parameter{CondorGroup, true},
+			Parameter{ResourceName, true},
+		},
+		removeCondorQuota,
+	}
+	c.Add("removeCondorQuota", &removeCondorQuota)
 
 	getGroupStorageQuota := BaseAPI {
 		InputModel {
@@ -1026,76 +1034,31 @@ func setCondorQuota(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
-func removeCondorQuota(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
+func removeCondorQuota(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	group := strings.TrimSpace(q.Get("condorgroup"))
-	comp  := strings.TrimSpace(q.Get("resourcename"))
+	compid := NewNullAttribute(ResourceID)
 
-	authorized,authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
-		return
+	err := c.DBtx.QueryRow(`select compid from compute_resources where name = $1`, i[ResourceName]).Scan(&compid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	type jsonerror struct {
-		Error []string `json:"ferry_error"`
+	if !compid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, ResourceName))
+		return nil, apiErr
 	}
 
-	var inputErr jsonerror
-
-	if group == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No condorgroup specified in http query.")
-		inputErr.Error = append(inputErr.Error, "No condorgroup specified.")
-	}
-	if comp == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No resourcename specified in http query.")
-		inputErr.Error = append(inputErr.Error, "No resourcename specified.")
-	}
-
-	if len(inputErr.Error) > 0 {
-		jsonout, err := json.Marshal(inputErr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
-		}
-		fmt.Fprintf(w, string(jsonout))
-		return
-	}
-
-	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	_, err = c.DBtx.Exec(`delete from compute_batch where compid = $1 and name = $2`, compid, i[CondorGroup])
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	defer DBtx.Rollback(cKey)
-
-	res, err := DBtx.Exec(`DELETE FROM compute_batch
-						   WHERE compid = (SELECT compid FROM compute_resources WHERE name = $1)
-						   AND name = $2;`, comp, group)
-
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Something went wrong.\" }")
-		return
-	} else {
-		n, err := res.RowsAffected()
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Error counting rows affected.\" }")
-			return
-		}
-		if n == 0 {
-			log.WithFields(QueryFields(r, startTime)).Error("Quota does not exist.")
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Quota does not exist.\" }")
-			return
-		}
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	DBtx.Commit(cKey)
+	return nil, nil
 }
 
 func getGroupStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
