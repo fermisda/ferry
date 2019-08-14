@@ -252,7 +252,7 @@ func main() {
 	grouter.HandleFunc("/getVOUserMap", APIs["getVOUserMap"].Run)
 	grouter.HandleFunc("/setStorageQuota", APIs["setStorageQuota"].Run)
 	grouter.HandleFunc("/cleanStorageQuotas", APIs["cleanStorageQuotas"].Run)
-	grouter.HandleFunc("/cleanCondorQuotas", cleanCondorQuotas)
+	grouter.HandleFunc("/cleanCondorQuotas", APIs["cleanCondorQuotas"].Run)
 	grouter.HandleFunc("/ping", APIs["ping"].Run)
 
 	grouter.HandleFunc("/testBaseAPI", APIs["testBaseAPI"].Run)

@@ -8425,3 +8425,48 @@ func cleanStorageQuotasLegacy(w http.ResponseWriter, r *http.Request) {
 	log.WithFields(QueryFields(r, startTime)).Info("Success!")
 	fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 }
+
+func cleanCondorQuotasLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+
+	DBtx, cKey, err := LoadTransaction(r, DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error starting database transaction.\" }")
+		return
+	}
+	defer DBtx.Rollback(cKey)
+
+	_, err = DBtx.Exec(`DO $$
+					   	BEGIN
+
+						   	UPDATE compute_batch AS q
+						   	SET last_updated = t.valid_until
+						   	FROM (SELECT q.batchid, tmp.valid_until
+								  FROM (SELECT *
+									    FROM compute_batch
+									    WHERE valid_until < NOW())
+								  AS tmp
+								  JOIN compute_batch AS q
+								  ON q.name = tmp.name
+								  AND q.valid_until is null)
+							AS t
+							WHERE q.batchid = t.batchid;
+
+						   	DELETE FROM compute_batch
+						   	WHERE valid_until < NOW();
+
+					   	END $$;`)
+	if err != nil {
+		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
+		return
+	}
+
+	DBtx.Commit(cKey)
+
+	log.WithFields(QueryFields(r, startTime)).Info("Success!")
+	fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+}
