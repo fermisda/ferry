@@ -3,11 +3,8 @@ package main
 import (
 	"errors"
 	"database/sql"
-	"fmt"
 	log "github.com/sirupsen/logrus"
-	"net/http"
 	"strings"
-	"time"
 	_ "github.com/lib/pq"
 )
 
@@ -53,6 +50,14 @@ func IncludeUserAPIs(c *APICollection) {
 		getSuperUserList,
 	}
 	c.Add("getSuperUserList", &getSuperUserList)
+
+	deleteUser := BaseAPI {
+		InputModel {
+			Parameter{UserName, true},
+		},
+		deleteUser,
+	}
+	c.Add("deleteUser", &deleteUser)
 
 	addCertificateDNToUser := BaseAPI {
 		InputModel {
@@ -1446,59 +1451,35 @@ func getUserUID(c APIContext, i Input) (interface{}, []APIError) {
 	return uid.Data, nil
 }
 
-func deleteUser(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
-	uName := q.Get("username")
-	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No username specified.\" }")
-		return		
+func deleteUser(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+	
+	uid := NewNullAttribute(UID)
+
+	err := c.DBtx.QueryRow(`select uid from users where uname = $1`, i[UserName]).Scan(&uid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	authorized, authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
-		return
+	if !uid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
+		return nil, apiErr
 	}
 
-	// check if the username is already in the DB. If it is not, say so and exit since there is nothing to delete.
-	var uname string
-	checkerr := DBptr.QueryRow(`select uid from users where uname=$1`, uName).Scan(&uname)
-	
-	switch {
-	case checkerr == sql.ErrNoRows: 
-		// set the header for success since we are already at the desired result
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Nothing to delete; user does not exist.\" }")
-		log.WithFields(QueryFields(r, startTime)).Info("user ID " + uName + " not found in DB.")
-		return	
-	case checkerr != nil:
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Nothing to delete; user does not exist.\" }")
-		log.WithFields(QueryFields(r, startTime)).Error("deleteUser: Error querying DB for user " + uName + ".")
-		return	
-	default:
-		// actually do the deletion now
-		DBtx, cKey, err := LoadTransaction(r, DBptr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
-		}
-		defer DBtx.Rollback(cKey)
-	
-		_, err = DBtx.Exec(`delete from users where uname=$1`,uName) 
-		if err == nil {	
-			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
-			log.WithFields(QueryFields(r, startTime)).Info("Success!")
-			DBtx.Commit(cKey)
-			return
+	_, err = c.DBtx.Exec(`delete from users where uid = $1`, uid)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		if strings.Contains(err.Error(), "violates foreign key constraint") {
+			apiErr = append(apiErr, APIError{errors.New("all associations with this user shall be removed before it can be deleted"), ErrorAPIRequirement})
 		} else {
-			fmt.Fprintf(w, "{ \"ferry_error\": \"%s\" }",err.Error())
-			log.WithFields(QueryFields(r, startTime)).Error("deleteUser: Error during delete action for user " + uName + ": " + err.Error())
-			return			
-		}	
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		}
+		return nil, apiErr
 	}
+
+	return nil, nil
 }
 
 func getUserAccessToComputeResources(c APIContext, i Input) (interface{}, []APIError) {
