@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 	_ "github.com/lib/pq"
@@ -72,6 +71,14 @@ func IncludeUnitAPIs(c *APICollection) {
 		createAffiliationUnit,
 	}
 	c.Add("createAffiliationUnit", &createAffiliationUnit)
+
+	removeAffiliationUnit := BaseAPI {
+		InputModel {
+			Parameter{UnitName, true},
+		},
+		removeAffiliationUnit,
+	}
+	c.Add("removeAffiliationUnit", &removeAffiliationUnit)
 
 	createFQAN := BaseAPI {
 		InputModel {
@@ -145,79 +152,41 @@ func createAffiliationUnit(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
-func removeAffiliationUnit(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
-	unitName := strings.TrimSpace(q.Get("unitname"))
-	if unitName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No experiment specified in http query.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"No experiment name specified.\" }")
-		return
+func removeAffiliationUnit(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+
+	unitid := NewNullAttribute(UnitID)
+
+	err := c.DBtx.QueryRow(`select unitid from affiliation_units where name=$1`, i[UnitName]).Scan(&unitid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
-	//requires auth
-	authorized, authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
-		return
+	if !unitid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+		return nil, apiErr
 	}
-	//check if it is really there already
-	// check if it already exists
-	var unitId int
-	checkerr := DBptr.QueryRow(`select unitid from affiliation_units where name=$1`, unitName).Scan(&unitId)
-	log.WithFields(QueryFields(r, startTime)).Info("unitID = " + strconv.Itoa(unitId))
-	switch {
-	case checkerr == sql.ErrNoRows:
-		// OK, it doesn't exist, let's add it now.
-		log.WithFields(QueryFields(r, startTime)).Error("Cannot delete affiliation unit " + unitName + "; unit does not exist.")
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Unit %s does not exist.\" }", unitName)
-		return
-	case checkerr != nil:
-		//other weird error
-		w.WriteHeader(http.StatusNotFound)
-		log.WithFields(QueryFields(r, startTime)).Error("Cannot remove affiliation unit " + unitName + ": " + checkerr.Error())
-		fmt.Fprintf(w, "{ \"ferry_error\": \"Database error; check logs.\" }")
-		return
-	default:
 
-		DBtx, cKey, err := LoadTransaction(r, DBptr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
-			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprintf(w, "{ \"ferry_error\": \"Error starting database transaction.\" }")
-			return
-		}
-		defer DBtx.Rollback(cKey)
-		// string for the remove statement
+	_, err = c.DBtx.Exec(`delete from voms_url where unitid = $1`, unitid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
 
-		removestr := fmt.Sprintf(`do $$ declare v_unitid int = %d ; begin delete from voms_url where unitid=v_unitid; delete from affiliation_units where unitid=v_unitid ; end $$;`, unitId)
-		//create prepared statement
-		_, err = DBtx.Exec(removestr)
-
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error deleting " + unitName + " to affiliation_units: " + err.Error())
-			if strings.Contains(err.Error(), "fk_affiliation_unit_user_certificate_affiliation_units") {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"There are still user certificates associated with this unit.\" }")
-			} else if strings.Contains(err.Error(), "fk_compute_resource_affiliation_units") {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"There are still compute resources associated with this unit.\" }")
-			} else if strings.Contains(err.Error(), "fk_experiment_group_affiliation_units") {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"There are still groups associated with this unit\" }")
-			} else if strings.Contains(err.Error(), "fk_grid_fqan_affiliation_units") {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"There are still FQANs associated with this unit.\" }")
-			} else {
-				fmt.Fprintf(w, "{ \"ferry_error\": \"Error executing DB deletion.\" }")
-			}
+	_, err = c.DBtx.Exec(`delete from affiliation_units where unitid = $1`, unitid)
+	if err != nil {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		if strings.Contains(err.Error(), "violates foreign key constraint") {
+			apiErr = append(apiErr, APIError{errors.New("all associations with this affiliation unit shall be removed before it can be deleted"), ErrorAPIRequirement})
 		} else {
-			// error is nil, so it's a success. Commit the transaction and return success.
-			if cKey != 0 {
-				DBtx.Commit(cKey)
-			}
-			log.WithFields(QueryFields(r, startTime)).Info("Successfully added " + unitName + " to affiliation_units.")
-			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		}
-		return
+		return nil, apiErr
 	}
+
+	return nil, nil
 }
 
 func setAffiliationUnitInfo(c APIContext, i Input) (interface{}, []APIError) {

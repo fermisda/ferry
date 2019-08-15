@@ -8470,3 +8470,78 @@ func cleanCondorQuotasLegacy(w http.ResponseWriter, r *http.Request) {
 	log.WithFields(QueryFields(r, startTime)).Info("Success!")
 	fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 }
+
+func removeAffiliationUnitLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	unitName := strings.TrimSpace(q.Get("unitname"))
+	if unitName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No experiment specified in http query.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"No experiment name specified.\" }")
+		return
+	}
+	//requires auth
+	authorized, authout := authorize(r)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
+		return
+	}
+	//check if it is really there already
+	// check if it already exists
+	var unitId int
+	checkerr := DBptr.QueryRow(`select unitid from affiliation_units where name=$1`, unitName).Scan(&unitId)
+	log.WithFields(QueryFields(r, startTime)).Info("unitID = " + strconv.Itoa(unitId))
+	switch {
+	case checkerr == sql.ErrNoRows:
+		// OK, it doesn't exist, let's add it now.
+		log.WithFields(QueryFields(r, startTime)).Error("Cannot delete affiliation unit " + unitName + "; unit does not exist.")
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Unit %s does not exist.\" }", unitName)
+		return
+	case checkerr != nil:
+		//other weird error
+		w.WriteHeader(http.StatusNotFound)
+		log.WithFields(QueryFields(r, startTime)).Error("Cannot remove affiliation unit " + unitName + ": " + checkerr.Error())
+		fmt.Fprintf(w, "{ \"ferry_error\": \"Database error; check logs.\" }")
+		return
+	default:
+
+		DBtx, cKey, err := LoadTransaction(r, DBptr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w, "{ \"ferry_error\": \"Error starting database transaction.\" }")
+			return
+		}
+		defer DBtx.Rollback(cKey)
+		// string for the remove statement
+
+		removestr := fmt.Sprintf(`do $$ declare v_unitid int = %d ; begin delete from voms_url where unitid=v_unitid; delete from affiliation_units where unitid=v_unitid ; end $$;`, unitId)
+		//create prepared statement
+		_, err = DBtx.Exec(removestr)
+
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error deleting " + unitName + " to affiliation_units: " + err.Error())
+			if strings.Contains(err.Error(), "fk_affiliation_unit_user_certificate_affiliation_units") {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"There are still user certificates associated with this unit.\" }")
+			} else if strings.Contains(err.Error(), "fk_compute_resource_affiliation_units") {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"There are still compute resources associated with this unit.\" }")
+			} else if strings.Contains(err.Error(), "fk_experiment_group_affiliation_units") {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"There are still groups associated with this unit\" }")
+			} else if strings.Contains(err.Error(), "fk_grid_fqan_affiliation_units") {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"There are still FQANs associated with this unit.\" }")
+			} else {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"Error executing DB deletion.\" }")
+			}
+		} else {
+			// error is nil, so it's a success. Commit the transaction and return success.
+			if cKey != 0 {
+				DBtx.Commit(cKey)
+			}
+			log.WithFields(QueryFields(r, startTime)).Info("Successfully added " + unitName + " to affiliation_units.")
+			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+		}
+		return
+	}
+}
