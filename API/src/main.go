@@ -273,7 +273,7 @@ func main() {
 	//wrapper API calls
 	grouter.HandleFunc("/testWrapper", testWrapper)
 	grouter.HandleFunc("/addUsertoExperiment", APIs["addUserToExperiment"].Run)
-	grouter.HandleFunc("/setLPCStorageAccess", setLPCStorageAccess)
+	grouter.HandleFunc("/setLPCStorageAccess", APIs["setLPCStorageAccess"].Run)
 	grouter.HandleFunc("/createExperiment", createExperiment)
 	grouter.HandleFunc("/addLPCConvener", addLPCConvener)
 	grouter.HandleFunc("/removeLPCConvener", removeLPCConvener)

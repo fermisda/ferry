@@ -217,6 +217,7 @@ const (
 	DN					Attribute = "dn"
 	UserAttribute		Attribute = "attribute"
 	Value				Attribute = "value"
+	ExternalUsername	Attribute = "externalusername"
 	QuotaUnit			Attribute = "quotaunit"
 	Path				Attribute = "path"
 	Shell				Attribute = "shell"
@@ -262,6 +263,7 @@ func (a Attribute) Type() (AttributeType) {
 		DN:					TypeString,
 		UserAttribute:		TypeString,
 		Value:				TypeString,
+		ExternalUsername:	TypeString,
 		QuotaUnit:			TypeString,
 		Path:				TypeString,
 		Shell:				TypeString,

@@ -8619,3 +8619,106 @@ func removeFQANLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, string(out))
 }
+
+func setLPCStorageAccessLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+
+	const unitName = "cms"
+	const storageName = "EOS"
+	const groupName = "us_cms"
+	
+	authorized,authout := authorize(r)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
+		return
+	}
+	
+	var DBtx Transaction
+	R := WithTransaction(r, &DBtx)
+
+	key, err := DBtx.Start(DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error starting database transaction: " + err.Error())
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
+		return
+	}
+	defer DBtx.Rollback(key)
+
+	q.Set("unitname", unitName)
+	R.URL.RawQuery = q.Encode()
+
+	DBtx.Savepoint("addCertificateDNToUser")
+	DBtx.Continue()
+	addCertificateDNToUserLegacy(w, R)
+	if !DBtx.Complete() {
+		if !strings.Contains(DBtx.Error().Error(), `pk_affiliation_unit_user_certificate`) {
+			log.WithFields(QueryFields(r, startTime)).Error("addCertificateDNToUser failed.")
+			if DBtx.Error().Error() == "User does not exist." {
+				fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
+			}
+			return
+		}
+		DBtx.RollbackToSavepoint("addCertificateDNToUser")
+	}
+
+	cernUname := strings.TrimSpace(q.Get("external_username"))
+
+	if cernUname != "" {
+		q.Set("attribute", "cern_username")
+		q.Set("value", cernUname)
+		R.URL.RawQuery = q.Encode()
+
+		DBtx.Continue()
+		setUserExternalAffiliationAttributeLegacy(w, R)
+		if !DBtx.Complete() {
+			log.WithFields(QueryFields(r, startTime)).Error("setUserExternalAffiliationAttribute failed.")
+			return
+		}
+	}
+
+	uname := q.Get("username")
+
+	var nQuotas sql.NullInt64
+	err = DBtx.QueryRow(`select count(*) from storage_quota as sq
+						 join users as u on sq.uid = u.uid
+						 join storage_resources as sr on sq.storageid = sr.storageid
+						 where uname = $1 and name = $2;`, uname, storageName).Scan(&nQuotas)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error querying user quotas: " + err.Error())
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error querying user quotas.\" }")
+		return
+	}
+	if nQuotas.Int64 == 0 {
+		var defaultPath, defaultQuota, defaultUnit sql.NullString
+		err = DBtx.QueryRow("select default_path, default_quota, default_unit from storage_resources where name = $1",
+		storageName).Scan(&defaultPath, &defaultQuota, &defaultUnit)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error querying default storage values: " + err.Error())
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error querying default storage values.\" }")
+			return
+		}
+
+		q.Set("resourcename", storageName)
+		q.Set("groupname", groupName)
+		q.Set("unitname", unitName)
+		q.Set("quota", defaultQuota.String)
+		q.Set("quota_unit", defaultUnit.String)
+		q.Set("path", fmt.Sprintf("%s/%s", defaultPath.String, uname))
+		R.URL.RawQuery = q.Encode()
+
+		DBtx.Continue()
+		setUserStorageQuotaLegacy(w, R)
+		if !DBtx.Complete() {
+			log.WithFields(QueryFields(r, startTime)).Error("setUserStorageQuota failed.")
+			return
+		}
+	}
+
+	log.WithFields(QueryFields(r, startTime)).Info("Success!")
+	fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+
+	DBtx.Commit(key)
+}
