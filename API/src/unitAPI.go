@@ -4,7 +4,6 @@ import (
 	"errors"
 	"regexp"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -100,6 +99,14 @@ func IncludeUnitAPIs(c *APICollection) {
 		setFQANMappings,
 	}
 	c.Add("setFQANMappings", &setFQANMappings)
+
+	removeFQAN := BaseAPI {
+		InputModel {
+			Parameter{FQAN, true},
+		},
+		removeFQAN,
+	}
+	c.Add("removeFQAN", &removeFQAN)
 
 	getAllAffiliationUnits := BaseAPI {
 		InputModel {
@@ -538,78 +545,35 @@ func createFQAN(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
-func removeFQAN(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+func removeFQAN(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	type jsonstatus struct {
-		Status string `json:"ferry_status,omitempty"`
-		Error  string `json:"ferry_error,omitempty"`
-	}
-	var inputErr []jsonstatus
+	fqanid := NewNullAttribute(FQANID)
 
-	q := r.URL.Query()
-	fqan := strings.TrimSpace(q.Get("fqan"))
-
-	if fqan == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No fqan specified in http query.")
-		inputErr = append(inputErr, jsonstatus{"", "No fqan specified."})
-	}
-	if len(inputErr) > 0 {
-		jsonout, err := json.Marshal(inputErr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
-		}
-		fmt.Fprintf(w, string(jsonout))
-		return
+	err := c.DBtx.QueryRow(`select fqanid from grid_fqan where fqan = $1`, i[FQAN]).Scan(&fqanid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
-	authorized, authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
-		return
+	if !fqanid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, FQAN))
+		return nil, apiErr
 	}
 
-	DBtx, cKey, err := LoadTransaction(r, DBptr)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
-	}
-	defer DBtx.Rollback(cKey)
-
-	var aRows int64
-	var res sql.Result
-	res, err = DBtx.Exec("delete from grid_fqan where fqan = $1", fqan)
-	if err == nil {
-		aRows, _ = res.RowsAffected()
-	} else {
-		aRows = 0
-	}
-
-	var output interface{}
-	if aRows == 1 {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
-		output = jsonstatus{"success", ""}
-		if cKey != 0 {
-			DBtx.Commit(cKey)
+	_, err = c.DBtx.Exec("delete from grid_fqan where fqanid = $1", fqanid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		if strings.Contains(err.Error(), "violates foreign key constraint") {
+			apiErr = append(apiErr, APIError{errors.New("all user associations with this fqan shall be removed before it can be deleted"), ErrorAPIRequirement})
 		} else {
-			return
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		}
-	} else {
-		if aRows == 0 && err == nil {
-			log.WithFields(QueryFields(r, startTime)).Error("FQAN doesn't exist.")
-			output = jsonstatus{"", "FQAN doesn't exist."}
-		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-			output = jsonstatus{"", err.Error()}
-		}
+		return nil, apiErr
 	}
 
-	out, err := json.Marshal(output)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
-	}
-	fmt.Fprintf(w, string(out))
+	return nil, nil
 }
 
 func setFQANMappings(c APIContext, i Input) (interface{}, []APIError) {
