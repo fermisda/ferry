@@ -501,7 +501,7 @@ func createFQAN(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 	if duplicateFQAN {
-		apiErr = append(apiErr, APIError{errors.New("specified FQAN mapping already exist"), ErrorAPIRequirement})
+		apiErr = append(apiErr, APIError{errors.New("specified FQAN mapping already exist"), ErrorDuplicateData})
 		return nil, apiErr
 	}
 

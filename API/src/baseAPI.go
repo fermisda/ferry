@@ -246,6 +246,7 @@ const (
 	LastUpdated			Attribute = "lastupdated"
 	Help				Attribute = "help"
 	PasswdMode			Attribute = "passwdmode"
+	Standalone			Attribute = "standalone"
 )
 
 // Type returns the type of the Attribute
@@ -292,6 +293,7 @@ func (a Attribute) Type() (AttributeType) {
 		LastUpdated:		TypeDate,
 		Help:				TypeFlag,
 		PasswdMode:			TypeFlag,
+		Standalone:			TypeFlag,
 	}
 
 	return AttributeType[a]

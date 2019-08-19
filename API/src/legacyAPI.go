@@ -8722,3 +8722,224 @@ func setLPCStorageAccessLegacy(w http.ResponseWriter, r *http.Request) {
 
 	DBtx.Commit(key)
 }
+
+func createExperimentLegacy(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	
+	unitName := strings.TrimSpace(q.Get("unitname"))
+	voms_url := strings.TrimSpace(q.Get("voms_url"))
+	homedir := strings.TrimSpace(q.Get("defaulthomedir"))
+	userName := strings.TrimSpace(q.Get("username"))
+	groupName := strings.TrimSpace(q.Get("groupname"))
+	standalone := strings.TrimSpace(q.Get("standalone")) // it is a standalone VO, i.e. not a subgroup of the Fermilab VO.
+
+	saVO, parserr := strconv.ParseBool(standalone)
+	if standalone == "" {
+		saVO = false
+	}
+	type jsonerror struct {
+		Error string `json:"ferry_error"`
+	}
+	var inputErr []jsonerror
+	
+	if parserr != nil && standalone != "" {
+		log.WithFields(QueryFields(r, startTime)).Error("Error parsing the standalone option.")
+		inputErr = append(inputErr, jsonerror{"Error parsing the standalone option. If provided it should be true or false."})
+	}
+	if unitName == "" {
+		
+		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
+		inputErr = append(inputErr, jsonerror{"No unitname specified."})	
+	}
+	//Set the default home directory to /nashome if it was not provided.
+	if homedir == "" {
+		homedir = "/nashome"
+	}
+	//Use experimentpro if username was not provided.
+	if userName == "" {
+		userName = unitName + "pro"
+	}
+	//Use unitname as groupname if it was not provided.
+	if groupName == "" {
+		groupName = unitName
+	}
+	authorized,authout := authorize(r)
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
+		return
+	}
+
+	duplicateCount := 0
+	duplicateCountRef := 0
+	var DBtx Transaction
+	R := WithTransaction(r, &DBtx)
+	key, err := DBtx.Start(DBptr)
+	if err != nil {
+		log.WithFields(QueryFields(r, startTime)).Error("Error starting database transaction: " + err.Error())
+		inputErr = append(inputErr, jsonerror{"Error starting database transaction."})
+		return
+	}
+	defer DBtx.Rollback(key)
+	if len(inputErr) > 0 {
+		jsonout, err := json.Marshal(inputErr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error(err)
+		}
+		fmt.Fprintf(w, string(jsonout))
+		return		
+	}
+	
+// first create the affiliation unit
+	if saVO {		
+		if voms_url != "" {
+			q.Set("voms_url",voms_url)
+		} else {
+			q.Set("voms_url","https://voms.fnal.gov:8443/voms/" + unitName)
+		}
+		
+	} else {
+		q.Set("voms_url","https://voms.fnal.gov:8443/voms/fermilab/" + unitName)	
+	}
+
+	R.URL.RawQuery = q.Encode()	
+
+	DBtx.Savepoint("createAffiliationUnit")
+//	DBtx.Continue()
+	duplicateCountRef ++
+	createAffiliationUnitLegacy(w,R)
+	if ! DBtx.Complete() {
+		// ERROR HANDLING AND ROLLBACK		
+		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") &&
+		   !strings.Contains(DBtx.Error().Error(), "already exists") {
+			log.WithFields(QueryFields(r, startTime)).Error("Unit already exists.")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in createAffiliationUnit: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
+			return
+		}
+		DBtx.RollbackToSavepoint("createAffiliationUnit")
+		duplicateCount ++	
+	} else {
+			log.WithFields(QueryFields(r, startTime)).Info("Successfully created affiliation_unit " + unitName + "." )
+	}
+
+	//OK, we made the unit. Now, create the compute resource. By default its name is the same as the unit name.
+	q.Set("unitname", unitName)
+	q.Set("resourcename", unitName)
+	q.Set("type", "Interactive")
+	q.Set("defaultshell", "/bin/bash")
+	q.Set("defaulthomedir", homedir)
+	
+	R.URL.RawQuery = q.Encode()
+	DBtx.Savepoint("createComputeResource")
+//	DBtx.Continue()
+	duplicateCountRef ++
+	createComputeResourceLegacy(w,R)
+	if !DBtx.Complete() {
+		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") &&
+		   !strings.Contains(DBtx.Error().Error(), "already exists") {
+			log.WithFields(QueryFields(r, startTime)).Error("createComputeResource failed.")
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in createComputeResource: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
+			return
+		} else {
+			DBtx.RollbackToSavepoint("createComputeResource")
+			duplicateCount ++
+		}
+	}
+	
+// now we need to add the default group (which we assume is the same name as the unit) to affiliation_unit_group
+// Set that group to be the primary group
+
+	q.Set("is_primary", "true")
+	q.Set("grouptype", "UnixGroup")
+	q.Set("groupname", groupName)
+	R.URL.RawQuery = q.Encode()
+	DBtx.Savepoint("addGroupToUnit")
+//	DBtx.Continue()
+	duplicateCountRef ++
+	addGroupToUnitLegacy(w,R)
+	if !DBtx.Complete() {
+		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") &&
+		   !strings.Contains(DBtx.Error().Error(), "Group and unit combination already in DB") {
+			log.WithFields(QueryFields(r, startTime)).Error("addGroupToUnit failed.")
+			log.WithFields(QueryFields(r, startTime)).Error("actual error: " + DBtx.Error().Error() )
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in addGroupToUnit: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
+			return
+		} else {
+			log.WithFields(QueryFields(r, startTime)).Error("actual error: " + DBtx.Error().Error() )
+			DBtx.RollbackToSavepoint("addGroupToUnit")
+			duplicateCount ++
+		}
+	}
+
+	for _, role := range []string{"Analysis", "NULL", "Production"} {
+		//createFQAN
+		// if standalone VO, change the string a bit
+		fqan := "/Role=" + role  + "/Capability=NULL"
+		if saVO {
+			fqan = "/" + unitName + fqan
+		} else {
+			fqan = "/fermilab/" + unitName + fqan
+		}
+		q.Set("fqan",fqan)
+		q.Set("mapped_group", groupName)
+		if role == "Production" {
+			q.Set("mapped_user", userName)
+			q.Set("is_leader", "false")
+			q.Set("username", userName)
+		} else {
+			q.Set("mapped_user","")
+		}
+		R.URL.RawQuery = q.Encode()
+
+		//Production is a special case since we need a mapped user. We should check if experimentpro has been added to the relevant group already.
+		//We also skip CMS since it is another special case.
+
+		if role == "Production" && unitName != "cms" {
+			var tmpuid,tmpgid int
+			DBtx.Savepoint("QuerryRow")
+			queryerr := DBtx.QueryRow(`select uid, groupid from user_group ug join groups g using (groupid) join users u using(uid) where u.uname=$1 and g.name=$2`,unitName + "pro", unitName).Scan(&tmpuid, &tmpgid)
+			if queryerr == sql.ErrNoRows {
+				DBtx.RollbackToSavepoint("QuerryRow")
+				DBtx.Savepoint("addUserToGroup_" + role)
+				addUserToGroupLegacy(w,R)
+				if !DBtx.Complete() {
+					log.WithFields(QueryFields(r, startTime)).Error("Error in addUserToGroup for " + unitName + "pro: " + DBtx.Error().Error())
+					if strings.Contains(DBtx.Error().Error(), "null value in column \"uid\"") {
+						fmt.Fprintf(w,"{ \"ferry_error\": \"User " + userName + " doesn't exist.\" }")
+					} else {
+						fmt.Fprintf(w,"{ \"ferry_error\": \"Error in addUserToGroup: " + strings.Replace(DBtx.Error().Error(), "\"", "'", -1) + ". Rolling back transaction.\" }")
+					}
+					return
+				}
+			}
+		}
+		//		DBtx.Continue()
+		DBtx.Savepoint("createFQAN_" + role)
+		duplicateCountRef ++
+		createFQANLegacy(w, R)
+		if !DBtx.Complete() {
+			// do some error handling and rollback 
+			
+			if !strings.Contains(DBtx.Error().Error(), "Specified FQAN already associated") {
+				fmt.Fprintf(w,"{ \"ferry_error\": \"Error in createFQAN for " + role + ": " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
+				log.WithFields(QueryFields(r, startTime)).Error("Error in createFQAN for role " + role + ": " +  DBtx.Error().Error())
+				return
+			}
+			DBtx.RollbackToSavepoint("createFQAN_" + role)
+			duplicateCount ++
+		}
+	}
+	
+	// If everything worked
+	if duplicateCount < duplicateCountRef {
+		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+	} else {
+		log.WithFields(QueryFields(r, startTime)).Info("Experiment already exists.")
+		fmt.Fprintf(w, "{ \"ferry_status\": \"Experiment already exists.\" }")
+	}
+	
+	DBtx.Commit(key)
+}
