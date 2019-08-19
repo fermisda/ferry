@@ -271,7 +271,7 @@ func main() {
 	grouter.HandleFunc("/getAllAffiliationUnits", APIs["getAllAffiliationUnits"].Run)
 
 	//wrapper API calls
-	grouter.HandleFunc("/testWrapper", testWrapper)
+	grouter.HandleFunc("/testWrapper", APIs["testWrapper"].Run)
 	grouter.HandleFunc("/addUsertoExperiment", APIs["addUserToExperiment"].Run)
 	grouter.HandleFunc("/setLPCStorageAccess", APIs["setLPCStorageAccess"].Run)
 	grouter.HandleFunc("/createExperiment", APIs["createExperiment"].Run)

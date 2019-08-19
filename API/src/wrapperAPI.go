@@ -5,7 +5,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"fmt"
  	_ "github.com/lib/pq"
-	"net/http"
 	"database/sql"
 )
 
@@ -71,26 +70,18 @@ func IncludeWrapperAPIs(c *APICollection) {
 		createExperiment,
 	}
 	c.Add("createExperiment", &createExperiment)
+
+	testWrapper := BaseAPI {
+		nil,
+		testWrapper,
+	}
+	c.Add("testWrapper", &testWrapper)
 }
 
-func testWrapper(w http.ResponseWriter, r *http.Request) {
-	cas, _ := FetchCAs(`C:\Users\coimb\Documents\Ferry\Certificates`)
-	rows, _ := DBptr.Query("select dn, issuer_ca from user_certificates;")
-
-	var dn, issuer string
-	for rows.Next() {
-		rows.Scan(&dn, &issuer)
-		ca, err := cas.MatchCA(dn)
-		if err != nil {
-			print(err.Error())
-		} else {
-			if ca["subjectdn"] != issuer {
-				print(ca["subjectdn"] + " != " + issuer)
-			} else {
-				print("Match!")
-			}
-		}
-	}
+func testWrapper(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+	
+	return "this is a test wrapper", apiErr
 }
 
 func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
