@@ -498,13 +498,13 @@ func getGroupMembers(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	rows, err := DBptr.Query(`select users.uname, users.uid, user_group.is_leader from
+	rows, err := c.DBtx.Query(`select users.uname, users.uid, user_group.is_leader from
 								user_group join
 								users using(uid)
-							  where
+							   where
 								groupid = $1 and
 								(user_group.last_updated>=$2 or $2 is null)`,
-							 groupid, i[LastUpdated])
+							  groupid, i[LastUpdated])
 	if err != nil {	
 		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
