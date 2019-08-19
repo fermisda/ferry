@@ -42,6 +42,15 @@ func IncludeWrapperAPIs(c *APICollection) {
 	}
 	c.Add("setLPCStorageAccess", &setLPCStorageAccess)
 
+	addLPCConvener := BaseAPI {
+		InputModel {
+			Parameter{UserName, true},
+			Parameter{GroupName, true},
+		},
+		addLPCConvener,
+	}
+	c.Add("addLPCConvener", &addLPCConvener)
+
 	createExperiment := BaseAPI {
 		InputModel {
 			Parameter{UnitName, true},
@@ -411,61 +420,40 @@ func createExperiment(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
-func addLPCConvener(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
-	
-	authorized,authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
-		return
-	}
-	
-	var DBtx Transaction
-	R := WithTransaction(r, &DBtx)
+func addLPCConvener(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 
-	key, err := DBtx.Start(DBptr)
-	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error starting database transaction: " + err.Error())
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
-		return
-	}
-	defer DBtx.Rollback(key)
-
-	if q.Get("groupname") != "" && q.Get("groupname")[0:3] != "lpc" {
-		log.WithFields(QueryFields(r, startTime)).Error("LPC groupnames must begin with \"lpc\".")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"groupname must begin with lpc.\" }")
-		return
+	if i[GroupName].Data.(string)[0:3] != "lpc" {
+		apiErr = append(apiErr, APIError{errors.New("groupname must begin with lpc"), ErrorAPIRequirement})
+		return nil, apiErr
 	}
 
-	q.Set("grouptype", "UnixGroup")
-	R.URL.RawQuery = q.Encode()
-
-	DBtx.Continue()
-	setGroupLeaderLegacy(w, R)
-	if !DBtx.Complete() {
-		log.WithFields(QueryFields(r, startTime)).Error("setGroupLeader failed.")
-		return
+	input := Input {
+		UserName: i[UserName],
+		GroupName: i[GroupName],
+		GroupType: NewNullAttribute(GroupType).Default("UnixGroup"),
 	}
 
-	q.Set("resourcename", "lpcinteractive")
-	R.URL.RawQuery = q.Encode()
-
-	DBtx.Continue()
-	setUserAccessToComputeResourceLegacy(w, R)
-	if !DBtx.Complete() {
-		if !strings.Contains(DBtx.Error().Error(), `The request already exists in the database`) {
-			log.WithFields(QueryFields(r, startTime)).Error("setUserAccessToComputeResource failed.")
-			return
-		}
+	_, apiErr = setGroupLeader(c, input)
+	if len(apiErr) > 0 {
+		return nil, apiErr
 	}
 
-	log.WithFields(QueryFields(r, startTime)).Info("Success!")
-	fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
+	input = Input {
+		UserName: i[UserName],
+		GroupName: i[GroupName],
+		ResourceName: NewNullAttribute(ResourceName).Default("lpcinteractive"),
+		Shell: NewNullAttribute(Shell),
+		HomeDir: NewNullAttribute(HomeDir),
+		Primary: NewNullAttribute(Primary),
+	}
 
-	DBtx.Commit(key)
+	_, apiErr = setUserAccessToComputeResource(c, input)
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	return nil, nil
 }
 
 func removeLPCConvener(w http.ResponseWriter, r *http.Request) {

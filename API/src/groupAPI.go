@@ -668,7 +668,7 @@ func setGroupLeader(c APIContext, i Input) (interface{}, []APIError) {
 	}
 
 	if !uid.Valid {
-		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
 	}
 	if !groupid.Valid {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
