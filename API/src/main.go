@@ -276,7 +276,7 @@ func main() {
 	grouter.HandleFunc("/setLPCStorageAccess", APIs["setLPCStorageAccess"].Run)
 	grouter.HandleFunc("/createExperiment", APIs["createExperiment"].Run)
 	grouter.HandleFunc("/addLPCConvener", APIs["addLPCConvener"].Run)
-	grouter.HandleFunc("/removeLPCConvener", removeLPCConvener)
+	grouter.HandleFunc("/removeLPCConvener", APIs["removeLPCConvener"].Run)
 	grouter.HandleFunc("/addLPCCollaborationGroup", APIs["addLPCCollaborationGroup"].Run)
 
 	//legacy API calls

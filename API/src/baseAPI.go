@@ -247,6 +247,7 @@ const (
 	Help				Attribute = "help"
 	PasswdMode			Attribute = "passwdmode"
 	Standalone			Attribute = "standalone"
+	RemoveGroup			Attribute = "removegroup"
 )
 
 // Type returns the type of the Attribute
@@ -294,6 +295,7 @@ func (a Attribute) Type() (AttributeType) {
 		Help:				TypeFlag,
 		PasswdMode:			TypeFlag,
 		Standalone:			TypeFlag,
+		RemoveGroup:		TypeFlag,
 	}
 
 	return AttributeType[a]
