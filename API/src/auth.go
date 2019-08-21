@@ -85,40 +85,62 @@ func ParseDN(names []pkix.AttributeTypeAndValue, sep string) string {
 	return sep + strings.Join(subject, sep)
 }
 
-func authorize( req *http.Request ) (bool, string) {
+func authorize(req *http.Request, r string) (bool, string) {
 	thetime := time.Now()
-	ip := req.RemoteAddr
+	ip := strings.Split(req.RemoteAddr, ":")[0]
 	authIPs := viper.GetStringSlice("ip_whitelist")
 	authDNs := viper.GetStringSlice("dn_whitelist")
+	dnRoles	:= viper.GetStringMapStringSlice("dn_roles")
+	ipRoles := viper.GetStringMapStringSlice("ip_roles")
 
-	// authorization should fail by default
-	authorized := false
-
-	// ignore DN if host matches authorized an ip
-	for _, authIP := range authIPs {
-		if authIP == strings.Split(ip, ":")[0] {
-			log.WithFields(QueryFields(req, thetime)).Print("Ignoring DN of authorized IP.")
-			return true, "Ignoring DN of authorized IP."
-		}
-	}
-
-	// string to build the full DN
-	certDN := ""
 	for _, presCert := range req.TLS.PeerCertificates {
-		certDN = ParseDN(presCert.Subject.Names, "/")
+		certDN := ParseDN(presCert.Subject.Names, "/")
+
+		// authorize public role
+		if r == "public" {
+			log.WithFields(QueryFields(req, thetime)).Printf("public role authorized DN %s", certDN)
+			return true, certDN
+		}
+
+		// authorize DN roles
+		if roles, ok := dnRoles[strings.ToLower(certDN)]; ok {
+			for _, role := range roles {
+				if r == role {
+					log.WithFields(QueryFields(req, thetime)).Printf("cert matches authorized role %s DN %s", role, certDN)
+					return true, certDN
+				}
+			}
+		}
+
+		// authorize whitelisted DNs
 		for _, authDN := range authDNs {
 			if authDN == certDN {
-				authorized = true
-				log.WithFields(QueryFields(req, thetime)).Print("Cert matches authorized DN " + certDN)
+				log.WithFields(QueryFields(req, thetime)).Printf("cert matches whitelisted DN %s", certDN)
+				return true, certDN
 			}
 		}
 	}
-	if certDN != "" {
-		return authorized, certDN
-	} else {
-		return authorized, "No CN found or no cert presented."	
+
+	// authorize IP roles
+	if roles, ok := ipRoles[ip]; ok {
+		for _, role := range roles {
+			if r == role {
+				log.WithFields(QueryFields(req, thetime)).Printf("ignoring DN of authorized IP %s with role %s", ip, role)
+				return true, ip
+			}
+		}
+	}
+
+	// authorize whitelisted IPs
+	for _, authIP := range authIPs {
+		if authIP == ip {
+			log.WithFields(QueryFields(req, thetime)).Printf("ignoring DN of authorized IP %s", ip)
+			return true, ip
+		}
 	}
 	
+	log.WithFields(QueryFields(req, thetime)).Printf("unable to authorize access", ip)
+	return false, ip
 }
 
 func checkClientIP(client *tls.ClientHelloInfo) (*tls.Config, error) {

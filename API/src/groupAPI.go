@@ -3,10 +3,7 @@ import (
 	"math"
 	"strings"
 	"database/sql"
-	"fmt"
 	_ "github.com/lib/pq"
-	"net/http"
-	"time"
 	log "github.com/sirupsen/logrus"
 	"strconv"
 //	"io/ioutil"
@@ -22,6 +19,7 @@ func IncludeGroupAPIs(c *APICollection) {
 			Parameter{GID, false},
 		},
 		createGroup,
+		RoleWrite,
 	}
 	c.Add("createGroup", &createGroup)
 
@@ -33,6 +31,7 @@ func IncludeGroupAPIs(c *APICollection) {
 			Parameter{Primary, false},
 		},
 		addGroupToUnit,
+		RoleWrite,
 	}
 	c.Add("addGroupToUnit", &addGroupToUnit)
 
@@ -43,6 +42,7 @@ func IncludeGroupAPIs(c *APICollection) {
 			Parameter{UnitName, true},
 		},
 		removeGroupFromUnit,
+		RoleWrite,
 	}
 	c.Add("removeGroupFromUnit", &removeGroupFromUnit)
 
@@ -52,6 +52,7 @@ func IncludeGroupAPIs(c *APICollection) {
 			Parameter{UnitName, true},
 		},
 		setPrimaryStatusGroup,
+		RoleWrite,
 	}
 	c.Add("setPrimaryStatusGroup", &setPrimaryStatusGroup)
 
@@ -62,6 +63,7 @@ func IncludeGroupAPIs(c *APICollection) {
 			Parameter{Leader, false},
 		},
 		getGroupMembers,
+		RoleRead,
 	}
 	c.Add("getGroupMembers", &getGroupMembers)
 
@@ -72,6 +74,7 @@ func IncludeGroupAPIs(c *APICollection) {
 			Parameter{GroupType, false},
 		},
 		isUserMemberOfGroup,
+		RoleRead,
 	}
 	c.Add("isUserMemberOfGroup", &isUserMemberOfGroup)
 
@@ -82,6 +85,7 @@ func IncludeGroupAPIs(c *APICollection) {
 			Parameter{GroupType, false},
 		},
 		isUserLeaderOfGroup,
+		RoleRead,
 	}
 	c.Add("isUserLeaderOfGroup", &isUserLeaderOfGroup)
 
@@ -92,6 +96,7 @@ func IncludeGroupAPIs(c *APICollection) {
 			Parameter{GroupType, true},
 		},
 		setGroupLeader,
+		RoleWrite,
 	}
 	c.Add("setGroupLeader", &setGroupLeader)
 
@@ -102,6 +107,7 @@ func IncludeGroupAPIs(c *APICollection) {
 			Parameter{GroupType, true},
 		},
 		removeGroupLeader,
+		RoleWrite,
 	}
 	c.Add("removeGroupLeader", &removeGroupLeader)
 
@@ -113,6 +119,7 @@ func IncludeGroupAPIs(c *APICollection) {
 			Parameter{LastUpdated, false},
 		},
 		getGroupUnits,
+		RoleRead,
 	}
 	c.Add("getGroupUnits", &getGroupUnits)
 
@@ -121,6 +128,7 @@ func IncludeGroupAPIs(c *APICollection) {
 			Parameter{LastUpdated, false},
 		},
 		getAllGroups,
+		RoleRead,
 	}
 	c.Add("getAllGroups", &getAllGroups)
 
@@ -129,6 +137,7 @@ func IncludeGroupAPIs(c *APICollection) {
 			Parameter{LastUpdated, false},
 		},
 		getAllGroupsMembers,
+		RoleRead,
 	}
 	c.Add("getAllGroupsMembers", &getAllGroupsMembers)
 
@@ -139,6 +148,7 @@ func IncludeGroupAPIs(c *APICollection) {
 			Parameter{LastUpdated, false},
 		},
 		getGroupAccessToResource,
+		RoleRead,
 	}
 	c.Add("getGroupAccessToResource", &getGroupAccessToResource)
 
@@ -149,6 +159,7 @@ func IncludeGroupAPIs(c *APICollection) {
 			Parameter{LastUpdated, false},
 		},
 		getBatchPriorities,
+		RoleRead,
 	}
 	c.Add("getBatchPriorities", &getBatchPriorities)
 
@@ -158,6 +169,7 @@ func IncludeGroupAPIs(c *APICollection) {
 			Parameter{ResourceName, false},
 		},
 		getCondorQuotas,
+		RoleRead,
 	}
 	c.Add("getCondorQuotas", &getCondorQuotas)
 
@@ -170,6 +182,7 @@ func IncludeGroupAPIs(c *APICollection) {
 			Parameter{Surplus, false},
 		},
 		setCondorQuota,
+		RoleWrite,
 	}
 	c.Add("setCondorQuota", &setCondorQuota)
 
@@ -179,6 +192,7 @@ func IncludeGroupAPIs(c *APICollection) {
 			Parameter{ResourceName, true},
 		},
 		removeCondorQuota,
+		RoleWrite,
 	}
 	c.Add("removeCondorQuota", &removeCondorQuota)
 
@@ -191,6 +205,7 @@ func IncludeGroupAPIs(c *APICollection) {
 			Parameter{LastUpdated, false},
 		},
 		getGroupStorageQuota,
+		RoleRead,
 	}
 	c.Add("getGroupStorageQuota", &getGroupStorageQuota)
 
@@ -201,6 +216,7 @@ func IncludeGroupAPIs(c *APICollection) {
 			Parameter{ResourceName, true},
 		},
 		removeUserAccessFromResource,
+		RoleRead,
 	}
 	c.Add("removeUserAccessFromResource", &removeUserAccessFromResource)
 }
@@ -239,39 +255,6 @@ func createGroup(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
-func deleteGroupt(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query()
-//	groupname := q.Get("groupname")
-
-	//require auth	
-	authorized,authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
-		return
-	}
-
-	NotDoneYet(w, r, startTime)
-}
-func deleteGroup(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query()
-// should be an int
-//	gid := q.Get("gid")
-
-	//require auth	
-	authorized,authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
-		return
-	}
-
-	NotDoneYet(w, r, startTime) 
-}
 func addGroupToUnit(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -448,23 +431,6 @@ func setPrimaryStatusGroup(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
-func removePrimaryStatusfromGroup(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query()
-//	groupname := q.Get("groupname")
-//	collabunit := q.Get("collaboration_unit")
-
-	//require auth	
-	authorized,authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
-		return
-	}
-
-	NotDoneYet(w, r, startTime)
-}
 func getGroupMembers(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -939,24 +905,6 @@ func getCondorQuotas(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
-func setGroupBatchPriority(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-//	q := r.URL.Query()
-//	groupname := q.Get("groupname")
-//	resource  := q.Get("resourcename")
-//	// should be an int
-//	prio := q.Get("priority")
-
-	authorized,authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
-		return
-	}
-
-	NotDoneYet(w, r, startTime)
-}
 func setCondorQuota(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1202,142 +1150,6 @@ func removeUserAccessFromResource(c APIContext, i Input) (interface{}, []APIErro
 	}
 
 	return nil, nil
-}
-
-func setGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	q := r.URL.Query()
-	rName := q.Get("resourcename")
-	gName := q.Get("groupname")
-	if gName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No value for groupname specified.\" }")
-		return
-	}
-	if rName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No compute resource specified in http query.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"No value for resourcename specified.\" }")
-		return
-	}
-	shell := q.Get("default_shell")
-	homedir := q.Get("default_home_dir")
-	var nullshell,nullhomedir sql.NullString
-	var gid,compid int
-	
-	//require auth	
-	authorized,authout := authorize(r)
-	if authorized == false {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
-		return
-	}
-	
-
-	type jsonout struct {
-	Uid int `json:"uid"`
-	Uname string `json:"username"`
-	}
-
-
-
-	//first thing we do is check that that resource exists
-	err := DBptr.QueryRow(`select compid from compute_resources where name=$1`,rName).Scan(&compid)
-	switch {
-	case err == sql.ErrNoRows:
-		log.WithFields(QueryFields(r, startTime)).Print("Compute resource " + rName + " does not exist.")
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Compute resource " + rName + " does not exist.\" }")
-		return
-	case err != nil:
-		log.WithFields(QueryFields(r, startTime)).Print("Error in compute resource DB query: "+err.Error())
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Compute resource DB query error.\" }")
-		return
-		
-	default:
-		log.WithFields(QueryFields(r, startTime)).Print("Resource "+ rName + "has compid " + strconv.Itoa(compid))	
-	}
-
-
-
-
-	//now, get all users is this group
-//	rows, err := DBptr.Query(`select users.uid,users.uname, groupid, shell, home_dir from compute_access as ca join groups on groups.groupid=ca.groupid join where groups.name=$1 and cr.compid=$2`,gName,compid)
-// if the query expects to change the existing values, set them up now
-	if shell != "" { 
-		nullshell.Valid = true
-		nullshell.String = shell 
-	}
-	if homedir != "" {
-		nullhomedir.Valid = true
-		nullhomedir.String = homedir
-	}
-	
-	switch {
-		// does not exist already, so do an insert
-	case err == sql.ErrNoRows:
-		//start yer transaction
-		cKey, terr := DBtx.Start(DBptr)
-		if terr != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + terr.Error())
-			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
-			return
-		}
-		defer DBtx.Rollback(cKey)
-		
-		_, inserr := DBtx.Exec(`insert into compute_access (compid, groupid, last_updated, shell, home_dir) values ($1,$2,NOW(),$3,$4)`, compid, gid, nullshell, nullhomedir)
-		if inserr != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error in database insert: " + inserr.Error())
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in database insertion.\" }")
-			return
-		} else {
-			err = DBtx.Commit(cKey)
-			log.WithFields(QueryFields(r, startTime)).Error("Set access for " + gName + " in " + rName)
-			w.WriteHeader(http.StatusOK)
-			fmt.Fprintf(w,"{ \"result\": \"success.\" }")
-			return		
-		}
-	case err != nil:
-		log.WithFields(QueryFields(r, startTime)).Error("Error checking database: " + err.Error())
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w,"{ \"ferry_error\": \"Error querying database.\" }")
-		return
-		
-	default:
-		//already exists, so we are just changing the shell and/or home dir values
-		
-		//start transaction
-		// start a transaction
-		DBtx, cKey, err := LoadTransaction(r, DBptr)
-		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
-			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
-			return
-		}
-		defer DBtx.Rollback(cKey)
-		
-		execstmt:= `update compute_access (shell, home_dir) values ($1,$2) where compid=$3 and groupid=$4`
-		_, moderr := DBtx.Exec(execstmt,nullshell, nullhomedir, compid, gid)
-		if moderr != nil {
-			log.WithFields(QueryFields(r, startTime)).Print("Error from Update: " + moderr.Error())
-			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in database transaction.\" }")
-			return	
-			
-		} else {
-			commerr := DBtx.Commit(cKey)
-			if commerr != nil {
-				log.WithFields(QueryFields(r, startTime)).Error("Problem with committing addition of " + rName + " to compute_resources.")
-			} else {
-				log.WithFields(QueryFields(r, startTime)).Info("Added " + rName + " to compute_resources.")
-			}
-			w.WriteHeader(http.StatusOK)
-			fmt.Fprintf(w,"{ \"result\": \"success.\" }")
-			return			
-		}	
-	}
-	
 }
 
 func getAllGroups(c APIContext, i Input) (interface{}, []APIError) {

@@ -143,7 +143,7 @@ func addCertificateDNToUserLegacy(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
-	authorized, authout := authorize(r)
+	authorized, authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -280,7 +280,7 @@ func setUserExternalAffiliationAttributeLegacy(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	authorized, authout := authorize(r)
+	authorized, authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -369,7 +369,7 @@ func setUserStorageQuotaLegacy(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
 	//call authorize function
-	authorized, authout := authorize(r)
+	authorized, authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -642,7 +642,7 @@ func setUserAccessToComputeResourceLegacy(w http.ResponseWriter, r *http.Request
 		return
 	}
 	
-	authorized, authout := authorize(r)
+	authorized, authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -951,7 +951,7 @@ func addUsertoExperimentLegacy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-    	authorized,authout := authorize(r)
+    	authorized,authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -1246,7 +1246,7 @@ func setUserExperimentFQANLegacy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	authorized, authout := authorize(r)
+	authorized, authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -1657,7 +1657,7 @@ func setUserInfoLegacy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authorized, authout := authorize(r)
+	authorized, authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -2307,7 +2307,7 @@ func setGroupLeaderLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//requires authorization
-	authorized,authout := authorize(r)
+	authorized,authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -2417,7 +2417,7 @@ func removeGroupLeaderLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//requires authorization
-	authorized,authout := authorize(r)
+	authorized,authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -2610,7 +2610,7 @@ func addUserToGroupLegacy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	authorized, authout := authorize(r)
+	authorized, authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -2717,7 +2717,7 @@ func removeUserFromGroupLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//require auth	
-	authorized,authout := authorize(r)
+	authorized,authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -2849,7 +2849,7 @@ func setUserShellAndHomeDirLegacy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authorized, authout := authorize(r)
+	authorized, authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -3024,7 +3024,7 @@ func setUserShellLegacy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authorized, authout := authorize(r)
+	authorized, authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -3153,7 +3153,7 @@ func createUserLegacy(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
-	authorized, authout := authorize(r)
+	authorized, authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -3581,7 +3581,7 @@ func createGroupLegacy(w http.ResponseWriter, r *http.Request) {
 		gid.Scan(q.Get("gid"))
 	}
 
-	authorized,authout := authorize(r)
+	authorized,authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -3651,7 +3651,7 @@ func addGroupToUnitLegacy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	authorized,authout := authorize(r)
+	authorized,authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -3793,7 +3793,7 @@ func setPrimaryStatusGroupLegacy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authorized,authout := authorize(r)
+	authorized,authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -4121,7 +4121,7 @@ func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
-	authorized,authout := authorize(r)
+	authorized,authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -4347,7 +4347,7 @@ func addLPCCollaborationGroupLegacy(w http.ResponseWriter, r *http.Request) {
 		quotaunit = "B"
 	}
 
-	authorized,authout := authorize(r)
+	authorized,authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -4740,7 +4740,7 @@ func setAffiliationUnitInfoLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//require auth	
-	authorized,authout := authorize(r)
+	authorized,authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -5289,7 +5289,7 @@ func createAffiliationUnitLegacy(w http.ResponseWriter, r *http.Request) {
 	//	} else if unitType != "NULL" {
 	//		unitType = "'" + unitType + "'"
 	//	}
-	authorized, authout := authorize(r)
+	authorized, authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -5469,7 +5469,7 @@ func createFQANLegacy(w http.ResponseWriter, r *http.Request) {
 	//	unit = `null`
 	//}
 
-	authorized, authout := authorize(r)
+	authorized, authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -6287,7 +6287,7 @@ func createComputeResourceLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//require auth
-	authorized, authout := authorize(r)
+	authorized, authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -6398,7 +6398,7 @@ func setComputeResourceInfoLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//require auth
-	authorized, authout := authorize(r)
+	authorized, authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -6532,7 +6532,7 @@ func setUserGridAccessLegacy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authorized, authout := authorize(r)
+	authorized, authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -6647,7 +6647,7 @@ func createStorageResourceLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//require auth
-	authorized, authout := authorize(r)
+	authorized, authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -6724,7 +6724,7 @@ func setStorageResourceInfoLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//require auth
-	authorized, authout := authorize(r)
+	authorized, authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -7264,7 +7264,7 @@ func setCondorQuotaLegacy(w http.ResponseWriter, r *http.Request) {
 	until := strings.TrimSpace(q.Get("validuntil"))
 	splus := strings.TrimSpace(q.Get("surplus"))
 
-	authorized,authout := authorize(r)
+	authorized,authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -7586,7 +7586,7 @@ func setFQANMappingsLegacy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authorized, authout := authorize(r)
+	authorized, authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -7642,7 +7642,7 @@ func setSuperUser(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
 	//call authorize function
-	authorized, authout := authorize(r)
+	authorized, authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -7737,7 +7737,7 @@ func removeSuperUser(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
 	//call authorize function
-	authorized, authout := authorize(r)
+	authorized, authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -7865,7 +7865,7 @@ func removeUserAccessFromResourceLegacy(w http.ResponseWriter, r *http.Request) 
 	}
 	
 	//require auth	
-	authorized,authout := authorize(r)
+	authorized,authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -7988,7 +7988,7 @@ func removeUserCertificateDNLegacy(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
-	authorized, authout := authorize(r)
+	authorized, authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -8111,7 +8111,7 @@ func removeUserExternalAffiliationAttributeLegacy(w http.ResponseWriter, r *http
 		return
 	}
 
-	authorized, authout := authorize(r)
+	authorized, authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -8227,7 +8227,7 @@ func removeGroupFromUnitLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//require auth	
-	authorized,authout := authorize(r)
+	authorized,authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -8316,7 +8316,7 @@ func removeCondorQuotaLegacy(w http.ResponseWriter, r *http.Request) {
 	group := strings.TrimSpace(q.Get("condorgroup"))
 	comp  := strings.TrimSpace(q.Get("resourcename"))
 
-	authorized,authout := authorize(r)
+	authorized,authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -8482,7 +8482,7 @@ func removeAffiliationUnitLegacy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	//requires auth
-	authorized, authout := authorize(r)
+	authorized, authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -8572,7 +8572,7 @@ func removeFQANLegacy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authorized, authout := authorize(r)
+	authorized, authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -8629,7 +8629,7 @@ func setLPCStorageAccessLegacy(w http.ResponseWriter, r *http.Request) {
 	const storageName = "EOS"
 	const groupName = "us_cms"
 	
-	authorized,authout := authorize(r)
+	authorized,authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -8765,7 +8765,7 @@ func createExperimentLegacy(w http.ResponseWriter, r *http.Request) {
 	if groupName == "" {
 		groupName = unitName
 	}
-	authorized,authout := authorize(r)
+	authorized,authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -8949,7 +8949,7 @@ func addLPCConvenerLegacy(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 	
-	authorized,authout := authorize(r)
+	authorized,authout := authorize(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -8999,4 +8999,212 @@ func addLPCConvenerLegacy(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 
 	DBtx.Commit(key)
+}
+
+func setGroupBatchPriority(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+//	q := r.URL.Query()
+//	groupname := q.Get("groupname")
+//	resource  := q.Get("resourcename")
+//	// should be an int
+//	prio := q.Get("priority")
+
+	authorized,authout := authorize(r, "")
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
+		return
+	}
+
+	NotDoneYet(w, r, startTime)
+}
+
+func deleteGroupt(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+//	q := r.URL.Query()
+//	groupname := q.Get("groupname")
+
+	//require auth	
+	authorized,authout := authorize(r, "")
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
+		return
+	}
+
+	NotDoneYet(w, r, startTime)
+}
+
+func deleteGroup(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+//	q := r.URL.Query()
+// should be an int
+//	gid := q.Get("gid")
+
+	//require auth	
+	authorized,authout := authorize(r, "")
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
+		return
+	}
+
+	NotDoneYet(w, r, startTime) 
+}
+
+func removePrimaryStatusfromGroup(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+//	q := r.URL.Query()
+//	groupname := q.Get("groupname")
+//	collabunit := q.Get("collaboration_unit")
+
+	//require auth	
+	authorized,authout := authorize(r, "")
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
+		return
+	}
+
+	NotDoneYet(w, r, startTime)
+}
+
+func setGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	q := r.URL.Query()
+	rName := q.Get("resourcename")
+	gName := q.Get("groupname")
+	if gName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No value for groupname specified.\" }")
+		return
+	}
+	if rName == "" {
+		log.WithFields(QueryFields(r, startTime)).Error("No compute resource specified in http query.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"No value for resourcename specified.\" }")
+		return
+	}
+	shell := q.Get("default_shell")
+	homedir := q.Get("default_home_dir")
+	var nullshell,nullhomedir sql.NullString
+	var gid,compid int
+	
+	//require auth	
+	authorized,authout := authorize(r, "")
+	if authorized == false {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
+		return
+	}
+	
+
+	type jsonout struct {
+	Uid int `json:"uid"`
+	Uname string `json:"username"`
+	}
+
+
+
+	//first thing we do is check that that resource exists
+	err := DBptr.QueryRow(`select compid from compute_resources where name=$1`,rName).Scan(&compid)
+	switch {
+	case err == sql.ErrNoRows:
+		log.WithFields(QueryFields(r, startTime)).Print("Compute resource " + rName + " does not exist.")
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Compute resource " + rName + " does not exist.\" }")
+		return
+	case err != nil:
+		log.WithFields(QueryFields(r, startTime)).Print("Error in compute resource DB query: "+err.Error())
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Compute resource DB query error.\" }")
+		return
+		
+	default:
+		log.WithFields(QueryFields(r, startTime)).Print("Resource "+ rName + "has compid " + strconv.Itoa(compid))	
+	}
+
+
+
+
+	//now, get all users is this group
+//	rows, err := DBptr.Query(`select users.uid,users.uname, groupid, shell, home_dir from compute_access as ca join groups on groups.groupid=ca.groupid join where groups.name=$1 and cr.compid=$2`,gName,compid)
+// if the query expects to change the existing values, set them up now
+	if shell != "" { 
+		nullshell.Valid = true
+		nullshell.String = shell 
+	}
+	if homedir != "" {
+		nullhomedir.Valid = true
+		nullhomedir.String = homedir
+	}
+	
+	switch {
+		// does not exist already, so do an insert
+	case err == sql.ErrNoRows:
+		//start yer transaction
+		cKey, terr := DBtx.Start(DBptr)
+		if terr != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + terr.Error())
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
+			return
+		}
+		defer DBtx.Rollback(cKey)
+		
+		_, inserr := DBtx.Exec(`insert into compute_access (compid, groupid, last_updated, shell, home_dir) values ($1,$2,NOW(),$3,$4)`, compid, gid, nullshell, nullhomedir)
+		if inserr != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error in database insert: " + inserr.Error())
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in database insertion.\" }")
+			return
+		} else {
+			err = DBtx.Commit(cKey)
+			log.WithFields(QueryFields(r, startTime)).Error("Set access for " + gName + " in " + rName)
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprintf(w,"{ \"result\": \"success.\" }")
+			return		
+		}
+	case err != nil:
+		log.WithFields(QueryFields(r, startTime)).Error("Error checking database: " + err.Error())
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w,"{ \"ferry_error\": \"Error querying database.\" }")
+		return
+		
+	default:
+		//already exists, so we are just changing the shell and/or home dir values
+		
+		//start transaction
+		// start a transaction
+		DBtx, cKey, err := LoadTransaction(r, DBptr)
+		if err != nil {
+			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
+			return
+		}
+		defer DBtx.Rollback(cKey)
+		
+		execstmt:= `update compute_access (shell, home_dir) values ($1,$2) where compid=$3 and groupid=$4`
+		_, moderr := DBtx.Exec(execstmt,nullshell, nullhomedir, compid, gid)
+		if moderr != nil {
+			log.WithFields(QueryFields(r, startTime)).Print("Error from Update: " + moderr.Error())
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in database transaction.\" }")
+			return	
+			
+		} else {
+			commerr := DBtx.Commit(cKey)
+			if commerr != nil {
+				log.WithFields(QueryFields(r, startTime)).Error("Problem with committing addition of " + rName + " to compute_resources.")
+			} else {
+				log.WithFields(QueryFields(r, startTime)).Info("Added " + rName + " to compute_resources.")
+			}
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprintf(w,"{ \"result\": \"success.\" }")
+			return			
+		}	
+	}
+	
 }

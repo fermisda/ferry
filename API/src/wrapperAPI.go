@@ -16,6 +16,7 @@ func IncludeWrapperAPIs(c *APICollection) {
 			Parameter{UnitName, true},
 		},
 		addUserToExperiment,
+		RoleWrite,
 	}
 	c.Add("addUserToExperiment", &addUserToExperiment)
 
@@ -26,6 +27,7 @@ func IncludeWrapperAPIs(c *APICollection) {
 			Parameter{QuotaUnit, false},
 		},
 		addLPCCollaborationGroup,
+		RoleWrite,
 	}
 	c.Add("addLPCCollaborationGroup", &addLPCCollaborationGroup)
 
@@ -36,6 +38,7 @@ func IncludeWrapperAPIs(c *APICollection) {
 			Parameter{ExternalUsername, true},
 		},
 		setLPCStorageAccess,
+		RoleWrite,
 	}
 	c.Add("setLPCStorageAccess", &setLPCStorageAccess)
 
@@ -45,6 +48,7 @@ func IncludeWrapperAPIs(c *APICollection) {
 			Parameter{GroupName, true},
 		},
 		addLPCConvener,
+		RoleWrite,
 	}
 	c.Add("addLPCConvener", &addLPCConvener)
 
@@ -55,6 +59,7 @@ func IncludeWrapperAPIs(c *APICollection) {
 			Parameter{RemoveGroup, false},
 		},
 		removeLPCConvener,
+		RoleWrite,
 	}
 	c.Add("removeLPCConvener", &removeLPCConvener)
 
@@ -68,12 +73,14 @@ func IncludeWrapperAPIs(c *APICollection) {
 			Parameter{Standalone, false},
 		},
 		createExperiment,
+		RoleWrite,
 	}
 	c.Add("createExperiment", &createExperiment)
 
 	testWrapper := BaseAPI {
 		nil,
 		testWrapper,
+		RolePublic,
 	}
 	c.Add("testWrapper", &testWrapper)
 }

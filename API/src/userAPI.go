@@ -15,6 +15,7 @@ func IncludeUserAPIs(c *APICollection) {
 			Parameter{UserName, true},
 		},
 		getUserInfo,
+		RoleRead,
 	}
 	c.Add("getUserInfo", &getUserInfo)
 
@@ -27,6 +28,7 @@ func IncludeUserAPIs(c *APICollection) {
 			Parameter{ExpirationDate, false},
 		},
 		setUserInfo,
+		RoleWrite,
 	}
 	c.Add("setUserInfo", &setUserInfo)
 
@@ -40,6 +42,7 @@ func IncludeUserAPIs(c *APICollection) {
 			Parameter{ExpirationDate, false},
 		},
 		createUser,
+		RoleWrite,
 	}
 	c.Add("createUser", &createUser)
 
@@ -48,6 +51,7 @@ func IncludeUserAPIs(c *APICollection) {
 			Parameter{UnitName, true},
 		},
 		getSuperUserList,
+		RoleRead,
 	}
 	c.Add("getSuperUserList", &getSuperUserList)
 
@@ -56,6 +60,7 @@ func IncludeUserAPIs(c *APICollection) {
 			Parameter{UserName, true},
 		},
 		deleteUser,
+		RoleWrite,
 	}
 	c.Add("deleteUser", &deleteUser)
 
@@ -66,6 +71,7 @@ func IncludeUserAPIs(c *APICollection) {
 			Parameter{DN, true},
 		},
 		addCertificateDNToUser,
+		RoleWrite,
 	}
 	c.Add("addCertificateDNToUser", &addCertificateDNToUser)
 
@@ -75,6 +81,7 @@ func IncludeUserAPIs(c *APICollection) {
 			Parameter{LastUpdated, false},
 		},
 		getUserExternalAffiliationAttributes,
+		RoleRead,
 	}
 	c.Add("getUserExternalAffiliationAttributes", &getUserExternalAffiliationAttributes)
 
@@ -85,6 +92,7 @@ func IncludeUserAPIs(c *APICollection) {
 			Parameter{Value, true},
 		},
 		setUserExternalAffiliationAttribute,
+		RoleWrite,
 	}
 	c.Add("setUserExternalAffiliationAttribute", &setUserExternalAffiliationAttribute)
 
@@ -95,6 +103,7 @@ func IncludeUserAPIs(c *APICollection) {
 			Parameter{ResourceName, true},
 		},
 		getUserStorageQuota,
+		RoleRead,
 	}
 	c.Add("getUserStorageQuota", &getUserStorageQuota)
 
@@ -106,6 +115,7 @@ func IncludeUserAPIs(c *APICollection) {
 			Parameter{LastUpdated, false},
 		},
 		getStorageQuotas,
+		RoleRead,
 	}
 	c.Add("getStorageQuotas", &getStorageQuotas)
 
@@ -115,6 +125,7 @@ func IncludeUserAPIs(c *APICollection) {
 			Parameter{LastUpdated, false},
 		},
 		getUserAccessToComputeResources,
+		RoleRead,
 	}
 	c.Add("getUserAccessToComputeResources", &getUserAccessToComputeResources)
 
@@ -128,6 +139,7 @@ func IncludeUserAPIs(c *APICollection) {
 			Parameter{Primary, false},
 		},
 		setUserAccessToComputeResource,
+		RoleWrite,
 	}
 	c.Add("setUserAccessToComputeResource", &setUserAccessToComputeResource)
 
@@ -139,6 +151,7 @@ func IncludeUserAPIs(c *APICollection) {
 			Parameter{Role, false},
 		},
 		setUserExperimentFQAN,
+		RoleWrite,
 	}
 	c.Add("setUserExperimentFQAN", &setUserExperimentFQAN)
 
@@ -149,6 +162,7 @@ func IncludeUserAPIs(c *APICollection) {
 			Parameter{LastUpdated, false},
 		},
 		getUserFQANs,
+		RoleRead,
 	}
 	c.Add("getUserFQANs", &getUserFQANs)
 
@@ -158,6 +172,7 @@ func IncludeUserAPIs(c *APICollection) {
 			Parameter{UnitName, false},
 		},
 		getUserCertificateDNs,
+		RoleRead,
 	}
 	c.Add("getUserCertificateDNs", &getUserCertificateDNs)
 
@@ -168,6 +183,7 @@ func IncludeUserAPIs(c *APICollection) {
 			Parameter{LastUpdated, false},
 		},
 		getAllUsersCertificateDNs,
+		RoleRead,
 	}
 	c.Add("getAllUsersCertificateDNs", &getAllUsersCertificateDNs)
 
@@ -177,6 +193,7 @@ func IncludeUserAPIs(c *APICollection) {
 			Parameter{LastUpdated, false},
 		},
 		getUserGroups,
+		RoleRead,
 	}
 	c.Add("getUserGroups", &getUserGroups)
 
@@ -188,6 +205,7 @@ func IncludeUserAPIs(c *APICollection) {
 			Parameter{Leader, false},
 		},
 		addUserToGroup,
+		RoleWrite,
 	}
 	c.Add("addUserToGroup", &addUserToGroup)
 
@@ -199,6 +217,7 @@ func IncludeUserAPIs(c *APICollection) {
 			Parameter{HomeDir, true},
 		},
 		setUserShellAndHomeDir,
+		RoleWrite,
 	}
 	c.Add("setUserShellAndHomeDir", &setUserShellAndHomeDir)
 
@@ -209,6 +228,7 @@ func IncludeUserAPIs(c *APICollection) {
 			Parameter{LastUpdated, false},
 		},
 		getUserShellAndHomeDir,
+		RoleRead,
 	}
 	c.Add("getUserShellAndHomeDir", &getUserShellAndHomeDir)
 
@@ -219,6 +239,7 @@ func IncludeUserAPIs(c *APICollection) {
 			Parameter{Shell, true},
 		},
 		setUserShell,
+		RoleWrite,
 	}
 	c.Add("setUserShell", &setUserShell)
 
@@ -229,6 +250,7 @@ func IncludeUserAPIs(c *APICollection) {
 			Parameter{GroupType, true},
 		},
 		removeUserFromGroup,
+		RoleWrite,
 	}
 	c.Add("removeUserFromGroup", &removeUserFromGroup)
 
@@ -237,6 +259,7 @@ func IncludeUserAPIs(c *APICollection) {
 			Parameter{UID, true},
 		},
 		getUserUname,
+		RoleRead,
 	}
 	c.Add("getUserUname", &getUserUname)
 
@@ -245,6 +268,7 @@ func IncludeUserAPIs(c *APICollection) {
 			Parameter{UserName, true},
 		},
 		getUserUID,
+		RoleRead,
 	}
 	c.Add("getUserUID", &getUserUID)
 
@@ -254,6 +278,7 @@ func IncludeUserAPIs(c *APICollection) {
 			Parameter{LastUpdated, false},
 		},
 		getAllUsers,
+		RoleRead,
 	}
 	c.Add("getAllUsers", &getAllUsers)
 
@@ -263,6 +288,7 @@ func IncludeUserAPIs(c *APICollection) {
 			Parameter{LastUpdated, false},
 		},
 		getAllUsersFQANs,
+		RoleRead,
 	}
 	c.Add("getAllUsersFQANs", &getAllUsersFQANs)
 
@@ -273,6 +299,7 @@ func IncludeUserAPIs(c *APICollection) {
 			Parameter{LastUpdated, false},
 		},
 		getMemberAffiliations,
+		RoleRead,
 	}
 	c.Add("getMemberAffiliations", &getMemberAffiliations)
 
@@ -283,6 +310,7 @@ func IncludeUserAPIs(c *APICollection) {
 			Parameter{Suspend, true},
 		},
 		setUserGridAccess,
+		RoleWrite,
 	}
 	c.Add("setUserGridAccess", &setUserGridAccess)
 
@@ -292,6 +320,7 @@ func IncludeUserAPIs(c *APICollection) {
 			Parameter{DN, true},
 		},
 		removeUserCertificateDN,
+		RoleWrite,
 	}
 	c.Add("removeUserCertificateDN", &removeUserCertificateDN)
 
@@ -301,6 +330,7 @@ func IncludeUserAPIs(c *APICollection) {
 			Parameter{UserAttribute, true},
 		},
 		removeUserExternalAffiliationAttribute,
+		RoleWrite,
 	}
 	c.Add("removeUserExternalAffiliationAttribute", &removeUserExternalAffiliationAttribute)
 }

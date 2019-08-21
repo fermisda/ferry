@@ -32,6 +32,7 @@ func IncludeMiscAPIs(c *APICollection) {
 			out[UserName] = "TEST"
 			return out, nil
 		},
+		RolePublic,
 	}
 	c.Add("testBaseAPI", &testBaseAPI)
 
@@ -48,6 +49,7 @@ func IncludeMiscAPIs(c *APICollection) {
 			Parameter{ExpirationDate, false},
 		},
 		setStorageQuota,
+		RoleWrite,
 	}
 	c.Add("setStorageQuota", &setStorageQuota)
 
@@ -56,6 +58,7 @@ func IncludeMiscAPIs(c *APICollection) {
 			Parameter{GroupName, true},
 		},
 		getGroupGID,
+		RoleRead,
 	}
 	c.Add("getGroupGID", &getGroupGID)
 
@@ -66,6 +69,7 @@ func IncludeMiscAPIs(c *APICollection) {
 			Parameter{LastUpdated, false},
 		},
 		getGroupFile,
+		RoleRead,
 	}
 	c.Add("getGroupFile", &getGroupFile)
 
@@ -76,6 +80,7 @@ func IncludeMiscAPIs(c *APICollection) {
 			Parameter{LastUpdated, false},
 		},
 		getGridMapFile,
+		RoleRead,
 	}
 	c.Add("getGridMapFile", &getGridMapFile)
 
@@ -85,6 +90,7 @@ func IncludeMiscAPIs(c *APICollection) {
 			Parameter{LastUpdated, false},
 		},
 		getGridMapFileByVO,
+		RoleRead,
 	}
 	c.Add("getGridMapFileByVO", &getGridMapFileByVO)
 
@@ -94,6 +100,7 @@ func IncludeMiscAPIs(c *APICollection) {
 			Parameter{LastUpdated, false},
 		},
 		getVORoleMapFile,
+		RoleRead,
 	}
 	c.Add("getVORoleMapFile", &getVORoleMapFile)
 
@@ -102,6 +109,7 @@ func IncludeMiscAPIs(c *APICollection) {
 			Parameter{GID, true},
 		},
 		getGroupName,
+		RoleRead,
 	}
 	c.Add("getGroupName", &getGroupName)
 
@@ -110,12 +118,14 @@ func IncludeMiscAPIs(c *APICollection) {
 			Parameter{DN, true},
 		},
 		lookupCertificateDN,
+		RoleWrite,
 	}
 	c.Add("lookupCertificateDN", &lookupCertificateDN)
 
 	getMappedGidFile := BaseAPI{
 		InputModel{},
 		getMappedGidFile,
+		RoleRead,
 	}
 	c.Add("getMappedGidFile", &getMappedGidFile)
 
@@ -125,6 +135,7 @@ func IncludeMiscAPIs(c *APICollection) {
 			Parameter{LastUpdated, false},
 		},
 		getStorageAuthzDBFile,
+		RoleRead,
 	}
 	c.Add("getStorageAuthzDBFile", &getStorageAuthzDBFile)
 
@@ -134,6 +145,7 @@ func IncludeMiscAPIs(c *APICollection) {
 			Parameter{Role, false},
 		},
 		getAffiliationMembersRoles,
+		RoleRead,
 	}
 	c.Add("getAffiliationMembersRoles", &getAffiliationMembersRoles)
 
@@ -142,6 +154,7 @@ func IncludeMiscAPIs(c *APICollection) {
 			Parameter{ResourceName, false},
 		},
 		getStorageAccessLists,
+		RoleRead,
 	}
 	c.Add("getStorageAccessLists", &getStorageAccessLists)
 
@@ -154,6 +167,7 @@ func IncludeMiscAPIs(c *APICollection) {
 			Parameter{UnitName, false},
 		},
 		createComputeResource,
+		RoleWrite,
 	}
 	c.Add("createComputeResource", &createComputeResource)
 
@@ -166,6 +180,7 @@ func IncludeMiscAPIs(c *APICollection) {
 			Parameter{UnitName, false},
 		},
 		setComputeResourceInfo,
+		RoleWrite,
 	}
 	c.Add("setComputeResourceInfo", &setComputeResourceInfo)
 
@@ -178,6 +193,7 @@ func IncludeMiscAPIs(c *APICollection) {
 			Parameter{Path, false},
 		},
 		createStorageResource,
+		RoleWrite,
 	}
 	c.Add("createStorageResource", &createStorageResource)
 
@@ -190,6 +206,7 @@ func IncludeMiscAPIs(c *APICollection) {
 			Parameter{Path, false},
 		},
 		setStorageResourceInfo,
+		RoleWrite,
 	}
 	c.Add("setStorageResourceInfo", &setStorageResourceInfo)
 
@@ -198,6 +215,7 @@ func IncludeMiscAPIs(c *APICollection) {
 			Parameter{ResourceName, false},
 		},
 		getStorageResourceInfo,
+		RoleRead,
 	}
 	c.Add("getStorageResourceInfo", &getStorageResourceInfo)
 
@@ -206,6 +224,7 @@ func IncludeMiscAPIs(c *APICollection) {
 			Parameter{LastUpdated, false},
 		},
 		getAllComputeResources,
+		RoleRead,
 	}
 	c.Add("getAllComputeResources", &getAllComputeResources)
 
@@ -216,6 +235,7 @@ func IncludeMiscAPIs(c *APICollection) {
 			Parameter{FQAN, false},
 		},
 		getVOUserMap,
+		RoleRead,
 	}
 	c.Add("getVOUserMap", &getVOUserMap)
 
@@ -226,24 +246,28 @@ func IncludeMiscAPIs(c *APICollection) {
 			Parameter{LastUpdated, false},
 		},
 		getPasswdFile,
+		RoleRead,
 	}
 	c.Add("getPasswdFile", &getPasswdFile)
 
 	ping := BaseAPI{
 		nil,
 		ping,
+		RolePublic,
 	}
 	c.Add("ping", &ping)
 
 	cleanStorageQuotas := BaseAPI{
 		nil,
 		cleanStorageQuotas,
+		RoleWrite,
 	}
 	c.Add("cleanStorageQuotas", &cleanStorageQuotas)
 
 	cleanCondorQuotas := BaseAPI{
 		nil,
 		cleanCondorQuotas,
+		RoleWrite,
 	}
 	c.Add("cleanCondorQuotas", &cleanCondorQuotas)
 }

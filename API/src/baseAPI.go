@@ -16,6 +16,7 @@ import (
 type BaseAPI struct {
 	InputModel InputModel
 	QueryFunction func(APIContext, Input) (interface{}, []APIError)
+	AccessRole AccessRole
 }
 
 // Run the API
@@ -28,7 +29,7 @@ func (b BaseAPI) Run(w http.ResponseWriter, r *http.Request) {
 	var output Output
 	defer output.Parse(context, w)
 
-	authorized, authout := authorize(r)
+	authorized, authout := authorize(r, b.AccessRole.String())
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		output.Err = append(output.Err, fmt.Errorf("%s not authorized", authout))
@@ -512,4 +513,19 @@ func NewMapNullAttribute(attributes ...Attribute) map[Attribute]*NullAttribute {
 // NewNullAttribute builds a NullAttribute of type Attribute
 func NewNullAttribute(attribute Attribute) NullAttribute {
 	return NullAttribute{attribute, nil, false, false}
+}
+
+// AccessRole represents roles required to access an API
+type AccessRole string
+
+// List of valid access roles
+const (
+	RolePublic 	AccessRole = "public"
+	RoleRead	AccessRole = "read"
+	RoleWrite	AccessRole = "write"
+)
+
+// String returns the AccessRole string representation
+func (a AccessRole) String() (string){
+	return string(a)
 }

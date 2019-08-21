@@ -23,6 +23,7 @@ func IncludeUnitAPIs(c *APICollection) {
 			Parameter{UnitType, false},
 		},
 		setAffiliationUnitInfo,
+		RoleWrite,
 	}
 	c.Add("setAffiliationUnitInfo", &setAffiliationUnitInfo)
 
@@ -32,6 +33,7 @@ func IncludeUnitAPIs(c *APICollection) {
 			Parameter{LastUpdated, false},
 		},
 		getAffiliationUnitMembers,
+		RoleRead,
 	}
 	c.Add("getAffiliationUnitMembers", &getAffiliationUnitMembers)
 
@@ -40,6 +42,7 @@ func IncludeUnitAPIs(c *APICollection) {
 			Parameter{UnitName, true},
 		},
 		getGroupsInAffiliationUnit,
+		RoleRead,
 	}
 	c.Add("getGroupsInAffiliationUnit", &getGroupsInAffiliationUnit)
 
@@ -48,6 +51,7 @@ func IncludeUnitAPIs(c *APICollection) {
 			Parameter{UnitName, true},
 		},
 		getGroupLeadersinAffiliationUnit,
+		RoleRead,
 	}
 	c.Add("getGroupLeadersinAffiliationUnit", &getGroupLeadersinAffiliationUnit)
 
@@ -57,6 +61,7 @@ func IncludeUnitAPIs(c *APICollection) {
 			Parameter{LastUpdated, false},
 		},
 		getAffiliationUnitComputeResources,
+		RoleRead,
 	}
 	c.Add("getAffiliationUnitComputeResources", &getAffiliationUnitComputeResources)
 
@@ -68,6 +73,7 @@ func IncludeUnitAPIs(c *APICollection) {
 			Parameter{UnitType, false},
 		},
 		createAffiliationUnit,
+		RoleWrite,
 	}
 	c.Add("createAffiliationUnit", &createAffiliationUnit)
 
@@ -76,6 +82,7 @@ func IncludeUnitAPIs(c *APICollection) {
 			Parameter{UnitName, true},
 		},
 		removeAffiliationUnit,
+		RoleWrite,
 	}
 	c.Add("removeAffiliationUnit", &removeAffiliationUnit)
 
@@ -87,6 +94,7 @@ func IncludeUnitAPIs(c *APICollection) {
 			Parameter{UnitName, false},
 		},
 		createFQAN,
+		RoleWrite,
 	}
 	c.Add("createFQAN", &createFQAN)
 
@@ -97,6 +105,7 @@ func IncludeUnitAPIs(c *APICollection) {
 			Parameter{UserName, false},
 		},
 		setFQANMappings,
+		RoleWrite,
 	}
 	c.Add("setFQANMappings", &setFQANMappings)
 
@@ -105,6 +114,7 @@ func IncludeUnitAPIs(c *APICollection) {
 			Parameter{FQAN, true},
 		},
 		removeFQAN,
+		RoleWrite,
 	}
 	c.Add("removeFQAN", &removeFQAN)
 
@@ -114,6 +124,7 @@ func IncludeUnitAPIs(c *APICollection) {
 			Parameter{LastUpdated, false},
 		},
 		getAllAffiliationUnits,
+		RoleRead,
 	}
 	c.Add("getAllAffiliationUnits", &getAllAffiliationUnits)
 }
