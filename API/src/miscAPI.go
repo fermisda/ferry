@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -272,11 +271,6 @@ func IncludeMiscAPIs(c *APICollection) {
 	c.Add("cleanCondorQuotas", &cleanCondorQuotas)
 }
 
-func NotDoneYet(w http.ResponseWriter, r *http.Request, t time.Time) {
-	fmt.Fprintf(w, `{"ferry_error": "This function is not done yet!"}`)
-	log.WithFields(QueryFields(r, t)).Error("This function is not done yet!")
-}
-
 func getPasswdFile(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -286,7 +280,7 @@ func getPasswdFile(c APIContext, i Input) (interface{}, []APIError) {
 								   (select compid from compute_resources where name = $2)`,
 						   i[UnitName], i[ResourceName]).Scan(&unitid, &compid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -316,7 +310,7 @@ func getPasswdFile(c APIContext, i Input) (interface{}, []APIError) {
 								or g.last_updated>=$3 or $3 is null)
 							   order by au.name, cr.name`, unitid, compid, i[LastUpdated])
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -401,7 +395,7 @@ func getGroupFile(c APIContext, i Input) (interface{}, []APIError) {
 								   (select compid from compute_resources where name = $2)`,
 						   i[UnitName], i[ResourceName]).Scan(&unitid, &compid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -426,7 +420,7 @@ func getGroupFile(c APIContext, i Input) (interface{}, []APIError) {
 							   order by name, uname`,
 							  unitid, compid, i[LastUpdated])
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -487,7 +481,7 @@ func getGridMapFile(c APIContext, i Input) (interface{}, []APIError) {
 								   (select compid from compute_resources where name = $2)`,
 						   i[UnitName], i[ResourceName]).Scan(&unitid, &compid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -511,7 +505,7 @@ func getGridMapFile(c APIContext, i Input) (interface{}, []APIError) {
 									 (ac.last_updated>=$3 or uc.last_updated>=$3 or us.last_updated>=$3 or $3 is null)`,
 							  unitid, compid, i[LastUpdated])
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -540,7 +534,7 @@ func getGridMapFileByVO(c APIContext, i Input) (interface{}, []APIError) {
 	unitid := NewNullAttribute(UnitID)
 	err := c.DBtx.QueryRow(`select unitid from affiliation_units where name = $1`, i[UnitName]).Scan(&unitid)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -559,7 +553,7 @@ func getGridMapFileByVO(c APIContext, i Input) (interface{}, []APIError) {
 									   us.last_updated >= $2 or au.last_updated >= $2 or $2 is null)`,
 							  unitid, i[LastUpdated])
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -588,7 +582,7 @@ func getVORoleMapFile(c APIContext, i Input) (interface{}, []APIError) {
 	compid := NewNullAttribute(UnitID)
 	err := c.DBtx.QueryRow(`select compid from compute_resources where name = $1`, i[ResourceName]).Scan(&compid)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -606,7 +600,7 @@ func getVORoleMapFile(c APIContext, i Input) (interface{}, []APIError) {
 							  where (compid = $1 or $1 is null) and (gf.last_updated >= $2 or u.last_updated >= $2 or $2 is null)`,
 							 compid, i[LastUpdated])
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -638,7 +632,7 @@ func getGroupGID(c APIContext, i Input) (interface{}, []APIError) {
 
 	err := c.DBtx.QueryRow(`select groupid, gid from groups where name = $1 and type = 'UnixGroup'`, i[GroupName]).Scan(&groupid, &gid)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -664,7 +658,7 @@ func getGroupName(c APIContext, i Input) (interface{}, []APIError) {
 
 	err := c.DBtx.QueryRow(`select name from groups where gid=$1`, i[GID]).Scan(&groupname)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -686,7 +680,7 @@ func lookupCertificateDN(c APIContext, i Input) (interface{}, []APIError) {
 	dnid := NewNullAttribute(DNID)
 	err := c.DBtx.QueryRow(`select dnid from user_certificates where dn = $1`, i[DN]).Scan(&dnid)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -700,7 +694,7 @@ func lookupCertificateDN(c APIContext, i Input) (interface{}, []APIError) {
 	err = c.DBtx.QueryRow(`select uid, uname from user_certificates join users using(uid) where dnid = $1;`,
 						  dnid).Scan(row[UID], row[UserName])
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -725,7 +719,7 @@ func getMappedGidFile(c APIContext, i Input) (interface{}, []APIError) {
 							   left join groups as g on g.groupid = gf.mapped_group
 							   left join users as u on u.uid = gf.mapped_user`)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -766,7 +760,7 @@ func getStorageAuthzDBFile(c APIContext, i Input) (interface{}, []APIError) {
                                where type = 'UnixGroup' and (ug.last_updated>=$1 or $1 is null)
 							   order by uname`, i[LastUpdated])
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -867,7 +861,7 @@ func getAffiliationMembersRoles(c APIContext, i Input) (interface{}, []APIError)
 	unitid := NewNullAttribute(UnitID)
 	err := c.DBtx.QueryRow(`select unitid from affiliation_units where name = $1`, i[UnitName]).Scan(&unitid)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -885,7 +879,7 @@ func getAffiliationMembersRoles(c APIContext, i Input) (interface{}, []APIError)
 							  where (unitid = $1 or $1 is null) and (lower(fqan) like lower($2))`,
 							 unitid, "%/role=" + role.Data.(string) + "/%")
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -917,7 +911,7 @@ func getStorageAccessLists(c APIContext, i Input) (interface{}, []APIError) {
 
 	rows, err := DBptr.Query(`select server, volume, access_level, host from nas_storage where server like $1;`, resource)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -965,7 +959,7 @@ func createComputeResource(c APIContext, i Input) (interface{}, []APIError) {
 								   (select compid from compute_resources where name = $2)`,
 						   i[UnitName], i[ResourceName]).Scan(&unitid, &compid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -987,7 +981,7 @@ func createComputeResource(c APIContext, i Input) (interface{}, []APIError) {
 						  values ($1, $2, $3, NOW(), $4, $5)`,
 						 i[ResourceName], shell, unitid, i[HomeDir], i[ResourceType])
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1004,7 +998,7 @@ func setComputeResourceInfo(c APIContext, i Input) (interface{}, []APIError) {
 								   (select compid from compute_resources where name = $2)`,
 						   i[UnitName], i[ResourceName]).Scan(&unitid, &compid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1033,7 +1027,7 @@ func setComputeResourceInfo(c APIContext, i Input) (interface{}, []APIError) {
 							last_updated = NOW()
 						  where compid = $5`, unitid, i[Shell], i[HomeDir], i[ResourceType], compid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1048,7 +1042,7 @@ func createStorageResource(c APIContext, i Input) (interface{}, []APIError) {
 	err := c.DBtx.QueryRow(`select storageid from storage_resources where name = $1`,
 						   i[ResourceName]).Scan(&storageid)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1079,7 +1073,7 @@ func createStorageResource(c APIContext, i Input) (interface{}, []APIError) {
 						  values ($1,$2,$3,NOW(),$4,$5)`,
 						i[ResourceName], i[Path], i[Quota], i[QuotaUnit], i[ResourceType])
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1094,7 +1088,7 @@ func getStorageResourceInfo(c APIContext, i Input) (interface{}, []APIError) {
 	err := c.DBtx.QueryRow(`select storageid from storage_resources where name = $1`,
 						   i[ResourceName]).Scan(&storageid)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1107,7 +1101,7 @@ func getStorageResourceInfo(c APIContext, i Input) (interface{}, []APIError) {
 	rows, err := c.DBtx.Query(`select name, default_path, default_quota, default_unit, type from storage_resources
 							   where storageid = $1 or $1 is null order by name`, storageid)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1141,7 +1135,7 @@ func setStorageResourceInfo(c APIContext, i Input) (interface{}, []APIError) {
 	err := c.DBtx.QueryRow(`select storageid from storage_resources where name = $1`,
 						   i[ResourceName]).Scan(&storageid)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1190,7 +1184,7 @@ func getAllComputeResources(c APIContext, i Input) (interface{}, []APIError) {
 							  left join affiliation_units as au using(unitid)
 							  where (cr.last_updated>=$1 or $1 is null);`, i[LastUpdated])
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1231,7 +1225,7 @@ func getVOUserMap(c APIContext, i Input) (interface{}, []APIError) {
 								   ($3 in (select fqan from grid_fqan))`,
 						   i[UserName], i[UnitName], i[FQAN]).Scan(&validUser, &validrUnit, &validFQAN)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1270,7 +1264,7 @@ func getVOUserMap(c APIContext, i Input) (interface{}, []APIError) {
 								and gf.fqan like $3
 							  order by u1.uname`, user, unit, fqan)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1322,7 +1316,7 @@ func cleanStorageQuotas(c APIContext, i Input) (interface{}, []APIError) {
 						   END $$;`)
 
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1355,7 +1349,7 @@ func cleanCondorQuotas(c APIContext, i Input) (interface{}, []APIError) {
 						   END $$;`)
 
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1390,7 +1384,7 @@ func setStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
 	}
 	queryerr := c.DBtx.QueryRow(querystr, i[ResourceName], i[dataAttr], i[UnitName]).Scan(&vStorageid, &vDataid, &vUnitid)
 	if queryerr != nil && queryerr != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+		log.WithFields(QueryFields(c)).Error(queryerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1442,7 +1436,7 @@ func setStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
 									 unitid = $3 and valid_until is NULL`,
 			vStorageid, vDataid, vUnitid).Scan(&vPath)
 		if queryerr != nil && queryerr != sql.ErrNoRows {
-			log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+			log.WithFields(QueryFields(c)).Error(queryerr)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 			return nil, apiErr
 		}

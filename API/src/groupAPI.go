@@ -228,7 +228,7 @@ func createGroup(c APIContext, i Input) (interface{}, []APIError) {
 
 	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, i[GroupType]).Scan(&validType)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -246,7 +246,7 @@ func createGroup(c APIContext, i Input) (interface{}, []APIError) {
 		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
 			apiErr = append(apiErr, DefaultAPIError(ErrorDuplicateData, GroupName))
 		} else {
-			log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+			log.WithFields(QueryFields(c)).Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		}
 		return nil, apiErr
@@ -266,7 +266,7 @@ func addGroupToUnit(c APIContext, i Input) (interface{}, []APIError) {
 
 	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, i[GroupType]).Scan(&validType)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -280,7 +280,7 @@ func addGroupToUnit(c APIContext, i Input) (interface{}, []APIError) {
 								  (select unitid from affiliation_units where name = $3)`,
 						  i[GroupName], i[GroupType], i[UnitName]).Scan(&groupid, &unitid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -302,7 +302,7 @@ func addGroupToUnit(c APIContext, i Input) (interface{}, []APIError) {
 		if strings.Contains(err.Error(), `unq_affiliation_unit_group_unitid_is_primary`) {
 			apiErr = append(apiErr, APIError{errors.New("affiliation unit already has a primary group"), ErrorAPIRequirement})
 		} else {
-			log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+			log.WithFields(QueryFields(c)).Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		}
 		return nil, apiErr
@@ -322,7 +322,7 @@ func removeGroupFromUnit(c APIContext, i Input) (interface{}, []APIError) {
 
 	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, i[GroupType]).Scan(&validType)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -336,7 +336,7 @@ func removeGroupFromUnit(c APIContext, i Input) (interface{}, []APIError) {
 								  (select unitid from affiliation_units where name = $3)`,
 						  i[GroupName], i[GroupType], i[UnitName]).Scan(&groupid, &unitid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -344,7 +344,7 @@ func removeGroupFromUnit(c APIContext, i Input) (interface{}, []APIError) {
 	err = c.DBtx.QueryRow(`select is_primary from affiliation_unit_group where groupid = $1 and unitid = $2`,
 						  groupid, unitid).Scan(&primary)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -364,7 +364,7 @@ func removeGroupFromUnit(c APIContext, i Input) (interface{}, []APIError) {
 
 	_, err = c.DBtx.Exec(`delete from affiliation_unit_group where groupid = $1 and unitid = $2`, groupid, unitid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -384,7 +384,7 @@ func setPrimaryStatusGroup(c APIContext, i Input) (interface{}, []APIError) {
 								   (select unitid from affiliation_units where name = $2)`,
 						  i[GroupName], i[UnitName]).Scan(&groupid, &unitid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -402,7 +402,7 @@ func setPrimaryStatusGroup(c APIContext, i Input) (interface{}, []APIError) {
 	err = c.DBtx.QueryRow(`select ($1, $2) in (select groupid, unitid from affiliation_unit_group)`,
 						  groupid, unitid).Scan(&groupInUnit)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -410,7 +410,7 @@ func setPrimaryStatusGroup(c APIContext, i Input) (interface{}, []APIError) {
 	_, err = c.DBtx.Exec(`update affiliation_unit_group set is_primary = false, last_updated = NOW()
 						  where is_primary = true and unitid = $1`, unitid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -423,7 +423,7 @@ func setPrimaryStatusGroup(c APIContext, i Input) (interface{}, []APIError) {
 							  values ($1, $2, true, NOW())`, groupid, unitid)
 	}
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -442,7 +442,7 @@ func getGroupMembers(c APIContext, i Input) (interface{}, []APIError) {
 
 	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, grouptype).Scan(&validType)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -454,7 +454,7 @@ func getGroupMembers(c APIContext, i Input) (interface{}, []APIError) {
 
 	err = c.DBtx.QueryRow(`select (select groupid from groups where name = $1 and type = $2)`, i[GroupName], grouptype).Scan(&groupid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -472,7 +472,7 @@ func getGroupMembers(c APIContext, i Input) (interface{}, []APIError) {
 								(user_group.last_updated>=$2 or $2 is null)`,
 							  groupid, i[LastUpdated])
 	if err != nil {	
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -510,7 +510,7 @@ func isUserMemberOfGroup(c APIContext, i Input) (interface{}, []APIError) {
 
 	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, grouptype).Scan(&validType)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -524,7 +524,7 @@ func isUserMemberOfGroup(c APIContext, i Input) (interface{}, []APIError) {
 								  (select groupid from groups where name = $2 and type = $3)`,
 						  i[UserName], i[GroupName], grouptype).Scan(&uid, &groupid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -544,7 +544,7 @@ func isUserMemberOfGroup(c APIContext, i Input) (interface{}, []APIError) {
 							(select uid, groupid from user_group join groups using(groupid) where type = $3)`,
 						  uid, groupid, grouptype).Scan(&out)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -563,7 +563,7 @@ func isUserLeaderOfGroup(c APIContext, i Input) (interface{}, []APIError) {
 
 	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, grouptype).Scan(&validType)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -577,7 +577,7 @@ func isUserLeaderOfGroup(c APIContext, i Input) (interface{}, []APIError) {
 								  (select groupid from groups where name = $2 and type = $3)`,
 						  i[UserName], i[GroupName], grouptype).Scan(&uid, &groupid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -596,7 +596,7 @@ func isUserLeaderOfGroup(c APIContext, i Input) (interface{}, []APIError) {
 	leader.Scan(false)
 	err = c.DBtx.QueryRow(`select is_leader from user_group where uid = $1 and groupid = $2`, uid ,groupid).Scan(&leader)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -614,7 +614,7 @@ func setGroupLeader(c APIContext, i Input) (interface{}, []APIError) {
 
 	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, i[GroupType]).Scan(&validType)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -628,7 +628,7 @@ func setGroupLeader(c APIContext, i Input) (interface{}, []APIError) {
 								  (select groupid from groups where name = $2 and type = $3)`,
 						  i[UserName], i[GroupName], i[GroupType]).Scan(&uid, &groupid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -647,7 +647,7 @@ func setGroupLeader(c APIContext, i Input) (interface{}, []APIError) {
 						  on conflict (uid, groupid) do update set is_leader = true`,
 						 uid, groupid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -665,7 +665,7 @@ func removeGroupLeader(c APIContext, i Input) (interface{}, []APIError) {
 
 	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, i[GroupType]).Scan(&validType)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -679,7 +679,7 @@ func removeGroupLeader(c APIContext, i Input) (interface{}, []APIError) {
 								  (select groupid from groups where name = $2 and type = $3)`,
 						  i[UserName], i[GroupName], i[GroupType]).Scan(&uid, &groupid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -697,7 +697,7 @@ func removeGroupLeader(c APIContext, i Input) (interface{}, []APIError) {
 	_, err = c.DBtx.Exec(`update user_group set is_leader = false, last_updated = NOW() where uid = $1 and groupid = $2`,
 						 uid, groupid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -716,7 +716,7 @@ func getGroupUnits(c APIContext, i Input) (interface{}, []APIError) {
 
 	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, groupType).Scan(&validType)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -729,7 +729,7 @@ func getGroupUnits(c APIContext, i Input) (interface{}, []APIError) {
 	err = c.DBtx.QueryRow(`select groupid from groups where name = $1 and type = $2`,
 						  i[GroupName], groupType).Scan(&groupid)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -747,7 +747,7 @@ func getGroupUnits(c APIContext, i Input) (interface{}, []APIError) {
 								and (vu.last_updated>=$3 or ag.last_updated>=$3 or $3 is null)`,
 								groupid, experiment, i[LastUpdated])
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -783,7 +783,7 @@ func getBatchPriorities(c APIContext, i Input) (interface{}, []APIError) {
 								   (select compid from compute_resources where name = $2)`,
 						   i[UnitName], i[ResourceName]).Scan(&unitid, &compid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -804,7 +804,7 @@ func getBatchPriorities(c APIContext, i Input) (interface{}, []APIError) {
 							  and (unitid = $2 or $2 is null)
 							  and (last_updated >= $3 or $3 is null)`, compid, unitid, i[LastUpdated])
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -840,7 +840,7 @@ func getCondorQuotas(c APIContext, i Input) (interface{}, []APIError) {
 								   (select compid from compute_resources where name = $2)`,
 						   i[UnitName], i[ResourceName]).Scan(&unitid, &compid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -865,7 +865,7 @@ func getCondorQuotas(c APIContext, i Input) (interface{}, []APIError) {
 								and (valid_until is null or valid_until >= NOW())
 							   order by cb.name, valid_until desc`, unitid, compid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -923,7 +923,7 @@ func setCondorQuota(c APIContext, i Input) (interface{}, []APIError) {
 								   (select $1 in (select name from compute_batch))`,
 						   unitName, i[ResourceName]).Scan(&unitid, &compid, &baseQuota)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -965,7 +965,7 @@ func setCondorQuota(c APIContext, i Input) (interface{}, []APIError) {
 						  update set value = $3, valid_until = $7, surplus = coalesce($6, compute_batch.surplus), last_updated = NOW()`,
 						 compid, condorGroup, quota, quotaType, unitid, i[Surplus], i[ExpirationDate])
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -973,7 +973,7 @@ func setCondorQuota(c APIContext, i Input) (interface{}, []APIError) {
 	if !i[ExpirationDate].Valid {
 		_, err = c.DBtx.Exec(`delete from compute_batch where compid = $1 and name = $2 and valid_until is not null`, compid, condorGroup)
 		if err != nil {
-			log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+			log.WithFields(QueryFields(c)).Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 			return nil, apiErr
 		}
@@ -989,7 +989,7 @@ func removeCondorQuota(c APIContext, i Input) (interface{}, []APIError) {
 
 	err := c.DBtx.QueryRow(`select compid from compute_resources where name = $1`, i[ResourceName]).Scan(&compid)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1001,7 +1001,7 @@ func removeCondorQuota(c APIContext, i Input) (interface{}, []APIError) {
 
 	_, err = c.DBtx.Exec(`delete from compute_batch where compid = $1 and name = $2`, compid, i[CondorGroup])
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1021,7 +1021,7 @@ func getGroupStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
 								   (select unitid from affiliation_units where name = $3)`,
 						   i[GroupName], i[ResourceName], i[UnitName]).Scan(&groupid, &storageid, &unitid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1051,7 +1051,7 @@ func getGroupStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
 							  order by valid_until desc`,
 							 groupid, storageid, unitid, i[LastUpdated])
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1107,7 +1107,7 @@ func removeUserAccessFromResource(c APIContext, i Input) (interface{}, []APIErro
 									where u.uname = $1 and cr.name = $3)`,
 						   i[UserName], i[GroupName], i[ResourceName]).Scan(&uid, &groupid, &compid, &isPrimary, &groupCount)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1130,7 +1130,7 @@ func removeUserAccessFromResource(c APIContext, i Input) (interface{}, []APIErro
 
 	res, err := c.DBtx.Exec(`delete from compute_access_group where uid = $1 and groupid = $2 and compid = $3`, uid, groupid, compid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1143,7 +1143,7 @@ func removeUserAccessFromResource(c APIContext, i Input) (interface{}, []APIErro
 	if nRows == groupCount{
 		_, err := c.DBtx.Exec(`delete from compute_access where uid = $1 and compid = $2`, uid, compid)
 		if err != nil {
-			log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+			log.WithFields(QueryFields(c)).Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 			return nil, apiErr
 		}
@@ -1157,7 +1157,7 @@ func getAllGroups(c APIContext, i Input) (interface{}, []APIError) {
 
 	rows, err := DBptr.Query(`select name, type, gid from groups where groups.last_updated>=$1 or $1 is null`, i[LastUpdated])
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1189,7 +1189,7 @@ func getAllGroupsMembers(c APIContext, i Input) (interface{}, []APIError) {
 							  where ug.last_updated >= $1 or g.last_updated >= $1 or $1 is null
 							  order by name, type`, i[LastUpdated])
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1251,7 +1251,7 @@ func getGroupAccessToResource(c APIContext, i Input) (interface{}, []APIError) {
 								   (select compid from compute_resources where name = $2)`,
 						  i[UnitName], i[ResourceName]).Scan(&unitid, &resourceid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1275,7 +1275,7 @@ func getGroupAccessToResource(c APIContext, i Input) (interface{}, []APIError) {
 								and (ca.last_updated>=$3 or $3 is null)
 							  ) order by groups.name`, resourceid, unitid, i[LastUpdated])
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}

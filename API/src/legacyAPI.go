@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/spf13/viper"
+	"net"
 	"regexp"
 	"strconv"
 	"strings"
@@ -13,23 +15,116 @@ import (
 	"errors"
 )
 
+func authorizeLegacy(req *http.Request, r string) (bool, string) {
+	thetime := time.Now()
+	ip := strings.Split(req.RemoteAddr, ":")[0]
+	authIPs := viper.GetStringSlice("ip_whitelist")
+	authDNs := viper.GetStringSlice("dn_whitelist")
+	dnRoles	:= viper.GetStringMapStringSlice("dn_roles")
+	ipRoles := viper.GetStringMapStringSlice("ip_roles")
+
+	for _, presCert := range req.TLS.PeerCertificates {
+		certDN := ParseDN(presCert.Subject.Names, "/")
+
+		// authorize public role
+		if r == "public" {
+			log.WithFields(QueryFieldsLegacy(req, thetime)).Printf("public role authorized DN %s", certDN)
+			return true, certDN
+		}
+
+		// authorize DN roles
+		if roles, ok := dnRoles[strings.ToLower(certDN)]; ok {
+			for _, role := range roles {
+				if r == role {
+					log.WithFields(QueryFieldsLegacy(req, thetime)).Printf("cert matches authorized role %s DN %s", role, certDN)
+					return true, certDN
+				}
+			}
+		}
+
+		// authorize whitelisted DNs
+		for _, authDN := range authDNs {
+			if authDN == certDN {
+				log.WithFields(QueryFieldsLegacy(req, thetime)).Printf("cert matches whitelisted DN %s", certDN)
+				return true, certDN
+			}
+		}
+	}
+
+	// authorize IP roles
+	if roles, ok := ipRoles[ip]; ok {
+		for _, role := range roles {
+			if r == role {
+				log.WithFields(QueryFieldsLegacy(req, thetime)).Printf("ignoring DN of authorized IP %s with role %s", ip, role)
+				return true, ip
+			}
+		}
+	}
+
+	// authorize whitelisted IPs
+	for _, authIP := range authIPs {
+		if authIP == ip {
+			log.WithFields(QueryFieldsLegacy(req, thetime)).Printf("ignoring DN of authorized IP %s", ip)
+			return true, ip
+		}
+	}
+	
+	log.WithFields(QueryFieldsLegacy(req, thetime)).Printf("unable to authorize access", ip)
+	return false, ip
+}
+
+func QueryFieldsLegacy(r *http.Request, t time.Time) log.Fields {
+	fields := make(log.Fields)
+
+	fields["action"] = r.URL.Path[1:]
+	fields["query"] = r.URL
+	fields["duration"] = time.Since(t).Nanoseconds() / 1E6
+
+	clientIP := strings.Split(r.RemoteAddr, ":")[0]
+	fields["client_ip"] = clientIP
+
+	clientNames, err := net.LookupAddr(clientIP)
+	if err == nil {
+		fields["hostname"] = strings.Trim(clientNames[0], ".")
+	} else {
+		fields["hostname"] = "unknown"
+	}
+
+	if len(r.TLS.PeerCertificates) > 0 {
+		fields["subject"] = ParseDN(r.TLS.PeerCertificates[0].Subject.Names, "/")
+	}
+
+	re := regexp.MustCompile(fmt.Sprintf(`(?:\&|\?)%s=([\w]+)`, string(UnitName)))
+	unitname := re.FindStringSubmatch(r.URL.String())
+	if len(unitname) > 1 {
+		fields[string(UnitName)] = unitname[1]
+	}
+
+	return fields
+}
+
+func NotDoneYet(w http.ResponseWriter, r *http.Request, t time.Time) {
+	fmt.Fprintf(w, `{"ferry_error": "This function is not done yet!"}`)
+	log.WithFields(QueryFieldsLegacy(r, t)).Error("This function is not done yet!")
+}
+
 func getUserInfoLegacy(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 	uname := q.Get("username")
 	if uname == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No username specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
 		return
 	}
 	pingerr := DBptr.Ping()
 	if pingerr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(pingerr)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(pingerr)
 	}
 	rows, err := DBptr.Query(`select full_name, uid, status, is_groupaccount, expiration_date from users where uname=$1`, uname)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "Error in DB query\n")
 	} else {
@@ -56,17 +151,17 @@ func getUserInfoLegacy(w http.ResponseWriter, r *http.Request) {
 			rows.Scan(&Out.FullName, &Out.Uid, &Out.Status, &Out.GrpAcct, &Out.ExpDate)
 			outline, jsonerr := json.Marshal(Out)
 			if jsonerr != nil {
-				log.WithFields(QueryFields(r, startTime)).Error(jsonerr)
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Error(jsonerr)
 			}
 			fmt.Fprintf(w, string(outline))
 			idx += 1
 		}
 		if idx == 0 {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 			fmt.Fprintf(w, `{ "ferry_error": "User does not exist." }`)
 		} else {
 			
-			log.WithFields(QueryFields(r, startTime)).Info("Success!")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 			fmt.Fprintf(w, " ]")
 		}
 	}
@@ -78,7 +173,7 @@ func getSuperUserListLegacy(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	expt := q.Get("unitname")
 	if expt == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No unitname specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
 		return
 	}
@@ -90,7 +185,7 @@ func getSuperUserListLegacy(w http.ResponseWriter, r *http.Request) {
 							  where ga.is_superuser=true and au.name=$1) as t1
 							  right join (select 1 as key, $1 in (select name from affiliation_units) as unit_exists) as c on c.key = t1.key`, expt)
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		//		http.Error(w,"Error in DB query",404)
@@ -118,7 +213,7 @@ func getSuperUserListLegacy(w http.ResponseWriter, r *http.Request) {
 			Out.Uname = tmpUname.String
 			outline, jsonerr := json.Marshal(Out)
 			if jsonerr != nil {
-				log.WithFields(QueryFields(r, startTime)).Error(jsonerr)
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Error(jsonerr)
 			}
 			output += string(outline)
 			idx++
@@ -127,12 +222,12 @@ func getSuperUserListLegacy(w http.ResponseWriter, r *http.Request) {
 	if idx == 0 {
 		if !exptExists {
 			output += `"ferry_error": "Experiment does not exist.",`
-			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Experiment does not exist.")
 		}
 		output += `"ferry_error": "No super users found."`
-		log.WithFields(QueryFields(r, startTime)).Error("No super users found.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No super users found.")
 	} else {	
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 	}
 
 	output += " ]"
@@ -143,7 +238,7 @@ func addCertificateDNToUserLegacy(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
-	authorized, authout := authorize(r, "")
+	authorized, authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -152,7 +247,7 @@ func addCertificateDNToUserLegacy(w http.ResponseWriter, r *http.Request) {
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	defer DBtx.Rollback(cKey)
 
@@ -161,18 +256,18 @@ func addCertificateDNToUserLegacy(w http.ResponseWriter, r *http.Request) {
 	unitName := strings.TrimSpace(q.Get("unitname"))
 	subjDN := strings.TrimSpace(q.Get("dn"))
 	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No username specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
 		return
 	}
 	if subjDN == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No DN specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No DN specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No dn specified.\" }")
 		return
 	} else {
 		dn, err := ExtractValidDN(subjDN)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 			if cKey != 0 {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"%s\" }", err.Error())
 			} else {
@@ -186,21 +281,21 @@ func addCertificateDNToUserLegacy(w http.ResponseWriter, r *http.Request) {
 	var uid, dnid sql.NullInt64
 	queryerr := DBtx.tx.QueryRow(`select us.uid, uc.dnid from (select 1 as key, uid from users where uname=$1 for update) as us full outer join (select 1 as key, dnid from user_certificates where dn=$2 for update) as uc on uc.key=us.key`,uName, subjDN).Scan(&uid,&dnid)
 	if queryerr == sql.ErrNoRows {
-		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 		if cKey != 0 {
 			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
 		}
 		DBtx.Report("User does not exist.")
 		return
 	} else if queryerr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB query: " + queryerr.Error())
 		if cKey != 0 {
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query. Check logs.\" }")
 		}
 		return
 	}
 	if ! uid.Valid {
-		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 		if cKey != 0 {
 			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
 		}
@@ -210,7 +305,7 @@ func addCertificateDNToUserLegacy(w http.ResponseWriter, r *http.Request) {
 	if ! dnid.Valid {
 		_, err := DBtx.Exec(`insert into user_certificates (dn, uid, last_updated) values ($1, $2, NOW()) returning dnid`, subjDN, uid.Int64)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB insert: " + err.Error())
 			if cKey != 0 {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB insert. Check logs.\" }")
 			}
@@ -220,7 +315,7 @@ func addCertificateDNToUserLegacy(w http.ResponseWriter, r *http.Request) {
 	} else {
 		if unitName == "" {
 			// error about DN already existing
-			log.WithFields(QueryFields(r, startTime)).Error("DN already exists and is assigned to this affiliation unit.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("DN already exists and is assigned to this affiliation unit.")
 			if cKey != 0 {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"DN already exists and is assigned to this affiliation unit.\" }")
 			}
@@ -231,16 +326,16 @@ func addCertificateDNToUserLegacy(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if strings.Contains(err.Error(), `pk_affiliation_unit_user_certificate`) {
 			if cKey != 0 {
-				log.WithFields(QueryFields(r, startTime)).Error("DN already exists and is assigned to this affiliation unit.")
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Error("DN already exists and is assigned to this affiliation unit.")
 				fmt.Fprintf(w, "{ \"ferry_error\": \"DN already exists and is assigned to this affiliation unit.\" }")
 			}
 		} else if strings.Contains(err.Error(), `null value in column "unitid"`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Affiliation unit does not exist.")
 			if cKey != 0 {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"Affiliation unit does not exist.\" }")
 			}
 		} else if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB insert: " + err.Error())
 			if cKey != 0 {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB insert. Check logs.\" }")
 			}
@@ -248,7 +343,7 @@ func addCertificateDNToUserLegacy(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		if cKey != 0 {
-			log.WithFields(QueryFields(r, startTime)).Info("Success!")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 		}
 		DBtx.Commit(cKey)
@@ -265,22 +360,22 @@ func setUserExternalAffiliationAttributeLegacy(w http.ResponseWriter, r *http.Re
 	value := strings.TrimSpace(q.Get("value"))
 
 	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No username specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
 		return
 	}
 	if attribute == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No attribute specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No attribute specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No attribute specified.\" }")
 		return
 	}
 	if value == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No value specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No value specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No value specified.\" }")
 		return
 	}
 
-	authorized, authout := authorize(r, "")
+	authorized, authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -289,7 +384,7 @@ func setUserExternalAffiliationAttributeLegacy(w http.ResponseWriter, r *http.Re
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	defer DBtx.Rollback(cKey)
 
@@ -322,15 +417,15 @@ func setUserExternalAffiliationAttributeLegacy(w http.ResponseWriter, r *http.Re
 	queryerr := DBtx.tx.QueryRow(`select us.uid,eaa.attribute from (select uid from users where uname = $1) as us left join (select uid, attribute from external_affiliation_attribute where attribute = $2) as eaa on us.uid=eaa.uid`, uName, attribute).Scan(&uid,&att)
 	if queryerr != nil {
 		if queryerr == sql.ErrNoRows {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
 			return
 		} else if strings.Contains(queryerr.Error(), "invalid input value for enum") {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid attribute.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Invalid attribute.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid attribute.\" }")
 			return
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB query: " + queryerr.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query. Check logs.\" }")
 			return
 		}
@@ -350,15 +445,15 @@ func setUserExternalAffiliationAttributeLegacy(w http.ResponseWriter, r *http.Re
 		DBtx.Commit(cKey)
 
 		if cKey != 0 {
-			log.WithFields(QueryFields(r, startTime)).Info("Success!")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 		}
 	} else {
 		if strings.Contains(err.Error(), `uname does not exist`) {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
 		}
 	}
@@ -369,7 +464,7 @@ func setUserStorageQuotaLegacy(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
 	//call authorize function
-	authorized, authout := authorize(r, "")
+	authorized, authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -394,14 +489,14 @@ func setUserStorageQuotaLegacy(w http.ResponseWriter, r *http.Request) {
 	} else {
 		ig, parserr := strconv.ParseBool(isgrp)
 		if parserr != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid isGroup specified in call.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Invalid isGroup specified in call.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid isGroup value specified.\" }")
 			return
 		}
 		isGroup = ig
 	}
 	if quota == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No quota value specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No quota value specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No quota specified.\" }")
 		return
 	}
@@ -412,22 +507,22 @@ func setUserStorageQuotaLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No user name given.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No user name given.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username provided.\" }")
 		return
 	}
 	if rName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No resource name given.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No resource name given.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No resourcename provided.\" }")
 		return
 	}
 	if unitName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No affiliation unit given.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No affiliation unit given.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname provided.\" }")
 		return
 	}
 	if unit == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No unit given.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No unit given.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No quota_unit provided.\" }")
 		return
 	}
@@ -435,7 +530,7 @@ func setUserStorageQuotaLegacy(w http.ResponseWriter, r *http.Request) {
 	// We want to store the value in the DB in bytes, no matter what the input unit is. Convert the value here and then set the unit of "B" for bytes	
 	newquota, converr := convertValue(quota, unit, "B")
 	if converr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(converr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(converr.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error converting unit value. It must be a number.\" }")
 		return	
 	}
@@ -453,7 +548,7 @@ func setUserStorageQuotaLegacy(w http.ResponseWriter, r *http.Request) {
 	
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	defer DBtx.Rollback(cKey)
 	
@@ -475,14 +570,14 @@ func setUserStorageQuotaLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 	queryerr := DBtx.QueryRow(querystr,rName, uName, unitName).Scan(&vSid, &vId, &vUnitid)
 	if queryerr == sql.ErrNoRows {
-		log.WithFields(QueryFields(r, startTime)).Error("Unit does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Unit does not exist.")
 		if cKey != 0 { 
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Unit does not exist.\" }")	
 		}
 		DBtx.Report("Unit does not exist.")
 		return
 	} else if queryerr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("DB error: " + queryerr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("DB error: " + queryerr.Error())
 		if cKey != 0 { 
 			fmt.Fprintf(w, "{ \"ferry_error\": \"DB error; check log.\" }")	
 		}
@@ -491,14 +586,14 @@ func setUserStorageQuotaLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 	if ! vId.Valid {
 		if isGroup {
-			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Group does not exist.")
 			if cKey !=0 {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"Group does not exist.\" }")
 			} else{
 				DBtx.Report("Group does not exist.")	
 			}
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 			if cKey != 0 {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")	
 			} else {
@@ -508,7 +603,7 @@ func setUserStorageQuotaLegacy(w http.ResponseWriter, r *http.Request) {
 		return
 	} 
 	if ! vSid.Valid {
-		log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Resource does not exist.")
 		if cKey != 0 {
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
 		} else {
@@ -562,30 +657,30 @@ func setUserStorageQuotaLegacy(w http.ResponseWriter, r *http.Request) {
 		DBtx.Commit(cKey)
 		
 		if cKey != 0 {
-			log.WithFields(QueryFields(r, startTime)).Info("Success!")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 		}
 	} else {
 		if strings.Contains(DBtx.Error().Error(), `User does not exist.`) {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
 		} else if strings.Contains(DBtx.Error().Error(), `Resource does not exist.`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Resource does not exist.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
 		} else if strings.Contains(DBtx.Error().Error(), `Group does not exist.`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Group does not exist.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Group does not exist.\" }")
 		} else if strings.Contains(DBtx.Error().Error(), `Null path for user quota.`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Null path for user quota.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Null path for user quota.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"No path given. It is required for permanent user quotas.\" }")
 		} else if strings.Contains(DBtx.Error().Error(), `No permanent quota.`) {
-			log.WithFields(QueryFields(r, startTime)).Error("No permanent quota.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No permanent quota.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"No permanent quota defined.\" }")
 		} else if strings.Contains(DBtx.Error().Error(), `invalid input syntax for type date`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid valid_until date.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Invalid valid_until date.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid valid_until date.\" }")
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(DBtx.Error().Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(DBtx.Error().Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
 		}
 	}
@@ -609,15 +704,15 @@ func setUserAccessToComputeResourceLegacy(w http.ResponseWriter, r *http.Request
 	var inputErr []jsonerror
 
 	if uname == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No username specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No value for username specified."})
 	}
 	if rName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No compute resource specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No compute resource specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No value for resourcename specified."})
 	}
 	if gName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No group name specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No group name specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No value for groupname specified."})
 	}
 
@@ -626,7 +721,7 @@ func setUserAccessToComputeResourceLegacy(w http.ResponseWriter, r *http.Request
 	if is_primary != "" { 
 		tmppri,prierr := strconv.ParseBool(is_primary)
 		if prierr != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid value of is_primary. If specified it must be true or false.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Invalid value of is_primary. If specified it must be true or false.")
 			inputErr = append(inputErr, jsonerror{"Invalid value of is_primary. If specified it must be true or false."})	
 		} else {
 			ispri = tmppri
@@ -636,13 +731,13 @@ func setUserAccessToComputeResourceLegacy(w http.ResponseWriter, r *http.Request
 	if len(inputErr) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		}
 		fmt.Fprintf(w, string(jsonout))
 		return
 	}
 	
-	authorized, authout := authorize(r, "")
+	authorized, authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -651,7 +746,7 @@ func setUserAccessToComputeResourceLegacy(w http.ResponseWriter, r *http.Request
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	defer DBtx.Rollback(cKey)
 
@@ -663,7 +758,7 @@ func setUserAccessToComputeResourceLegacy(w http.ResponseWriter, r *http.Request
 							where u.uname = $1 and cr.name = $2 and cg.is_primary`,
 	uname, rName).Scan(&priCount)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		return
 	}
 	if priCount == 0 {
@@ -688,7 +783,7 @@ func setUserAccessToComputeResourceLegacy(w http.ResponseWriter, r *http.Request
 		// do the insertion now
 		_, ugerr := DBtx.Exec(`insert into user_group (uid, groupid) values ((select uid from users where uname=$1),(select groupid from groups where name=$2))`,uname,gName)
 		if ugerr != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error inserting into user_group: " + ugerr.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error inserting into user_group: " + ugerr.Error())
 			if cKey != 0 {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"Error checking user_group table. Aborting.\" }")	
 			}
@@ -696,7 +791,7 @@ func setUserAccessToComputeResourceLegacy(w http.ResponseWriter, r *http.Request
 		}
 	} else if err != nil {
 		
-		log.WithFields(QueryFields(r, startTime)).Error("Error checking user_group: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error checking user_group: " + err.Error())
 		if cKey != 0 {
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		}
@@ -719,7 +814,7 @@ func setUserAccessToComputeResourceLegacy(w http.ResponseWriter, r *http.Request
 		checkerr := DBtx.tx.QueryRow(`select default_shell, default_home_dir from compute_resources as cr where cr.name=$1`,rName).Scan(&defShell,&defhome)
 		if checkerr == sql.ErrNoRows {
 			// the given compid does not exist in this case. Exit accordingly.	
-			log.WithFields(QueryFields(r, startTime)).Error("resource " + rName + " does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("resource " + rName + " does not exist.")
 			if cKey != 0 {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
 			}
@@ -750,7 +845,7 @@ func setUserAccessToComputeResourceLegacy(w http.ResponseWriter, r *http.Request
 										(select uid from users where uname = $2), $3, $4)`,
 			rName, uname, defShell, defhome)
 		if inserr != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + inserr.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB insert: " + inserr.Error())
 			// now we also need to do a bunch of other checks here
 			if strings.Contains(inserr.Error(),"null value in column \"compid\"") {
 				if cKey != 0 {
@@ -771,11 +866,11 @@ func setUserAccessToComputeResourceLegacy(w http.ResponseWriter, r *http.Request
 				return		
 			}
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully inserted (%s,%s,%s,%s) into compute_access.",rName, uname, defShell, defhome))		
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Info(fmt.Sprintf("Successfully inserted (%s,%s,%s,%s) into compute_access.",rName, uname, defShell, defhome))		
 		}
 		
 	case err != nil:
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error()) 
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB query: " + err.Error()) 
 		if cKey != 0 {
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		}
@@ -786,13 +881,13 @@ func setUserAccessToComputeResourceLegacy(w http.ResponseWriter, r *http.Request
 		if "" != shell || "" != homedir {
 			_, moderr := DBtx.Exec(`update compute_access set shell=$1,home_dir=$2,last_updated=NOW() where uid=$3 and compid=$4`,defShell,defhome,uid,compid)
 			if moderr != nil {
-				log.WithFields(QueryFields(r, startTime)).Error("Error in DB update: " + err.Error()) 
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB update: " + err.Error()) 
 				if cKey != 0 {
 					fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB update.\" }")
 				}
 				return		
 			} else {
-				log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully updated (%s,%s,%s,%s) in compute_access.",rName, uname, defShell, defhome))			
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Info(fmt.Sprintf("Successfully updated (%s,%s,%s,%s) in compute_access.",rName, uname, defShell, defhome))			
 			}
 		}
 		
@@ -820,7 +915,7 @@ func setUserAccessToComputeResourceLegacy(w http.ResponseWriter, r *http.Request
 			_, uperr := DBtx.Exec(`update compute_access_group set is_primary=false, last_updated=NOW() where compid=(select compid from compute_resources where name=$1) and uid=(select uid from users where uname=$2) and groupid not in (select groupid from groups where groups.name=$3 and groups.type = 'UnixGroup')`,rName, uname, gName)
 			if uperr != nil {	
 				
-				log.WithFields(QueryFields(r, startTime)).Error("Error update is_primary field in existing DB entries: " + uperr.Error())	
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error update is_primary field in existing DB entries: " + uperr.Error())	
 				if cKey != 0 {
 					fmt.Fprintf(w, "{ \"ferry_error\": \"Error updating is_primary value for pre-existing compute_access_group entries. See ferry log.\" }")
 				}
@@ -830,7 +925,7 @@ func setUserAccessToComputeResourceLegacy(w http.ResponseWriter, r *http.Request
 		
 		_, inserr := DBtx.Exec(`insert into compute_access_group (compid, uid, groupid, last_updated, is_primary) values ( (select compid from compute_resources where name=$1), (select uid from users where uname=$2), (select groupid from groups where groups.name=$3 and groups.type = 'UnixGroup'), NOW(), $4)`, rName, uname, gName, cagPrimary)
 		if inserr != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insert: " + inserr.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB insert: " + inserr.Error())
 			// now we also need to do a bunch of other checks here
 			if strings.Contains(inserr.Error(),"null value in column \"compid\"") {
 				if cKey != 0 {
@@ -856,11 +951,11 @@ func setUserAccessToComputeResourceLegacy(w http.ResponseWriter, r *http.Request
 			}
 			
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully inserted (%s,%s,%s) into compute_access_group.",rName, uname, gName))
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Info(fmt.Sprintf("Successfully inserted (%s,%s,%s) into compute_access_group.",rName, uname, gName))
 		}
 		
 	case err != nil:
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error()) 
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB query: " + err.Error()) 
 		if cKey != 0 {
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 			}
@@ -870,7 +965,7 @@ func setUserAccessToComputeResourceLegacy(w http.ResponseWriter, r *http.Request
 		
 		if ((cagPrimary.Valid && cagPrimary.Bool == ispri) || is_primary == "" && !ispri) && "" == shell && "" == homedir {
 			// everything in the DB is already the same as the request, so don't do anything
-			log.WithFields(QueryFields(r, startTime)).Print("The request already exists in the database. Nothing to do.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Print("The request already exists in the database. Nothing to do.")
 			if cKey != 0 {
 				fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 			}
@@ -886,25 +981,25 @@ func setUserAccessToComputeResourceLegacy(w http.ResponseWriter, r *http.Request
 					
 					_, moderr := DBtx.Exec(`update compute_access_group set is_primary=false,last_updated=NOW() where groupid != $1 and uid=$2 and compid=$3`,grpid,uid,compid)
 					if moderr != nil {
-						log.WithFields(QueryFields(r, startTime)).Error("Error in DB update: " + err.Error()) 
+						log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB update: " + err.Error()) 
 						if cKey != 0 {
 							fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB update.\" }")
 							}
 						return		
 					} else {
 						
-						log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully updated (%s,%s) entries in compute_access_group.",rName, uname))					
+						log.WithFields(QueryFieldsLegacy(r, startTime)).Info(fmt.Sprintf("Successfully updated (%s,%s) entries in compute_access_group.",rName, uname))					
 					}
 					_, moderr = DBtx.Exec(`update compute_access_group set is_primary=$1,last_updated=NOW() where groupid=$2 and uid=$3 and compid=$4`,cagPrimary,grpid,uid,compid)
 					if moderr != nil {
-						log.WithFields(QueryFields(r, startTime)).Error("Error in DB update: " + err.Error()) 
+						log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB update: " + err.Error()) 
 						if cKey != 0 {
 							fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB update.\" }")
 						}
 						return		
 					} else {
 						
-						log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully updated (%s,%s,%s,%s) in compute_access_group.",rName, uname, gName,is_primary))					
+						log.WithFields(QueryFieldsLegacy(r, startTime)).Info(fmt.Sprintf("Successfully updated (%s,%s,%s,%s) in compute_access_group.",rName, uname, gName,is_primary))					
 					}
 					
 				}
@@ -938,20 +1033,20 @@ func addUsertoExperimentLegacy(w http.ResponseWriter, r *http.Request) {
 
 	unit := strings.TrimSpace(q.Get("unitname"))
 	if unit == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No unitname specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No unitname specified."})
 	}
 
 	if len(inputErr) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		}
 		fmt.Fprintf(w, string(jsonout))
 		return
 	}
 	
-    	authorized,authout := authorize(r, "")
+    	authorized,authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -963,11 +1058,11 @@ func addUsertoExperimentLegacy(w http.ResponseWriter, r *http.Request) {
 	
 	key, err := DBtx.Start(DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error starting database transaction: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error starting database transaction: " + err.Error())
 		inputErr = append(inputErr, jsonerror{"Error starting database transaction." })
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		}
 		fmt.Fprintf(w, string(jsonout))
 		return
@@ -976,11 +1071,11 @@ func addUsertoExperimentLegacy(w http.ResponseWriter, r *http.Request) {
 
 	uName := strings.TrimSpace(q.Get("username"))
 	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No username specified.")
 		inputErr = append(inputErr, jsonerror{"No username specified." })
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		}
 		fmt.Fprintf(w, string(jsonout))
 		return	
@@ -991,13 +1086,13 @@ func addUsertoExperimentLegacy(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := DBtx.Query("select full_name, status from users where uname = $1", uName)
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
 
 	if !rows.Next() {
-		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
 		return
 	}
@@ -1005,7 +1100,7 @@ func addUsertoExperimentLegacy(w http.ResponseWriter, r *http.Request) {
 	rows.Close()
 
 	if !valid {
-		log.WithFields(QueryFields(r, startTime)).Error("User status is not valid.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User status is not valid.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"User status is not valid.\" }")
 		return
 	}
@@ -1018,7 +1113,7 @@ func addUsertoExperimentLegacy(w http.ResponseWriter, r *http.Request) {
 	addCertificateDNToUserLegacy(w, R)
 	if !DBtx.Complete() {
 		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") {
-			log.WithFields(QueryFields(r, startTime)).Error("addCertificateDNToUser failed: DBtx.Error().Error()" )
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("addCertificateDNToUser failed: DBtx.Error().Error()" )
 			if  strings.Contains(DBtx.Error().Error(), `null value in column "unitid" violates not-null constraint`) {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"Affiliation unit does not exist.\" }")					
 			} else {		
@@ -1035,12 +1130,12 @@ func addUsertoExperimentLegacy(w http.ResponseWriter, r *http.Request) {
 								 where (lower(fqan) like lower($1) or lower(fqan) like lower($2)) and mapped_user is null;`,
 								 "/" + unit + "/Role=" + fqan + "%", "/fermilab/" + unit + "/Role=" + fqan + "%")
 		if err != nil {
-			defer log.WithFields(QueryFields(r, startTime)).Error(err)
+			defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 			return
 		}
 		if !rows.Next() {
-			log.WithFields(QueryFields(r, startTime)).Error("FQAN not found.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("FQAN not found.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"FQAN not found.\" }")
 			return
 		}
@@ -1050,7 +1145,7 @@ func addUsertoExperimentLegacy(w http.ResponseWriter, r *http.Request) {
 
 		if rows.Next() {
 			rows.Scan(&fullFqan)
-			log.WithFields(QueryFields(r, startTime)).Error("Found ambiguous FQANs.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Found ambiguous FQANs.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Found ambiguous FQANs.\" }")
 			return
 		}
@@ -1065,7 +1160,7 @@ func addUsertoExperimentLegacy(w http.ResponseWriter, r *http.Request) {
 		setUserExperimentFQANLegacy(w, R)
 		if !DBtx.Complete() {
 			if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") && !strings.Contains(DBtx.Error().Error(), "FQAN not assigned to specified unit") {
-				log.WithFields(QueryFields(r, startTime)).Error("Failed to set FQAN to user: " + DBtx.Error().Error())
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Failed to set FQAN to user: " + DBtx.Error().Error())
 				fmt.Fprintf(w, "{ \"ferry_error\": \"setUserExperimentFQAN failed. Last DB error: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
 				return	
 			}
@@ -1078,14 +1173,14 @@ func addUsertoExperimentLegacy(w http.ResponseWriter, r *http.Request) {
 							 left join affiliation_units au on cr.unitid = au.unitid
 							 where au.name = $1 and cr.type = 'Interactive';`, unit)
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
 
 	if !rows.Next() {
-		log.WithFields(QueryFields(r, startTime)).Error("Compute resource not found.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Compute resource not found.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Compute resource not found.\" }")
 		return
 	}
@@ -1097,13 +1192,13 @@ func addUsertoExperimentLegacy(w http.ResponseWriter, r *http.Request) {
 							left join groups as gp on ag.groupid = gp.groupid
 							where ag.is_primary and au.name = $1;`, unit)
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
 
 	if !rows.Next() {
-		log.WithFields(QueryFields(r, startTime)).Error("Primary group not found for this unit.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Primary group not found for this unit.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Primary group not found for this unit.\" }")
 		return
 	}
@@ -1120,7 +1215,7 @@ func addUsertoExperimentLegacy(w http.ResponseWriter, r *http.Request) {
 	setUserAccessToComputeResourceLegacy(w, R)
 	if !DBtx.Complete() {
 		if !strings.Contains(DBtx.Error().Error(), "The request already exists in the database.") {
-			log.WithFields(QueryFields(r, startTime)).Error("addUserToGroup failed: " + DBtx.Error().Error() )
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("addUserToGroup failed: " + DBtx.Error().Error() )
 			fmt.Fprintf(w, "{ \"ferry_error\": \"setUserAccessToComputeResource for " + compResource + " failed. Last DB error: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
 			return
 		}
@@ -1139,7 +1234,7 @@ func addUsertoExperimentLegacy(w http.ResponseWriter, r *http.Request) {
 	if unit == "cms" {
 		rows, err = DBtx.Query(`select sr.storageid, sr.name, sr.default_path, sr.default_quota, sr.default_unit from storage_resources as sr`)
 		if err != nil {
-			defer log.WithFields(QueryFields(r, startTime)).Error(err)
+			defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 			return
 		}
@@ -1188,7 +1283,7 @@ func addUsertoExperimentLegacy(w http.ResponseWriter, r *http.Request) {
 			var quotaCount int
 			err = DBtx.QueryRow("select count(*) from storage_quota where path = $1", q["path"][0]).Scan(&quotaCount)
 			if err != nil {
-				defer log.WithFields(QueryFields(r, startTime)).Error(err)
+				defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 				fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 				return
 			}
@@ -1196,7 +1291,7 @@ func addUsertoExperimentLegacy(w http.ResponseWriter, r *http.Request) {
 				DBtx.Savepoint("setUserStorageQuota_" + sr[isr].SrName)
 				setUserStorageQuotaLegacy(w,R)
 				if !DBtx.Complete() {
-					log.WithFields(QueryFields(r, startTime)).Error("setUserStorageQuota on  " + sr[isr].SrName + "  failed: " + DBtx.Error().Error() )
+					log.WithFields(QueryFieldsLegacy(r, startTime)).Error("setUserStorageQuota on  " + sr[isr].SrName + "  failed: " + DBtx.Error().Error() )
 					fmt.Fprintf(w, "{ \"ferry_error\": \"setUserStorageQuota for " + sr[isr].SrName + " failed. Last DB error: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
 					return
 				}
@@ -1210,7 +1305,7 @@ func addUsertoExperimentLegacy(w http.ResponseWriter, r *http.Request) {
 	if duplicateCount == duplicateCountRef {
 		fmt.Fprintf(w, "{ \"ferry_status\": \"User already belongs to the experiment.\" }")
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 
 		DBtx.Commit(key)
@@ -1227,12 +1322,12 @@ func setUserExperimentFQANLegacy(w http.ResponseWriter, r *http.Request) {
 	fqan := strings.TrimSpace(q.Get("fqan"))
 
 	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No username specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
 		return
 	}
 	if unitName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No unitname specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
 		return
 	}
@@ -1240,13 +1335,13 @@ func setUserExperimentFQANLegacy(w http.ResponseWriter, r *http.Request) {
 		if strings.TrimSpace(q.Get("role")) != "" {
 			fqan = "%Role=" + strings.TrimSpace(q.Get("role")) + "%"
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error("No role or fqan specified in http query.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No role or fqan specified in http query.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"No role or fqan specified.\" }")
 			return
 		}
 	}
 
-	authorized, authout := authorize(r, "")
+	authorized, authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -1255,7 +1350,7 @@ func setUserExperimentFQANLegacy(w http.ResponseWriter, r *http.Request) {
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	defer DBtx.Rollback(cKey)
 
@@ -1263,13 +1358,13 @@ func setUserExperimentFQANLegacy(w http.ResponseWriter, r *http.Request) {
 	queryerr := DBtx.QueryRow(`select uid from users where uname=$1 for update`, uName).Scan(&uid)
 	switch {
 	case queryerr == sql.ErrNoRows:
-		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 		if cKey != 0 {
 			fmt.Fprintf(w,"{ \"ferry_error\": \"User does not exist.\" }")
 		}
 		return
 	case queryerr != nil:
-		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error during query:" + queryerr.Error())
 		if cKey != 0 {
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
 		}
@@ -1279,13 +1374,13 @@ func setUserExperimentFQANLegacy(w http.ResponseWriter, r *http.Request) {
 	queryerr = DBtx.QueryRow(`select unitid from affiliation_units where name=$1 for update`, unitName).Scan(&unitid)
 	switch {
 	case queryerr == sql.ErrNoRows:
-		log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Affiliation unit does not exist.")
 		if cKey != 0 {
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Affiliation unit does not exist.\" }")
 		}
 		return
 	case queryerr != nil:
-		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error during query:" + queryerr.Error())
 		if cKey != 0 {
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
 		}
@@ -1299,14 +1394,14 @@ func setUserExperimentFQANLegacy(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case queryerr == nil:
 		if !hasCert {
-			log.WithFields(QueryFields(r, startTime)).Error("User is not member of affiliation unit.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User is not member of affiliation unit.")
 			if cKey != 0 {
 				fmt.Fprintf(w,"{ \"ferry_error\": \"User is not member of affiliation unit.\" }")
 			}
 			return
 		}
 	default:
-		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error during query:" + queryerr.Error())
 		if cKey != 0 {
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
 		}
@@ -1318,7 +1413,7 @@ func setUserExperimentFQANLegacy(w http.ResponseWriter, r *http.Request) {
 								  affiliation_units as au on gf.unitid=au.unitid
 								  where au.name=$1 and gf.fqan like $2`,unitName, fqan)
 	if queryerr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error during query:" + queryerr.Error())
 		if cKey != 0 {
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
 		}
@@ -1330,7 +1425,7 @@ func setUserExperimentFQANLegacy(w http.ResponseWriter, r *http.Request) {
 		var fqanid int
 		err = rows.Scan(&fqanid)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
 			return
 		}
@@ -1338,7 +1433,7 @@ func setUserExperimentFQANLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 	rows.Close()
 	if len(fqanids) == 0 {
-		log.WithFields(QueryFields(r, startTime)).Error("No FQANs found for this query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No FQANs found for this query.")
 		if cKey != 0 {
 			fmt.Fprintf(w,"{ \"ferry_error\": \"No FQANs found for this query.\" }")
 		}
@@ -1355,19 +1450,19 @@ func setUserExperimentFQANLegacy(w http.ResponseWriter, r *http.Request) {
 				duplicate ++
 			} else {
 				if strings.Contains(err.Error(), `null value in column "uid" violates not-null constraint`) {
-					log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+					log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 					if cKey != 0 {
 						fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
 					}
 				} else if strings.Contains(err.Error(), `null value in column "fqanid" violates not-null constraint`) {
-					log.WithFields(QueryFields(r, startTime)).Error("FQAN does not exist.")
+					log.WithFields(QueryFieldsLegacy(r, startTime)).Error("FQAN does not exist.")
 					if cKey != 0 {
 						fmt.Fprintf(w, "{ \"ferry_error\": \"FQAN does not exist.\" }")
 					} else {
 						DBtx.Report("FQAN does not exist.")
 					}
 				} else {
-					log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+					log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 					if cKey != 0 {
 						fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
 					}
@@ -1379,13 +1474,13 @@ func setUserExperimentFQANLegacy(w http.ResponseWriter, r *http.Request) {
 
 	if len(fqanids) == duplicate {
 		if cKey != 0 {
-			log.WithFields(QueryFields(r, startTime)).Error("This association already exists.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("This association already exists.")
 			fmt.Fprintf(w, "{ \"ferry_status\": \"This association already exists.\" }")
 		}
 		return
 	} else {
 		if cKey != 0 {
-			log.WithFields(QueryFields(r, startTime)).Info("Success!")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 		}
 	}
@@ -1420,7 +1515,7 @@ func getUserCertificateDNsLegacy(w http.ResponseWriter, r *http.Request) {
 								($2 in (select name from affiliation_units) or $2 = '%') as unit_exists
 							) as c on t.key = c.key;`, uname, expt, "%" + expt + "%")
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		//		http.Error(w,"Error in DB query",404)
@@ -1466,15 +1561,15 @@ func getUserCertificateDNsLegacy(w http.ResponseWriter, r *http.Request) {
 		var queryStatus jsonstatus
 		if !userExists && uname != "%" {
 			queryErr.Error = append(queryErr.Error, "User does not exist.")
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 		}
 		if !exptExists && expt != "%" {
 			queryErr.Error = append(queryErr.Error, "Experiment does not exist.")
-			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Experiment does not exist.")
 		}
 		if userExists && exptExists {
 			queryStatus.Status = append(queryErr.Error, "User does not have any certificates registered.")
-			log.WithFields(QueryFields(r, startTime)).Info("User does not have any certificates registered.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Info("User does not have any certificates registered.")
 		}
 		if len(queryErr.Error) > 0 {
 			output = queryErr
@@ -1482,12 +1577,12 @@ func getUserCertificateDNsLegacy(w http.ResponseWriter, r *http.Request) {
 			output = queryStatus
 		}
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonoutput, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 	}
 	fmt.Fprintf(w, string(jsonoutput))
 }
@@ -1513,21 +1608,21 @@ func getAllUsersCertificateDNsLegacy(w http.ResponseWriter, r *http.Request) {
 		if activebool,err := strconv.ParseBool(ao) ; err == nil {
 			activeonly = activebool
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB query: " + err.Error())
 			inputErr = append(inputErr, jsonerror{"Invalid value for active. Must be true or false (or omit it from the query)."})
 		}
 	}
 
 	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
 		inputErr = append(inputErr, jsonerror{"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time."})
 	}
 	
 	if len(inputErr) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		}
 		fmt.Fprintf(w, string(jsonout))
 		return
@@ -1544,7 +1639,7 @@ func getAllUsersCertificateDNsLegacy(w http.ResponseWriter, r *http.Request) {
 								$1 in (select name from affiliation_units) as unit_exists
 							) as c on t.key = c.key;`, expt, activeonly, lastupdate)
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
@@ -1580,19 +1675,19 @@ func getAllUsersCertificateDNsLegacy(w http.ResponseWriter, r *http.Request) {
 		var queryErr []jsonerror
 		if !exptExists {
 			queryErr = append(queryErr, jsonerror{"Experiment does not exist."})
-			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Experiment does not exist.")
 		} else {
 			queryErr = append(queryErr, jsonerror{"Query returned no users."})
-			log.WithFields(QueryFields(r, startTime)).Error("Query returned no users.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Query returned no users.")
 		}
 		output = queryErr
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonoutput, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 	}
 	fmt.Fprintf(w, string(jsonoutput))
 }
@@ -1611,7 +1706,7 @@ func setUserInfoLegacy(w http.ResponseWriter, r *http.Request) {
 	eDate.String =strings.TrimSpace( q.Get("expiration_date"))
 
 	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No username specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
 		return
 	}
@@ -1625,7 +1720,7 @@ func setUserInfoLegacy(w http.ResponseWriter, r *http.Request) {
 	} else {
 		_, err := strconv.ParseBool(status.String)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid status specified in http query.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Invalid status specified in http query.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid status specified. Should be true or false.\" }")
 			return
 		}
@@ -1636,7 +1731,7 @@ func setUserInfoLegacy(w http.ResponseWriter, r *http.Request) {
 	} else {
 		_, err := strconv.ParseBool(gAccount.String)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid groupaccount specified in http query.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Invalid groupaccount specified in http query.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid groupaccount specified. Should be true or false.\" }")
 			return
 		}
@@ -1652,12 +1747,12 @@ func setUserInfoLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if fName.String == "" && status.String == "" && gAccount.String == "" && eDate.String == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("Not enough arguments.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Not enough arguments.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Not enough arguments.\" }")
 		return
 	}
 
-	authorized, authout := authorize(r, "")
+	authorized, authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -1666,7 +1761,7 @@ func setUserInfoLegacy(w http.ResponseWriter, r *http.Request) {
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	defer DBtx.Rollback(cKey)
 
@@ -1675,11 +1770,11 @@ func setUserInfoLegacy(w http.ResponseWriter, r *http.Request) {
 
 	queryerr := DBtx.tx.QueryRow(`select uid from users where uname=$1`,uName).Scan(&uidint)
 	if queryerr == sql.ErrNoRows {
-		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
 		return
 	} else if queryerr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error determining uid.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error determining uid.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"DB error determining uid.\" }")
 		return
 	}
@@ -1696,16 +1791,16 @@ func setUserInfoLegacy(w http.ResponseWriter, r *http.Request) {
 	_, err = DBtx.Exec(query, uidint, fName, status, gAccount, eDate)
 
 	if err == nil {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 		DBtx.Commit(cKey)
 	} else {
 		if strings.Contains(err.Error(), `invalid input syntax for type date`) ||
 			strings.Contains(err.Error(), `date/time field value out of range`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid expiration date.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Invalid expiration date.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid expiration date.\" }")
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
 		}
 	}
@@ -1723,7 +1818,7 @@ func getUserExternalAffiliationAttributesLegacy(w http.ResponseWriter, r *http.R
 	}
 	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
 		return
 	}
@@ -1734,7 +1829,7 @@ func getUserExternalAffiliationAttributesLegacy(w http.ResponseWriter, r *http.R
 							 (select 1 as key, $1 in (select uname from users) as user_exists) as c on t.key = c.key where t.last_updated>=$2 or $2 is null;`, user, lastupdate)
 
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
@@ -1769,19 +1864,19 @@ func getUserExternalAffiliationAttributesLegacy(w http.ResponseWriter, r *http.R
 		var Err []jsonerror
 		if !userExists {
 			Err = append(Err, jsonerror{"User does not exist."})
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 		} else {
 			Err = append(Err, jsonerror{"User does not have external affiliation attributes"})
-			log.WithFields(QueryFields(r, startTime)).Error("User does not have external affiliation attributes")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not have external affiliation attributes")
 		}
 		output = Err
 	} else {
 		output = Out
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	fmt.Fprintf(w, string(jsonout))
 
@@ -1813,14 +1908,14 @@ func getStorageQuotasLegacy(w http.ResponseWriter, r *http.Request) {
 	
 	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
 		inputErr.Error = append(inputErr.Error, "Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.")
 	}
 	
 	if len(inputErr.Error) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		}
 		fmt.Fprintf(w, string(jsonout))
 		return
@@ -1844,7 +1939,7 @@ func getStorageQuotasLegacy(w http.ResponseWriter, r *http.Request) {
 							) as c on t.key = c.key;`, user, group, resource, lastupdate)
 
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
@@ -1891,26 +1986,26 @@ func getStorageQuotasLegacy(w http.ResponseWriter, r *http.Request) {
 	if len(outMap.Users) == 0 && len(outMap.Groups) == 0 {
 		var queryErr jsonerror
 		if !userExists && user != "%" {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 			queryErr.Error = append(queryErr.Error, "User does not exist.")
 		} else if !groupExists && group != "%" {
-			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Group does not exist.")
 			queryErr.Error = append(queryErr.Error, "Group does not exist.")
 		} else if !resourceExists && resource != "%" {
-			log.WithFields(QueryFields(r, startTime)).Error("Storage resource does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Storage resource does not exist.")
 			queryErr.Error = append(queryErr.Error, "Storage resource does not exist.")
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error("No storage quotas were found for this query.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No storage quotas were found for this query.")
 			queryErr.Error = append(queryErr.Error, "No storage quotas were found for this query.")
 		}
 		output = queryErr
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		output = outMap
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
@@ -1922,7 +2017,7 @@ func getUserFQANsLegacy(w http.ResponseWriter, r *http.Request) {
 	uname := q.Get("username")
 	expt := q.Get("unitname")
 	if uname == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No username specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
 		return
 	}
@@ -1932,7 +2027,7 @@ func getUserFQANsLegacy(w http.ResponseWriter, r *http.Request) {
 
 	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
 		return
 	}
@@ -1950,7 +2045,7 @@ func getUserFQANsLegacy(w http.ResponseWriter, r *http.Request) {
 								$2 in (select name from affiliation_units) as unit_exists
 							) as C on T.key = C.key where T.last_updated >= $3 or $3 is null order by T.name;`, uname, expt, lastupdate)
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		//		http.Error(w,"Error in DB query",404)
@@ -1982,24 +2077,24 @@ func getUserFQANsLegacy(w http.ResponseWriter, r *http.Request) {
 		var queryErr jsonerror
 		if !userExists {
 			queryErr.Error = append(queryErr.Error, "User does not exist.")
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 		}
 		if !exptExists {
 			queryErr.Error = append(queryErr.Error, "Experiment does not exist.")
-			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Experiment does not exist.")
 		}
 		if userExists && exptExists {
 			queryErr.Error = append(queryErr.Error, "User do not have any assigned FQANs.")
-			log.WithFields(QueryFields(r, startTime)).Error("User do not have any assigned FQANs.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User do not have any assigned FQANs.")
 		}
 		output = queryErr
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonoutput, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 	}
 	fmt.Fprintf(w, string(jsonoutput))
 }
@@ -2013,7 +2108,7 @@ func getGroupMembersLegacy(w http.ResponseWriter, r *http.Request) {
 	//	//should be a bool
 
 	if groupname == "" {	
-		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("No groupname specified.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified\" }")
 		return
 	}
@@ -2026,7 +2121,7 @@ func getGroupMembersLegacy(w http.ResponseWriter, r *http.Request) {
 	if gl != "" {
 		getl,glerr := strconv.ParseBool(gl)	
 		if glerr != nil {
-			log.WithFields(QueryFields(r, startTime)).Print("Invalid value of return_leaders: " + gl + ". Must be true or false.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Invalid value of return_leaders: " + gl + ". Must be true or false.")
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid value for return_leaders. Must be true or false\" }")		
 			return
 		} else {
@@ -2036,7 +2131,7 @@ func getGroupMembersLegacy(w http.ResponseWriter, r *http.Request) {
 	
 	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
-                log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+                log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
                 fmt.Fprintf(w,"{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
                 return
     }
@@ -2055,17 +2150,17 @@ func getGroupMembersLegacy(w http.ResponseWriter, r *http.Request) {
 	err := DBptr.QueryRow(`select groupid from groups where (name, type) = ($1, $2)`, groupname, grouptype).Scan(&grpid)
 	switch {
 	case err == sql.ErrNoRows:
-		log.WithFields(QueryFields(r, startTime)).Print("Group does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Group does not exist.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Group does not exist.\" }")
 		return
 
 	case err != nil && strings.Contains(err.Error(), `invalid input value for enum`):
-		log.WithFields(QueryFields(r, startTime)).Print("Invalid group type.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Invalid group type.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid group type.\" }")
 		return
 		
 	case err != nil:
-		log.WithFields(QueryFields(r, startTime)).Print("Group ID query error: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Group ID query error: " + err.Error())
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
@@ -2073,7 +2168,7 @@ func getGroupMembersLegacy(w http.ResponseWriter, r *http.Request) {
 	default:
 		rows, err := DBptr.Query(`select users.uname, users.uid, user_group.is_leader from user_group join users on users.uid=user_group.uid where user_group.groupid=$1 and (user_group.last_updated>=$2 or $2 is null)`, grpid, lastupdate)
 		if err != nil {	
-			log.WithFields(QueryFields(r, startTime)).Print("Database query error: " + err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Database query error: " + err.Error())
 			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")		
 			return
@@ -2097,15 +2192,15 @@ func getGroupMembersLegacy(w http.ResponseWriter, r *http.Request) {
 			}
 			var queryErr []jsonerror
 			queryErr = append(queryErr, jsonerror{"This group has no members."})
-			log.WithFields(QueryFields(r, startTime)).Error("Group has no members")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Group has no members")
 			output = queryErr
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Info("Success!")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 			output = Out
 		}
 		jsonoutput, err := json.Marshal(output)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 		}
 		fmt.Fprintf(w, string(jsonoutput))	
 	}
@@ -2126,11 +2221,11 @@ func IsUserMemberOfGroupLegacy(w http.ResponseWriter, r *http.Request) {
 	gtype := q.Get("grouptype")
 
 	if user == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No username specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No username specified."})
 	}
 	if group == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No groupname specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No groupname specified."})
 	}
 	if gtype == "" {	
@@ -2140,7 +2235,7 @@ func IsUserMemberOfGroupLegacy(w http.ResponseWriter, r *http.Request) {
 	if len(inputErr) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		}
 		fmt.Fprintf(w, string(jsonout))
 		return
@@ -2160,7 +2255,7 @@ func IsUserMemberOfGroupLegacy(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(err.Error(), `invalid input value for enum`){
 			typeExists = false
 		} else {
-			defer log.WithFields(QueryFields(r, startTime)).Error(err)
+			defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 			return
@@ -2188,26 +2283,26 @@ func IsUserMemberOfGroupLegacy(w http.ResponseWriter, r *http.Request) {
 	if !tmpMember.Valid {
 		var queryErr []jsonerror
 		if !typeExists {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid group type.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Invalid group type.")
 			queryErr = append(queryErr, jsonerror{"Invalid group type."})
 		} else {
 			if !userExists {
-				log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 				queryErr = append(queryErr, jsonerror{"User does not exist."})
 			}
 			if !groupExists {
-				log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Group does not exist.")
 				queryErr = append(queryErr, jsonerror{"Group does not exist."})
 			}
 		}
 		output = queryErr
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
@@ -2221,12 +2316,12 @@ func IsUserLeaderOfGroupLegacy(w http.ResponseWriter, r *http.Request) {
 	grouptype := q.Get("grouptype")
 	
 	if groupname == "" {	
-		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("No groupname specified.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified\" }")
 		return
 	}
 	if uName == "" {	
-		log.WithFields(QueryFields(r, startTime)).Print("No username specified.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("No username specified.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No username specified\" }")
 		return
 	}
@@ -2237,15 +2332,15 @@ func IsUserLeaderOfGroupLegacy(w http.ResponseWriter, r *http.Request) {
 	grouperr := DBptr.QueryRow(`select groupid from groups where (name, type) = ($1, $2)`, groupname, grouptype).Scan(&groupId)
 	switch {
 	case grouperr == sql.ErrNoRows:
-		log.WithFields(QueryFields(r, startTime)).Print("Group " + groupname + " does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Group " + groupname + " does not exist.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Group " + groupname + " does not exist.\" }")
 		return
 	case grouperr != nil && strings.Contains(grouperr.Error(), "invalid input value for enum"):
-		log.WithFields(QueryFields(r, startTime)).Print("Invalid group type.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Invalid group type.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid group type.\" }")
 		return
 	case grouperr != nil:
-		log.WithFields(QueryFields(r, startTime)).Print("Group ID query error: " + grouperr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Group ID query error: " + grouperr.Error())
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
@@ -2254,11 +2349,11 @@ func IsUserLeaderOfGroupLegacy(w http.ResponseWriter, r *http.Request) {
 		usererr := DBptr.QueryRow(`select uid from users where uname=$1`,uName).Scan(&uId)
 		switch {
 		case usererr == sql.ErrNoRows:
-			log.WithFields(QueryFields(r, startTime)).Print("User " + uName + " does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Print("User " + uName + " does not exist.")
 			fmt.Fprintf(w,"{ \"ferry_error\": \"User " + uName + " does not exist.\" }")
 			return
 		case usererr != nil:
-			log.WithFields(QueryFields(r, startTime)).Print("User ID query error: " + usererr.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Print("User ID query error: " + usererr.Error())
 			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 			return
@@ -2268,13 +2363,13 @@ func IsUserLeaderOfGroupLegacy(w http.ResponseWriter, r *http.Request) {
 			leaderstr := strconv.FormatBool(isLeader)
 			switch {
 			case checkerr != nil && checkerr != sql.ErrNoRows:
-				log.WithFields(QueryFields(r, startTime)).Print("Group leader query error: " + checkerr.Error())
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Group leader query error: " + checkerr.Error())
 				w.WriteHeader(http.StatusNotFound)
 				fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 				return	
 			default:
 				w.WriteHeader(http.StatusOK)
-				log.WithFields(QueryFields(r, startTime)).Print(uName + " is a leader of " + groupname + ": " + leaderstr)
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Print(uName + " is a leader of " + groupname + ": " + leaderstr)
 				fmt.Fprintf(w,"{ \"leader\": \"" + leaderstr + "\" }")
 				return
 			}
@@ -2291,23 +2386,23 @@ func setGroupLeaderLegacy(w http.ResponseWriter, r *http.Request) {
 	grouptype := q.Get("grouptype")
 	
 	if groupname == "" {	
-		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("No groupname specified.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified\" }")
 		return
 	}
 	if grouptype == "" {	
-		log.WithFields(QueryFields(r, startTime)).Print("No grouptype specified.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("No grouptype specified.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No grouptype specified\" }")
 		return
 	}
 	if uName == "" {	
-		log.WithFields(QueryFields(r, startTime)).Print("No username specified.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("No username specified.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No username specified\" }")
 		return
 	}
 
 	//requires authorization
-	authorized,authout := authorize(r, "")
+	authorized,authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -2316,7 +2411,7 @@ func setGroupLeaderLegacy(w http.ResponseWriter, r *http.Request) {
 	
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Print("Error starting DB transaction: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Error starting DB transaction: " + err.Error())
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 		return
@@ -2327,15 +2422,15 @@ func setGroupLeaderLegacy(w http.ResponseWriter, r *http.Request) {
 	grouperr := DBptr.QueryRow(`select groupid from groups where (name, type) = ($1, $2)`, groupname, grouptype).Scan(&groupId)
 	switch {
 	case grouperr == sql.ErrNoRows:
-		log.WithFields(QueryFields(r, startTime)).Print("Group " + groupname + " does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Group " + groupname + " does not exist.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Group " + groupname + " does not exist.\" }")
 		return
 	case grouperr != nil && strings.Contains(grouperr.Error(), "invalid input value for enum"):
-		log.WithFields(QueryFields(r, startTime)).Print("Invalid group type.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Invalid group type.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid group type.\" }")
 		return
 	case grouperr != nil:
-		log.WithFields(QueryFields(r, startTime)).Print("Group ID query error: " + grouperr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Group ID query error: " + grouperr.Error())
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
@@ -2344,11 +2439,11 @@ func setGroupLeaderLegacy(w http.ResponseWriter, r *http.Request) {
 		usererr := DBptr.QueryRow(`select uid from users where uname=$1`,uName).Scan(&uId)
 		switch {
 		case usererr == sql.ErrNoRows:
-			log.WithFields(QueryFields(r, startTime)).Print("User " + uName + " does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Print("User " + uName + " does not exist.")
 			fmt.Fprintf(w,"{ \"ferry_error\": \"User " + uName + " does not exist.\" }")
 			return
 		case usererr != nil:
-			log.WithFields(QueryFields(r, startTime)).Print("User ID query error: " + usererr.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Print("User ID query error: " + usererr.Error())
 			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 			return
@@ -2366,7 +2461,7 @@ func setGroupLeaderLegacy(w http.ResponseWriter, r *http.Request) {
 								   end $$;`, groupId, uId)
 			stmt, err := DBtx.Prepare(setstr)
 			if err != nil {
-				log.WithFields(QueryFields(r, startTime)).Print("Error preparing DB command: " + err.Error())
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Error preparing DB command: " + err.Error())
 				w.WriteHeader(http.StatusNotFound)
 				fmt.Fprintf(w,"{ \"ferry_error\": \"Error preparing database command.\" }")
 				return
@@ -2375,14 +2470,14 @@ func setGroupLeaderLegacy(w http.ResponseWriter, r *http.Request) {
 			_, err = stmt.Exec()
 			if err != nil {
 				w.WriteHeader(http.StatusNotFound)
-				log.WithFields(QueryFields(r, startTime)).Print("Error setting " + uName + " leader of " + groupname + ": " + err.Error())
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Error setting " + uName + " leader of " + groupname + ": " + err.Error())
 				fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB update.\" }")		
 				return
 			} else {
 				// error is nil, so it's a success. Commit the transaction and return success.
 				DBtx.Commit(cKey)
 				w.WriteHeader(http.StatusOK)
-				log.WithFields(QueryFields(r, startTime)).Print("Successfully set " + uName + " as leader of " + groupname + ".")
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Successfully set " + uName + " as leader of " + groupname + ".")
 				if cKey != 0 {
 					fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 				}
@@ -2401,23 +2496,23 @@ func removeGroupLeaderLegacy(w http.ResponseWriter, r *http.Request) {
 	grouptype := q.Get("grouptype")
 	
 	if groupname == "" {	
-		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("No groupname specified.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified\" }")
 		return
 	}
 	if grouptype == "" {	
-		log.WithFields(QueryFields(r, startTime)).Print("No grouptype specified.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("No grouptype specified.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No grouptype specified\" }")
 		return
 	}
 	if uName == "" {	
-		log.WithFields(QueryFields(r, startTime)).Print("No username specified.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("No username specified.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No username specified\" }")
 		return
 	}
 
 	//requires authorization
-	authorized,authout := authorize(r, "")
+	authorized,authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -2426,7 +2521,7 @@ func removeGroupLeaderLegacy(w http.ResponseWriter, r *http.Request) {
 	
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Print("Error starting DB transaction: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Error starting DB transaction: " + err.Error())
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 		return
@@ -2437,15 +2532,15 @@ func removeGroupLeaderLegacy(w http.ResponseWriter, r *http.Request) {
 	grouperr := DBptr.QueryRow(`select groupid from groups where (name, type) = ($1, $2)`, groupname, grouptype).Scan(&groupId)
 	switch {
 	case grouperr == sql.ErrNoRows:
-		log.WithFields(QueryFields(r, startTime)).Print("Group " + groupname + " does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Group " + groupname + " does not exist.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Group " + groupname + " does not exist.\" }")
 		return
 	case grouperr != nil && strings.Contains(grouperr.Error(), "invalid input value for enum"):
-		log.WithFields(QueryFields(r, startTime)).Print("Invalid group type.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Invalid group type.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid group type.\" }")
 		return
 	case grouperr != nil:
-		log.WithFields(QueryFields(r, startTime)).Print("Group ID query error: " + grouperr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Group ID query error: " + grouperr.Error())
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
@@ -2454,11 +2549,11 @@ func removeGroupLeaderLegacy(w http.ResponseWriter, r *http.Request) {
 		usererr := DBptr.QueryRow(`select uid from users where uname=$1`,uName).Scan(&uId)
 		switch {
 		case usererr == sql.ErrNoRows:
-			log.WithFields(QueryFields(r, startTime)).Print("User " + uName + " does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Print("User " + uName + " does not exist.")
 			fmt.Fprintf(w,"{ \"ferry_error\": \"User " + uName + " does not exist.\" }")
 			return
 		case usererr != nil:
-			log.WithFields(QueryFields(r, startTime)).Print("User ID query error: " + usererr.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Print("User ID query error: " + usererr.Error())
 			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 			return
@@ -2476,7 +2571,7 @@ func removeGroupLeaderLegacy(w http.ResponseWriter, r *http.Request) {
 								   end $$;`, groupId, uId)
 			stmt, err := DBtx.Prepare(setstr)
 			if err != nil {
-				log.WithFields(QueryFields(r, startTime)).Print("Error preparing DB command: " + err.Error())
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Error preparing DB command: " + err.Error())
 				w.WriteHeader(http.StatusNotFound)
 				fmt.Fprintf(w,"{ \"ferry_error\": \"Error preparing database command.\" }")
 				return
@@ -2486,13 +2581,13 @@ func removeGroupLeaderLegacy(w http.ResponseWriter, r *http.Request) {
 			DBtx.err = err
 			if err != nil {
 				if strings.Contains(err.Error(), "User is not a leader of this group.") {
-					log.WithFields(QueryFields(r, startTime)).Error("User is not a leader of this group.")
+					log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User is not a leader of this group.")
 					if cKey != 0 {
 						fmt.Fprintf(w,"{ \"ferry_error\": \"User is not a leader of this group.\" }")
 					}
 				} else {
 					w.WriteHeader(http.StatusNotFound)
-					log.WithFields(QueryFields(r, startTime)).Print("Error setting " + uName + " leader of " + groupname + ": " + err.Error())
+					log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Error setting " + uName + " leader of " + groupname + ": " + err.Error())
 					fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB update.\" }")
 					return
 				}
@@ -2500,7 +2595,7 @@ func removeGroupLeaderLegacy(w http.ResponseWriter, r *http.Request) {
 				// error is nil, so it's a success. Commit the transaction and return success.
 				DBtx.Commit(cKey)
 				w.WriteHeader(http.StatusOK)
-				log.WithFields(QueryFields(r, startTime)).Print("Successfully set " + uName + " as leader of " + groupname + ".")
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Successfully set " + uName + " as leader of " + groupname + ".")
 				if cKey != 0 {
 					fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 				}
@@ -2516,25 +2611,25 @@ func getUserGroupsLegacy(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	uname := q.Get("username")
 	if uname == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No username specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
 		return
 	}
 	pingerr := DBptr.Ping()
 	if pingerr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(pingerr)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(pingerr)
 	}
 	
 	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
 		return
 	}
 
 	rows, err := DBptr.Query(`select groups.gid, groups.name, groups.type from groups INNER JOIN user_group on (groups.groupid = user_group.groupid) INNER JOIN users on (user_group.uid = users.uid) where users.uname=$1 and (user_group.last_updated>=$2 or $2 is null)`, uname, lastupdate)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "Error in DB query\n")
 	} else {
@@ -2559,16 +2654,16 @@ func getUserGroupsLegacy(w http.ResponseWriter, r *http.Request) {
 			rows.Scan(&Out.Gid, &Out.Groupname, &Out.Grouptype)
 			outline, jsonerr := json.Marshal(Out)
 			if jsonerr != nil {
-				log.WithFields(QueryFields(r, startTime)).Error(jsonerr)
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Error(jsonerr)
 			}
 			fmt.Fprintf(w, string(outline))
 			idx += 1
 		}
 		if idx == 0 {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 			fmt.Fprintf(w, `{ "ferry_error": "User does not exist." }`)
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Info("Success!")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 			fmt.Fprintf(w, " ]")
 		}
 	}
@@ -2585,17 +2680,17 @@ func addUserToGroupLegacy(w http.ResponseWriter, r *http.Request) {
 	isLeader := strings.TrimSpace(q.Get("is_leader"))
 
 	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No username specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
 		return
 	}
 	if gName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No groupname specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No groupname specified.\" }")
 		return
 	}
 	if gType == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No grouptype specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No grouptype specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No grouptype specified.\" }")
 		return
 	}
@@ -2604,13 +2699,13 @@ func addUserToGroupLegacy(w http.ResponseWriter, r *http.Request) {
 	} else {
 		_, err := strconv.ParseBool(q.Get("is_leader"))
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid is_leader specified in http query.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Invalid is_leader specified in http query.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid is_leader specified.\" }")
 			return
 		}
 	}
 
-	authorized, authout := authorize(r, "")
+	authorized, authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -2619,7 +2714,7 @@ func addUserToGroupLegacy(w http.ResponseWriter, r *http.Request) {
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	defer DBtx.Rollback(cKey)
 
@@ -2642,33 +2737,33 @@ func addUserToGroupLegacy(w http.ResponseWriter, r *http.Request) {
                              $4, NOW())`,uName, gName, gType, isLeader)
 	if err == nil {
 		if cKey != 0 {
-			log.WithFields(QueryFields(r, startTime)).Info("Success!")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 		}
 	} else {
 		if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
 			DBtx.RollbackToSavepoint("duplicateUser")
-			log.WithFields(QueryFields(r, startTime)).Error("User already belongs to this group.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User already belongs to this group.")
 			if cKey != 0 {
 				fmt.Fprintf(w, "{ \"ferry_status\": \"User already belongs to this group.\" }")
 			}
 		} else if strings.Contains(err.Error(), `null value in column "uid" violates not-null constraint`) {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 			if cKey != 0 {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
 			}
 		} else if strings.Contains(err.Error(), `null value in column "groupid" violates not-null constraint`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Group does not exist.")
 			if cKey != 0 {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"Group does not exist.\" }")
 			}
 		} else if strings.Contains(err.Error(), `invalid input value for enum`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid group type.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Invalid group type.")
 			if cKey != 0 {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid group type.\" }")
 			}
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 			if cKey != 0 {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
 			}
@@ -2694,15 +2789,15 @@ func removeUserFromGroupLegacy(w http.ResponseWriter, r *http.Request) {
 	gtype := strings.TrimSpace(q.Get("grouptype"))
 
 	if user == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No username specified in http query.")
 		inputErr.Error = append(inputErr.Error, "No username specified.")
 	}
 	if group == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No groupname specified in http query.")
 		inputErr.Error = append(inputErr.Error, "No groupname specified.")
 	}
 	if gtype == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No grouptype specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No grouptype specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No grouptype specified.\" }")
 		return
 	}
@@ -2710,14 +2805,14 @@ func removeUserFromGroupLegacy(w http.ResponseWriter, r *http.Request) {
 	if len(inputErr.Error) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		}
 		fmt.Fprintf(w, string(jsonout))
 		return
 	}
 
 	//require auth	
-	authorized,authout := authorize(r, "")
+	authorized,authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -2726,7 +2821,7 @@ func removeUserFromGroupLegacy(w http.ResponseWriter, r *http.Request) {
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	defer DBtx.Rollback(cKey)
 
@@ -2734,21 +2829,21 @@ func removeUserFromGroupLegacy(w http.ResponseWriter, r *http.Request) {
 
 	queryerr := DBtx.tx.QueryRow(`select uid, groupid from (select 1 as key, uid from users where uname=$1) as us full outer join (select 1 as key, groupid, type from groups where name = $2 and type = $3) as g on us.key=g.key`,user, group, gtype).Scan(&uid,&groupid)
 	if queryerr == sql.ErrNoRows {
-		log.WithFields(QueryFields(r, startTime)).Error("User and group names do not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User and group names do not exist.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"User and group names do not exist.\" }")
 		return	
 	} else if queryerr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error: " + queryerr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error: " + queryerr.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
 		return
 	}
 	if ! uid.Valid {
-		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
 		return
 	} 
 	if ! groupid.Valid {
-		log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Group does not exist.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Group does not exist.\" }")
 		return
 	}
@@ -2779,23 +2874,23 @@ func removeUserFromGroupLegacy(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var queryErr jsonerror
 		if strings.Contains(err.Error(), `noUser`) {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 			queryErr.Error = append(queryErr.Error, "User does not exist.")
 		}
 		if strings.Contains(err.Error(), `noGroup`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Group does not exist.")
 			queryErr.Error = append(queryErr.Error, "Group does not exist.")
 		}
 		if strings.Contains(err.Error(), `user_group`) {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not belong to this group.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not belong to this group.")
 			queryErr.Error = append(queryErr.Error, "User does not belong to this group.")
 		}
 		if strings.Contains(err.Error(), `invalid input value for enum`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid group type.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Invalid group type.")
 			queryErr.Error = append(queryErr.Error, "Invalid group type.")
 		}
 		if len(queryErr.Error) == 0 {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 			queryErr.Error = append(queryErr.Error, "Something went wrong.")
 		}
 		output = queryErr
@@ -2804,7 +2899,7 @@ func removeUserFromGroupLegacy(w http.ResponseWriter, r *http.Request) {
 			Error string `json:"ferry_status"`
 		}
 		output = jsonstatus{"success"}
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 
 		DBtx.Commit(cKey)
 		if cKey == 0 {
@@ -2813,7 +2908,7 @@ func removeUserFromGroupLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
@@ -2829,27 +2924,27 @@ func setUserShellAndHomeDirLegacy(w http.ResponseWriter, r *http.Request) {
 	hDir  := strings.TrimSpace(q.Get("homedir"))
 
 	if rName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No resourcename specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No resourcename specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No resourcename specified.\" }")
 		return
 	}
 	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No username specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
 		return
 	}
 	if shell == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No shell specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No shell specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No shell specified.\" }")
 		return
 	}
 	if hDir == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No homedir specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No homedir specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No homedir specified.\" }")
 		return
 	}
 
-	authorized, authout := authorize(r, "")
+	authorized, authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -2858,7 +2953,7 @@ func setUserShellAndHomeDirLegacy(w http.ResponseWriter, r *http.Request) {
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	defer DBtx.Rollback(cKey)
 
@@ -2866,17 +2961,17 @@ func setUserShellAndHomeDirLegacy(w http.ResponseWriter, r *http.Request) {
 	var cauid,cacompid sql.NullInt64
 	queryerr := DBtx.QueryRow(`select (select uid from users where uname=$1), (select compid from compute_resources where name=$2)`, uName, rName).Scan(&cauid, &cacompid)
 	if queryerr != nil && queryerr != sql.ErrNoRows {
-		log.WithFields(QueryFields(r, startTime)).Error("Error verifying user and resource status: " + queryerr.Error() + ". Will not proceed.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error verifying user and resource status: " + queryerr.Error() + ". Will not proceed.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query. Check log.\" }")
 		return
 	}
 	if !cauid.Valid {
-		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")	
 		return
 	}
 	if !cacompid.Valid {
-		log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Resource does not exist.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")	
 		return
 	}
@@ -2887,21 +2982,21 @@ func setUserShellAndHomeDirLegacy(w http.ResponseWriter, r *http.Request) {
 		//check whether any rows were modified. If no rows were modified, the user did not have access to this compute resource. Print such a message.
 		aRows, _ := res.RowsAffected()
 		if aRows == 0 {
-			log.WithFields(QueryFields(r, startTime)).Info("User " + uName + " does not have access to resource " + rName + ".")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Info("User " + uName + " does not have access to resource " + rName + ".")
                         fmt.Fprintf(w, "{ \"ferry_error\": \"User does not have access to this resource.\" }")
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Info("Success!")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 		}
 	} else {
 		if strings.Contains(err.Error(), `User does not exist.`) {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
 		} else if strings.Contains(err.Error(), `Resource does not exist.`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Resource does not exist.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Resource does not exist.\" }")
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
 		}
 	}
@@ -2917,19 +3012,19 @@ func getUserShellAndHomeDirLegacy(w http.ResponseWriter, r *http.Request) {
 	user := q.Get("username")
 
 	if comp == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No resourcename specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No resourcename specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No resourcename specified.\" }")
 		return
 	}
 	if user == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No username specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
 		return
 	}
 
 	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
 		return
 	}
@@ -2943,7 +3038,7 @@ func getUserShellAndHomeDirLegacy(w http.ResponseWriter, r *http.Request) {
 														   $2 in (select uname from users) as user_exists)
 							  as c on c.key = t1.key`, comp, user, lastupdate)
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		//		http.Error(w,"Error in DB query",404)
@@ -2974,7 +3069,7 @@ func getUserShellAndHomeDirLegacy(w http.ResponseWriter, r *http.Request) {
 			Out.HomeDir = tmpHomeDir.String
 			outline, jsonerr := json.Marshal(Out)
 			if jsonerr != nil {
-				log.WithFields(QueryFields(r, startTime)).Error(jsonerr)
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Error(jsonerr)
 			}
 			output += string(outline)
 			idx++
@@ -2983,16 +3078,16 @@ func getUserShellAndHomeDirLegacy(w http.ResponseWriter, r *http.Request) {
 	if idx == 0 {
 		if !compExists {
 			output += `{"ferry_error": "Resource does not exist."},`
-			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Resource does not exist.")
 		}
 		if !userExists {
 			output += `{"ferry_error": "User does not exist."},`
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 		}
 		output += `{"ferry_error": "User doesn't have access to resource."}`
-		log.WithFields(QueryFields(r, startTime)).Error("No super users found.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No super users found.")
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 	}
 
 	output += " ]"
@@ -3009,22 +3104,22 @@ func setUserShellLegacy(w http.ResponseWriter, r *http.Request) {
 	shell := strings.TrimSpace(q.Get("shell"))
 
 	if aName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No unitname specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
 		return
 	}
 	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No username specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
 		return
 	}
 	if shell == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No shell specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No shell specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No shell specified.\" }")
 		return
 	}
 
-	authorized, authout := authorize(r, "")
+	authorized, authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -3036,22 +3131,22 @@ func setUserShellLegacy(w http.ResponseWriter, r *http.Request) {
 
 	queryerr := DBptr.QueryRow(`select uid, unitid from (select 1 as key, uid from users where uname = $1) as u full outer join (select 1 as key, unitid from affiliation_units au where au.name = $2 ) as aut on u.key=aut.key`, uName, aName).Scan(&uid,&unitid)
 	if queryerr == sql.ErrNoRows {
-		log.WithFields(QueryFields(r, startTime)).Error("User and unit do not exist.")	
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User and unit do not exist.")	
 		fmt.Fprintf(w, "{ \"ferry_error\": \"User and unit do not exist.\" }")
 		return
 	}
 	if !uid.Valid {
-		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
 	}
 	if !unitid.Valid {
-		log.WithFields(QueryFields(r, startTime)).Error("Unit does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Unit does not exist.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Unit does not exist.\" }")
 	}
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	defer DBtx.Rollback(cKey)
 
@@ -3060,14 +3155,14 @@ func setUserShellLegacy(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		aRows, _ := res.RowsAffected()
 		if aRows == 0 {
-			log.WithFields(QueryFields(r, startTime)).Info("User " + uName + " does not have access to resources owned by " + aName + ".")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Info("User " + uName + " does not have access to resources owned by " + aName + ".")
                         fmt.Fprintf(w, "{ \"ferry_error\": \"User does not have access to this resource.\" }")
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Info("Success!")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 		}
 	} else {	
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
 	}
 	
@@ -3083,18 +3178,18 @@ func getUserStorageQuotaLegacy(w http.ResponseWriter, r *http.Request) {
 	unitName := strings.TrimSpace(q.Get("unitname"))
 
 	if rName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No resource name specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No resource name specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No resourcename specified.\" }")
 		return
 
 	}
 	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No user name specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No user name specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
 		return
 	}
 	if unitName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No unit name specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No unit name specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
 		return
 	}
@@ -3106,7 +3201,7 @@ func getUserStorageQuotaLegacy(w http.ResponseWriter, r *http.Request) {
 							  where affiliation_units.name=$1 AND storage_resources.type=$2 and users.uname=$3 and (valid_until is null or valid_until >= NOW())
 							  order by valid_until desc`, unitName, rName, uName)
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 
@@ -3136,15 +3231,15 @@ func getUserStorageQuotaLegacy(w http.ResponseWriter, r *http.Request) {
 		}
 		var queryErr []jsonerror
 		queryErr = append(queryErr, jsonerror{"User has no quotas registered."})
-		log.WithFields(QueryFields(r, startTime)).Error("User has no quotas registered.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User has no quotas registered.")
 		output = queryErr
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonoutput, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 	}
 	fmt.Fprintf(w, string(jsonoutput))
 }
@@ -3153,7 +3248,7 @@ func createUserLegacy(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
-	authorized, authout := authorize(r, "")
+	authorized, authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -3172,24 +3267,24 @@ func createUserLegacy(w http.ResponseWriter, r *http.Request) {
 	tmpStatus, err := strconv.ParseBool(strings.TrimSpace(q.Get("status")))
 
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Invalid status specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Invalid status specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid status value. Must be true or false.\" }")
 		return
 	} else {
 		status.Scan(tmpStatus)
 	}
 	if uName.String == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No username specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
 		return
 	}
 	if uid.String == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No UID specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No UID specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No uid specified.\" }")
 		return
 	}
 	if fullname.String == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No fullname specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No fullname specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No fullname specified.\" }")
 		return
 	}
@@ -3197,14 +3292,14 @@ func createUserLegacy(w http.ResponseWriter, r *http.Request) {
 		expdate.String = "2038-01-01"
 	}
 	if groupname.String == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No groupname specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No groupname specified.\" }")
 		return
 	}
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	defer DBtx.Rollback(cKey)
 
@@ -3213,16 +3308,16 @@ func createUserLegacy(w http.ResponseWriter, r *http.Request) {
 						uName, uid, fullname, status, expdate)
 	if err != nil {
 		if strings.Contains(err.Error(), "invalid input syntax for type date") {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid expiration date.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Invalid expiration date.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid expiration date.\" }")
 		} else if strings.Contains(err.Error(), "duplicate key value violates unique constraint \"pk_users\"") {
-			log.WithFields(QueryFields(r, startTime)).Error("UID already exists.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("UID already exists.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"UID already exists\" }")
 		} else if strings.Contains(err.Error(), "duplicate key value violates unique constraint \"unq_users_uname\"") {
-			log.WithFields(QueryFields(r, startTime)).Error("Username already exists.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Username already exists.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Username already exists.\" }")
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"" + strings.Replace(err.Error(), "\"", "'", -1) + "\" }")
 		}
 		return
@@ -3233,10 +3328,10 @@ func createUserLegacy(w http.ResponseWriter, r *http.Request) {
 						uid, groupname)
 	if err != nil {
 		if strings.Contains(err.Error(), "null value in column \"groupid\" violates not-null constraint") {
-			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Group does not exist.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Group does not exist.\" }")
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"" + strings.Replace(err.Error(), "\"", "'", -1) + "\" }")
 		}
 		return
@@ -3245,7 +3340,7 @@ func createUserLegacy(w http.ResponseWriter, r *http.Request) {
 	if cKey != 0 {
 		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 	}
-	log.WithFields(QueryFields(r, startTime)).Info("Success!")
+	log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 	DBtx.Commit(cKey)
 }
 
@@ -3255,13 +3350,13 @@ func getUserUnameLegacy(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	uidstr := q.Get("uid")
 	if uidstr == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No uid specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No uid specified in http query.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No uid specified (use uid=<number> in API query).\" }")
 		return
 	}
 	uid,err := strconv.Atoi(uidstr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Invalid uid specified (either missing or not an integer).")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Invalid uid specified (either missing or not an integer).")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid uid format.\" }")
 		return	
 	}
@@ -3272,17 +3367,17 @@ func getUserUnameLegacy(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case checkerr == sql.ErrNoRows:
 		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-		log.WithFields(QueryFields(r, startTime)).Error("user ID " + uidstr + " not found in DB.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("user ID " + uidstr + " not found in DB.")
 		return
 		
 	case checkerr != nil:
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query for " + uidstr + ": " + checkerr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB query for " + uidstr + ": " + checkerr.Error())
 		return
 	default:		
 		fmt.Fprintf(w, "{ \"uname\": \"" + uname  + "\" }")	
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		return
 	}
 }
@@ -3293,7 +3388,7 @@ func getUserUIDLegacy(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	uName := q.Get("username")
 	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No username specified in http query.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No username specified (use username=foo in the API query).\" }")
 		return
 	}
@@ -3303,17 +3398,17 @@ func getUserUIDLegacy(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case checkerr == sql.ErrNoRows:
 		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
-		log.WithFields(QueryFields(r, startTime)).Error("user " + uName + " not found in DB.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("user " + uName + " not found in DB.")
 		return
 		
 	case checkerr != nil: 
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query for " + uName + ": " + checkerr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB query for " + uName + ": " + checkerr.Error())
 		return
 	default:
 		fmt.Fprintf(w, "{ \"uid\": " + strconv.Itoa(uid) + " }")	
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		return
 	}
 }
@@ -3332,25 +3427,25 @@ func getMemberAffiliationsLegacy(w http.ResponseWriter, r *http.Request) {
 	expOnly := false
 
 	if user == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No username specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No username specified."})
 	}
 	if q.Get("experimentsonly") != "" {
 		var err error
 		if expOnly, err = strconv.ParseBool(q.Get("experimentsonly")); err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid experimentsonly specified in http query.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Invalid experimentsonly specified in http query.")
 			inputErr = append(inputErr, jsonerror{"Invalid experimentsonly specified."})
 		}
 	}
 	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
 		inputErr = append(inputErr, jsonerror{"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time."})
 	}
 	if len(inputErr) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		}
 		fmt.Fprintf(w, string(jsonout))
 		return
@@ -3368,7 +3463,7 @@ func getMemberAffiliationsLegacy(w http.ResponseWriter, r *http.Request) {
 							 ) as r;`, user, expOnly, lastupdate)
 
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
@@ -3399,20 +3494,20 @@ func getMemberAffiliationsLegacy(w http.ResponseWriter, r *http.Request) {
 	if len(Out) == 0 {
 		var queryErr []jsonerror
 		if !userExists {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 			queryErr = append(queryErr, jsonerror{"User does not exist."})
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not belong to any affiliation unit or experiment.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not belong to any affiliation unit or experiment.")
 			queryErr = append(queryErr, jsonerror{"User does not belong to any affiliation unit or experiment."})
 		}
 		output = queryErr
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
@@ -3428,7 +3523,7 @@ func getAllUsersLegacy(w http.ResponseWriter, r *http.Request) {
 		if activebool,err := strconv.ParseBool(ao) ; err == nil {
 			activeonly = activebool
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB query: " + err.Error())
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid value for active. Must be true or false (or omit it from the query).\" }")
 			return
 		}
@@ -3437,7 +3532,7 @@ func getAllUsersLegacy(w http.ResponseWriter, r *http.Request) {
 	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	
 	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
 		return
 	}
@@ -3445,7 +3540,7 @@ func getAllUsersLegacy(w http.ResponseWriter, r *http.Request) {
 	rows, err := DBptr.Query(`select uname, uid, full_name, status, expiration_date from users where (status=$1 or not $1) and (last_updated>=$2 or $2 is null) order by uname`,strconv.FormatBool(activeonly),lastupdate)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB query: " + err.Error())
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
@@ -3473,15 +3568,15 @@ func getAllUsersLegacy(w http.ResponseWriter, r *http.Request) {
 		}
 		var queryErr []jsonerror
 		queryErr = append(queryErr, jsonerror{"Query returned no users."})
-		log.WithFields(QueryFields(r, startTime)).Error("Query returned no users.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Query returned no users.")
 		output = queryErr
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonoutput, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 	}
 	fmt.Fprintf(w, string(jsonoutput))
 }
@@ -3497,7 +3592,7 @@ func getAllUsersFQANsLegacy(w http.ResponseWriter, r *http.Request) {
 	if suspend != "" {
 		var err error
 		if suspendBool, err = strconv.ParseBool(suspend); err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB query: " + err.Error())
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid value for suspend. Must be true or false (or omit it from the query).\"}")
 			return
 		}
@@ -3505,7 +3600,7 @@ func getAllUsersFQANsLegacy(w http.ResponseWriter, r *http.Request) {
 	
 	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
 		return
 	}
@@ -3519,7 +3614,7 @@ func getAllUsersFQANsLegacy(w http.ResponseWriter, r *http.Request) {
 							  and (is_banned = $2 or $3) order by uname;`, lastupdate, suspendBool, suspend == "")
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB query: " + err.Error())
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
@@ -3545,15 +3640,15 @@ func getAllUsersFQANsLegacy(w http.ResponseWriter, r *http.Request) {
 		}
 		var queryErr []jsonerror
 		queryErr = append(queryErr, jsonerror{"Query returned no FQANs."})
-		log.WithFields(QueryFields(r, startTime)).Error("Query returned no FQANs.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Query returned no FQANs.")
 		output = queryErr
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonoutput, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 	}
 	fmt.Fprintf(w, string(jsonoutput))
 }
@@ -3568,12 +3663,12 @@ func createGroupLegacy(w http.ResponseWriter, r *http.Request) {
 	var gid sql.NullString
 
 	if gName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No groupname specified in http query.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified.\" }")
 		return
 	}
 	if gType == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No grouptype specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No grouptype specified in http query.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No grouptype specified.\" }")
 		return
 	}
@@ -3581,7 +3676,7 @@ func createGroupLegacy(w http.ResponseWriter, r *http.Request) {
 		gid.Scan(q.Get("gid"))
 	}
 
-	authorized,authout := authorize(r, "")
+	authorized,authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -3590,27 +3685,27 @@ func createGroupLegacy(w http.ResponseWriter, r *http.Request) {
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	defer DBtx.Rollback(cKey)
 
 	_, err = DBtx.Exec("insert into groups (gid, name, type, last_updated) values ($1, $2, $3, NOW())", gid, gName, gType)
 	if err == nil {
 		DBtx.Commit(cKey)
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 	} else {
 		if strings.Contains(err.Error(), `invalid input value for enum groups_group_type`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid grouptype specified in http query.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Invalid grouptype specified in http query.")
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid grouptype specified in http query.\" }")
 		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint "idx_groups_gid"`) {
-			log.WithFields(QueryFields(r, startTime)).Error("GID already exists.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("GID already exists.")
 			fmt.Fprintf(w,"{ \"ferry_error\": \"GID already exists.\" }")
 		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Group already exists.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Group already exists.")
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Group already exists.\" }")
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Something went wrong.\" }")
 		}
 	}
@@ -3630,28 +3725,28 @@ func addGroupToUnitLegacy(w http.ResponseWriter, r *http.Request) {
 		var converr error
 		isPrimary, converr = strconv.ParseBool(isPrimarystr)	
 		if converr != nil {
-			log.WithFields(QueryFields(r, startTime)).Print("Invalid value of is_primary (Must be true or false).")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Invalid value of is_primary (Must be true or false).")
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid value for is_primary (Must be true or false).\" }")
 			return
 		}
 	}
 	if groupname == "" {	
-		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("No groupname specified.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified\" }")
 		return
 	}
 	if grouptype == "" {	
-		log.WithFields(QueryFields(r, startTime)).Print("No grouptype specified.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("No grouptype specified.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No grouptype specified\" }")
 		return
 	}
 	if unitName == "" {	
-		log.WithFields(QueryFields(r, startTime)).Print("No unitname specified.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("No unitname specified.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No unitname specified\" }")
 		return
 	}
 	
-	authorized,authout := authorize(r, "")
+	authorized,authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -3661,7 +3756,7 @@ func addGroupToUnitLegacy(w http.ResponseWriter, r *http.Request) {
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	defer DBtx.Rollback(cKey)
 
@@ -3670,22 +3765,22 @@ func addGroupToUnitLegacy(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		DBtx.Report(err.Error())
 		if strings.Contains(err.Error(), `Group and unit combination already in DB`) {
-			log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
 			if cKey != 0 {
 				fmt.Fprintf(w,"{ \"ferry_error\": \"Group already belongs to unit.\" }")
 			}
 		} else if strings.Contains(err.Error(), `unq_affiliation_unit_group_unitid_is_primary`) {
-			log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
 			if cKey != 0 {
 				fmt.Fprintf(w,"{ \"ferry_error\": \"Unit can not have more then one primary group.\" }")
 			}
 		} else if strings.Contains(err.Error(), `invalid input value for enum`) {
-			log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
 			if cKey != 0 {
 				fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid group type.\" }")
 			}
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
 			if cKey != 0 {
 				fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB insert.\" }")
 			}
@@ -3694,7 +3789,7 @@ func addGroupToUnitLegacy(w http.ResponseWriter, r *http.Request) {
 		return
 	} else {
 		w.WriteHeader(http.StatusOK)
-		log.WithFields(QueryFields(r, startTime)).Print("Successfully added " + groupname + " to affiliation_unit_groups.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Successfully added " + groupname + " to affiliation_unit_groups.")
 		if cKey != 0 {
 			DBtx.Commit(cKey)
 			fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
@@ -3711,20 +3806,20 @@ func addGroupToUnitDB(tx *Transaction, groupname, grouptype, unitName string, is
 	checkerr := tx.tx.QueryRow(`select unitid from affiliation_units where name=$1`,unitName).Scan(&unitId)
 	switch {
 	case checkerr == sql.ErrNoRows:
-//		log.WithFields(QueryFields(r, startTime)).Print("Affiliation unit " + unitName + " does not exist.")
+//		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Affiliation unit " + unitName + " does not exist.")
 	//	w.WriteHeader(http.StatusNotFound)
 	//	fmt.Fprintf(w,"{ \"ferry_error\": \"Affiliation unit " + unitName + " does not exist.\" }")
 		return checkerr
 	case checkerr != nil:
-//		log.WithFields(QueryFields(r, startTime)).Print("Affiliation unit query error: " + checkerr.Error())
+//		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Affiliation unit query error: " + checkerr.Error())
 
 		return checkerr
 	default:
 		grouperr := tx.tx.QueryRow(`select groupid from groups where name=$1 and type=$2`,groupname,grouptype).Scan(&groupId)
-//		log.WithFields(QueryFields(r, startTime)).Print(" group ID = " + strconv.Itoa(groupId))
+//		log.WithFields(QueryFieldsLegacy(r, startTime)).Print(" group ID = " + strconv.Itoa(groupId))
 		switch {
 		case grouperr == sql.ErrNoRows:
-//			log.WithFields(QueryFields(r, startTime)).Print("Group " + groupname + " does not exist.")
+//			log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Group " + groupname + " does not exist.")
 //			w.WriteHeader(http.StatusNotFound)
 //			fmt.Fprintf(w,"{ \"ferry_error\": \"Group " + groupname + " does not exist.\" }")
 			return grouperr
@@ -3736,7 +3831,7 @@ func addGroupToUnitDB(tx *Transaction, groupname, grouptype, unitName string, is
 			// start a transaction
 	//		DBtx, cKey, err := LoadTransaction(r, DBptr)
 	//		if err != nil {
-	//			log.WithFields(QueryFields(r, startTime)).Print("Error starting DB transaction: " + err.Error())
+	//			log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Error starting DB transaction: " + err.Error())
 	//			w.WriteHeader(http.StatusNotFound)
 	//			fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 	//			return
@@ -3747,7 +3842,7 @@ insert into affiliation_unit_group (groupid, unitid, is_primary, last_updated) v
 			log.Print(addstr)
 			stmt, err := tx.Prepare(addstr)
 			if err != nil {
-			//	log.WithFields(QueryFields(r, startTime)).Print("Error preparing DB command: " + err.Error())
+			//	log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Error preparing DB command: " + err.Error())
 			//	w.WriteHeader(http.StatusNotFound)
 			//	fmt.Fprintf(w,"{ \"ferry_error\": \"Error preparing database command.\" }")
 				//				DBtx.Rollback(cKey)
@@ -3758,9 +3853,9 @@ insert into affiliation_unit_group (groupid, unitid, is_primary, last_updated) v
 			defer stmt.Close()
 			if err != nil {
 //				if strings.Contains(err.Error(),`Group and unit combination already in DB`) {
-//					log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
+//					log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
 //				} else {
-//					log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
+//					log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
 //				}
 				//				DBtx.Rollback(cKey)
 				return err
@@ -3768,7 +3863,7 @@ insert into affiliation_unit_group (groupid, unitid, is_primary, last_updated) v
 				// error is nil, so it's a success. Commit the transaction and return success.
 				//				DBtx.Commit(cKey)
 				
-//				log.WithFields(QueryFields(r, startTime)).Print("Successfully added " + groupname + " to affiliation_unit_groups.")
+//				log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Successfully added " + groupname + " to affiliation_unit_groups.")
 				return nil	
 			}
 		}
@@ -3783,17 +3878,17 @@ func setPrimaryStatusGroupLegacy(w http.ResponseWriter, r *http.Request) {
 	groupname := strings.TrimSpace(q.Get("groupname"))
 	unitName := strings.TrimSpace(q.Get("unitname"))
 	if groupname == "" {	
-		log.WithFields(QueryFields(r, startTime)).Print("No groupname specified.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("No groupname specified.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified\" }")
 		return
 	}
 	if unitName == "" {	
-		log.WithFields(QueryFields(r, startTime)).Print("No unitname specified.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("No unitname specified.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No unitname specified\" }")
 		return
 	}
 
-	authorized,authout := authorize(r, "")
+	authorized,authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -3802,7 +3897,7 @@ func setPrimaryStatusGroupLegacy(w http.ResponseWriter, r *http.Request) {
 	
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Print("Error starting DB transaction: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Error starting DB transaction: " + err.Error())
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 		return
@@ -3827,7 +3922,7 @@ func setPrimaryStatusGroupLegacy(w http.ResponseWriter, r *http.Request) {
 						   end $FOO$;`, groupname, unitName)
 	stmt, err := DBtx.Prepare(setstr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Print("Error preparing DB command: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Error preparing DB command: " + err.Error())
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error preparing database command.\" }")
 		return
@@ -3837,14 +3932,14 @@ func setPrimaryStatusGroupLegacy(w http.ResponseWriter, r *http.Request) {
 //	_, err = DBtx.Exec(setstr,groupname,unitName)
 	if err != nil {
 		if strings.Contains(err.Error(),`Group does not exist`) {
-			log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Group does not exist.\" }")
 		} else if strings.Contains(err.Error(),`Unit does not exist`) {
-			log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Unit does not exist.\" }")
 		} else {
 			w.WriteHeader(http.StatusNotFound)
-			log.WithFields(QueryFields(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Error adding " + groupname + " to " + unitName + "groups: " + err.Error())
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB insert.\" }")		
 		}
 		stmt.Close()
@@ -3853,7 +3948,7 @@ func setPrimaryStatusGroupLegacy(w http.ResponseWriter, r *http.Request) {
 		// error is nil, so it's a success. Commit the transaction and return success.
 		DBtx.Commit(cKey)
 		w.WriteHeader(http.StatusOK)
-		log.WithFields(QueryFields(r, startTime)).Print("Successfully added " + groupname + " to affiliation_unit_groups.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Successfully added " + groupname + " to affiliation_unit_groups.")
 		fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 	}
 	stmt.Close()
@@ -3875,7 +3970,7 @@ func getGroupUnitsLegacy(w http.ResponseWriter, r *http.Request) {
 	expOnly := false
 
 	if group == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No group name specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No group name specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No group name specified."})
 	}
 	if gtype == "" {
@@ -3884,21 +3979,21 @@ func getGroupUnitsLegacy(w http.ResponseWriter, r *http.Request) {
 	if q.Get("experimentsonly") != "" {
 		var err error
 		if expOnly, err = strconv.ParseBool(q.Get("experimentsonly")); err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid experimentsonly specified in http query.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Invalid experimentsonly specified in http query.")
 			inputErr = append(inputErr, jsonerror{"Invalid experimentsonly specified."})
 		}
 	}
 	
 	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
-                log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+                log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
           	inputErr = append(inputErr, jsonerror{"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time."})
         }
 	
 	if len(inputErr) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		}
 		fmt.Fprintf(w, string(jsonout))
 		return
@@ -3916,10 +4011,10 @@ func getGroupUnitsLegacy(w http.ResponseWriter, r *http.Request) {
 							) as c on t.key = c.key;`, group, gtype, expOnly, lastupdate)
 	if err != nil {
 		if strings.Contains(err.Error(), "invalid input value for enum") {
-			defer log.WithFields(QueryFields(r, startTime)).Error("Invalid group type.")
+			defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Invalid group type.")
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid group type.\" }")
 		} else {
-			defer log.WithFields(QueryFields(r, startTime)).Error(err)
+			defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		}
@@ -3955,20 +4050,20 @@ func getGroupUnitsLegacy(w http.ResponseWriter, r *http.Request) {
 	if len(Out) == 0 {
 		var queryErr []jsonerror
 		if !groupExists {
-			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Group does not exist.")
 			queryErr = append(queryErr, jsonerror{"Group does not exist."})
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error("Group does not belong to any unit.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Group does not belong to any unit.")
 			queryErr = append(queryErr, jsonerror{"Group does not belong to any unit."})
 		}
 		output = queryErr
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
@@ -3979,7 +4074,7 @@ func getAllGroupsLegacy(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
-                log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+                log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
                 return
         }
@@ -3987,7 +4082,7 @@ func getAllGroupsLegacy(w http.ResponseWriter, r *http.Request) {
 	rows, err := DBptr.Query(`select name, type, gid from groups where groups.last_updated>=$1 or $1 is null`, lastupdate)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB query: " + err.Error())
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
@@ -4013,15 +4108,15 @@ func getAllGroupsLegacy(w http.ResponseWriter, r *http.Request) {
 		}
 		var queryErr []jsonerror
 		queryErr = append(queryErr, jsonerror{"Query returned no groups."})
-		log.WithFields(QueryFields(r, startTime)).Error("Query returned no groups.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Query returned no groups.")
 		output = queryErr
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonoutput, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 	}
 	fmt.Fprintf(w, string(jsonoutput))
 }
@@ -4038,14 +4133,14 @@ func getAllGroupsMembersLegacy(w http.ResponseWriter, r *http.Request) {
 
 	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
 		inputErr = append(inputErr, jsonerror{"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time."})
 	}
 
 	if len(inputErr) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		}
 		fmt.Fprintf(w, string(jsonout))
 		return
@@ -4059,7 +4154,7 @@ func getAllGroupsMembersLegacy(w http.ResponseWriter, r *http.Request) {
 							  order by g.name, g.type;`, lastupdate)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB query: " + err.Error())
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
@@ -4104,15 +4199,15 @@ func getAllGroupsMembersLegacy(w http.ResponseWriter, r *http.Request) {
 		}
 		var queryErr []jsonerror
 		queryErr = append(queryErr, jsonerror{"Query returned no groups."})
-		log.WithFields(QueryFields(r, startTime)).Error("Query returned no groups.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Query returned no groups.")
 		output = queryErr
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonoutput, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 	}
 	fmt.Fprintf(w, string(jsonoutput))
 }
@@ -4121,7 +4216,7 @@ func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
-	authorized,authout := authorize(r, "")
+	authorized,authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -4137,33 +4232,33 @@ func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
 	unit := strings.TrimSpace(q.Get("quota_unit"))
 
 	if gName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No group name specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No group name specified in http query.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No group name specified.\" }")
 		return
 	}
 	if rName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No storage resource specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No storage resource specified in http query.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No storage resource specified.\" }")
 		return
 	}
 	if unitName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No experiment specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No experiment specified in http query.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No experiment name specified.\" }")
 		return
 	}	
 	if groupquota == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No quota value specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No quota value specified in http query.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No quota specified.\" }")
 		return
 	}
 	if validtime == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No expire time given; assuming it is indefinite.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No expire time given; assuming it is indefinite.")
 		validtime = "NULL"
 	} else {
 		validtime = "'" + validtime + "'"
 	}
 	if unit == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No quota unit specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No quota unit specified in http query.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No quota_unit specified.\" }")
 		return
 	}
@@ -4171,7 +4266,7 @@ func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
 	newquota, converr := convertValue(groupquota, unit, "B")
 
 	if converr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(converr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(converr.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error converting unit value. It must be a number.\" }")
 		return	
 	}
@@ -4182,7 +4277,7 @@ func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 		return	
 	}
@@ -4191,17 +4286,17 @@ func setGroupStorageQuota(w http.ResponseWriter, r *http.Request) {
 	err = setGroupStorageQuotaDB(DBtx, gName, unitName, rName, groupquota, unit, validtime)
 
 	if err == nil {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 	} else {
 		if strings.Contains(err.Error(), `Group does not exist.`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Group does not exist.")
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Group does not exist.\" }")
 		} else if strings.Contains(err.Error(), `Resource does not exist.`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Resource does not exist.")
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Resource does not exist.\" }")
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Something went wrong.\" }")
 		}
 	}
@@ -4329,17 +4424,17 @@ func addLPCCollaborationGroupLegacy(w http.ResponseWriter, r *http.Request) {
 	is_primary := false
 
 	if gName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No groupname specified in http query.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified.\" }")
 		return
 	}
 	if gName[0:3] != "lpc" {
-		log.WithFields(QueryFields(r, startTime)).Error("LPC groupnames must begin with \"lpc\".")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("LPC groupnames must begin with \"lpc\".")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"groupname must begin with lpc.\" }")
 		return	
 	}
 	if quota == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No quota specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No quota specified in http query.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No quota specified.\" }")
 		return
 	}
@@ -4347,7 +4442,7 @@ func addLPCCollaborationGroupLegacy(w http.ResponseWriter, r *http.Request) {
 		quotaunit = "B"
 	}
 
-	authorized,authout := authorize(r, "")
+	authorized,authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -4362,27 +4457,27 @@ func addLPCCollaborationGroupLegacy(w http.ResponseWriter, r *http.Request) {
 						  gName).Scan(&usrid, &grpid, &unitid, &compid)
 	switch {
 	case err != nil:
-		log.WithFields(QueryFields(r, startTime)).Print("Error in affiliation_unit_group DB query: "+err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Error in affiliation_unit_group DB query: "+err.Error())
 		fmt.Fprintf(w,"{ \"ferry_error\": \"DB query error.\" }")
 		return
 
 	case !usrid.Valid:
-		log.WithFields(QueryFields(r, startTime)).Print("LPC groups require a user with the same name.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("LPC groups require a user with the same name.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"LPC groups require a user with the same name.\" }")
 		return
 
 	case !grpid.Valid:
-		log.WithFields(QueryFields(r, startTime)).Print("Group does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Group does not exist.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Group does not exist.\" }")
 		return
 
 	case !unitid.Valid:
-		log.WithFields(QueryFields(r, startTime)).Print("Affiliation unit does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Affiliation unit does not exist.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Affiliation unit does not exist.\" }")
 		return
 
 	case !compid.Valid:
-		log.WithFields(QueryFields(r, startTime)).Print("Compute resource does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Compute resource does not exist.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Compute resource does not exist.\" }")
 		return
 	}
@@ -4394,14 +4489,14 @@ func addLPCCollaborationGroupLegacy(w http.ResponseWriter, r *http.Request) {
 						  compid, usrid, grpid, unitid).Scan(&inUsrCompRes, &inGrpCompRes, &inAffUnit)
 		
 	if inGrpCompRes && inAffUnit {
-		log.WithFields(QueryFields(r, startTime)).Print("Group "+ gName + " is already associated with CMS.")	
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Group "+ gName + " is already associated with CMS.")	
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Group already associated to CMS.\" }")
 		return
 	}
 
 	cKey, terr := DBtx.Start(DBptr)
 	if terr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + terr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error starting DB transaction: " + terr.Error())
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 		return
@@ -4416,7 +4511,7 @@ func addLPCCollaborationGroupLegacy(w http.ResponseWriter, r *http.Request) {
 	if !inAffUnit {
 		adderr := addGroupToUnitDB(&DBtx, gName, "UnixGroup", "cms", is_primary)
 		if adderr != nil {
-			log.WithFields(QueryFields(r, startTime)).Print("Error adding group to unit: " + adderr.Error() + ". Not continuing.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Error adding group to unit: " + adderr.Error() + ". Not continuing.")
 			if adderr == sql.ErrNoRows {
 				fmt.Fprintf(w,"{ \"ferry_error\": \"group does not exist in groups table.\" }")
 				return
@@ -4434,7 +4529,7 @@ func addLPCCollaborationGroupLegacy(w http.ResponseWriter, r *http.Request) {
 										(select default_home_dir from compute_resources where name = 'lpcinteractive') || '/' || $3,
 									    NOW());`, compid, usrid, gName)
 		if adderr != nil {
-			log.WithFields(QueryFields(r, startTime)).Print("Error adding group to lpcinteractive: " + adderr.Error() + ". Not continuing.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Error adding group to lpcinteractive: " + adderr.Error() + ". Not continuing.")
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error adding group to lpcinteractive.\" }")
 			return
 		}
@@ -4443,7 +4538,7 @@ func addLPCCollaborationGroupLegacy(w http.ResponseWriter, r *http.Request) {
 	if !inGrpCompRes {
 		_, adderr := DBtx.Exec("insert into compute_access_group (compid, uid, groupid, is_primary, last_updated) values ($1, $2, $3, true, NOW());", compid, usrid, grpid)
 		if adderr != nil {
-			log.WithFields(QueryFields(r, startTime)).Print("Error adding group to lpcinteractive: " + adderr.Error() + ". Not continuing.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Error adding group to lpcinteractive: " + adderr.Error() + ". Not continuing.")
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error adding group to lpcinteractive.\" }")
 			return
 		}
@@ -4452,7 +4547,7 @@ func addLPCCollaborationGroupLegacy(w http.ResponseWriter, r *http.Request) {
 	// We want to store the value in the DB in bytes, no matter what the input unit is. Convert the value here and then set the unit of "B" for bytes	
 	newquota, converr := convertValue(quota, quotaunit, "B")
 	if converr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(converr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(converr.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error converting unit value. It must be a number.\" }")
 		return	
 	}
@@ -4461,12 +4556,12 @@ func addLPCCollaborationGroupLegacy(w http.ResponseWriter, r *http.Request) {
 	if quotaerr != nil {
 		// print out the error
 		// roll back transaction
-		log.WithFields(QueryFields(r, startTime)).Print("Error adjusting quota for " + gName + ". Rolling back addition of " + gName + " to cms.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Error adjusting quota for " + gName + ". Rolling back addition of " + gName + " to cms.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + quotaerr.Error() + "\"}")
 		return
 	} else {
 		DBtx.Commit(cKey)
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 		return
 	}
@@ -4486,23 +4581,23 @@ func getGroupAccessToResourceLegacy(w http.ResponseWriter, r *http.Request) {
 	var inputErr []jsonerror
 
 	if unitName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No  unit name specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No  unit name specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No unitname specified."})
 	}
 	if rName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No resource name specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No resource name specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No resourcename specified."})
 	}	
 	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
 		inputErr = append(inputErr, jsonerror{"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time."})
 	}
 
 	if len(inputErr) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		}
 		fmt.Fprintf(w, string(jsonout))
 		return
@@ -4512,27 +4607,27 @@ func getGroupAccessToResourceLegacy(w http.ResponseWriter, r *http.Request) {
 	checkerr := DBptr.QueryRow(`select unitid from affiliation_units where name=$1`,unitName).Scan(&unitid)
 	switch {
 	case checkerr == sql.ErrNoRows:
-		log.WithFields(QueryFields(r, startTime)).Error("Unit " + unitName + " does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Unit " + unitName + " does not exist.")
 		inputErr = append(inputErr, jsonerror{"Unit " + unitName + " does not exist."})
 	case checkerr != nil :
-		log.WithFields(QueryFields(r, startTime)).Error("Error in affiliation_unit check: " + checkerr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in affiliation_unit check: " + checkerr.Error())
 		inputErr = append(inputErr, jsonerror{"Error in affiliation_unit check."})	
 	}
 
 	checkerr = DBptr.QueryRow(`select compid from compute_resources where name=$1`,rName).Scan(&compid)
 	switch {
 	case checkerr == sql.ErrNoRows:
-		log.WithFields(QueryFields(r, startTime)).Error("Resource " + rName + " does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Resource " + rName + " does not exist.")
 		inputErr = append(inputErr, jsonerror{"Resource " + rName + " does not exist."})
 	case checkerr != nil :
-		log.WithFields(QueryFields(r, startTime)).Error("Error in compute_resource check: " + checkerr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in compute_resource check: " + checkerr.Error())
 		inputErr = append(inputErr, jsonerror{"Error in compute_resource check."})	
 	}
 
 	if len(inputErr) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		}
 		fmt.Fprintf(w, string(jsonout))
 		return
@@ -4555,13 +4650,13 @@ func getGroupAccessToResourceLegacy(w http.ResponseWriter, r *http.Request) {
 									and (ca.last_updated>=$3 or $3 is null)
 								) order by groups.name`, compid, unitid, lastupdate)
 	if dberr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + dberr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB query: " + dberr.Error())
 		inputErr = append(inputErr, jsonerror{dberr.Error()})
 		
 		if len(inputErr) > 0 {
 			errjson, err := json.Marshal(inputErr)
 			if err != nil {
-				log.WithFields(QueryFields(r, startTime)).Error(err)
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 			}
 			fmt.Fprintf(w, string(errjson))
 			return
@@ -4578,7 +4673,7 @@ func getGroupAccessToResourceLegacy(w http.ResponseWriter, r *http.Request) {
 	if len(grouplist.Groupname) == 0 {
 		var queryErr []jsonerror
 		queryErr = append(queryErr, jsonerror{"No groups for this unit have access to this resource."})
-		log.WithFields(QueryFields(r, startTime)).Error("No groups for " + unitName + " on resource " + rName + ".")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No groups for " + unitName + " on resource " + rName + ".")
 		output = queryErr
 		
 	} else {
@@ -4587,7 +4682,7 @@ func getGroupAccessToResourceLegacy(w http.ResponseWriter, r *http.Request) {
 	
 	jsonoutput, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 	}
 	fmt.Fprintf(w, string(jsonoutput))
 }
@@ -4599,7 +4694,7 @@ func getGroupGIDLegacy(w http.ResponseWriter, r *http.Request) {
 	gName := q.Get("groupname")
 	var iGid bool
 	if gName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No groupname specified in http query.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No groupname specified.\" }")
 		return
 	}
@@ -4607,7 +4702,7 @@ func getGroupGIDLegacy(w http.ResponseWriter, r *http.Request) {
 		var err error
 		iGid, err = strconv.ParseBool(q.Get("include_gid"))
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid include_gid specified in http query.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Invalid include_gid specified in http query.")
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid include_gid specified.\" }")
 			return
 		}
@@ -4615,12 +4710,12 @@ func getGroupGIDLegacy(w http.ResponseWriter, r *http.Request) {
 
 	pingerr := DBptr.Ping()
 	if pingerr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(pingerr)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(pingerr)
 	}
 	
 	rows, err := DBptr.Query(`select groupid, gid from groups where name=$1 and type = 'UnixGroup'`, gName)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"Error in DB query\n")	
 	} else {	
@@ -4645,16 +4740,16 @@ func getGroupGIDLegacy(w http.ResponseWriter, r *http.Request) {
 			}
 			outline, jsonerr := json.Marshal(Out)
 			if jsonerr != nil {
-				log.WithFields(QueryFields(r, startTime)).Error(jsonerr)
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Error(jsonerr)
 			}
 			fmt.Fprintf(w,string(outline))
 			idx++
 		}
 		if idx == 0 {
-			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Group does not exist.")
 			fmt.Fprintf(w, `{ "ferry_error": "Group does not exist." }`)
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Info("Success!")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 			fmt.Fprintf(w," ]")
 		}		
 	}
@@ -4666,23 +4761,23 @@ func getGroupNameLegacy(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	gid := q.Get("gid")
 	if gid == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No gid specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No gid specified in http query.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No gid specified.\" }")
 		return
 	} else if _, err := strconv.Atoi(gid); err != nil  {
-		log.WithFields(QueryFields(r, startTime)).Error("Invalid gid specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Invalid gid specified in http query.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid gid specified.\" }")
 		return
 	}
 
 	pingerr := DBptr.Ping()
 	if pingerr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(pingerr)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(pingerr)
 	}
 	
 	rows, err := DBptr.Query(`select name from groups where gid=$1`, gid)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"Error in DB query\n")	
 	} else {	
@@ -4703,16 +4798,16 @@ func getGroupNameLegacy(w http.ResponseWriter, r *http.Request) {
 			rows.Scan(&Out.Groupname)
 			outline, jsonerr := json.Marshal(Out)
 			if jsonerr != nil {
-				log.WithFields(QueryFields(r, startTime)).Error(jsonerr)
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Error(jsonerr)
 				}
 			fmt.Fprintf(w,string(outline))
 			idx++
 			}
 		if idx == 0 {
-			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Group does not exist.")
 			fmt.Fprintf(w, `{ "ferry_error": "Group does not exist." }`)
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Info("Success!")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 			fmt.Fprintf(w," ]")
 		}		
 	}
@@ -4729,18 +4824,18 @@ func setAffiliationUnitInfoLegacy(w http.ResponseWriter, r *http.Request) {
 //	unitId := q.Get("unitid")
 //only unitName is required
 	if unitName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No unitname specified in http query.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No unitname name specified.\" }")
 		return
 	}
 	if unitType == "" && voms_url == "" && altName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No values specified to modify.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No values specified to modify.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No values (voms_url, type, alternative_name) specified to modify.\" }")
 		return
 	}
 
 	//require auth	
-	authorized,authout := authorize(r, "")
+	authorized,authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -4757,17 +4852,17 @@ func setAffiliationUnitInfoLegacy(w http.ResponseWriter, r *http.Request) {
 	checkerr := DBptr.QueryRow(`select au.unitid, vu.url, au.alternative_name, au.type from affiliation_units as au
 								left join voms_url as vu on au.unitid = vu.unitid where name=$1`,
 								unitName).Scan(&tmpId, &tmpvoms, &tmpaltName, &tmpType)
-	log.WithFields(QueryFields(r, startTime)).Info("unitID = " + strconv.Itoa(tmpId))
+	log.WithFields(QueryFieldsLegacy(r, startTime)).Info("unitID = " + strconv.Itoa(tmpId))
 	switch {
 	case checkerr == sql.ErrNoRows:
 		// OK, it doesn't exist, bail out
-		log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit " + unitName + " not in database.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Affiliation unit " + unitName + " not in database.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Unit %s does not exist.\" }",unitName)
 		return		
 	case checkerr != nil:
 		//other weird error
 		w.WriteHeader(http.StatusNotFound)
-		log.WithFields(QueryFields(r, startTime)).Error("Cannot update affiliation unit " + unitName + ": " + checkerr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Cannot update affiliation unit " + unitName + ": " + checkerr.Error())
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Database error; check logs.\" }")
 		return
 	default:
@@ -4827,12 +4922,12 @@ func setAffiliationUnitInfoLegacy(w http.ResponseWriter, r *http.Request) {
 //							   end $$;`,
 //							unitName, altName, unitType, voms_url)
 //
-//		log.WithFields(QueryFields(r, startTime)).Info("Full string is " + modstr)
+//		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Full string is " + modstr)
 
 		// start DB transaction
 		DBtx, cKey, err := LoadTransaction(r, DBptr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error starting DB transaction: " + err.Error())
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 			return
 		}
@@ -4843,7 +4938,7 @@ func setAffiliationUnitInfoLegacy(w http.ResponseWriter, r *http.Request) {
 		
 		_, err = DBtx.Exec(`update affiliation_units set alternative_name = $1, type = $2, last_updated = NOW() where unitid = $3`, tmpaltName, tmpType, tmpId)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error updating " + unitName + " in affiliation_units: " + err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error updating " + unitName + " in affiliation_units: " + err.Error())
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error executing DB update.\" }")
 		} else {
 
@@ -4853,7 +4948,7 @@ func setAffiliationUnitInfoLegacy(w http.ResponseWriter, r *http.Request) {
 }
 			// error is nil, so it's a success. Commit the transaction and return success.
 			DBtx.Commit(cKey)
-			log.WithFields(QueryFields(r, startTime)).Info("Successfully set values for " + unitName + " in affiliation_units.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Successfully set values for " + unitName + " in affiliation_units.")
 			fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 		}
 //		stmt.Close()
@@ -4868,13 +4963,13 @@ func getAffiliationUnitMembersLegacy(w http.ResponseWriter, r *http.Request) {
 	unitName := q.Get("unitname")
 
 	if unitName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No unit name specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No unit name specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
 		return
 	}
 	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
 		return
 	}
@@ -4885,19 +4980,19 @@ func getAffiliationUnitMembersLegacy(w http.ResponseWriter, r *http.Request) {
 	case checkerr == sql.ErrNoRows:
 		// set the header for success since we are already at the desired result
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Affiliation unit does not exist.\" }")
-		log.WithFields(QueryFields(r, startTime)).Error("unit " + unitName + " not found in DB.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("unit " + unitName + " not found in DB.")
 		return
 	case checkerr != nil:
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Database error.\" }")
-		log.WithFields(QueryFields(r, startTime)).Error("deleteUser: Error querying DB for unit " + unitName + ".")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("deleteUser: Error querying DB for unit " + unitName + ".")
 		return
 	default:
-		log.WithFields(QueryFields(r, startTime)).Info("Fetching members of unit " + unitName)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Fetching members of unit " + unitName)
 	}
 	rows, err := DBptr.Query(`select ca.uid, users.uname from compute_access as ca join users on ca.uid = users.uid join compute_resources as cr on cr.compid = ca.compid where cr.unitid=$1 and (ca.last_updated>=$2 or $2 is null) order by ca.uid`, unitId, lastupdate)
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
@@ -4920,7 +5015,7 @@ func getAffiliationUnitMembersLegacy(w http.ResponseWriter, r *http.Request) {
 
 	rowsug, err := DBptr.Query(`select DISTINCT ug.uid, users.uname from user_group as ug join affiliation_unit_group as aug on aug.groupid = ug.groupid join users on ug.uid = users.uid where aug.unitid=$1 and (ug.last_updated>=$2 or $2 is null) order by ug.uid`, unitId, lastupdate)
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
@@ -4943,15 +5038,15 @@ func getAffiliationUnitMembersLegacy(w http.ResponseWriter, r *http.Request) {
 		}
 		var queryStat jsonstatus
 		queryStat.Status = append(queryStat.Status, "No affiliation unit members found for this query.")
-		log.WithFields(QueryFields(r, startTime)).Error("No affiliation unit members found for this query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No affiliation unit members found for this query.")
 		output = queryStat
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonoutput, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 	}
 	fmt.Fprintf(w, string(jsonoutput))
 }
@@ -4963,13 +5058,13 @@ func getGroupsInAffiliationLegacy(w http.ResponseWriter, r *http.Request) {
 	unitName := q.Get("unitname")
 
 	if unitName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No unit name specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No unit name specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
 		return
 	}
 	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
 		return
 	}
@@ -4980,12 +5075,12 @@ func getGroupsInAffiliationLegacy(w http.ResponseWriter, r *http.Request) {
 	case checkerr == sql.ErrNoRows:
 		// set the header for success since we are already at the desired result
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Affiliation unit does not exist.\" }")
-		log.WithFields(QueryFields(r, startTime)).Error("unit " + unitName + " not found in DB.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("unit " + unitName + " not found in DB.")
 		return
 	case checkerr != nil:
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Database error.\" }")
-		log.WithFields(QueryFields(r, startTime)).Error("deleteUser: Error querying DB for unit " + unitName + ".")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("deleteUser: Error querying DB for unit " + unitName + ".")
 		return
 	default:
 
@@ -4995,7 +5090,7 @@ func getGroupsInAffiliationLegacy(w http.ResponseWriter, r *http.Request) {
 								  where aug.unitid=$1 and (aug.last_updated>=$2 or $2 is null)`,
 			unitId, lastupdate)
 		if err != nil {
-			defer log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 			return
@@ -5029,15 +5124,15 @@ func getGroupsInAffiliationLegacy(w http.ResponseWriter, r *http.Request) {
 			}
 			var queryErr []jsonerror
 			queryErr = append(queryErr, jsonerror{"This affiliation unit has no groups."})
-			log.WithFields(QueryFields(r, startTime)).Error("This affiliation unit has no groups.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("This affiliation unit has no groups.")
 			output = queryErr
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Info("Success!")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 			output = Out
 		}
 		jsonoutput, err := json.Marshal(output)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 		}
 		fmt.Fprintf(w, string(jsonoutput))
 	}
@@ -5049,14 +5144,14 @@ func getGroupLeadersinAffiliationUnitLegacy(w http.ResponseWriter, r *http.Reque
 	q := r.URL.Query()
 	unitName := q.Get("unitname")
 	if unitName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No unit name specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No unit name specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
 		return
 	}
 
 	rows, err := DBptr.Query(`select DISTINCT groups.name, groups.type, user_group.uid, users.uname  from user_group join users on users.uid = user_group.uid join groups on groups.groupid = user_group.groupid where is_leader=TRUE and user_group.groupid in (select groupid from affiliation_unit_group left outer join affiliation_units as au on affiliation_unit_group.unitid= au.unitid where au.name=$1) order by groups.name, groups.type`, unitName)
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
@@ -5107,15 +5202,15 @@ func getGroupLeadersinAffiliationUnitLegacy(w http.ResponseWriter, r *http.Reque
 		}
 		var queryErr []jsonerror
 		queryErr = append(queryErr, jsonerror{"This affiliation unit has no groups with assigned leaders."})
-		log.WithFields(QueryFields(r, startTime)).Error("This affiliation unit has no groups with assigned leaders.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("This affiliation unit has no groups with assigned leaders.")
 		output = queryErr
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonoutput, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 	}
 	fmt.Fprintf(w, string(jsonoutput))
 
@@ -5127,20 +5222,20 @@ func getAffiliationUnitComputeResourcesLegacy(w http.ResponseWriter, r *http.Req
 	q := r.URL.Query()
 	unitName := q.Get("unitname")
 	if unitName == "" {
-		log.WithFields(QueryFields(r, startTime)).Print("No unit name specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("No unit name specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
 		return
 	}
 	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
 		return
 	}
 
 	rows, err := DBptr.Query(`select cr.name, cr.type, cr.default_shell, cr.default_home_dir from compute_resources as cr join affiliation_units as au on au.unitid = cr.unitid where au.name=$1 and (cr.last_updated>=$2 or $2 is null) order by name`, unitName, lastupdate)
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Print(err.Error())
+		defer log.WithFields(QueryFieldsLegacy(r, startTime)).Print(err.Error())
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
@@ -5191,7 +5286,7 @@ func getAffiliationUnitComputeResourcesLegacy(w http.ResponseWriter, r *http.Req
 	}
 	jsonoutput, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Print(err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print(err.Error())
 	}
 	fmt.Fprintf(w, string(jsonoutput))
 }
@@ -5208,7 +5303,7 @@ func getAllAffiliationUnitsLegacy(w http.ResponseWriter, r *http.Request) {
 	//	}
 	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
 		return
 	}
@@ -5217,7 +5312,7 @@ func getAllAffiliationUnitsLegacy(w http.ResponseWriter, r *http.Request) {
 							  where url is not null and url like $1 and (au.last_updated>=$2 or $2 is null)`, "%"+voname+"%", lastupdate)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB query: " + err.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
@@ -5245,15 +5340,15 @@ func getAllAffiliationUnitsLegacy(w http.ResponseWriter, r *http.Request) {
 		}
 		var queryErr []jsonerror
 		queryErr = append(queryErr, jsonerror{"Query returned no units."})
-		log.WithFields(QueryFields(r, startTime)).Error("Query returned no units.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Query returned no units.")
 		output = queryErr
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonoutput, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 	}
 	fmt.Fprintf(w, string(jsonoutput))
 }
@@ -5268,7 +5363,7 @@ func createAffiliationUnitLegacy(w http.ResponseWriter, r *http.Request) {
 	unitType := strings.TrimSpace(q.Get("type"))
 	//only the unit name is actually required; the others can be empty
 	if unitName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No unitname specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No experiment name specified.\" }")
 		return
 	} // else {
@@ -5289,7 +5384,7 @@ func createAffiliationUnitLegacy(w http.ResponseWriter, r *http.Request) {
 	//	} else if unitType != "NULL" {
 	//		unitType = "'" + unitType + "'"
 	//	}
-	authorized, authout := authorize(r, "")
+	authorized, authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -5299,7 +5394,7 @@ func createAffiliationUnitLegacy(w http.ResponseWriter, r *http.Request) {
 	// start a transaction
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error starting DB transaction: " + err.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error starting database transaction.\" }")
 		return
 	}
@@ -5312,11 +5407,11 @@ func createAffiliationUnitLegacy(w http.ResponseWriter, r *http.Request) {
 	case checkerr == sql.ErrNoRows:
 		// OK, it doesn't exist, let's add it now.
 
-		log.WithFields(QueryFields(r, startTime)).Info("cKey = " + fmt.Sprintf("%d", cKey))
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("cKey = " + fmt.Sprintf("%d", cKey))
 
 		_, inserr := DBtx.Exec(`insert into affiliation_units (name, alternative_name, type) values ($1, $2, $3)`, unitName, altName, unitType)
 		if inserr != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error adding " + unitName + " to affiliation_units: " + inserr.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error adding " + unitName + " to affiliation_units: " + inserr.Error())
 			if cKey != 0 {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"Error executing DB insert.\" }")
 			}
@@ -5326,7 +5421,7 @@ func createAffiliationUnitLegacy(w http.ResponseWriter, r *http.Request) {
 			if voms_url != "" {
 				_, vomserr := DBtx.Exec(`insert into voms_url (unitid, url) values ((select unitid from affiliation_units where name = $1), $2)`, unitName, voms_url)
 				if vomserr != nil {
-					log.WithFields(QueryFields(r, startTime)).Error("Error adding " + unitName + " voms_url: " + vomserr.Error())
+					log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error adding " + unitName + " voms_url: " + vomserr.Error())
 					if cKey != 0 {
 						fmt.Fprintf(w, "{ \"ferry_error\": \"Error executing DB insert.\" }")
 					}
@@ -5337,7 +5432,7 @@ func createAffiliationUnitLegacy(w http.ResponseWriter, r *http.Request) {
 			if cKey != 0 {
 				DBtx.Commit(cKey)
 			}
-			log.WithFields(QueryFields(r, startTime)).Info("Successfully added " + unitName + " to affiliation_units.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Successfully added " + unitName + " to affiliation_units.")
 			if cKey != 0 {
 				fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 			}
@@ -5346,13 +5441,13 @@ func createAffiliationUnitLegacy(w http.ResponseWriter, r *http.Request) {
 		return
 	case checkerr != nil:
 		//other weird error
-		log.WithFields(QueryFields(r, startTime)).Error("Cannot create affiliation unit " + unitName + ": " + checkerr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Cannot create affiliation unit " + unitName + ": " + checkerr.Error())
 		if cKey != 0 {
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Database error; check logs.\" }")
 		}
 		return
 	default:
-		log.WithFields(QueryFields(r, startTime)).Error("Cannot create affiliation unit " + unitName + "; another unit with that name already exists.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Cannot create affiliation unit " + unitName + "; another unit with that name already exists.")
 		if cKey != 0 {
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Unit %s already exists.\" }", unitName)
 		}
@@ -5376,7 +5471,7 @@ func getBatchPrioritiesLegacy(w http.ResponseWriter, r *http.Request) {
 	}	
 	lastupdate, parserr :=  stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
 		return
 	}
@@ -5389,7 +5484,7 @@ func getBatchPrioritiesLegacy(w http.ResponseWriter, r *http.Request) {
 							  and (cr.last_updated >= $3 or $3 is null)`,rName, uName, lastupdate)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
-		log.WithFields(QueryFields(r, startTime)).Error("No resource name specified in DB query: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No resource name specified in DB query: " + err.Error())
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
@@ -5421,15 +5516,15 @@ func getBatchPrioritiesLegacy(w http.ResponseWriter, r *http.Request) {
 		}
 		var queryErr []jsonerror
 		queryErr = append(queryErr, jsonerror{"Query returned no priorities."})
-		log.WithFields(QueryFields(r, startTime)).Error("Query returned no priorities.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Query returned no priorities.")
 		output = queryErr
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonoutput, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 	}
 	fmt.Fprintf(w, string(jsonoutput))
 }
@@ -5444,12 +5539,12 @@ func createFQANLegacy(w http.ResponseWriter, r *http.Request) {
 	var mUser, unit string
 
 	if fqan == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No fqan specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No fqan specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No fqan specified.\" }")
 		return
 	}
 	if mGroup == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No mapped_group specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No mapped_group specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No mapped_group specified.\" }")
 		return
 	}
@@ -5461,7 +5556,7 @@ func createFQANLegacy(w http.ResponseWriter, r *http.Request) {
 	if q.Get("unitname") != "" {
 		unit = strings.TrimSpace(q.Get("unitname"))
 		if ok, _ := regexp.MatchString(fmt.Sprintf(`^\/(fermilab\/)?%s\/.*`, unit), fqan); !ok {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid FQAN.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Invalid FQAN.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid FQAN.\" }")
 			return
 		}
@@ -5469,7 +5564,7 @@ func createFQANLegacy(w http.ResponseWriter, r *http.Request) {
 	//	unit = `null`
 	//}
 
-	authorized, authout := authorize(r, "")
+	authorized, authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -5478,21 +5573,21 @@ func createFQANLegacy(w http.ResponseWriter, r *http.Request) {
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	defer DBtx.Rollback(cKey)
 
 	var uid, unitid, groupid sql.NullInt64
 	queryerr := DBtx.tx.QueryRow(`select (select unitid from affiliation_units where name = $1), (select uid from users where uname=$2), (select groupid from groups where name=$3 and type = 'UnixGroup')`, unit, mUser, mGroup).Scan(&unitid, &uid, &groupid)
 	if queryerr != nil && queryerr != sql.ErrNoRows {
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB query: " + queryerr.Error())
 		if cKey != 0 {
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		}
 		return
 	}
 	if groupid.Valid == false {
-		log.WithFields(QueryFields(r, startTime)).Error("Specified mapped_group does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Specified mapped_group does not exist.")
 		DBtx.Report("Specified mapped_group does not exist.")
 		if cKey != 0 {
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Specified mapped_group does not exist.\" }")
@@ -5500,7 +5595,7 @@ func createFQANLegacy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if uid.Valid == false && mUser != "" {
-		log.WithFields(QueryFields(r, startTime)).Error("Specified mapped_user does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Specified mapped_user does not exist.")
 		DBtx.Report("Specified mapped_user does not exist.")
 		if cKey != 0 {
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Specified mapped_user does not exist.\" }")
@@ -5512,7 +5607,7 @@ func createFQANLegacy(w http.ResponseWriter, r *http.Request) {
 	var tmpfqanid int
 	queryerr = DBtx.tx.QueryRow(`select fqanid from grid_fqan where unitid=$1 and fqan=$2`, unitid, fqan).Scan(&tmpfqanid)
 	if queryerr != nil && queryerr != sql.ErrNoRows {
-		log.WithFields(QueryFields(r, startTime)).Error("Query error: unable to verify whether FQAN/unit combo already in DB." + queryerr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Query error: unable to verify whether FQAN/unit combo already in DB." + queryerr.Error())
 		if cKey != 0 {
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Unable to verify whether FQAN/unit combo already in DB. Will not proceed.\" }")
 		} else {
@@ -5521,7 +5616,7 @@ func createFQANLegacy(w http.ResponseWriter, r *http.Request) {
 		return
 	} else if queryerr == nil {
 		// if the error is nil, then it DID find the combo alreayd, and so we should exit.
-		log.WithFields(QueryFields(r, startTime)).Error("Specified FQAN already associated with specified unit. Check specified values. Use setFQANMappings to modify an existing entry.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Specified FQAN already associated with specified unit. Check specified values. Use setFQANMappings to modify an existing entry.")
 		if cKey != 0 {
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Specified FQAN already associated with this unit. Use setFQANMappings to modify an existing entry.\" }")
 		}
@@ -5534,7 +5629,7 @@ func createFQANLegacy(w http.ResponseWriter, r *http.Request) {
 	if uid.Valid {
 		ingrouperr := DBtx.tx.QueryRow(`select uid, groupid from user_group where uid=$1 and groupid=$2`, uid, groupid).Scan(&tmpu, &tmpg)
 		if ingrouperr == sql.ErrNoRows {
-			log.WithFields(QueryFields(r, startTime)).Error("User not a member of this group.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User not a member of this group.")
 			if cKey != 0 {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"User not a member of this group.\" }")
 			}
@@ -5542,7 +5637,7 @@ func createFQANLegacy(w http.ResponseWriter, r *http.Request) {
 			return
 
 		} else if ingrouperr != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + ingrouperr.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB query: " + ingrouperr.Error())
 			if cKey != 0 {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 			}
@@ -5554,7 +5649,7 @@ func createFQANLegacy(w http.ResponseWriter, r *http.Request) {
 							left join user_certificates as uc on ac.dnid = uc.dnid
                                    			where ac.unitid = $1 and uid = $2`, unitid, uid).Scan(&tmpc)
 			if inuniterr == sql.ErrNoRows {
-				log.WithFields(QueryFields(r, startTime)).Error("User not a member of this unit.")
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User not a member of this unit.")
 				if cKey != 0 {
 					fmt.Fprintf(w, "{ \"ferry_error\": \"User not a member of this unit.\" }")
 				} else {
@@ -5563,7 +5658,7 @@ func createFQANLegacy(w http.ResponseWriter, r *http.Request) {
 				return
 
 			} else if inuniterr != nil {
-				log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + inuniterr.Error())
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB query: " + inuniterr.Error())
 				if cKey != 0 {
 					fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 				}
@@ -5575,38 +5670,38 @@ func createFQANLegacy(w http.ResponseWriter, r *http.Request) {
 	_, err = DBtx.Exec(`insert into grid_fqan (fqan, unitid, mapped_user, mapped_group, last_updated) values ($1, $2, $3, $4, NOW())`, fqan, unitid, uid, groupid)
 
 	if err == nil {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		if cKey != 0 {
 			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 		}
 	} else {
 		if strings.Contains(err.Error(), `user does not exist`) {
-			log.WithFields(QueryFields(r, startTime)).Error("User doesn't exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User doesn't exist.")
 			if cKey != 0 {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"User doesn't exist.\" }")
 			}
 		} else if strings.Contains(err.Error(), `group does not exist`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Group doesn't exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Group doesn't exist.")
 			if cKey != 0 {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"Group doesn't exist.\" }")
 			}
 		} else if strings.Contains(err.Error(), `user does not belong to group`) {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not belong to group.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not belong to group.")
 			if cKey != 0 {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"User does not belong to group.\" }")
 			}
 		} else if strings.Contains(err.Error(), `user does not belong to experiment`) {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not belong to experiment.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not belong to experiment.")
 			if cKey != 0 {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"User does not belong to experiment.\" }")
 			}
 		} else if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
-			log.WithFields(QueryFields(r, startTime)).Error("FQAN already exists.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("FQAN already exists.")
 			if cKey != 0 {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"FQAN already exists.\" }")
 			}
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 			if cKey != 0 {
 				fmt.Fprintf(w, "{ \"ferry_error\": \""+err.Error()+"\" }")
 			}
@@ -5631,7 +5726,7 @@ func getGroupFileLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
 		return
 	}
@@ -5669,7 +5764,7 @@ func getGroupFileLegacy(w http.ResponseWriter, r *http.Request) {
  							) as c on t.key = c.key;`, unit, comp, lastupdate, unit == "")
 
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
@@ -5720,24 +5815,24 @@ func getGroupFileLegacy(w http.ResponseWriter, r *http.Request) {
 			}
 			prevGname = tmpGname.String
 			if tmpTime.Valid {
-				log.WithFields(QueryFields(r, startTime)).Debugln("tmpTime is valid" + tmpTime.String)
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Debugln("tmpTime is valid" + tmpTime.String)
 
 				parseTime, parserr := time.Parse(time.RFC3339, tmpTime.String)
 				lasttime := &Entry.Lasttime
 				if parserr != nil {
-					log.WithFields(QueryFields(r, startTime)).Error("Error parsing last updated time of " + tmpTime.String)
+					log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error parsing last updated time of " + tmpTime.String)
 				} else {
 					if *lasttime == 0 || (parseTime.Unix() > *lasttime) {
 						*lasttime = parseTime.Unix()
 					}
 				}
 			} else {
-				log.WithFields(QueryFields(r, startTime)).Debugln("tmpTime is not valid")
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Debugln("tmpTime is not valid")
 			}
 		}
 	}
 	Out = append(Out, Entry)
-	log.WithFields(QueryFields(r, startTime)).Debugln("Length: " + fmt.Sprintf("%d", len(Out)))
+	log.WithFields(QueryFieldsLegacy(r, startTime)).Debugln("Length: " + fmt.Sprintf("%d", len(Out)))
 	var output interface{}
 	if prevGname == "" {
 		type jsonerror struct {
@@ -5746,28 +5841,28 @@ func getGroupFileLegacy(w http.ResponseWriter, r *http.Request) {
 		var Err []jsonerror
 		if !unitExists && unit != "" {
 			Err = append(Err, jsonerror{"Affiliation unit does not exist."})
-			log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Affiliation unit does not exist.")
 		}
 		if !compExists && comp != "%" {
 			Err = append(Err, jsonerror{"Resource does not exist."})
-			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Resource does not exist.")
 		}
 		if len(Out) == 1 && Out[0].Gname == "" {
 			Err = append(Err, jsonerror{"No users or groups with the non-primary GID for this unit and resource(s). Nothing to do."})
-			log.WithFields(QueryFields(r, startTime)).Error("No users with the non-primary GID for this unit and resource(s).")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No users with the non-primary GID for this unit and resource(s).")
 		}
 		if len(Err) == 0 {
 			Err = append(Err, jsonerror{"Something went wrong."})
-			log.WithFields(QueryFields(r, startTime)).Error("Something went wrong.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Something went wrong.")
 		}
 		output = Err
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
@@ -5785,12 +5880,12 @@ func lookupCertificateDNLegacy(w http.ResponseWriter, r *http.Request) {
 	certdn := q.Get("certificatedn")
 
 	if certdn == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No certificatedn name specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No certificatedn name specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No certificatedn name specified."})
 	} else {
 		dn, err := ExtractValidDN(certdn)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 			inputErr = append(inputErr, jsonerror{err.Error()})
 		}
 		certdn = dn
@@ -5799,7 +5894,7 @@ func lookupCertificateDNLegacy(w http.ResponseWriter, r *http.Request) {
 	if len(inputErr) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		}
 		fmt.Fprintf(w, string(jsonout))
 		return
@@ -5807,7 +5902,7 @@ func lookupCertificateDNLegacy(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := DBptr.Query(`select u.uid, uname from user_certificates as uc left join users as u on uc.uid = u.uid where dn = $1;`, certdn)
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
@@ -5835,16 +5930,16 @@ func lookupCertificateDNLegacy(w http.ResponseWriter, r *http.Request) {
 	var output interface{}
 	if len(Out) == 0 {
 		var queryErr []jsonerror
-		log.WithFields(QueryFields(r, startTime)).Error("Certificate DN does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Certificate DN does not exist.")
 		queryErr = append(queryErr, jsonerror{"Certificate DN does not exist."})
 		output = queryErr
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
@@ -5858,7 +5953,7 @@ func getMappedGidFileLegacy(w http.ResponseWriter, r *http.Request) {
 							  left join users as u on u.uid = gf.mapped_user;`)
 
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
@@ -5896,15 +5991,15 @@ func getMappedGidFileLegacy(w http.ResponseWriter, r *http.Request) {
 		}
 		var Err jsonerror
 		Err = jsonerror{"Something went wrong."}
-		log.WithFields(QueryFields(r, startTime)).Error("Something went wrong.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Something went wrong.")
 		output = Err
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
@@ -5924,20 +6019,20 @@ func getStorageAuthzDBFileLegacy(w http.ResponseWriter, r *http.Request) {
 		if pBool, err := strconv.ParseBool(q.Get("passwdmode")); err == nil {
 			pMode = pBool
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB query: " + err.Error())
 			inputErr.Error = append(inputErr.Error, "Invalid value for passwdmode. Must be true or false (or omit it from the query).")
 		}
 	}
 	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
 		inputErr.Error = append(inputErr.Error, "Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.")
 	}
 
 	if len(inputErr.Error) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		}
 		fmt.Fprintf(w, string(jsonout))
 		return
@@ -5950,7 +6045,7 @@ func getStorageAuthzDBFileLegacy(w http.ResponseWriter, r *http.Request) {
 							  order by u.uname;`, lastupdate)
 
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
@@ -6032,14 +6127,14 @@ func getStorageAuthzDBFileLegacy(w http.ResponseWriter, r *http.Request) {
 			if tmpTime.Valid {
 				parseTime, parserr := time.Parse(time.RFC3339, tmpTime.String)
 				if parserr != nil {
-					log.WithFields(QueryFields(r, startTime)).Error("Error parsing last updated time of " + tmpTime.String)
+					log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error parsing last updated time of " + tmpTime.String)
 				} else {
 					if lasttime == 0 || (parseTime.Unix() > lasttime) {
 						lasttime = parseTime.Unix()
 					}
 				}
 			} else {
-				log.WithFields(QueryFields(r, startTime)).Debugln("tmpTime is not valid")
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Debugln("tmpTime is not valid")
 			}
 
 			if tmpUser.String != prevUname {
@@ -6074,15 +6169,15 @@ func getStorageAuthzDBFileLegacy(w http.ResponseWriter, r *http.Request) {
 		}
 		var Err jsonerror
 		Err = jsonerror{"Something went wrong."}
-		log.WithFields(QueryFields(r, startTime)).Error("Something went wrong.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Something went wrong.")
 		output = Err
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
@@ -6118,7 +6213,7 @@ func getAffiliationMembersRolesLegacy(w http.ResponseWriter, r *http.Request) {
 							) as c on t.key = c.key;`, unit, role)
 
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
@@ -6152,24 +6247,24 @@ func getAffiliationMembersRolesLegacy(w http.ResponseWriter, r *http.Request) {
 		var Err jsonerror
 		if !unitExists {
 			Err.Error = append(Err.Error, "Experiment does not exist.")
-			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Experiment does not exist.")
 		}
 		if !roleExists {
 			Err.Error = append(Err.Error, "Role does not exist.")
-			log.WithFields(QueryFields(r, startTime)).Error("Role does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Role does not exist.")
 		}
 		if len(Err.Error) == 0 {
 			Err.Error = append(Err.Error, "No roles were found")
-			log.WithFields(QueryFields(r, startTime)).Error("No roles were found")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No roles were found")
 		}
 		output = Err
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
@@ -6185,7 +6280,7 @@ func getStorageAccessListsLegacy(w http.ResponseWriter, r *http.Request) {
 		resource = "%"
 	}
 	/*if resource == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No resourcename specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No resourcename specified in http query.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No resourcename specified.\" }")
 		return
 	}*/
@@ -6193,7 +6288,7 @@ func getStorageAccessListsLegacy(w http.ResponseWriter, r *http.Request) {
 	rows, err := DBptr.Query(`select server, volume, access_level, host from nas_storage where server like $1;`, resource)
 
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
@@ -6230,15 +6325,15 @@ func getStorageAccessListsLegacy(w http.ResponseWriter, r *http.Request) {
 		}
 		var Err jsonerror
 		Err = jsonerror{"Storage resource does not exist."}
-		log.WithFields(QueryFields(r, startTime)).Error("Storage resource does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Storage resource does not exist.")
 		output = Err
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
@@ -6257,16 +6352,16 @@ func createComputeResourceLegacy(w http.ResponseWriter, r *http.Request) {
 
 	var nullhomedir sql.NullString
 	if rName == "" {
-		log.WithFields(QueryFields(r, startTime)).Print("No resource name specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("No resource name specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No resourcename specified.\" }")
 		return
 	}
 	if rType == "" {
-		log.WithFields(QueryFields(r, startTime)).Print("No resource type specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("No resource type specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No type specified.\" }")
 		return
 	} else if strings.ToUpper(rType) == "NULL" {
-		log.WithFields(QueryFields(r, startTime)).Print("'NULL' is an invalid resource type.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("'NULL' is an invalid resource type.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Resource type of NULL is not allowed.\" }")
 		return
 	}
@@ -6278,7 +6373,7 @@ func createComputeResourceLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 	if homedir == "" || strings.ToUpper(strings.TrimSpace(homedir)) == "NULL" {
 		nullhomedir.Valid = false
-		log.WithFields(QueryFields(r, startTime)).Print("No defaulthomedir specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("No defaulthomedir specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No defaulthomedir specified.\" }")
 		return
 	} else {
@@ -6287,7 +6382,7 @@ func createComputeResourceLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//require auth
-	authorized, authout := authorize(r, "")
+	authorized, authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -6298,7 +6393,7 @@ func createComputeResourceLegacy(w http.ResponseWriter, r *http.Request) {
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error starting DB transaction: " + err.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error starting database transaction.\" }")
 		return
 	}
@@ -6309,7 +6404,7 @@ func createComputeResourceLegacy(w http.ResponseWriter, r *http.Request) {
 	if unitName != "" {
 		uniterr := DBtx.tx.QueryRow(`select unitid from affiliation_units where name=$1`, unitName).Scan(&unitID)
 		if uniterr != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error determining unitid for " + unitName + ": " + uniterr.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error determining unitid for " + unitName + ": " + uniterr.Error())
 			if cKey != 0 {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"Error determining unitID for "+unitName+". You cannot add a unit name that does not already exist in affiliation_units.\" }")
 			}
@@ -6337,7 +6432,7 @@ func createComputeResourceLegacy(w http.ResponseWriter, r *http.Request) {
 			_, err = DBtx.Exec(addstr, rName, shell, unitID, nullhomedir, rType)
 		}
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error starting DB transaction: " + err.Error())
 			w.WriteHeader(http.StatusNotFound)
 			if cKey != 0 {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"Error in database transaction.\" }")
@@ -6347,7 +6442,7 @@ func createComputeResourceLegacy(w http.ResponseWriter, r *http.Request) {
 			if cKey != 0 {
 				DBtx.Commit(cKey)
 			}
-			log.WithFields(QueryFields(r, startTime)).Error("Added " + rName + " to compute_resources.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Added " + rName + " to compute_resources.")
 			if cKey != 0 {
 				fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 			}
@@ -6356,7 +6451,7 @@ func createComputeResourceLegacy(w http.ResponseWriter, r *http.Request) {
 
 	case checkerr != nil:
 		//some other error, exit with status 500
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + checkerr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB query: " + checkerr.Error())
 		w.WriteHeader(http.StatusNotFound)
 		if cKey != 0 {
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in database check.\" }")
@@ -6364,7 +6459,7 @@ func createComputeResourceLegacy(w http.ResponseWriter, r *http.Request) {
 		return
 	default:
 		// if we get here, it means that the unit already exists. Bail out.
-		log.WithFields(QueryFields(r, startTime)).Error("Resource " + rName + " already exists.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Resource " + rName + " already exists.")
 		if cKey != 0 {
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Resource already exists.\" }")
 		}
@@ -6387,18 +6482,18 @@ func setComputeResourceInfoLegacy(w http.ResponseWriter, r *http.Request) {
 	homedir := strings.TrimSpace(q.Get("defaulthomedir"))
 
 	if rName == "" {
-		log.WithFields(QueryFields(r, startTime)).Print("No resource name specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("No resource name specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No resourcename specified.\" }")
 		return
 	}
 	if strings.ToUpper(strings.TrimSpace(rType)) == "NULL" {
-		log.WithFields(QueryFields(r, startTime)).Print("'NULL' is an invalid resource type.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("'NULL' is an invalid resource type.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Resource type of NULL is not allowed.\" }")
 		return
 	}
 
 	//require auth
-	authorized, authout := authorize(r, "")
+	authorized, authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -6415,7 +6510,7 @@ func setComputeResourceInfoLegacy(w http.ResponseWriter, r *http.Request) {
 	//transaction start, and update command
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error starting DB transaction: " + err.Error())
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error starting database transaction.\" }")
 		return
@@ -6427,12 +6522,12 @@ func setComputeResourceInfoLegacy(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case err == sql.ErrNoRows:
 		// nothing returned from the select, so the resource does not exist.
-		log.WithFields(QueryFields(r, startTime)).Print("compute resource with name " + rName + " not found in compute_resources table. Exiting.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("compute resource with name " + rName + " not found in compute_resources table. Exiting.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"resource does not exist. Use createComputeResource to add a new resource.\" }")
 		return
 	case err != nil:
 		w.WriteHeader(http.StatusNotFound)
-		log.WithFields(QueryFields(r, startTime)).Print("Error in DB query: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Error in DB query: " + err.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	default:
@@ -6484,7 +6579,7 @@ func setComputeResourceInfoLegacy(w http.ResponseWriter, r *http.Request) {
 		_, commerr := DBtx.Exec(`update compute_resources set default_shell=$1, unitid=$2, last_updated=NOW(), default_home_dir=$3, type=$4 where name=$5`, nullshell, unitID, nullhomedir, currentType, rName)
 		if commerr != nil {
 			w.WriteHeader(http.StatusNotFound)
-			log.WithFields(QueryFields(r, startTime)).Error("Error during DB update " + commerr.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error during DB update " + commerr.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Database error during update.\" }")
 			return
 		} else {
@@ -6492,7 +6587,7 @@ func setComputeResourceInfoLegacy(w http.ResponseWriter, r *http.Request) {
 			if cKey != 0 {
 				DBtx.Commit(cKey)
 			}
-			log.WithFields(QueryFields(r, startTime)).Info("Successfully updated " + unitName + ".")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Successfully updated " + unitName + ".")
 			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 		}
 	} //end switch
@@ -6510,29 +6605,29 @@ func setUserGridAccessLegacy(w http.ResponseWriter, r *http.Request) {
 	var suspBool bool
 
 	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No username specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
 		return
 	}
 	if unitName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No unitname specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
 		return
 	}
 	if suspend == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No suspend specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No suspend specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No suspend specified.\" }")
 		return
 	}
 	if parsedbool, err := strconv.ParseBool(suspend) ; err == nil {
 		suspBool = parsedbool
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Error("Invalid value for active.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Invalid value for active.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid value for active. Must be true or false (or omit it from the query).\" }")
 		return
 	}
 
-	authorized, authout := authorize(r, "")
+	authorized, authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -6541,31 +6636,31 @@ func setUserGridAccessLegacy(w http.ResponseWriter, r *http.Request) {
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	defer DBtx.Rollback(cKey)
 
 	var uid, unitid int
 	queryerr := DBtx.QueryRow(`select uid from users where uname=$1 for update`, uName).Scan(&uid)
 	if queryerr == sql.ErrNoRows {
-		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"User does not exist.\" }")
 		return
 	}
 	if queryerr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error during query:" + queryerr.Error())
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
 		return	
 	}
 
 	queryerr = DBtx.QueryRow(`select unitid from affiliation_units where name=$1 for update`, unitName).Scan(&unitid)
 	if queryerr == sql.ErrNoRows {
-		log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Affiliation unit does not exist.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Affiliation unit does not exist.\" }")
 		return
 	}
 	if queryerr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error during query:" + queryerr.Error())
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
 		return	
 	}
@@ -6574,12 +6669,12 @@ func setUserGridAccessLegacy(w http.ResponseWriter, r *http.Request) {
 						where uid = $2 and fqanid in (select fqanid from grid_fqan where unitid = $3)`,
 					   suspBool, uid, unitid)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error during query:" + queryerr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error during query:" + queryerr.Error())
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error during DB query; check logs.\" }")
 		return
 	}
 
-	log.WithFields(QueryFields(r, startTime)).Info("Success!")
+	log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 	fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 	
 	DBtx.Commit(cKey)
@@ -6599,16 +6694,16 @@ func createStorageResourceLegacy(w http.ResponseWriter, r *http.Request) {
 	defquota := strings.TrimSpace(q.Get("default_quota"))
 
 	if rName == "" {
-		log.WithFields(QueryFields(r, startTime)).Print("No resource name specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("No resource name specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No resourcename specified.\" }")
 		return
 	}
 	if rType == "" {
-		log.WithFields(QueryFields(r, startTime)).Print("No resource type specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("No resource type specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No type specified.\" }")
 		return
 	} else if strings.ToUpper(strings.TrimSpace(rType)) == "NULL" {
-		log.WithFields(QueryFields(r, startTime)).Print("'NULL' is an invalid resource type.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("'NULL' is an invalid resource type.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Resource type of NULL is not allowed.\" }")
 		return
 	}
@@ -6624,7 +6719,7 @@ func createStorageResourceLegacy(w http.ResponseWriter, r *http.Request) {
 		nullquota.Valid = true
 		convquota, converr := strconv.ParseInt(defquota, 10, 64)
 		if converr != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error converting default_quota to int: " + converr.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error converting default_quota to int: " + converr.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Error converting default_quota to int. Check format.\" }")
 			return
 		}
@@ -6640,14 +6735,14 @@ func createStorageResourceLegacy(w http.ResponseWriter, r *http.Request) {
 			nullunit.Valid = true
 			nullunit.String = defunit
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid value for default unit. Allowed values are B,KB,KIB,MB,MIB,GB,GIB,TB,TIB.)")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Invalid value for default unit. Allowed values are B,KB,KIB,MB,MIB,GB,GIB,TB,TIB.)")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid value for default_unit.\" }")
 			return
 		}
 	}
 
 	//require auth
-	authorized, authout := authorize(r, "")
+	authorized, authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -6662,7 +6757,7 @@ func createStorageResourceLegacy(w http.ResponseWriter, r *http.Request) {
 		// OK, it does not already exist, so we start a transaction
 		DBtx, cKey, err := LoadTransaction(r, DBptr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error starting DB transaction: " + err.Error())
 			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Error starting database transaction.\" }")
 			return
@@ -6674,26 +6769,26 @@ func createStorageResourceLegacy(w http.ResponseWriter, r *http.Request) {
 			rName, nullpath, nullquota, nullunit, rType)
 
 		if inserterr != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error in DB insertionn: " + inserterr.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB insertionn: " + inserterr.Error())
 			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in database transaction.\" }")
 			//	DBtx.Rollback(cKey)
 			return
 		} else {
 			DBtx.Commit(cKey)
-			log.WithFields(QueryFields(r, startTime)).Error("Added " + rName + " to compute_resources.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Added " + rName + " to compute_resources.")
 			fmt.Fprintf(w, "{ \"result\": \"success.\" }")
 			return
 		}
 	case checkerr != nil:
 		//some other error, exit with status 500
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + checkerr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB query: " + checkerr.Error())
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in database check.\" }")
 		return
 	default:
 		// if we get here, it means that the unit already exists. Bail out.
-		log.WithFields(QueryFields(r, startTime)).Error("Resource " + rName + " already exists.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Resource " + rName + " already exists.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Resource already exists.\" }")
 		return
 	}
@@ -6713,18 +6808,18 @@ func setStorageResourceInfoLegacy(w http.ResponseWriter, r *http.Request) {
 	defquota := strings.TrimSpace(q.Get("default_quota"))
 
 	if rName == "" {
-		log.WithFields(QueryFields(r, startTime)).Print("No resource name specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("No resource name specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No resourcename specified.\" }")
 		return
 	}
 	if rType == "null" {
-		log.WithFields(QueryFields(r, startTime)).Print("'null' is an invalid resource type.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("'null' is an invalid resource type.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Resource type of null is not allowed.\" }")
 		return
 	}
 
 	//require auth
-	authorized, authout := authorize(r, "")
+	authorized, authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -6743,12 +6838,12 @@ func setStorageResourceInfoLegacy(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case err == sql.ErrNoRows:
 		// nothing returned from the select, so the resource does not exist.
-		log.WithFields(QueryFields(r, startTime)).Print("Storage resource with name " + rName + " not found in compute_resources table. Exiting.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Storage resource with name " + rName + " not found in compute_resources table. Exiting.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"resource does not exist. Use createStorageResource to add a new resource.\" }")
 		return
 	case err != nil:
 		w.WriteHeader(http.StatusNotFound)
-		log.WithFields(QueryFields(r, startTime)).Print("Error in DB query: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Error in DB query: " + err.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	default:
@@ -6775,7 +6870,7 @@ func setStorageResourceInfoLegacy(w http.ResponseWriter, r *http.Request) {
 				nullquota.Valid = true
 				convquota, converr := strconv.ParseInt(defquota, 10, 64)
 				if converr != nil {
-					log.WithFields(QueryFields(r, startTime)).Error("Error converting default_quota to int: " + converr.Error())
+					log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error converting default_quota to int: " + converr.Error())
 					fmt.Fprintf(w, "{ \"ferry_error\": \"Error converting default_quota to int. Check format.\" }")
 					return
 				}
@@ -6792,7 +6887,7 @@ func setStorageResourceInfoLegacy(w http.ResponseWriter, r *http.Request) {
 					nullunit.Valid = true
 					nullunit.String = strings.ToUpper(defunit)
 				} else {
-					log.WithFields(QueryFields(r, startTime)).Error("Invalid value for default unit. Allowed values are B,KB,KIB,MB,MIB,GB,GIB,TB,TIB.)")
+					log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Invalid value for default unit. Allowed values are B,KB,KIB,MB,MIB,GB,GIB,TB,TIB.)")
 					fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid value for default_unit.\" }")
 					return
 				}
@@ -6805,7 +6900,7 @@ func setStorageResourceInfoLegacy(w http.ResponseWriter, r *http.Request) {
 		//transaction start, and update command
 		DBtx, cKey, err := LoadTransaction(r, DBptr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error starting DB transaction: " + err.Error())
 			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Error starting database transaction.\" }")
 			return
@@ -6815,13 +6910,13 @@ func setStorageResourceInfoLegacy(w http.ResponseWriter, r *http.Request) {
 		_, commerr := DBtx.Exec(`update storage_resources set default_path=$1, default_quota=$2, last_updated=NOW(), default_unit=$3, type=$4 where name=$5`, nullpath, nullquota, nullunit, currentType, rName)
 		if commerr != nil {
 			w.WriteHeader(http.StatusNotFound)
-			log.WithFields(QueryFields(r, startTime)).Error("Error during DB update: " + commerr.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error during DB update: " + commerr.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Database error during update.\" }")
 			return
 		} else {
 			// if no error, commit and all that
 			DBtx.Commit(cKey)
-			log.WithFields(QueryFields(r, startTime)).Info("Successfully updated " + rName + ".")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Successfully updated " + rName + ".")
 			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 		}
 	} //end switch
@@ -6835,7 +6930,7 @@ func getAllComputeResourcesLegacy(w http.ResponseWriter, r *http.Request) {
 
 	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
 		return
 	}
@@ -6844,7 +6939,7 @@ func getAllComputeResourcesLegacy(w http.ResponseWriter, r *http.Request) {
 							  from compute_resources as cr left join affiliation_units as au on cr.unitid = au.unitid where (cr.last_updated>=$1 or $1 is null);`, lastupdate)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB query: " + err.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
@@ -6873,15 +6968,15 @@ func getAllComputeResourcesLegacy(w http.ResponseWriter, r *http.Request) {
 		}
 		var queryErr []jsonerror
 		queryErr = append(queryErr, jsonerror{"Query returned no compute resources."})
-		log.WithFields(QueryFields(r, startTime)).Error("Query returned no compute resources.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Query returned no compute resources.")
 		output = queryErr
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonoutput, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 	}
 	fmt.Fprintf(w, string(jsonoutput))
 }
@@ -6912,7 +7007,7 @@ func getVOUserMapLegacy(w http.ResponseWriter, r *http.Request) {
 							$3 IN (SELECT fqan FROM grid_fqan)`,
 		user, unit, fqan).Scan(&userExists, &unitExists, &fqanExists)
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
@@ -6924,22 +7019,22 @@ func getVOUserMapLegacy(w http.ResponseWriter, r *http.Request) {
 	var inputErr []jsonerror
 
 	if !userExists && user != "%" {
-		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 		inputErr = append(inputErr, jsonerror{"User does not exist."})
 	}
 	if !unitExists && unit != "%" {
-		log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Affiliation unit does not exist.")
 		inputErr = append(inputErr, jsonerror{"Affiliation unit does not exist."})
 	}
 	if !fqanExists && fqan != "%" {
-		log.WithFields(QueryFields(r, startTime)).Error("FQAN does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("FQAN does not exist.")
 		inputErr = append(inputErr, jsonerror{"FQAN does not exist."})
 	}
 
 	if len(inputErr) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		}
 		fmt.Fprintf(w, string(jsonout))
 		return
@@ -6963,7 +7058,7 @@ func getVOUserMapLegacy(w http.ResponseWriter, r *http.Request) {
 							  ORDER BY u1.uname`, user, unit, fqan)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB query: " + err.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
@@ -6989,16 +7084,16 @@ func getVOUserMapLegacy(w http.ResponseWriter, r *http.Request) {
 	var output interface{}
 	if len(voUserMap) == 0 {
 		var queryErr []jsonerror
-		log.WithFields(QueryFields(r, startTime)).Error("No mappings found.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No mappings found.")
 		queryErr = append(queryErr, jsonerror{"No mappings found."})
 		output = queryErr
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		output = voUserMap
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
@@ -7013,7 +7108,7 @@ func getPasswdFileLegacy(w http.ResponseWriter, r *http.Request) {
 
 	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time.\"}")
 		return
 	}
@@ -7034,7 +7129,7 @@ func getPasswdFileLegacy(w http.ResponseWriter, r *http.Request) {
 							) as c on t.key = c.key;`, unit, comp, unit == "", comp == "", lastupdate)
 
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
@@ -7066,7 +7161,7 @@ func getPasswdFileLegacy(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var tmpAname, tmpRname, tmpUname, tmpUid, tmpGid, tmpGecos, tmpHdir, tmpShell, tmpTime sql.NullString
 		rows.Scan(&tmpAname, &tmpRname, &tmpUname, &tmpUid, &tmpGid, &tmpGecos, &tmpHdir, &tmpShell, &unitExists, &compExists, &tmpTime)
-		log.WithFields(QueryFields(r, startTime)).Debugln(tmpAname.String + " " + tmpRname.String + " " + tmpUname.String)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Debugln(tmpAname.String + " " + tmpRname.String + " " + tmpUname.String)
 
 		if !tmpRname.Valid {
 			continue
@@ -7101,18 +7196,18 @@ func getPasswdFileLegacy(w http.ResponseWriter, r *http.Request) {
 
 			}
 			if tmpTime.Valid {
-				log.WithFields(QueryFields(r, startTime)).Debugln("tmpTime is valid" + tmpTime.String)
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Debugln("tmpTime is valid" + tmpTime.String)
 
 				parseTime, parserr := time.Parse(time.RFC3339, tmpTime.String)
 				if parserr != nil {
-					log.WithFields(QueryFields(r, startTime)).Error("Error parsing last updated time of " + tmpTime.String)
+					log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error parsing last updated time of " + tmpTime.String)
 				} else {
 					if lasttime == 0 || (parseTime.Unix() > lasttime) {
 						lasttime = parseTime.Unix()
 					}
 				}
 			} else {
-				log.WithFields(QueryFields(r, startTime)).Debugln("tmpTime is not valid")
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Debugln("tmpTime is not valid")
 			}
 			tmpUsers = append(tmpUsers, jsonuser{tmpUname.String, tmpUid.String, tmpGid.String, tmpGecos.String, tmpHdir.String, tmpShell.String})
 		}
@@ -7130,24 +7225,24 @@ func getPasswdFileLegacy(w http.ResponseWriter, r *http.Request) {
 		var Err []jsonerror
 		if !unitExists && unit != "" {
 			Err = append(Err, jsonerror{"Affiliation unit does not exist."})
-			log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Affiliation unit does not exist.")
 		}
 		if !compExists && comp != "" {
 			Err = append(Err, jsonerror{"Resource does not exist."})
-			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Resource does not exist.")
 		}
 		if len(Err) == 0 {
 			Err = append(Err, jsonerror{"No entries were found for this query."})
-			log.WithFields(QueryFields(r, startTime)).Error("No entries were found for this query.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No entries were found for this query.")
 		}
 		output = Err
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonout, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	fmt.Fprintf(w, string(jsonout))
 }
@@ -7190,7 +7285,7 @@ func getCondorQuotasLegacy(w http.ResponseWriter, r *http.Request) {
 	rows, err := DBptr.Query(query, uName, rName)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
-		log.WithFields(QueryFields(r, startTime)).Error("No resource name specified in DB query: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No resource name specified in DB query: " + err.Error())
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
 	}
@@ -7230,25 +7325,25 @@ func getCondorQuotasLegacy(w http.ResponseWriter, r *http.Request) {
 		}
 		var queryErr jsonerror
 		if !unitExists && uName != "%" {
-			log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Affiliation unit does not exist.")
 			queryErr.Error = append(queryErr.Error, "Affiliation unit does not exist.")
 		}
 		if !resourceExists && rName != "%" {
-			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Resource does not exist.")
 			queryErr.Error = append(queryErr.Error, "Resource does not exist.")
 		}
 		if len(queryErr.Error) == 0 {
-			log.WithFields(QueryFields(r, startTime)).Error("Query returned no quotas.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Query returned no quotas.")
 			queryErr.Error = append(queryErr.Error, "Query returned no quotas.")
 		}
 		output = queryErr
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		output = out
 	}
 	jsonoutput, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 	}
 	fmt.Fprintf(w, string(jsonoutput))
 }
@@ -7264,7 +7359,7 @@ func setCondorQuotaLegacy(w http.ResponseWriter, r *http.Request) {
 	until := strings.TrimSpace(q.Get("validuntil"))
 	splus := strings.TrimSpace(q.Get("surplus"))
 
-	authorized,authout := authorize(r, "")
+	authorized,authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -7272,17 +7367,17 @@ func setCondorQuotaLegacy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if group == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No condorgroup specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No condorgroup specified in http query.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No condorgroup specified.\" }")
 		return
 	}
 	if comp == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No resourcename specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No resourcename specified in http query.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No resourcename specified.\" }")
 		return
 	}
 	if quota == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No quota specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No quota specified in http query.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No quota specified.\" }")
 		return
 	}
@@ -7315,7 +7410,7 @@ func setCondorQuotaLegacy(w http.ResponseWriter, r *http.Request) {
 
 	if splus != "" {
 		if splusBool, err := strconv.ParseBool(splus); err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid value for surplus. Must be true or false (or omit it from the query).")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Invalid value for surplus. Must be true or false (or omit it from the query).")
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid value for surplus. Must be true or false (or omit it from the query).\" }")
 		} else {
 			splus = strconv.FormatBool(splusBool)
@@ -7326,7 +7421,7 @@ func setCondorQuotaLegacy(w http.ResponseWriter, r *http.Request) {
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	defer DBtx.Rollback(cKey)
 
@@ -7368,24 +7463,24 @@ func setCondorQuotaLegacy(w http.ResponseWriter, r *http.Request) {
 									end $$;`, uName, comp, name, quota, qType, splus, until))
 
 	if err == nil {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 	} else {
 		if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
-			log.WithFields(QueryFields(r, startTime)).Error("This quota already exists.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("This quota already exists.")
 			fmt.Fprintf(w,"{ \"ferry_error\": \"This quota already exists.\" }")
 		} else if strings.Contains(err.Error(), `null value in column "compid"`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Resource does not exist.")
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Resource does not exist.\" }")
 		} else if strings.Contains(err.Error(), `invalid input syntax for type date`) ||
 				  strings.Contains(err.Error(), `date/time field value out of range`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid expiration date.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Invalid expiration date.")
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Invalid expiration date.\" }")
 		} else if strings.Contains(err.Error(), `no base level quota`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Base level quota does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Base level quota does not exist.")
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Base level quota does not exist.\" }")
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Something went wrong.\" }")
 		}
 	}
@@ -7410,33 +7505,33 @@ func getGroupStorageQuotaLegacy(w http.ResponseWriter, r *http.Request) {
 	if quota_unit != "" {
 	okunit := checkUnits(quota_unit)	
 		if !okunit {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid unit specified in http query.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Invalid unit specified in http query.")
 			inputErr = append(inputErr, jsonerror{"Invalid unit specified."})	
 		}
 	}
 	if groupname == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No groupname specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No groupname specified."})
 	}
 	if resource == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No resourcename specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No resourcename specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No resourcename specified."})
 	}
 	if exptname == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No unitname specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No unitname name specified."})
 	}
 
 	lastupdate, parserr := stringToParsedTime(strings.TrimSpace(q.Get("last_updated")))
 	if parserr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error parsing provided update time: " + parserr.Error())
 		inputErr = append(inputErr, jsonerror{"Error parsing last_updated time. Check ferry logs. If provided, it should be an integer representing an epoch time."})
 	}
 
 	if len(inputErr) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		}
 		fmt.Fprintf(w, string(jsonout))
 		return
@@ -7457,7 +7552,7 @@ func getGroupStorageQuotaLegacy(w http.ResponseWriter, r *http.Request) {
 								$4 in (select name from affiliation_units) as unit_exists
 							) as c on t.key = c.key;`, groupname, "UnixGroup", resource, exptname, lastupdate)
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Print("Error in DB query: " + err.Error())
+		defer log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Error in DB query: " + err.Error())
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		
@@ -7481,7 +7576,7 @@ func getGroupStorageQuotaLegacy(w http.ResponseWriter, r *http.Request) {
 			if quota_unit != "" && quota_unit != tmpUnit.String {
 				newval, converr := convertValue(tmpValue.String,tmpUnit.String,quota_unit)
 				if converr != nil {
-					log.WithFields(QueryFields(r, startTime)).Error("Error converting quota value: " + converr.Error())
+					log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error converting quota value: " + converr.Error())
 					inputErr = append(inputErr, jsonerror{"Error converting quota value to desired unit."})	
 				} else {
 					tmpValue.String = strconv.FormatFloat(newval, 'f', -1, 64)
@@ -7498,29 +7593,29 @@ func getGroupStorageQuotaLegacy(w http.ResponseWriter, r *http.Request) {
 		}
 		var queryErr []jsonerror
 		if !groupExists {
-			log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Group does not exist.")
 			queryErr = append(queryErr, jsonerror{"Group does not exist."})
 		}
 		if !resourceExists {
-			log.WithFields(QueryFields(r, startTime)).Error("Resource does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Resource does not exist.")
 			queryErr = append(queryErr, jsonerror{"Resource does not exist."})
 		}
 		if !unitExists {
-			log.WithFields(QueryFields(r, startTime)).Error("Experiment does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Experiment does not exist.")
 			queryErr = append(queryErr, jsonerror{"Experiment does not exist."})
 		}
 		if len(queryErr) == 0 {
-			log.WithFields(QueryFields(r, startTime)).Error("Group has no quotas registered.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Group has no quotas registered.")
 			queryErr = append(queryErr, jsonerror{"Group has no quotas registered."})
 		}
 		output = queryErr
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		output = Out
 	}
 	jsonoutput, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 	}
 	fmt.Fprintf(w, string(jsonoutput))
 }
@@ -7543,7 +7638,7 @@ func setFQANMappingsLegacy(w http.ResponseWriter, r *http.Request) {
 	var inputErr jsonerror
 
 	if fqan == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No fqan specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No fqan specified in http query.")
 		inputErr.Error = append(inputErr.Error, "No fqan specified.")
 	}
 	if mUser != "" {
@@ -7552,7 +7647,7 @@ func setFQANMappingsLegacy(w http.ResponseWriter, r *http.Request) {
 			if uid.Valid {
 				values = append(values, fmt.Sprintf("mapped_user = %d", uid.Int64))
 			} else {
-				log.WithFields(QueryFields(r, startTime)).Error("User doesn't exist.")
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User doesn't exist.")
 				inputErr.Error = append(inputErr.Error, "User doesn't exist.")
 			}
 		} else {
@@ -7565,7 +7660,7 @@ func setFQANMappingsLegacy(w http.ResponseWriter, r *http.Request) {
 			if groupid.Valid {
 				values = append(values, fmt.Sprintf("mapped_group = %d", groupid.Int64))
 			} else {
-				log.WithFields(QueryFields(r, startTime)).Error("Group doesn't exist.")
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Group doesn't exist.")
 				inputErr.Error = append(inputErr.Error, "Group doesn't exist.")
 			}
 		} else {
@@ -7573,20 +7668,20 @@ func setFQANMappingsLegacy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if mUser == "" && mGroup == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No mapped_user or mapped_group specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No mapped_user or mapped_group specified in http query.")
 		inputErr.Error = append(inputErr.Error, "No mapped_user or mapped_group specified.")
 	}
 
 	if len(inputErr.Error) > 0 {
 		out, err := json.Marshal(inputErr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 		}
 		fmt.Fprintf(w, string(out))
 		return
 	}
 
-	authorized, authout := authorize(r, "")
+	authorized, authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -7595,7 +7690,7 @@ func setFQANMappingsLegacy(w http.ResponseWriter, r *http.Request) {
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	defer DBtx.Rollback(cKey)
 
@@ -7606,30 +7701,30 @@ func setFQANMappingsLegacy(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		rows, rowsErr = res.RowsAffected()
 		if rowsErr != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 		}
 	} else {
 		rows = 0
 	}
 
 	if rows == 1 {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 	} else {
 		var queryErr jsonerror
 		if rows == 0 && err == nil {
-			log.WithFields(QueryFields(r, startTime)).Error("FQAN doesn't exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("FQAN doesn't exist.")
 			queryErr.Error = append(queryErr.Error, "FQAN doesn't exist.")
 		} else if strings.Contains(err.Error(), `null value in column "mapped_group" violates not-null constraint`) {
-			log.WithFields(QueryFields(r, startTime)).Error("Attribute mapped_group can not be NULL.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Attribute mapped_group can not be NULL.")
 			queryErr.Error = append(queryErr.Error, "Attribute mapped_group can not be NULL.")
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 			queryErr.Error = append(queryErr.Error, err.Error())
 		}
 		out, err := json.Marshal(queryErr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 		}
 		fmt.Fprintf(w, string(out))
 	}
@@ -7642,7 +7737,7 @@ func setSuperUser(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
 	//call authorize function
-	authorized, authout := authorize(r, "")
+	authorized, authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -7653,12 +7748,12 @@ func setSuperUser(w http.ResponseWriter, r *http.Request) {
 	uName := strings.TrimSpace(q.Get("username"))
 	unitName := strings.TrimSpace(q.Get("unitname"))
 	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No user name specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No user name specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
 		return
 	}
 	if unitName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No unit name specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No unit name specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
 		return
 	}
@@ -7668,7 +7763,7 @@ func setSuperUser(w http.ResponseWriter, r *http.Request) {
  
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Unable to start database transaction.\" }")
 		return
@@ -7684,7 +7779,7 @@ func setSuperUser(w http.ResponseWriter, r *http.Request) {
 															 )`, uName, unitName).Scan(&uid, &unitid, &member)
 	
 	if queryerr == sql.ErrNoRows {
-		log.WithFields(QueryFields(r, startTime)).Error("User and unit names do not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User and unit names do not exist.")
 		if cKey != 0 {
 			fmt.Fprintf(w, "{ \"ferry_error\": \"User and unit names do not exist.\" }")
 		} else {
@@ -7692,14 +7787,14 @@ func setSuperUser(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	} else if queryerr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error: " + queryerr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error: " + queryerr.Error())
 		if cKey !=0 {
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
 		} 
 		return
 	}
 	if ! uid.Valid {
-		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 		if cKey != 0 {
 			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
 		} else {
@@ -7708,12 +7803,12 @@ func setSuperUser(w http.ResponseWriter, r *http.Request) {
 		return
 	} 
 	if ! unitid.Valid {
-		log.WithFields(QueryFields(r, startTime)).Error("Unit does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Unit does not exist.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Unit does not exist.\" }")
 		return
 	}
 	if ! member {
-		log.WithFields(QueryFields(r, startTime)).Error("User does not belong to unit.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not belong to unit.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not belong to unit.\" }")
 		return
 	}
@@ -7724,10 +7819,10 @@ func setSuperUser(w http.ResponseWriter, r *http.Request) {
 
 	if err == nil {
 		if cKey != 0 { DBtx.Commit(cKey) }
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Error("Error: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error: " + err.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
 	}
 }
@@ -7737,7 +7832,7 @@ func removeSuperUser(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
 	//call authorize function
-	authorized, authout := authorize(r, "")
+	authorized, authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -7748,12 +7843,12 @@ func removeSuperUser(w http.ResponseWriter, r *http.Request) {
 	uName := strings.TrimSpace(q.Get("username"))
 	unitName := strings.TrimSpace(q.Get("unitname"))
 	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No user name specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No user name specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
 		return
 	}
 	if unitName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No unit name specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No unit name specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No unitname specified.\" }")
 		return
 	}
@@ -7763,7 +7858,7 @@ func removeSuperUser(w http.ResponseWriter, r *http.Request) {
  
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Unable to start database transaction.\" }")
 		return
@@ -7779,7 +7874,7 @@ func removeSuperUser(w http.ResponseWriter, r *http.Request) {
 															 )`, uName, unitName).Scan(&uid, &unitid, &member)
 	
 	if queryerr == sql.ErrNoRows {
-		log.WithFields(QueryFields(r, startTime)).Error("User and unit names do not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User and unit names do not exist.")
 		if cKey != 0 {
 			fmt.Fprintf(w, "{ \"ferry_error\": \"User and unit names do not exist.\" }")
 		} else {
@@ -7787,14 +7882,14 @@ func removeSuperUser(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	} else if queryerr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error: " + queryerr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error: " + queryerr.Error())
 		if cKey !=0 {
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
 		} 
 		return
 	}
 	if ! uid.Valid {
-		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 		if cKey != 0 {
 			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
 		} else {
@@ -7803,12 +7898,12 @@ func removeSuperUser(w http.ResponseWriter, r *http.Request) {
 		return
 	} 
 	if ! unitid.Valid {
-		log.WithFields(QueryFields(r, startTime)).Error("Unit does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Unit does not exist.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Unit does not exist.\" }")
 		return
 	}
 	if ! member {
-		log.WithFields(QueryFields(r, startTime)).Error("User does not belong to unit.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not belong to unit.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not belong to unit.\" }")
 		return
 	}
@@ -7819,10 +7914,10 @@ func removeSuperUser(w http.ResponseWriter, r *http.Request) {
 
 	if err == nil {
 		if cKey != 0 { DBtx.Commit(cKey) }
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Error("Error: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error: " + err.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
 	}
 }
@@ -7843,29 +7938,29 @@ func removeUserAccessFromResourceLegacy(w http.ResponseWriter, r *http.Request) 
 	rName := q.Get("resourcename")
 
 	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No username specified in http query.")
 		inputErr = append(inputErr, jsonstatus{"", "No username specified."})
 	}
 	if gName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No groupname specified in http query.")
 		inputErr = append(inputErr, jsonstatus{"", "No groupname specified."})
 	}
 	if rName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No resourcename specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No resourcename specified in http query.")
 		inputErr = append(inputErr, jsonstatus{"", "No resourcename name specified."})
 	}
 
 	if len(inputErr) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		}
 		fmt.Fprintf(w, string(jsonout))
 		return
 	}
 	
 	//require auth	
-	authorized,authout := authorize(r, "")
+	authorized,authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -7874,7 +7969,7 @@ func removeUserAccessFromResourceLegacy(w http.ResponseWriter, r *http.Request) 
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error starting DB transaction: " + err.Error())
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 		return
@@ -7899,7 +7994,7 @@ func removeUserAccessFromResourceLegacy(w http.ResponseWriter, r *http.Request) 
 	var rows *sql.Rows
 	rows, err = DBtx.Query(query, uName, gName, rName)
 	if err != nil {	
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 		return
@@ -7951,25 +8046,25 @@ func removeUserAccessFromResourceLegacy(w http.ResponseWriter, r *http.Request) 
 		var queryStatus []jsonstatus
 		if userExists && groupExists && resourceExists {
 			queryStatus = append(queryStatus, jsonstatus{"", "User does not have access to this group in the compute resource."})
-			log.WithFields(QueryFields(r, startTime)).Error("User does not have access to this group in the compute resource.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not have access to this group in the compute resource.")
 		}
 		if !userExists {
 			queryStatus = append(queryStatus, jsonstatus{"", "User does not exist."})
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 		}
 		if !groupExists {
 			queryStatus = append(queryStatus, jsonstatus{"", "Group does not exist."})
-			log.WithFields(QueryFields(r, startTime)).Error("Grpup does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Grpup does not exist.")
 		}
 		if !resourceExists {
 			queryStatus = append(queryStatus, jsonstatus{"", "Compute resource does not exist."})
-			log.WithFields(QueryFields(r, startTime)).Error("Compute resource does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Compute resource does not exist.")
 		}
 		output = queryStatus
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info(fmt.Sprintf("Successfully deleted (%s,%s,%s) from compute_access.", uName, gName, rName))
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info(fmt.Sprintf("Successfully deleted (%s,%s,%s) from compute_access.", uName, gName, rName))
 		if cKey != 0 {
-			log.WithFields(QueryFields(r, startTime)).Info("Success!")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 			output = jsonstatus{"success", ""}
 		}
 		DBtx.Commit(cKey)
@@ -7977,7 +8072,7 @@ func removeUserAccessFromResourceLegacy(w http.ResponseWriter, r *http.Request) 
 
 	jsonoutput, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 	}
 	if cKey != 0 {
 		fmt.Fprintf(w, string(jsonoutput))
@@ -7988,7 +8083,7 @@ func removeUserCertificateDNLegacy(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
-	authorized, authout := authorize(r, "")
+	authorized, authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -7999,18 +8094,18 @@ func removeUserCertificateDNLegacy(w http.ResponseWriter, r *http.Request) {
 	uName := strings.TrimSpace(q.Get("username"))
 	subjDN := strings.TrimSpace(q.Get("dn"))
 	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No username specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
 		return
 	}
 	if subjDN == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No DN specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No DN specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No dn specified.\" }")
 		return
 	} else {
 		dn, err := ExtractValidDN(subjDN)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"%s\" }", err.Error())
 			return
 		}
@@ -8019,28 +8114,28 @@ func removeUserCertificateDNLegacy(w http.ResponseWriter, r *http.Request) {
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	defer DBtx.Rollback(cKey)
 
 	var uid, dnid sql.NullInt64
 	queryerr := DBtx.tx.QueryRow(`select us.uid, uc.dnid from (select 1 as key, uid from users where uname=$1 for update) as us full outer join (select 1 as key, dnid from user_certificates where dn=$2 for update) as uc on uc.key=us.key`,uName, subjDN).Scan(&uid,&dnid)
 	if queryerr == sql.ErrNoRows {
-		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
 		return
 	} else if queryerr != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB query: " + queryerr.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query. Check logs.\" }")
 		return
 	}
 	if ! uid.Valid {
-		log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
 		return		
 	}
 	if ! dnid.Valid {
-		log.WithFields(QueryFields(r, startTime)).Error("DN does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("DN does not exist.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"DN does not exist.\" }")
 		return		
 	}
@@ -8073,17 +8168,17 @@ func removeUserCertificateDNLegacy(w http.ResponseWriter, r *http.Request) {
 										delete from user_certificates where dnid=u_dnid and uid=u_uid;
 									end $$;`, uid.Int64, dnid.Int64))
 	if err == nil {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 	} else {
 		if strings.Contains(err.Error(), `dnid uid association does not exist`) {
-			log.WithFields(QueryFields(r, startTime)).Error("USER DN association does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("USER DN association does not exist.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"USER DN association does not exist.\" }")
 		} else if strings.Contains(err.Error(), `unique dnid unitid association`) {
-			log.WithFields(QueryFields(r, startTime)).Error("This certificate is unique for the user in one or more affiliation units.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("This certificate is unique for the user in one or more affiliation units.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"This certificate is unique for the user in one or more affiliation units.\" }")
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
 			return
 		}
@@ -8101,17 +8196,17 @@ func removeUserExternalAffiliationAttributeLegacy(w http.ResponseWriter, r *http
 	attribute := strings.TrimSpace(q.Get("attribute"))
 
 	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No username specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No username specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No username specified.\" }")
 		return
 	}
 	if attribute == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No attribute specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No attribute specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No attribute specified.\" }")
 		return
 	}
 
-	authorized, authout := authorize(r, "")
+	authorized, authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -8120,7 +8215,7 @@ func removeUserExternalAffiliationAttributeLegacy(w http.ResponseWriter, r *http
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	defer DBtx.Rollback(cKey)
 
@@ -8130,22 +8225,22 @@ func removeUserExternalAffiliationAttributeLegacy(w http.ResponseWriter, r *http
 	queryerr := DBtx.tx.QueryRow(`select us.uid,eaa.attribute from (select uid from users where uname = $1) as us left join (select uid, attribute from external_affiliation_attribute where attribute = $2) as eaa on us.uid=eaa.uid`,uName, attribute).Scan(&uid,&att)
 	if queryerr != nil {
 		if queryerr == sql.ErrNoRows {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
 			return
 		} else if strings.Contains(queryerr.Error(), "invalid input value for enum") {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid attribute.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Invalid attribute.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Invalid attribute.\" }")
 			return
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error("Error in DB query: " + queryerr.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in DB query: " + queryerr.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query. Check logs.\" }")
 			return
 		}
 	}
 
 	if !att.Valid {
-		log.WithFields(QueryFields(r, startTime)).Error("User doesn't have this attribute.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User doesn't have this attribute.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"User doesn't have this attribute.\" }")
 		return	
 	}
@@ -8172,17 +8267,17 @@ func removeUserExternalAffiliationAttributeLegacy(w http.ResponseWriter, r *http
 	_, err = DBtx.Exec(`delete from external_affiliation_attribute where uid = $1 and attribute = $2`, uid, att.String)
 
 	if err == nil {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 	} else {
 		if strings.Contains(err.Error(), `uname does not exist`) {
-			log.WithFields(QueryFields(r, startTime)).Error("User does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("User does not exist.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
 		} else if strings.Contains(err.Error(), `attribute does not exist`) {
-			log.WithFields(QueryFields(r, startTime)).Error("External affiliation attribute does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("External affiliation attribute does not exist.")
 			fmt.Fprintf(w, "{ \"ferry_error\": \"External affiliation attribute does not exist.\" }")
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Something went wrong.\" }")
 		}
 	}
@@ -8206,28 +8301,28 @@ func removeGroupFromUnitLegacy(w http.ResponseWriter, r *http.Request) {
 	uName := strings.TrimSpace(q.Get("unitname"))
 
 	if gName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No groupname specified in http query.")
 		inputErr.Error = append(inputErr.Error, "No groupname specified.")
 	}
 	if gType == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No grouptype specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No grouptype specified in http query.")
 		inputErr.Error = append(inputErr.Error, "No grouptype specified.")
 	}
 	if uName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No unitname specified in http query.")
 		inputErr.Error = append(inputErr.Error, "No unitname specified.")
 	}
 	if len(inputErr.Error) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		}
 		fmt.Fprintf(w, string(jsonout))
 		return
 	}
 
 	//require auth	
-	authorized,authout := authorize(r, "")
+	authorized,authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -8236,7 +8331,7 @@ func removeGroupFromUnitLegacy(w http.ResponseWriter, r *http.Request) {
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	defer DBtx.Rollback(cKey)
 
@@ -8248,7 +8343,7 @@ func removeGroupFromUnitLegacy(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(err.Error(), "invalid input value for enum") {
 			typeExists = false
 		} else {
-			defer log.WithFields(QueryFields(r, startTime)).Error(err)
+			defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in DB query.\" }")
 			return
@@ -8272,7 +8367,7 @@ func removeGroupFromUnitLegacy(w http.ResponseWriter, r *http.Request) {
 
 	var output interface{}
 	if aRows == 1 {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		output = jsonstatus{"success", nil}
 		if cKey != 0 {
 			DBtx.Commit(cKey)
@@ -8282,19 +8377,19 @@ func removeGroupFromUnitLegacy(w http.ResponseWriter, r *http.Request) {
 	} else {
 		var out jsonstatus
 		if !typeExists {
-			log.WithFields(QueryFields(r, startTime)).Error("Invalid group type.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Invalid group type.")
 			out.Error = append(out.Error, "Invalid group type.")
 		} else {
 			if !groupExists {
-				log.WithFields(QueryFields(r, startTime)).Error("Group does not exist.")
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Group does not exist.")
 				out.Error = append(out.Error, "Group does not exist.")
 			}
 			if !unitExists {
-				log.WithFields(QueryFields(r, startTime)).Error("Affiliation unit does not exist.")
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Affiliation unit does not exist.")
 				out.Error = append(out.Error, "Affiliation unit does not exist.")
 			}
 			if groupExists && unitExists {
-				log.WithFields(QueryFields(r, startTime)).Error("Group does not belong to affiliation unit.")
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Group does not belong to affiliation unit.")
 				out.Error = append(out.Error, "Group does not belong to affiliation unit.")
 			}
 		}
@@ -8303,7 +8398,7 @@ func removeGroupFromUnitLegacy(w http.ResponseWriter, r *http.Request) {
 
 	out, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 	}
 	fmt.Fprintf(w, string(out))
 }
@@ -8316,7 +8411,7 @@ func removeCondorQuotaLegacy(w http.ResponseWriter, r *http.Request) {
 	group := strings.TrimSpace(q.Get("condorgroup"))
 	comp  := strings.TrimSpace(q.Get("resourcename"))
 
-	authorized,authout := authorize(r, "")
+	authorized,authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -8330,18 +8425,18 @@ func removeCondorQuotaLegacy(w http.ResponseWriter, r *http.Request) {
 	var inputErr jsonerror
 
 	if group == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No condorgroup specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No condorgroup specified in http query.")
 		inputErr.Error = append(inputErr.Error, "No condorgroup specified.")
 	}
 	if comp == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No resourcename specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No resourcename specified in http query.")
 		inputErr.Error = append(inputErr.Error, "No resourcename specified.")
 	}
 
 	if len(inputErr.Error) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		}
 		fmt.Fprintf(w, string(jsonout))
 		return
@@ -8349,7 +8444,7 @@ func removeCondorQuotaLegacy(w http.ResponseWriter, r *http.Request) {
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	defer DBtx.Rollback(cKey)
 
@@ -8358,22 +8453,22 @@ func removeCondorQuotaLegacy(w http.ResponseWriter, r *http.Request) {
 						   AND name = $2;`, comp, group)
 
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Something went wrong.\" }")
 		return
 	} else {
 		n, err := res.RowsAffected()
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error counting rows affected.\" }")
 			return
 		}
 		if n == 0 {
-			log.WithFields(QueryFields(r, startTime)).Error("Quota does not exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Quota does not exist.")
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Quota does not exist.\" }")
 			return
 		}
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		fmt.Fprintf(w,"{ \"ferry_status\": \"success\" }")
 	}
 
@@ -8386,7 +8481,7 @@ func cleanStorageQuotasLegacy(w http.ResponseWriter, r *http.Request) {
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error starting DB transaction: " + err.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error starting database transaction.\" }")
 		return
 	}
@@ -8414,7 +8509,7 @@ func cleanStorageQuotasLegacy(w http.ResponseWriter, r *http.Request) {
 
 					   	END $$;`)
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
@@ -8422,7 +8517,7 @@ func cleanStorageQuotasLegacy(w http.ResponseWriter, r *http.Request) {
 
 	DBtx.Commit(cKey)
 
-	log.WithFields(QueryFields(r, startTime)).Info("Success!")
+	log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 	fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 }
 
@@ -8432,7 +8527,7 @@ func cleanCondorQuotasLegacy(w http.ResponseWriter, r *http.Request) {
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error starting DB transaction: " + err.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error starting database transaction.\" }")
 		return
 	}
@@ -8459,7 +8554,7 @@ func cleanCondorQuotasLegacy(w http.ResponseWriter, r *http.Request) {
 
 					   	END $$;`)
 	if err != nil {
-		defer log.WithFields(QueryFields(r, startTime)).Error(err)
+		defer log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Error in DB query.\" }")
 		return
@@ -8467,7 +8562,7 @@ func cleanCondorQuotasLegacy(w http.ResponseWriter, r *http.Request) {
 
 	DBtx.Commit(cKey)
 
-	log.WithFields(QueryFields(r, startTime)).Info("Success!")
+	log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 	fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 }
 
@@ -8477,12 +8572,12 @@ func removeAffiliationUnitLegacy(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	unitName := strings.TrimSpace(q.Get("unitname"))
 	if unitName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No experiment specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No experiment specified in http query.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"No experiment name specified.\" }")
 		return
 	}
 	//requires auth
-	authorized, authout := authorize(r, "")
+	authorized, authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -8492,24 +8587,24 @@ func removeAffiliationUnitLegacy(w http.ResponseWriter, r *http.Request) {
 	// check if it already exists
 	var unitId int
 	checkerr := DBptr.QueryRow(`select unitid from affiliation_units where name=$1`, unitName).Scan(&unitId)
-	log.WithFields(QueryFields(r, startTime)).Info("unitID = " + strconv.Itoa(unitId))
+	log.WithFields(QueryFieldsLegacy(r, startTime)).Info("unitID = " + strconv.Itoa(unitId))
 	switch {
 	case checkerr == sql.ErrNoRows:
 		// OK, it doesn't exist, let's add it now.
-		log.WithFields(QueryFields(r, startTime)).Error("Cannot delete affiliation unit " + unitName + "; unit does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Cannot delete affiliation unit " + unitName + "; unit does not exist.")
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Unit %s does not exist.\" }", unitName)
 		return
 	case checkerr != nil:
 		//other weird error
 		w.WriteHeader(http.StatusNotFound)
-		log.WithFields(QueryFields(r, startTime)).Error("Cannot remove affiliation unit " + unitName + ": " + checkerr.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Cannot remove affiliation unit " + unitName + ": " + checkerr.Error())
 		fmt.Fprintf(w, "{ \"ferry_error\": \"Database error; check logs.\" }")
 		return
 	default:
 
 		DBtx, cKey, err := LoadTransaction(r, DBptr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error starting DB transaction: " + err.Error())
 			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w, "{ \"ferry_error\": \"Error starting database transaction.\" }")
 			return
@@ -8522,7 +8617,7 @@ func removeAffiliationUnitLegacy(w http.ResponseWriter, r *http.Request) {
 		_, err = DBtx.Exec(removestr)
 
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error deleting " + unitName + " to affiliation_units: " + err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error deleting " + unitName + " to affiliation_units: " + err.Error())
 			if strings.Contains(err.Error(), "fk_affiliation_unit_user_certificate_affiliation_units") {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"There are still user certificates associated with this unit.\" }")
 			} else if strings.Contains(err.Error(), "fk_compute_resource_affiliation_units") {
@@ -8539,7 +8634,7 @@ func removeAffiliationUnitLegacy(w http.ResponseWriter, r *http.Request) {
 			if cKey != 0 {
 				DBtx.Commit(cKey)
 			}
-			log.WithFields(QueryFields(r, startTime)).Info("Successfully added " + unitName + " to affiliation_units.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Successfully added " + unitName + " to affiliation_units.")
 			fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 		}
 		return
@@ -8560,19 +8655,19 @@ func removeFQANLegacy(w http.ResponseWriter, r *http.Request) {
 	fqan := strings.TrimSpace(q.Get("fqan"))
 
 	if fqan == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No fqan specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No fqan specified in http query.")
 		inputErr = append(inputErr, jsonstatus{"", "No fqan specified."})
 	}
 	if len(inputErr) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		}
 		fmt.Fprintf(w, string(jsonout))
 		return
 	}
 
-	authorized, authout := authorize(r, "")
+	authorized, authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w, "{ \"ferry_error\": \""+authout+"not authorized.\" }")
@@ -8581,7 +8676,7 @@ func removeFQANLegacy(w http.ResponseWriter, r *http.Request) {
 
 	DBtx, cKey, err := LoadTransaction(r, DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err)
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 	}
 	defer DBtx.Rollback(cKey)
 
@@ -8596,7 +8691,7 @@ func removeFQANLegacy(w http.ResponseWriter, r *http.Request) {
 
 	var output interface{}
 	if aRows == 1 {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		output = jsonstatus{"success", ""}
 		if cKey != 0 {
 			DBtx.Commit(cKey)
@@ -8605,17 +8700,17 @@ func removeFQANLegacy(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		if aRows == 0 && err == nil {
-			log.WithFields(QueryFields(r, startTime)).Error("FQAN doesn't exist.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("FQAN doesn't exist.")
 			output = jsonstatus{"", "FQAN doesn't exist."}
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 			output = jsonstatus{"", err.Error()}
 		}
 	}
 
 	out, err := json.Marshal(output)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error(err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err.Error())
 	}
 	fmt.Fprintf(w, string(out))
 }
@@ -8629,7 +8724,7 @@ func setLPCStorageAccessLegacy(w http.ResponseWriter, r *http.Request) {
 	const storageName = "EOS"
 	const groupName = "us_cms"
 	
-	authorized,authout := authorize(r, "")
+	authorized,authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -8641,7 +8736,7 @@ func setLPCStorageAccessLegacy(w http.ResponseWriter, r *http.Request) {
 
 	key, err := DBtx.Start(DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error starting database transaction: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error starting database transaction: " + err.Error())
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 		return
 	}
@@ -8655,7 +8750,7 @@ func setLPCStorageAccessLegacy(w http.ResponseWriter, r *http.Request) {
 	addCertificateDNToUserLegacy(w, R)
 	if !DBtx.Complete() {
 		if !strings.Contains(DBtx.Error().Error(), `pk_affiliation_unit_user_certificate`) {
-			log.WithFields(QueryFields(r, startTime)).Error("addCertificateDNToUser failed.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("addCertificateDNToUser failed.")
 			if DBtx.Error().Error() == "User does not exist." {
 				fmt.Fprintf(w, "{ \"ferry_error\": \"User does not exist.\" }")
 			}
@@ -8674,7 +8769,7 @@ func setLPCStorageAccessLegacy(w http.ResponseWriter, r *http.Request) {
 		DBtx.Continue()
 		setUserExternalAffiliationAttributeLegacy(w, R)
 		if !DBtx.Complete() {
-			log.WithFields(QueryFields(r, startTime)).Error("setUserExternalAffiliationAttribute failed.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("setUserExternalAffiliationAttribute failed.")
 			return
 		}
 	}
@@ -8687,7 +8782,7 @@ func setLPCStorageAccessLegacy(w http.ResponseWriter, r *http.Request) {
 						 join storage_resources as sr on sq.storageid = sr.storageid
 						 where uname = $1 and name = $2;`, uname, storageName).Scan(&nQuotas)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error querying user quotas: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error querying user quotas: " + err.Error())
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error querying user quotas.\" }")
 		return
 	}
@@ -8696,7 +8791,7 @@ func setLPCStorageAccessLegacy(w http.ResponseWriter, r *http.Request) {
 		err = DBtx.QueryRow("select default_path, default_quota, default_unit from storage_resources where name = $1",
 		storageName).Scan(&defaultPath, &defaultQuota, &defaultUnit)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error querying default storage values: " + err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error querying default storage values: " + err.Error())
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error querying default storage values.\" }")
 			return
 		}
@@ -8712,12 +8807,12 @@ func setLPCStorageAccessLegacy(w http.ResponseWriter, r *http.Request) {
 		DBtx.Continue()
 		setUserStorageQuotaLegacy(w, R)
 		if !DBtx.Complete() {
-			log.WithFields(QueryFields(r, startTime)).Error("setUserStorageQuota failed.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("setUserStorageQuota failed.")
 			return
 		}
 	}
 
-	log.WithFields(QueryFields(r, startTime)).Info("Success!")
+	log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 	fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 
 	DBtx.Commit(key)
@@ -8745,12 +8840,12 @@ func createExperimentLegacy(w http.ResponseWriter, r *http.Request) {
 	var inputErr []jsonerror
 	
 	if parserr != nil && standalone != "" {
-		log.WithFields(QueryFields(r, startTime)).Error("Error parsing the standalone option.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error parsing the standalone option.")
 		inputErr = append(inputErr, jsonerror{"Error parsing the standalone option. If provided it should be true or false."})
 	}
 	if unitName == "" {
 		
-		log.WithFields(QueryFields(r, startTime)).Error("No unitname specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No unitname specified in http query.")
 		inputErr = append(inputErr, jsonerror{"No unitname specified."})	
 	}
 	//Set the default home directory to /nashome if it was not provided.
@@ -8765,7 +8860,7 @@ func createExperimentLegacy(w http.ResponseWriter, r *http.Request) {
 	if groupName == "" {
 		groupName = unitName
 	}
-	authorized,authout := authorize(r, "")
+	authorized,authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -8778,7 +8873,7 @@ func createExperimentLegacy(w http.ResponseWriter, r *http.Request) {
 	R := WithTransaction(r, &DBtx)
 	key, err := DBtx.Start(DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error starting database transaction: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error starting database transaction: " + err.Error())
 		inputErr = append(inputErr, jsonerror{"Error starting database transaction."})
 		return
 	}
@@ -8786,7 +8881,7 @@ func createExperimentLegacy(w http.ResponseWriter, r *http.Request) {
 	if len(inputErr) > 0 {
 		jsonout, err := json.Marshal(inputErr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error(err)
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error(err)
 		}
 		fmt.Fprintf(w, string(jsonout))
 		return		
@@ -8814,14 +8909,14 @@ func createExperimentLegacy(w http.ResponseWriter, r *http.Request) {
 		// ERROR HANDLING AND ROLLBACK		
 		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") &&
 		   !strings.Contains(DBtx.Error().Error(), "already exists") {
-			log.WithFields(QueryFields(r, startTime)).Error("Unit already exists.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Unit already exists.")
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in createAffiliationUnit: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
 			return
 		}
 		DBtx.RollbackToSavepoint("createAffiliationUnit")
 		duplicateCount ++	
 	} else {
-			log.WithFields(QueryFields(r, startTime)).Info("Successfully created affiliation_unit " + unitName + "." )
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Successfully created affiliation_unit " + unitName + "." )
 	}
 
 	//OK, we made the unit. Now, create the compute resource. By default its name is the same as the unit name.
@@ -8839,7 +8934,7 @@ func createExperimentLegacy(w http.ResponseWriter, r *http.Request) {
 	if !DBtx.Complete() {
 		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") &&
 		   !strings.Contains(DBtx.Error().Error(), "already exists") {
-			log.WithFields(QueryFields(r, startTime)).Error("createComputeResource failed.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("createComputeResource failed.")
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in createComputeResource: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
 			return
 		} else {
@@ -8862,12 +8957,12 @@ func createExperimentLegacy(w http.ResponseWriter, r *http.Request) {
 	if !DBtx.Complete() {
 		if !strings.Contains(DBtx.Error().Error(), "duplicate key value violates unique constraint") &&
 		   !strings.Contains(DBtx.Error().Error(), "Group and unit combination already in DB") {
-			log.WithFields(QueryFields(r, startTime)).Error("addGroupToUnit failed.")
-			log.WithFields(QueryFields(r, startTime)).Error("actual error: " + DBtx.Error().Error() )
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("addGroupToUnit failed.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("actual error: " + DBtx.Error().Error() )
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in addGroupToUnit: " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
 			return
 		} else {
-			log.WithFields(QueryFields(r, startTime)).Error("actual error: " + DBtx.Error().Error() )
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("actual error: " + DBtx.Error().Error() )
 			DBtx.RollbackToSavepoint("addGroupToUnit")
 			duplicateCount ++
 		}
@@ -8905,7 +9000,7 @@ func createExperimentLegacy(w http.ResponseWriter, r *http.Request) {
 				DBtx.Savepoint("addUserToGroup_" + role)
 				addUserToGroupLegacy(w,R)
 				if !DBtx.Complete() {
-					log.WithFields(QueryFields(r, startTime)).Error("Error in addUserToGroup for " + unitName + "pro: " + DBtx.Error().Error())
+					log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in addUserToGroup for " + unitName + "pro: " + DBtx.Error().Error())
 					if strings.Contains(DBtx.Error().Error(), "null value in column \"uid\"") {
 						fmt.Fprintf(w,"{ \"ferry_error\": \"User " + userName + " doesn't exist.\" }")
 					} else {
@@ -8924,7 +9019,7 @@ func createExperimentLegacy(w http.ResponseWriter, r *http.Request) {
 			
 			if !strings.Contains(DBtx.Error().Error(), "Specified FQAN already associated") {
 				fmt.Fprintf(w,"{ \"ferry_error\": \"Error in createFQAN for " + role + ": " + DBtx.Error().Error() + ". Rolling back transaction.\" }")
-				log.WithFields(QueryFields(r, startTime)).Error("Error in createFQAN for role " + role + ": " +  DBtx.Error().Error())
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in createFQAN for role " + role + ": " +  DBtx.Error().Error())
 				return
 			}
 			DBtx.RollbackToSavepoint("createFQAN_" + role)
@@ -8934,10 +9029,10 @@ func createExperimentLegacy(w http.ResponseWriter, r *http.Request) {
 	
 	// If everything worked
 	if duplicateCount < duplicateCountRef {
-		log.WithFields(QueryFields(r, startTime)).Info("Success!")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 		fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 	} else {
-		log.WithFields(QueryFields(r, startTime)).Info("Experiment already exists.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Experiment already exists.")
 		fmt.Fprintf(w, "{ \"ferry_status\": \"Experiment already exists.\" }")
 	}
 	
@@ -8949,7 +9044,7 @@ func addLPCConvenerLegacy(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	q := r.URL.Query()
 	
-	authorized,authout := authorize(r, "")
+	authorized,authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -8961,14 +9056,14 @@ func addLPCConvenerLegacy(w http.ResponseWriter, r *http.Request) {
 
 	key, err := DBtx.Start(DBptr)
 	if err != nil {
-		log.WithFields(QueryFields(r, startTime)).Error("Error starting database transaction: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error starting database transaction: " + err.Error())
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 		return
 	}
 	defer DBtx.Rollback(key)
 
 	if q.Get("groupname") != "" && q.Get("groupname")[0:3] != "lpc" {
-		log.WithFields(QueryFields(r, startTime)).Error("LPC groupnames must begin with \"lpc\".")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("LPC groupnames must begin with \"lpc\".")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"groupname must begin with lpc.\" }")
 		return
 	}
@@ -8979,7 +9074,7 @@ func addLPCConvenerLegacy(w http.ResponseWriter, r *http.Request) {
 	DBtx.Continue()
 	setGroupLeaderLegacy(w, R)
 	if !DBtx.Complete() {
-		log.WithFields(QueryFields(r, startTime)).Error("setGroupLeader failed.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("setGroupLeader failed.")
 		return
 	}
 
@@ -8990,12 +9085,12 @@ func addLPCConvenerLegacy(w http.ResponseWriter, r *http.Request) {
 	setUserAccessToComputeResourceLegacy(w, R)
 	if !DBtx.Complete() {
 		if !strings.Contains(DBtx.Error().Error(), `The request already exists in the database`) {
-			log.WithFields(QueryFields(r, startTime)).Error("setUserAccessToComputeResource failed.")
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("setUserAccessToComputeResource failed.")
 			return
 		}
 	}
 
-	log.WithFields(QueryFields(r, startTime)).Info("Success!")
+	log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Success!")
 	fmt.Fprintf(w, "{ \"ferry_status\": \"success\" }")
 
 	DBtx.Commit(key)
@@ -9010,7 +9105,7 @@ func setGroupBatchPriority(w http.ResponseWriter, r *http.Request) {
 //	// should be an int
 //	prio := q.Get("priority")
 
-	authorized,authout := authorize(r, "")
+	authorized,authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -9027,7 +9122,7 @@ func deleteGroupt(w http.ResponseWriter, r *http.Request) {
 //	groupname := q.Get("groupname")
 
 	//require auth	
-	authorized,authout := authorize(r, "")
+	authorized,authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -9045,7 +9140,7 @@ func deleteGroup(w http.ResponseWriter, r *http.Request) {
 //	gid := q.Get("gid")
 
 	//require auth	
-	authorized,authout := authorize(r, "")
+	authorized,authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -9063,7 +9158,7 @@ func removePrimaryStatusfromGroup(w http.ResponseWriter, r *http.Request) {
 //	collabunit := q.Get("collaboration_unit")
 
 	//require auth	
-	authorized,authout := authorize(r, "")
+	authorized,authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -9080,12 +9175,12 @@ func setGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
 	rName := q.Get("resourcename")
 	gName := q.Get("groupname")
 	if gName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No groupname specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No groupname specified in http query.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No value for groupname specified.\" }")
 		return
 	}
 	if rName == "" {
-		log.WithFields(QueryFields(r, startTime)).Error("No compute resource specified in http query.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("No compute resource specified in http query.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"No value for resourcename specified.\" }")
 		return
 	}
@@ -9095,7 +9190,7 @@ func setGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
 	var gid,compid int
 	
 	//require auth	
-	authorized,authout := authorize(r, "")
+	authorized,authout := authorizeLegacy(r, "")
 	if authorized == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"" + authout + "not authorized.\" }")
@@ -9114,16 +9209,16 @@ func setGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
 	err := DBptr.QueryRow(`select compid from compute_resources where name=$1`,rName).Scan(&compid)
 	switch {
 	case err == sql.ErrNoRows:
-		log.WithFields(QueryFields(r, startTime)).Print("Compute resource " + rName + " does not exist.")
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Compute resource " + rName + " does not exist.")
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Compute resource " + rName + " does not exist.\" }")
 		return
 	case err != nil:
-		log.WithFields(QueryFields(r, startTime)).Print("Error in compute resource DB query: "+err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Error in compute resource DB query: "+err.Error())
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Compute resource DB query error.\" }")
 		return
 		
 	default:
-		log.WithFields(QueryFields(r, startTime)).Print("Resource "+ rName + "has compid " + strconv.Itoa(compid))	
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Resource "+ rName + "has compid " + strconv.Itoa(compid))	
 	}
 
 
@@ -9147,7 +9242,7 @@ func setGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
 		//start yer transaction
 		cKey, terr := DBtx.Start(DBptr)
 		if terr != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + terr.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error starting DB transaction: " + terr.Error())
 			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 			return
@@ -9156,18 +9251,18 @@ func setGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
 		
 		_, inserr := DBtx.Exec(`insert into compute_access (compid, groupid, last_updated, shell, home_dir) values ($1,$2,NOW(),$3,$4)`, compid, gid, nullshell, nullhomedir)
 		if inserr != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error in database insert: " + inserr.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error in database insert: " + inserr.Error())
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in database insertion.\" }")
 			return
 		} else {
 			err = DBtx.Commit(cKey)
-			log.WithFields(QueryFields(r, startTime)).Error("Set access for " + gName + " in " + rName)
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Set access for " + gName + " in " + rName)
 			w.WriteHeader(http.StatusOK)
 			fmt.Fprintf(w,"{ \"result\": \"success.\" }")
 			return		
 		}
 	case err != nil:
-		log.WithFields(QueryFields(r, startTime)).Error("Error checking database: " + err.Error())
+		log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error checking database: " + err.Error())
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w,"{ \"ferry_error\": \"Error querying database.\" }")
 		return
@@ -9179,7 +9274,7 @@ func setGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
 		// start a transaction
 		DBtx, cKey, err := LoadTransaction(r, DBptr)
 		if err != nil {
-			log.WithFields(QueryFields(r, startTime)).Error("Error starting DB transaction: " + err.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Error starting DB transaction: " + err.Error())
 			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error starting database transaction.\" }")
 			return
@@ -9189,7 +9284,7 @@ func setGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
 		execstmt:= `update compute_access (shell, home_dir) values ($1,$2) where compid=$3 and groupid=$4`
 		_, moderr := DBtx.Exec(execstmt,nullshell, nullhomedir, compid, gid)
 		if moderr != nil {
-			log.WithFields(QueryFields(r, startTime)).Print("Error from Update: " + moderr.Error())
+			log.WithFields(QueryFieldsLegacy(r, startTime)).Print("Error from Update: " + moderr.Error())
 			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w,"{ \"ferry_error\": \"Error in database transaction.\" }")
 			return	
@@ -9197,9 +9292,9 @@ func setGroupAccessToResource(w http.ResponseWriter, r *http.Request) {
 		} else {
 			commerr := DBtx.Commit(cKey)
 			if commerr != nil {
-				log.WithFields(QueryFields(r, startTime)).Error("Problem with committing addition of " + rName + " to compute_resources.")
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Error("Problem with committing addition of " + rName + " to compute_resources.")
 			} else {
-				log.WithFields(QueryFields(r, startTime)).Info("Added " + rName + " to compute_resources.")
+				log.WithFields(QueryFieldsLegacy(r, startTime)).Info("Added " + rName + " to compute_resources.")
 			}
 			w.WriteHeader(http.StatusOK)
 			fmt.Fprintf(w,"{ \"result\": \"success.\" }")

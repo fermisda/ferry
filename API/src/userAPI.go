@@ -344,7 +344,7 @@ func getUserCertificateDNs(c APIContext, i Input) (interface{}, []APIError) {
 									    (select unitid from affiliation_units where name=$2)`,
 							  i[UserName], i[UnitName]).Scan(&uid, &unitid)
 	if queryerr != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+		log.WithFields(QueryFields(c)).Error(queryerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -367,7 +367,7 @@ func getUserCertificateDNs(c APIContext, i Input) (interface{}, []APIError) {
 							   order by uname`,
 							uid, unitid)
 	if queryerr != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+		log.WithFields(QueryFields(c)).Error(queryerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -415,7 +415,7 @@ func getAllUsersCertificateDNs(c APIContext, i Input) (interface{}, []APIError) 
 	queryerr := c.DBtx.QueryRow(`select unitid from affiliation_units where name=$1`,
 								i[UnitName]).Scan(&unitid)
 	if queryerr != nil && queryerr != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+		log.WithFields(QueryFields(c)).Error(queryerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -435,7 +435,7 @@ func getAllUsersCertificateDNs(c APIContext, i Input) (interface{}, []APIError) 
 										where unitid = coalesce($1, unitid) and (status = $2 or not $2) and (ac.last_updated >= $3 or $3 is null)
 									order by uname`, unitid, activeOnly, i[LastUpdated])
 	if queryerr != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+		log.WithFields(QueryFields(c)).Error(queryerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -479,7 +479,7 @@ func getUserFQANs(c APIContext, i Input) (interface{}, []APIError) {
 								   (select unitid from affiliation_units where name=$2)`,
 						   i[UserName], i[UnitName]).Scan(&uid, &unitid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -504,7 +504,7 @@ func getUserFQANs(c APIContext, i Input) (interface{}, []APIError) {
 							  	(ga.last_updated >= $3 or $3 is null)
 							   order by name;`, uid, unitid, i[LastUpdated])
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -533,7 +533,7 @@ func getSuperUserList(c APIContext, i Input) (interface{}, []APIError) {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
 		return nil, apiErr
 	} else if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -545,7 +545,7 @@ func getSuperUserList(c APIContext, i Input) (interface{}, []APIError) {
 							   where ga.is_superuser=true and gf.unitid=$1
 							   order by u.uname`, unitID)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -572,7 +572,7 @@ func getUserGroups(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -583,7 +583,7 @@ func getUserGroups(c APIContext, i Input) (interface{}, []APIError) {
 							   where uid = $1 and (user_group.last_updated >= $2 or $2 is null)`,
 							  uid, i[LastUpdated])
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -610,7 +610,7 @@ func getUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 
 	rows, err := c.DBtx.Query(`select full_name, uid, status, is_groupaccount, expiration_date from users where uname=$1`, i[UserName])
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -644,7 +644,7 @@ func addUserToGroup(c APIContext, i Input) (interface{}, []APIError) {
 
 	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, i[GroupType]).Scan(&validType)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -658,7 +658,7 @@ func addUserToGroup(c APIContext, i Input) (interface{}, []APIError) {
 								  (select groupid from groups where name = $2 and type = $3)`,
 						  i[UserName], i[GroupName], i[GroupType]).Scan(&uid, &groupid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -678,7 +678,7 @@ func addUserToGroup(c APIContext, i Input) (interface{}, []APIError) {
 						  update set is_leader = $3, last_updated = NOW() where $4`,
 						 uid, groupid, leader, i[Leader].Valid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -696,7 +696,7 @@ func removeUserFromGroup(c APIContext, i Input) (interface{}, []APIError) {
 
 	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, i[GroupType]).Scan(&validType)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -710,7 +710,7 @@ func removeUserFromGroup(c APIContext, i Input) (interface{}, []APIError) {
 								  (select groupid from groups where name = $2 and type = $3)`,
 						  i[UserName], i[GroupName], i[GroupType]).Scan(&uid, &groupid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -727,7 +727,7 @@ func removeUserFromGroup(c APIContext, i Input) (interface{}, []APIError) {
 
 	_, err = c.DBtx.Exec(`delete from user_group where uid = $1 and groupid = $2`, uid, groupid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -758,7 +758,7 @@ func setUserExperimentFQAN(c APIContext, i Input) (interface{}, []APIError) {
 									    (select unitid from affiliation_units where name=$2)`,
 							  i[UserName], i[UnitName]).Scan(&uid, &unitid)
 	if queryerr != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+		log.WithFields(QueryFields(c)).Error(queryerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -778,7 +778,7 @@ func setUserExperimentFQAN(c APIContext, i Input) (interface{}, []APIError) {
 							  join user_certificates as uc on ac.dnid = uc.dnid
 							  where uid = $1 and unitid = $2`, uid, unitid).Scan(&hasCert)
 	if queryerr != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+		log.WithFields(QueryFields(c)).Error(queryerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -790,7 +790,7 @@ func setUserExperimentFQAN(c APIContext, i Input) (interface{}, []APIError) {
 
 	rows, queryerr := c.DBtx.Query(`select fqanid from grid_fqan where unitid = $1 and fqan like $2`, unitid, fqan)
 	if queryerr != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+		log.WithFields(QueryFields(c)).Error(queryerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -812,7 +812,7 @@ func setUserExperimentFQAN(c APIContext, i Input) (interface{}, []APIError) {
 								   values($1, $2, false, false, NOW())
 								   on conflict (uid, fqanid) do nothing`, uid, fqanid)
 		if queryerr != nil {
-			log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+			log.WithFields(QueryFields(c)).Error(queryerr)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 			return nil, apiErr
 		}
@@ -831,7 +831,7 @@ func setUserShellAndHomeDir(c APIContext, i Input) (interface{}, []APIError) {
 								   (select compid from compute_resources where name = $2)`,
 						   i[UserName], i[ResourceName]).Scan(&uid, &resourceid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -850,7 +850,7 @@ func setUserShellAndHomeDir(c APIContext, i Input) (interface{}, []APIError) {
 	err = c.DBtx.QueryRow(`select ($1, $2) in (select uid, compid from compute_access)`,
 						  uid, resourceid).Scan(&member)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -866,7 +866,7 @@ func setUserShellAndHomeDir(c APIContext, i Input) (interface{}, []APIError) {
 	_, err = c.DBtx.Exec(`update compute_access set shell = $1, home_dir = $2, last_updated = NOW()
 						   where compid = $3 and uid = $4`, i[Shell], i[HomeDir], resourceid, uid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -884,7 +884,7 @@ func setUserShell(c APIContext, i Input) (interface{}, []APIError) {
 								   (select unitid from affiliation_units where name = $2)`,
 						   i[UserName], i[UnitName]).Scan(&uid, &unitid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -904,7 +904,7 @@ func setUserShell(c APIContext, i Input) (interface{}, []APIError) {
 						   compute_access join compute_resources using(compid))`,
 						  uid, unitid).Scan(&member)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -921,7 +921,7 @@ func setUserShell(c APIContext, i Input) (interface{}, []APIError) {
 						  where uid = $2 and
 						  compid in (select compid from compute_resources where unitid = $3)`, i[Shell], uid, unitid)
 	if err != nil {	
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -939,7 +939,7 @@ func getUserShellAndHomeDir(c APIContext, i Input) (interface{}, []APIError) {
 								   (select compid from compute_resources where name = $2)`,
 						   i[UserName], i[ResourceName]).Scan(&uid, &resourceid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -958,7 +958,7 @@ func getUserShellAndHomeDir(c APIContext, i Input) (interface{}, []APIError) {
 	err = c.DBtx.QueryRow(`select ($1, $2) in (select uid, compid from compute_access)`,
 						  uid, resourceid).Scan(&member)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -976,7 +976,7 @@ func getUserShellAndHomeDir(c APIContext, i Input) (interface{}, []APIError) {
 						   where uid = $1 and compid = $2 and (last_updated >= $3 or $3 is null)`,
 						  uid, resourceid, i[LastUpdated]).Scan(row[Shell], row[HomeDir])
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1006,7 +1006,7 @@ func getUserStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
 								   (select storageid from storage_resources where name = $3)`,
 						   i[UserName], i[UnitName], i[ResourceName]).Scan(&uid, &unitid, &resourceid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1028,7 +1028,7 @@ func getUserStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
 							  where uid = $1 AND unitid = $2 and storageid = $3 and (valid_until is null or valid_until >= NOW())
 							  order by valid_until desc`, uid, unitid, resourceid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1059,7 +1059,7 @@ func setUserExternalAffiliationAttribute(c APIContext, i Input) (interface{}, []
 	uid := NewNullAttribute(UID)
 	err := c.DBtx.QueryRow(`select uid from users where uname = $1`, i[UserName]).Scan(&uid)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1070,7 +1070,7 @@ func setUserExternalAffiliationAttribute(c APIContext, i Input) (interface{}, []
 	var validAttribute bool
 	err = c.DBtx.QueryRow(`select $1 = any (enum_range(null::external_affiliation_attribute_attribute_type)::text[])`, i[UserAttribute]).Scan(&validAttribute)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1085,7 +1085,7 @@ func setUserExternalAffiliationAttribute(c APIContext, i Input) (interface{}, []
 	_, err = c.DBtx.Exec(`insert into external_affiliation_attribute (uid, attribute, value) values ($1, $2, $3)
 						on conflict (uid, attribute) do update set value = $3`, uid, i[UserAttribute], i[Value])
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1101,7 +1101,7 @@ func removeUserExternalAffiliationAttribute(c APIContext, i Input) (interface{},
 								   (select $2 = any (enum_range(null::external_affiliation_attribute_attribute_type)::text[]))`,
 						   i[UserName], i[UserAttribute]).Scan(&uid, &validAttribute)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1120,7 +1120,7 @@ func removeUserExternalAffiliationAttribute(c APIContext, i Input) (interface{},
 	_, err = c.DBtx.Exec(`delete from external_affiliation_attribute where uid = $1 and attribute = $2`,
 						 uid, i[UserAttribute])
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1134,7 +1134,7 @@ func getUserExternalAffiliationAttributes(c APIContext, i Input) (interface{}, [
 
 	err := c.DBtx.tx.QueryRow(`select uid from users where uname = $1`, i[UserName]).Scan(&uid)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1150,7 +1150,7 @@ func getUserExternalAffiliationAttributes(c APIContext, i Input) (interface{}, [
 							  where u.uid = coalesce($1, uid) and (a.last_updated >= $2 or $2 is null)
 							  order by uname`, uid, i[LastUpdated])
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1180,7 +1180,7 @@ func addCertificateDNToUser(c APIContext, i Input) (interface{}, []APIError) {
 	// DN validation
 	dn, err := ExtractValidDN(i[DN].Data.(string))
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err.Error())
+		log.WithFields(QueryFields(c)).Error(err.Error())
 		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, DN))
 		return nil, apiErr
 	}
@@ -1194,7 +1194,7 @@ func addCertificateDNToUser(c APIContext, i Input) (interface{}, []APIError) {
 								  (select unitid from affiliation_units where name=$3)`,
 								i[UserName], dn, i[UnitName]).Scan(&uid, &dnid, &unitid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1212,13 +1212,13 @@ func addCertificateDNToUser(c APIContext, i Input) (interface{}, []APIError) {
 	if !dnid.Valid {
 		_, err := c.DBtx.Exec(`insert into user_certificates (dn, uid, last_updated) values ($1, $2, NOW()) returning dnid`, dn, uid)
 		if err != nil {
-			log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+			log.WithFields(QueryFields(c)).Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 			return nil, apiErr
 		}
 		err = c.DBtx.QueryRow(`select dnid from user_certificates where dn=$1`, dn).Scan(&dnid)
 		if err != nil {
-			log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+			log.WithFields(QueryFields(c)).Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 			return nil, apiErr
 		}
@@ -1227,7 +1227,7 @@ func addCertificateDNToUser(c APIContext, i Input) (interface{}, []APIError) {
 	_, err = c.DBtx.Exec(`insert into affiliation_unit_user_certificate (unitid, dnid, last_updated) values ($1, $2, NOW())
 						  on conflict (unitid, dnid) do nothing`, unitid, dnid)
 	if err != nil && !strings.Contains(err.Error(), `pk_affiliation_unit_user_certificate`) {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1241,7 +1241,7 @@ func removeUserCertificateDN(c APIContext, i Input) (interface{}, []APIError) {
 	// DN validation
 	dn, err := ExtractValidDN(i[DN].Data.(string))
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err.Error())
+		log.WithFields(QueryFields(c)).Error(err.Error())
 		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, DN))
 		return nil, apiErr
 	}
@@ -1255,7 +1255,7 @@ func removeUserCertificateDN(c APIContext, i Input) (interface{}, []APIError) {
 								  (select dnid from user_certificates where dn=$2)`,
 						  i[UserName], dn).Scan(&uid, &dnid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1270,7 +1270,7 @@ func removeUserCertificateDN(c APIContext, i Input) (interface{}, []APIError) {
 						   where c.count = 1`,
 						  uid, dnid).Scan(&countUnique)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1290,14 +1290,14 @@ func removeUserCertificateDN(c APIContext, i Input) (interface{}, []APIError) {
 
 	_, err = c.DBtx.Exec(`delete from affiliation_unit_user_certificate where dnid = $1`, dnid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
 
 	_, err = c.DBtx.Exec(`delete from user_certificates where dnid = $1`, dnid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1323,7 +1323,7 @@ func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
 		return nil, apiErr
 	} else if queryerr != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+		log.WithFields(QueryFields(c)).Error(queryerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1338,7 +1338,7 @@ func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 							   where uid = $1`,
 							  uid, i[FullName], i[Status], i[GroupAccount], expDate)
 	if queryerr != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+		log.WithFields(QueryFields(c)).Error(queryerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1354,7 +1354,7 @@ func createUser(c APIContext, i Input) (interface{}, []APIError) {
 
 	err := c.DBtx.QueryRow(`select (select groupid from groups where name = $1)`, i[GroupName]).Scan(&groupid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1373,7 +1373,7 @@ func createUser(c APIContext, i Input) (interface{}, []APIError) {
 		} else if strings.Contains(err.Error(), "duplicate key value violates unique constraint \"unq_users_uname\"") {
 			apiErr = append(apiErr, DefaultAPIError(ErrorDuplicateData, UserName))
 		} else {
-			log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+			log.WithFields(QueryFields(c)).Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))	
 		}
 		return nil, apiErr
@@ -1383,7 +1383,7 @@ func createUser(c APIContext, i Input) (interface{}, []APIError) {
 						  values ($1, $2, false, NOW())`,
 						 i[UID], groupid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1399,7 +1399,7 @@ func getMemberAffiliations(c APIContext, i Input) (interface{}, []APIError) {
 
 	err := c.DBtx.QueryRow(`select uid from users where uname = $1`, i[UserName]).Scan(&uid)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1417,7 +1417,7 @@ func getMemberAffiliations(c APIContext, i Input) (interface{}, []APIError) {
 								  and (ac.last_updated >= $3 or $3 is null)
 							  )`, uid, experiment, i[LastUpdated])
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1450,7 +1450,7 @@ func getUserUname(c APIContext, i Input) (interface{}, []APIError) {
 
 	err := c.DBtx.QueryRow(`select uname from users where uid = $1`, i[UID]).Scan(&uname)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1470,7 +1470,7 @@ func getUserUID(c APIContext, i Input) (interface{}, []APIError) {
 
 	err := c.DBtx.QueryRow(`select uid from users where uname = $1`, i[UserName]).Scan(&uid)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1490,7 +1490,7 @@ func deleteUser(c APIContext, i Input) (interface{}, []APIError) {
 
 	err := c.DBtx.QueryRow(`select uid from users where uname = $1`, i[UserName]).Scan(&uid)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1502,7 +1502,7 @@ func deleteUser(c APIContext, i Input) (interface{}, []APIError) {
 
 	_, err = c.DBtx.Exec(`delete from users where uid = $1`, uid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		if strings.Contains(err.Error(), "violates foreign key constraint") {
 			apiErr = append(apiErr, APIError{errors.New("all associations with this user shall be removed before it can be deleted"), ErrorAPIRequirement})
 		} else {
@@ -1521,7 +1521,7 @@ func getUserAccessToComputeResources(c APIContext, i Input) (interface{}, []APIE
 
 	err := c.DBtx.tx.QueryRow(`select uid from users where uname = $1`, i[UserName]).Scan(&uid)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1537,7 +1537,7 @@ func getUserAccessToComputeResources(c APIContext, i Input) (interface{}, []APIE
 							   where uid = $1 and (ca.last_updated>=$2 or $2 is null)`,
 							  uid, i[LastUpdated])
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1577,7 +1577,7 @@ func getStorageQuotas(c APIContext, i Input) (interface{}, []APIError) {
 								(select storageid from storage_resources where name = $3)`,
 						   i[UserName], i[GroupName], i[ResourceName]).Scan(&uid, &groupid, &resourceid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1609,7 +1609,7 @@ func getStorageQuotas(c APIContext, i Input) (interface{}, []APIError) {
 							  order by uname asc, g.name asc, sr.name asc, valid_until desc`,
 							 uid, groupid, resourceid, i[LastUpdated])
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1673,7 +1673,7 @@ func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIEr
 								(select compid from compute_resources where name = $3)`,
 						   i[UserName], i[GroupName], i[ResourceName]).Scan(&uid, &groupid, &compid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1695,7 +1695,7 @@ func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIEr
 	_, err = c.DBtx.Exec(`insert into user_group (uid, groupid) values ($1, $2)
 						  on conflict (uid, groupid) do nothing`, uid, groupid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1704,7 +1704,7 @@ func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIEr
 	err = c.DBtx.QueryRow(`select default_shell, default_home_dir from compute_resources where compid = $1`,
 						 compid).Scan(&dShell, &dHome)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1730,7 +1730,7 @@ func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIEr
 						  on conflict (compid, uid) do update set shell = coalesce($5, ca.shell), home_dir = coalesce($6, ca.home_dir)`,
 						compid, uid, shell, home, i[Shell], i[HomeDir])
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1740,7 +1740,7 @@ func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIEr
 	err = c.DBtx.QueryRow(`select count(*) from compute_access_group where uid = $1 and compid = $2 and is_primary`,
 							uid, groupid).Scan(&priCount)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1752,7 +1752,7 @@ func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIEr
 		_, err = c.DBtx.Exec(`update compute_access_group set is_primary = false where uid = $1 and compid = $2 and is_primary`,
 							uid, compid)
 		if err != nil {
-			log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+			log.WithFields(QueryFields(c)).Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 			return nil, apiErr
 		}
@@ -1763,7 +1763,7 @@ func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIEr
 						  on conflict (compid, uid, groupid) do update set is_primary = coalesce($5, cg.is_primary)`,
 						compid, uid, groupid, primary, i[Primary])
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1780,7 +1780,7 @@ func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 							  where (status=$1 or not $1) and (last_updated>=$2 or $2 is null)
 							  order by uname`, status, i[LastUpdated])
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1816,7 +1816,7 @@ func getAllUsersFQANs(c APIContext, i Input) (interface{}, []APIError) {
 									and (is_banned = $1 or $1 is null)  order by uname`,
 							 i[Suspend], i[LastUpdated])
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1847,7 +1847,7 @@ func setUserGridAccess(c APIContext, i Input) (interface{}, []APIError) {
 									    (select unitid from affiliation_units where name=$2)`,
 							  i[UserName], i[UnitName]).Scan(&uid, &unitid)
 	if queryerr != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+		log.WithFields(QueryFields(c)).Error(queryerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -1866,7 +1866,7 @@ func setUserGridAccess(c APIContext, i Input) (interface{}, []APIError) {
 						   where uid = $2 and fqanid in (select fqanid from grid_fqan where unitid = $3)`,
 					   	  i[Suspend], uid, unitid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}

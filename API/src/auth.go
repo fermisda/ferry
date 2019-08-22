@@ -3,7 +3,6 @@ import (
 	"crypto/x509"
 	"fmt"
 	log "github.com/sirupsen/logrus"
-	"net/http"
 	"os"
 	"bytes"
 	"bufio"
@@ -11,7 +10,6 @@ import (
 	"crypto/tls"
 	"github.com/spf13/viper"
 	"crypto/x509/pkix"
-	"time"
 )
 
 // we probably need   list of authorized DNs too
@@ -85,29 +83,26 @@ func ParseDN(names []pkix.AttributeTypeAndValue, sep string) string {
 	return sep + strings.Join(subject, sep)
 }
 
-func authorize(req *http.Request, r string) (bool, string) {
-	thetime := time.Now()
-	ip := strings.Split(req.RemoteAddr, ":")[0]
+func authorize(c APIContext, r AccessRole) (AccessLevel, string) {
+	ip := strings.Split(c.R.RemoteAddr, ":")[0]
 	authIPs := viper.GetStringSlice("ip_whitelist")
 	authDNs := viper.GetStringSlice("dn_whitelist")
 	dnRoles	:= viper.GetStringMapStringSlice("dn_roles")
 	ipRoles := viper.GetStringMapStringSlice("ip_roles")
 
-	for _, presCert := range req.TLS.PeerCertificates {
+	for _, presCert := range c.R.TLS.PeerCertificates {
 		certDN := ParseDN(presCert.Subject.Names, "/")
 
 		// authorize public role
 		if r == "public" {
-			log.WithFields(QueryFields(req, thetime)).Printf("public role authorized DN %s", certDN)
-			return true, certDN
+			return LevelPublic, fmt.Sprintf("public role authorized DN %s", certDN)
 		}
 
 		// authorize DN roles
 		if roles, ok := dnRoles[strings.ToLower(certDN)]; ok {
 			for _, role := range roles {
-				if r == role {
-					log.WithFields(QueryFields(req, thetime)).Printf("cert matches authorized role %s DN %s", role, certDN)
-					return true, certDN
+				if r.String() == role {
+					return LevelDNRole, fmt.Sprintf("cert matches authorized role %s DN %s", role, certDN)
 				}
 			}
 		}
@@ -115,8 +110,7 @@ func authorize(req *http.Request, r string) (bool, string) {
 		// authorize whitelisted DNs
 		for _, authDN := range authDNs {
 			if authDN == certDN {
-				log.WithFields(QueryFields(req, thetime)).Printf("cert matches whitelisted DN %s", certDN)
-				return true, certDN
+				return LevelDNWhitelist, fmt.Sprintf("cert matches whitelisted DN %s", certDN)
 			}
 		}
 	}
@@ -124,9 +118,8 @@ func authorize(req *http.Request, r string) (bool, string) {
 	// authorize IP roles
 	if roles, ok := ipRoles[ip]; ok {
 		for _, role := range roles {
-			if r == role {
-				log.WithFields(QueryFields(req, thetime)).Printf("ignoring DN of authorized IP %s with role %s", ip, role)
-				return true, ip
+			if r.String() == role {
+				return LevelIPRole, fmt.Sprintf("ignoring DN of authorized IP %s with role %s", ip, role)
 			}
 		}
 	}
@@ -134,13 +127,11 @@ func authorize(req *http.Request, r string) (bool, string) {
 	// authorize whitelisted IPs
 	for _, authIP := range authIPs {
 		if authIP == ip {
-			log.WithFields(QueryFields(req, thetime)).Printf("ignoring DN of authorized IP %s", ip)
-			return true, ip
+			return LevelIPWhitelist, fmt.Sprintf("ignoring DN of whitelisted IP %s", ip)
 		}
 	}
-	
-	log.WithFields(QueryFields(req, thetime)).Printf("unable to authorize access", ip)
-	return false, ip
+
+	return LevelDenied, "unable to authorize access"
 }
 
 func checkClientIP(client *tls.ClientHelloInfo) (*tls.Config, error) {

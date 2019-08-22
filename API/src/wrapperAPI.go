@@ -101,14 +101,14 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 
 	err := c.DBtx.QueryRow("select full_name, status from users where uname = $1", i[UserName]).Scan(&fullName, &status)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
 
 	err = c.DBtx.QueryRow("select unitid from affiliation_units where name = $1", i[UnitName]).Scan(&unitid)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -163,7 +163,7 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 						   where unitid = $1 and type = 'Interactive';`,
 						  unitid).Scan(&compResource)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -179,7 +179,7 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 						 where is_primary and unitid = $1;`,
 						unitid).Scan(&compGroup)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -209,7 +209,7 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 	if i[UnitName].Data.(string) == "cms" {
 		rows, err := c.DBtx.Query(`select name, default_path, default_quota, default_unit from storage_resources`)
 		if err != nil {
-			log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+			log.WithFields(QueryFields(c)).Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 			return nil, apiErr
 		}
@@ -286,7 +286,7 @@ func setLPCStorageAccess(c APIContext, i Input) (interface{}, []APIError) {
 							where uname = $1 and name = $2;`,
 						   i[UserName], storageName).Scan(&nQuotas)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -297,7 +297,7 @@ func setLPCStorageAccess(c APIContext, i Input) (interface{}, []APIError) {
 		err = c.DBtx.QueryRow("select default_path, default_quota, default_unit from storage_resources where name = $1",
 		storageName).Scan(&defaultPath, &defaultQuota, &defaultUnit)
 		if err != nil {
-			log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+			log.WithFields(QueryFields(c)).Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 			return nil, apiErr
 		}
@@ -396,7 +396,7 @@ func createExperiment(c APIContext, i Input) (interface{}, []APIError) {
 			err := c.DBtx.QueryRow(`select ($1, $2) in (select uname, name from user_group join groups using (groupid) join users using(uid))`,
 								   userName, groupName).Scan(&userInGroup)
 			if err != nil {
-				log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+				log.WithFields(QueryFields(c)).Error(err)
 				apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 				return nil, apiErr
 			}
@@ -525,7 +525,7 @@ func addLPCCollaborationGroup(c APIContext, i Input) (interface{}, []APIError) {
 								   (select compid from compute_resources where name = $4);`,
 						   i[GroupName], grouptype, unitname, computeres).Scan(&uid, &groupid, &unitid, &resourceid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -564,7 +564,7 @@ func addLPCCollaborationGroup(c APIContext, i Input) (interface{}, []APIError) {
 								  (select default_home_dir from compute_resources where name = $1)`,
 								  computeres).Scan(&shell, &homedir)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}

@@ -143,7 +143,7 @@ func createAffiliationUnit(c APIContext, i Input) (interface{}, []APIError) {
 	i[UnitName]).Scan(&unitid)
 
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -155,14 +155,14 @@ func createAffiliationUnit(c APIContext, i Input) (interface{}, []APIError) {
 	
 	_, err = c.DBtx.Exec(`insert into affiliation_units (name, alternative_name, type, last_updated) values ($1, $2, $3, NOW())`, i[UnitName], i[AlternativeName], i[UnitType])
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))	
 		return nil, apiErr
 	} 
 	if i[VOMSURL].Valid { //do only after unitid has been created by initial insert
 		_, vomserr := c.DBtx.Exec(`insert into voms_url (unitid, url) values ((select unitid from affiliation_units where name = $1), $2)`, i[UnitName], i[VOMSURL])
 		if vomserr != nil {
-			log.WithFields(QueryFields(c.R, c.StartTime)).Error(vomserr)
+			log.WithFields(QueryFields(c)).Error(vomserr)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))	
 			return nil, apiErr
 		}
@@ -177,7 +177,7 @@ func removeAffiliationUnit(c APIContext, i Input) (interface{}, []APIError) {
 
 	err := c.DBtx.QueryRow(`select unitid from affiliation_units where name=$1`, i[UnitName]).Scan(&unitid)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -188,14 +188,14 @@ func removeAffiliationUnit(c APIContext, i Input) (interface{}, []APIError) {
 
 	_, err = c.DBtx.Exec(`delete from voms_url where unitid = $1`, unitid)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
 
 	_, err = c.DBtx.Exec(`delete from affiliation_units where unitid = $1`, unitid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		if strings.Contains(err.Error(), "violates foreign key constraint") {
 			apiErr = append(apiErr, APIError{errors.New("all associations with this affiliation unit shall be removed before it can be deleted"), ErrorAPIRequirement})
 		} else {
@@ -229,11 +229,11 @@ func setAffiliationUnitInfo(c APIContext, i Input) (interface{}, []APIError) {
 		i[UnitName]).Scan(&tmpID, &tmpvoms, &tmpaltName, &tmpType)
 
 	if queryerr == sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+		log.WithFields(QueryFields(c)).Error(queryerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
 		return nil, apiErr
 	} else if queryerr != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+		log.WithFields(QueryFields(c)).Error(queryerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -242,7 +242,7 @@ func setAffiliationUnitInfo(c APIContext, i Input) (interface{}, []APIError) {
 			i[AlternativeName].Default(tmpaltName), i[UnitType].Default(tmpType), tmpID)
 
 		if queryerr != nil {
-			log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+			log.WithFields(QueryFields(c)).Error(queryerr)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 			return nil, apiErr
 		}
@@ -251,7 +251,7 @@ func setAffiliationUnitInfo(c APIContext, i Input) (interface{}, []APIError) {
 		_, queryerr = c.DBtx.Exec(`update voms_url set url = $1, last_updated = NOW() where unitid = $2`, i[VOMSURL].Default(tmpvoms), tmpID)
 
 		if queryerr != nil {
-			log.WithFields(QueryFields(c.R, c.StartTime)).Error(queryerr)
+			log.WithFields(QueryFields(c)).Error(queryerr)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 			return nil, apiErr
 		}
@@ -266,7 +266,7 @@ func getAffiliationUnitMembers(c APIContext, i Input) (interface{}, []APIError) 
 
 	checkerr := c.DBtx.QueryRow(`select unitid from affiliation_units where name=$1`, i[UnitName]).Scan(&unitid)
 	if checkerr != nil && checkerr != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(checkerr)
+		log.WithFields(QueryFields(c)).Error(checkerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -278,7 +278,7 @@ func getAffiliationUnitMembers(c APIContext, i Input) (interface{}, []APIError) 
 	rows, checkerr := c.DBtx.Query(`select DISTINCT ug.uid, users.uname from user_group as ug join affiliation_unit_group as aug on aug.groupid = ug.groupid join users on ug.uid = users.uid where aug.unitid=$1 and (ug.last_updated>=$2 or $2 is null) order by ug.uid`,
 	 unitid, i[LastUpdated])
 	if checkerr != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(checkerr)
+		log.WithFields(QueryFields(c)).Error(checkerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -308,7 +308,7 @@ func getGroupsInAffiliationUnit(c APIContext, i Input) (interface{}, []APIError)
 
 	checkerr := c.DBtx.QueryRow(`select unitid from affiliation_units where name=$1`, i[UnitName]).Scan(&unitid)
 	if checkerr != nil && checkerr != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(checkerr)
+		log.WithFields(QueryFields(c)).Error(checkerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -323,7 +323,7 @@ func getGroupsInAffiliationUnit(c APIContext, i Input) (interface{}, []APIError)
 	where aug.unitid=$1 and (aug.last_updated>=$2 or $2 is null)`,
 	unitid, i[LastUpdated])
 	if checkerr != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(checkerr)
+		log.WithFields(QueryFields(c)).Error(checkerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -354,7 +354,7 @@ func getGroupLeadersinAffiliationUnit(c APIContext, i Input) (interface{}, []API
 
 	err := c.DBtx.QueryRow(`select unitid from affiliation_units where name=$1`, i[UnitName]).Scan(&unitid)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -374,7 +374,7 @@ func getGroupLeadersinAffiliationUnit(c APIContext, i Input) (interface{}, []API
 								  unitid)
 
 	if checkerr != nil && checkerr != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(checkerr)
+		log.WithFields(QueryFields(c)).Error(checkerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -431,7 +431,7 @@ func getAffiliationUnitComputeResources(c APIContext, i Input) (interface{}, []A
 
 	err := c.DBtx.QueryRow(`select unitid from affiliation_units where name=$1`, i[UnitName]).Scan(&unitid)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -444,7 +444,7 @@ func getAffiliationUnitComputeResources(c APIContext, i Input) (interface{}, []A
 	rows, err := c.DBtx.Query(`select name, type, default_shell, default_home_dir from compute_resources
 							   where unitid = $1 and (last_updated>=$2 or $2 is null) order by name`, unitid, i[LastUpdated])
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -478,7 +478,7 @@ func createFQAN(c APIContext, i Input) (interface{}, []APIError) {
 								   (select unitid from affiliation_units where name = $3)`,
 						   i[GroupName], i[UserName], i[UnitName]).Scan(&groupid, &uid, &unitid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -507,7 +507,7 @@ func createFQAN(c APIContext, i Input) (interface{}, []APIError) {
 								  (($1, $3, coalesce($4, -1)) in (select fqan, mapped_group, coalesce(mapped_user, -1) from grid_fqan))`,
 						  i[FQAN], unitid, groupid, uid).Scan(&duplicateFQAN)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -520,7 +520,7 @@ func createFQAN(c APIContext, i Input) (interface{}, []APIError) {
 		var userInGroup bool
 		err = c.DBtx.QueryRow(`select ($1, $2) in (select uid, groupid from user_group)`, uid, groupid).Scan(&userInGroup)
 		if err != nil {
-			log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+			log.WithFields(QueryFields(c)).Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 			return nil, apiErr
 		}
@@ -535,7 +535,7 @@ func createFQAN(c APIContext, i Input) (interface{}, []APIError) {
 								   left join user_certificates using(dnid)
                                    where unitid = $1 and uid = $2`, unitid, uid).Scan(&userInUnit)
 			if err != nil {
-				log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+				log.WithFields(QueryFields(c)).Error(err)
 				apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 				return nil, apiErr
 			}
@@ -548,7 +548,7 @@ func createFQAN(c APIContext, i Input) (interface{}, []APIError) {
 
 	_, err = c.DBtx.Exec(`insert into grid_fqan (fqan, unitid, mapped_user, mapped_group, last_updated) values ($1, $2, $3, $4, NOW())`, i[FQAN], unitid, uid, groupid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -563,7 +563,7 @@ func removeFQAN(c APIContext, i Input) (interface{}, []APIError) {
 
 	err := c.DBtx.QueryRow(`select fqanid from grid_fqan where fqan = $1`, i[FQAN]).Scan(&fqanid)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -575,7 +575,7 @@ func removeFQAN(c APIContext, i Input) (interface{}, []APIError) {
 
 	_, err = c.DBtx.Exec("delete from grid_fqan where fqanid = $1", fqanid)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		if strings.Contains(err.Error(), "violates foreign key constraint") {
 			apiErr = append(apiErr, APIError{errors.New("all user associations with this fqan shall be removed before it can be deleted"), ErrorAPIRequirement})
 		} else {
@@ -600,7 +600,7 @@ func setFQANMappings(c APIContext, i Input) (interface{}, []APIError) {
 								   (select uid from users where uname = $3)`,
 						   i[FQAN], i[GroupName], i[UserName]).Scan(&validFQAN, &groupid, &uid)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -632,7 +632,7 @@ func setFQANMappings(c APIContext, i Input) (interface{}, []APIError) {
 						  where fqan = $4`,
 						 i[UserName].AbsoluteNull, uid, groupid, i[FQAN])
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -649,7 +649,7 @@ func getAllAffiliationUnits(c APIContext, i Input) (interface{}, []APIError) {
 							where url like concat('%voms/', $1::text) or url like concat('%voms/', $1::text, '/%')`,
 						   i[VOName]).Scan(&countURLs)
 	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
@@ -664,7 +664,7 @@ func getAllAffiliationUnits(c APIContext, i Input) (interface{}, []APIError) {
 							  and (au.last_updated>=$2 or $2 is null)`,
 							 i[VOName], i[LastUpdated])
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err)
+		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}

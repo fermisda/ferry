@@ -29,19 +29,23 @@ func (b BaseAPI) Run(w http.ResponseWriter, r *http.Request) {
 	var output Output
 	defer output.Parse(context, w)
 
-	authorized, authout := authorize(r, b.AccessRole.String())
-	if authorized == false {
+	authLevel, message := authorize(context, b.AccessRole)
+	context.AuthRole = b.AccessRole
+	context.AuthLevel = authLevel
+	if authLevel == LevelDenied {
 		w.WriteHeader(http.StatusUnauthorized)
-		output.Err = append(output.Err, fmt.Errorf("%s not authorized", authout))
+		output.Err = append(output.Err, fmt.Errorf("client not authorized"))
+		log.WithFields(QueryFields(context)).Info(message)
 		return
 	}
+	log.WithFields(QueryFields(context)).Debug(message)
 
 	var err error
 	context.DBtx, context.Ckey, err = LoadTransaction(r, DBptr)
 	if err != nil {
 		err := errors.New("error starting database transaction")
 		output.Err = append(output.Err, err)
-		log.WithFields(QueryFields(r, context.StartTime)).Error(err)
+		log.WithFields(QueryFields(context)).Error(err)
 		return
 	}
 	defer context.DBtx.Rollback(context.Ckey)
@@ -62,7 +66,7 @@ func (b BaseAPI) Run(w http.ResponseWriter, r *http.Request) {
 	if len(queryErr) > 0 {
 		var errType ErrorType
 		for _, err := range queryErr {
-			log.WithFields(QueryFields(r, context.StartTime)).Error(err.Error)
+			log.WithFields(QueryFields(context)).Error(err.Error)
 			output.Err = append(output.Err, err.Error)
 			if err.Type > errType {
 				errType = err.Type
@@ -76,6 +80,8 @@ func (b BaseAPI) Run(w http.ResponseWriter, r *http.Request) {
 		
 		return
 	}
+
+	log.WithFields(QueryFields(context)).Info("success")
 
 	context.DBtx.Commit(context.Ckey)
 	output.Status = true
@@ -123,7 +129,7 @@ func (i Input) Parse(c APIContext, m InputModel) ([]error) {
 			parsedAttribute.Scan(value)
 			if !parsedAttribute.Valid && !parsedAttribute.AbsoluteNull {
 				errs = append(errs, fmt.Errorf(errString, p.Attribute, p.Attribute.Type()))
-				log.WithFields(QueryFields(c.R, c.StartTime)).Error(errs[len(errs) - 1])
+				log.WithFields(QueryFields(c)).Error(errs[len(errs) - 1])
 				continue
 			}
 		}
@@ -131,7 +137,7 @@ func (i Input) Parse(c APIContext, m InputModel) ([]error) {
 		errString = "required parameter %s not provided"
 		if !parsedAttribute.Valid && p.Required {
 			errs = append(errs, fmt.Errorf(errString, p.Attribute))
-			log.WithFields(QueryFields(c.R, c.StartTime)).Error(errs[len(errs) - 1])
+			log.WithFields(QueryFields(c)).Error(errs[len(errs) - 1])
 			continue
 		}
 
@@ -140,7 +146,7 @@ func (i Input) Parse(c APIContext, m InputModel) ([]error) {
 
 	for p := range q {
 		errs = append(errs, fmt.Errorf("%s is not a valid parameter for this api", p))
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(errs[len(errs) - 1])
+		log.WithFields(QueryFields(c)).Error(errs[len(errs) - 1])
 	}
 
 	return errs
@@ -190,7 +196,7 @@ func (o *Output) Parse(c APIContext, w http.ResponseWriter) () {
 
 	parsedOut, err := json.Marshal(out)
 	if err != nil {
-		log.WithFields(QueryFields(c.R, c.StartTime)).Error(err.Error())
+		log.WithFields(QueryFields(c)).Error(err.Error())
 	}
 	fmt.Fprintf(w, string(parsedOut))
 }
@@ -487,6 +493,8 @@ func DefaultAPIError(t ErrorType, a interface{}) APIError {
 type APIContext struct {
 	R *http.Request
 	StartTime time.Time
+	AuthLevel AccessLevel
+	AuthRole AccessRole
 	DBtx *Transaction
 	Ckey int64
 }
@@ -528,4 +536,32 @@ const (
 // String returns the AccessRole string representation
 func (a AccessRole) String() (string){
 	return string(a)
+}
+
+// AccessLevel represents roles required to access an API
+type AccessLevel int
+
+// List of valid access roles
+const (
+	LevelDenied AccessLevel = iota -1
+	levelUnauth
+	LevelPublic
+	LevelDNRole
+	LevelIPRole
+	LevelDNWhitelist
+	LevelIPWhitelist
+)
+
+// String returns the AccessRole string representation
+func (a AccessLevel) String() string {
+	messageMap := map[AccessLevel]string {
+		LevelDenied:		"denied",
+		levelUnauth:		"unauthenticated",
+		LevelPublic:		"public",
+		LevelDNRole:		"dn_role",
+		LevelIPRole:		"ip_role",
+		LevelDNWhitelist:	"dn_whitelist",
+		LevelIPWhitelist:	"ip_whitelist",
+	}
+	return messageMap[a]
 }

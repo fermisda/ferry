@@ -1,6 +1,8 @@
 package main
 
 import (
+	"strings"
+	"regexp"
 	"database/sql"
 	"flag"
 	"fmt"
@@ -28,21 +30,48 @@ var Mainsrv *http.Server
 var ValidCAs CAs
 
 func handler(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	log.WithFields(QueryFields(r, startTime)).Debug(r.URL.Path)
+	var c APIContext
+	c.StartTime = time.Now()
+	log.WithFields(QueryFields(c)).Debug(r.URL.Path)
 	fmt.Fprintf(w, "This is a placeholder for paths like %s!", r.URL.Path[1:])
 }
 
 //QueryFields builds fields for a logger from an http request
-func QueryFields(r *http.Request, t time.Time) log.Fields {
+func QueryFields(c APIContext) log.Fields {
+	const Unknown = "unknown"
 	fields := make(log.Fields)
 
-	fields["client"] = r.RemoteAddr
-	fields["action"] = r.URL.Path[1:]
-	fields["query"] = r.URL
-	fields["duration"] = time.Since(t).Nanoseconds() / 1E6
-	if len(r.TLS.PeerCertificates) > 0 {
-		fields["subject"] = ParseDN(r.TLS.PeerCertificates[0].Subject.Names, "/")
+	fields["action"] = c.R.URL.Path[1:]
+	fields["query"] = c.R.URL
+	fields["auth_level"] = c.AuthLevel.String()
+	fields["duration"] = time.Since(c.StartTime).Nanoseconds() / 1E6
+
+	clientIP := strings.Split(c.R.RemoteAddr, ":")[0]
+	fields["client_ip"] = clientIP
+
+	clientNames, err := net.LookupAddr(clientIP)
+	if err == nil {
+		fields["hostname"] = strings.Trim(clientNames[0], ".")
+	} else {
+		fields["hostname"] = Unknown
+	}
+
+	if len(c.R.TLS.PeerCertificates) > 0 {
+		fields["subject"] = ParseDN(c.R.TLS.PeerCertificates[0].Subject.Names, "/")
+	}
+
+	if c.AuthRole != "" {
+		fields["auth_role"] = c.AuthRole
+	} else {
+		fields["auth_role"] = Unknown
+	}
+
+	re := regexp.MustCompile(fmt.Sprintf(`(?:\&|\?)%s=([\w]+)`, string(UnitName)))
+	unitname := re.FindStringSubmatch(c.R.URL.String())
+	if len(unitname) > 1 {
+		fields[string(UnitName)] = unitname[1]
+	} else {
+		fields[string(UnitName)] = Unknown
 	}
 
 	return fields
@@ -55,7 +84,7 @@ func gatekeeper(c net.Conn, s http.ConnState) {
 	fields["state"] = s.String()
 
 	if s.String() == "new" {
-		log.WithFields(fields).Info("New connection started.")
+		log.WithFields(fields).Debug("New connection started.")
 	} else {
 		log.WithFields(fields).Debug("Connection status changed.")
 	}
@@ -87,6 +116,11 @@ func main() {
 
 	//Setup log file
 	logConfig := viper.GetStringMapString("log")
+
+	log.SetFormatter(&log.TextFormatter{
+		FullTimestamp: true,
+		DisableColors: true,
+	})
 
 	if len(logConfig) > 0 {
 		if len(logConfig["file"]) > 0 {
@@ -298,7 +332,7 @@ func main() {
 		ReadTimeout: 10 * time.Second,
 		Handler:     grouter,
 		ConnState:   gatekeeper,
-		ErrorLog:    golog.New(log.StandardLogger().Writer(), "", 0),
+		ErrorLog:    golog.New(log.StandardLogger().WriterLevel(log.DebugLevel), "", 0),
 	}
 
 	certslice := viper.GetStringSlice("certificates")
