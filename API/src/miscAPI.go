@@ -375,7 +375,7 @@ func getPasswdFile(c APIContext, i Input) (interface{}, []APIError) {
 			})
 		}
 	}
-	if prevUname.Valid {
+	if prevUname.Valid || prevUname.AbsoluteNull {
 		tmpResources[prevRname.Data.(string)] = tmpUsers
 		out[prevUname.Data.(string)] = jsonmap{
 			Resources: tmpResources,
