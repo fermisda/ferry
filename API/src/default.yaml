@@ -15,13 +15,12 @@ database:
   max_idle_conns: 0
 
 server:
-  port: 8443
+  port: 8445
   cert: /home/ferry/.cert/hostcert.pem
   key: /home/ferry/.cert/hostkey.pem
   cas: /etc/grid-security/certificates/
 
 certificates:
-  - /etc/grid-security/certificates/cilogon-osg.pem
   - /etc/grid-security/certificates/cilogon-basic.pem
   - /etc/grid-security/certificates/InCommon-IGTF-Server-CA.pem
 # - /etc/pki/tls/certs/ca-bundle.crt  
@@ -47,38 +46,38 @@ ip_whitelist:
   - 131.225.240.187     # cmsgpvm01.fnal.gov
 
 dn_whitelist:
- - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Kenneth Herner/CN=UID:kherner
- - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Tanya Levshina/CN=UID:tlevshin
- - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Bruno Coimbra/CN=UID:coimbra
- - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Jeny Teheran/CN=UID:jteheran
- - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Mine Altunay/CN=UID:maltunay
- - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Steven Timm/CN=UID:timm
- - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=fermicloud044.fnal.gov
- - /DC=ch/DC=cern/OU=Organic Units/OU=Users/CN=fakhan/CN=762000/CN=Farrukh Aftab Khan
- - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=David Mason/CN=UID:dmason
- - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Farrukh Khan/CN=UID:fkhan
- - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Dmitry Litvintsev/CN=UID:litvinse
- - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=fermicloud051.fnal.gov
- - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Dave Dykstra/CN=UID:dwd
- - /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=fermicloud033.fnal.gov
- - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=vomsdev2.fnal.gov
- - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=vomsdev1.fnal.gov
- - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=vomsitbgpvm01.fnal.gov
- - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=voms1.fnal.gov
- - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=voms2.fnal.gov
- - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=jobsub-dev.fnal.gov
- - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=fifebatch.fnal.gov
- - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=scsgpvm01.fnal.gov
- - /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=scsgpvm01.fnal.gov
- - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Joe Boyd/CN=UID:boyd
- - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Kevin Retzke/CN=UID:kretzke
- - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Shreyas Bhat/CN=UID:sbhat
- - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Nikolay Kuropatkin/CN=UID:kuropat
- - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Vito Di Benedetto/CN=UID:vito
- - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Lisa Goodenough/CN=UID:goodenou
- - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=usdc/fifeutilgpvm01.fnal.gov
+  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Kenneth Herner/CN=UID:kherner
+  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Tanya Levshina/CN=UID:tlevshin
+  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Bruno Coimbra/CN=UID:coimbra
+  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Jeny Teheran/CN=UID:jteheran
+  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Mine Altunay/CN=UID:maltunay
+  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Steven Timm/CN=UID:timm
+  - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=fermicloud044.fnal.gov
+  - /DC=ch/DC=cern/OU=Organic Units/OU=Users/CN=fakhan/CN=762000/CN=Farrukh Aftab Khan
+  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=David Mason/CN=UID:dmason
+  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Farrukh Khan/CN=UID:fkhan
+  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Dmitry Litvintsev/CN=UID:litvinse
+  - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=fermicloud051.fnal.gov
+  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Dave Dykstra/CN=UID:dwd
+  - /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=fermicloud033.fnal.gov
+  - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=vomsdev2.fnal.gov
+  - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=vomsdev1.fnal.gov
+  - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=vomsitbgpvm01.fnal.gov
+  - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=voms1.fnal.gov
+  - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=voms2.fnal.gov
+  - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=jobsub-dev.fnal.gov
+  - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=fifebatch.fnal.gov
+  - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=scsgpvm01.fnal.gov
+  - /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=scsgpvm01.fnal.gov
+  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Joe Boyd/CN=UID:boyd
+  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Kevin Retzke/CN=UID:kretzke
+  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Shreyas Bhat/CN=UID:sbhat
+  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Nikolay Kuropatkin/CN=UID:kuropat
+  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Vito Di Benedetto/CN=UID:vito
+  - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Lisa Goodenough/CN=UID:goodenou
+  - /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=usdc/fifeutilgpvm01.fnal.gov
 
- dn_roles:
+dn_roles:
   /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Bruno Coimbra/CN=UID:coimbra: [read, write]
 
 ip_roles:
