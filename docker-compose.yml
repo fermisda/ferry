@@ -15,7 +15,7 @@ services:
     network_mode: "bridge"
     restart: always
     ports:
-    - "${FERRY_API_PORT}:8443"
+    - "${FERRY_API_PORT}:8445"
     logging:
       driver: json-file
       options:
