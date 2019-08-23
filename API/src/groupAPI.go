@@ -810,7 +810,7 @@ func getBatchPriorities(c APIContext, i Input) (interface{}, []APIError) {
 	}
 	defer rows.Close()
 
-	type jsonpriority = map[Attribute]interface{}
+	type jsonpriority map[Attribute]interface{}
 	out := make([]jsonpriority, 0)
 
 	for rows.Next() {
