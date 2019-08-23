@@ -98,16 +98,19 @@ class Group:
             diff.append("members")
         return diff
 
-def postToSlack(message, action):
-    if "slack" not in config:
-        return
-    target = dict(config.items("slack"))
-    url = target["url"]
-    data = {"payload": target["payload"]}
-    data["payload"] = data["payload"].replace("$MSG", message)
-    data["payload"] = data["payload"].replace("$ACT", action)
-    data = bytes(urllib.parse.urlencode(data).encode())
-    openURL(url, data=data)
+def postToSlack(messages, action):
+    if not isinstance(messages, list):
+        messages = [messages]
+    for message in messages:
+        if "slack" not in config:
+            return
+        target = dict(config.items("slack"))
+        url = target["url"]
+        data = {"payload": target["payload"]}
+        data["payload"] = data["payload"].replace("$MSG", message)
+        data["payload"] = data["payload"].replace("$ACT", action)
+        data = bytes(urllib.parse.urlencode(data).encode())
+        openURL(url, data=data)
 
 def resources(resourcesString):
     resoruces = []
@@ -130,17 +133,20 @@ def writeToFerry(action, params = None):
             exit(14)
         jOut = json.loads(tmpOut)
         logging.debug(jOut)
-        if not "ferry_error" in jOut:
+        if len(jOut["ferry_error"]) == 0 in jOut:
             if not params:
                 params = ""
             logging.info("action: %s(%s)" % (action, params))
             return True
-        logging.error("message: %s action: %s(%s)" % (jOut["ferry_error"], action, params))
-        postToSlack(jOut["ferry_error"], "action: %s(%s)" % (action, params))
-        if jOut["ferry_error"] in target["skip_user_errors"]:
-            skipList.append(params["username"])
-        if jOut["ferry_error"] in target["skip_group_errors"]:
-            skipList.append(params["groupname"])
+        for error in jOut["ferry_error"]:
+            logging.error("message: %s action: %s(%s)" % (error, action, params))
+            postToSlack(error, "action: %s(%s)" % (action, params))
+            if error in target["skip_user_errors"]:
+                skipList.append(params["username"])
+                break
+            if error in target["skip_group_errors"]:
+                skipList.append(params["groupname"])
+                break
         return False
     else:
         params = ", ".join(["%s=%s" % (x, y) for x, y in params.items()])
@@ -300,9 +306,9 @@ def fetch_ferry():
     tmpOut = openURL(url, context=ferryContext)
     if not tmpOut:
             exit(9)
-    jUsers = json.loads(tmpOut)
+    jUsers = json.loads(tmpOut)["ferry_output"]
     for jUser in jUsers:
-        users[str(jUser["uid"])] = User(str(jUser["uid"]), jUser["username"], jUser["full_name"], jUser["status"], dateSwitcher(jUser["expiration_date"]))
+        users[str(jUser["uid"])] = User(str(jUser["uid"]), jUser["username"], jUser["fullname"], jUser["status"], dateSwitcher(jUser["expirationdate"]))
         unameUid[jUser["username"]] = str(jUser["uid"])
 
     url = source["hostname"] + source["api_get_certificates"]
@@ -310,7 +316,7 @@ def fetch_ferry():
     tmpOut = openURL(url, context=ferryContext)
     if not tmpOut:
             exit(10)
-    jCerts = json.loads(tmpOut)
+    jCerts = json.loads(tmpOut)["ferry_output"]
     for jUser in jCerts:
         for jCert in jUser["certificates"]:
             users[unameUid[jUser["username"]]].certificates.append(jCert["dn"])
@@ -320,26 +326,28 @@ def fetch_ferry():
     tmpOut = openURL(url, context=ferryContext)
     if not tmpOut:
             exit(11)
-    jGroups = json.loads(tmpOut)
+    jGroups = json.loads(tmpOut)["ferry_output"]
     for jGroup in jGroups:
-        groups[str(jGroup["gid"])] = Group(str(jGroup["gid"]), jGroup["name"], jGroup["type"])
+        groups[str(jGroup["gid"])] = Group(str(jGroup["gid"]), jGroup["groupname"], jGroup["grouptype"])
 
     url = source["hostname"] + source["api_get_group_members"]
     logging.debug("Fetching Ferry group members: %s" % url)
     tmpOut = openURL(url, context=ferryContext)
     if not tmpOut:
             exit(12)
-    jGroups = json.loads(tmpOut)
+    jGroups = json.loads(tmpOut)["ferry_output"]
     for jGroup in jGroups:
         if jGroup["members"] != None:
             for jUser in jGroup["members"]:
-                groups[str(jGroup["gid"])].members.append(jUser["uid"])
+                if not jGroup["gid"]:
+                    continue
+                groups[str(jGroup["gid"])].members.append(str(jUser["uid"]))
 
     url = source["hostname"] + source["api_get_users_fqans"]
     tmpOut = openURL(url, context=ferryContext)
     if not tmpOut:
             exit(13)
-    jFQANs = json.loads(tmpOut)
+    jFQANs = json.loads(tmpOut)["ferry_output"]
     for uname, items in jFQANs.items():
         for item in items:
             users[unameUid[uname]].fqans.append((item["fqan"], item["unitname"]))
@@ -352,13 +360,13 @@ def fetch_ferry():
         if not tmpOut:
             exit(14)
         jPasswd = json.loads(tmpOut)
-        jPasswd = list(jPasswd.values())[0] # get first affiliation unit
-        if resource not in jPasswd["resources"]:
-            logging.debug("Resorce %s does not exist." % resource)
+        if len(jPasswd["ferry_error"]) > 0 or len(jPasswd["ferry_output"]) == 0:
+            logging.debug("Resorce %s not found." % resource)
             continue
+        jPasswd = list(jPasswd["ferry_output"].values())[0] # get first affiliation unit
         jPasswd = jPasswd["resources"][resource]
         for access in jPasswd:
-            users[access["uid"]].addComputeAccess(accessString)
+            users[str(access["uid"])].addComputeAccess(accessString)
 
     return users, groups
 
@@ -403,15 +411,15 @@ def update_users():
             diff = user.diff(ferryUsers[user.uid])
             if "full_name" in diff or "expiration_date" in diff or "status" in diff:
                 auxUser = ferryUsers[user.uid]
-                params = {"uid": user.uid, "username": user.uname}
+                params = {"username": user.uname}
                 if "full_name" in diff:
                     params["fullname"] = user.full_name
                     auxUser.full_name = user.full_name
                 if "expiration_date" in diff:
                     if user.expiration_date == "":
-                        params["expiration_date"] = "null"
+                        params["expirationdate"] = "null"
                     else:
-                        params["expiration_date"] = user.expiration_date
+                        params["expirationdate"] = user.expiration_date
                     auxUser.expiration_date = user.expiration_date
                 if "status" in diff:
                     params["status"] = str(user.status)
