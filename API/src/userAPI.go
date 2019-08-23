@@ -1792,12 +1792,18 @@ func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 	for rows.Next() {
 		row := NewMapNullAttribute(UserName, UID, FullName, Status, ExpirationDate)
 		rows.Scan(row[UserName], row[UID], row[FullName], row[Status], row[ExpirationDate])
+
+		var expirationDate interface{}
+		if row[ExpirationDate].Valid {
+			expirationDate = row[ExpirationDate].Data
+		}
+
 		out = append(out, jsonout{
 			UserName:		row[UserName].Data,
 			UID:			row[UID].Data,
 			FullName:		row[FullName].Data,
 			Status:			row[Status].Data,
-			ExpirationDate:	row[ExpirationDate].Data,
+			ExpirationDate:	expirationDate,
 		})
 	}
 
