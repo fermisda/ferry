@@ -65,8 +65,8 @@ class User:
             "groupname": group,
             "resourcename": resource,
             "shell": shell,
-            "home_dir": home,
-            "is_primary": primary
+            "homedir": home,
+            "primary": primary
         }
 
 class Group:
@@ -118,6 +118,20 @@ def resources(resourcesString):
         resoruces.append(resource)
     return resoruces
 
+def readFromFerry(action, params = None):
+    source = dict(config.items("ferry"))
+    url = source["hostname"] + source[action]
+    if params:
+        url += "?" + urllib.parse.urlencode(params)
+    logging.debug("reading from url: %s" % url)
+    tmpOut = openURL(url, context=ferryContext)
+    if not tmpOut:
+        exit(15)
+    jOut = json.loads(tmpOut)
+    if len(jOut["ferry_error"]) > 0:
+        return None
+    return jOut["ferry_output"]
+
 def writeToFerry(action, params = None):
     for item in ["username", "groupname"]:
         if params and item in params and params[item] in skipList:
@@ -133,7 +147,7 @@ def writeToFerry(action, params = None):
             exit(14)
         jOut = json.loads(tmpOut)
         logging.debug(jOut)
-        if len(jOut["ferry_error"]) == 0 in jOut:
+        if len(jOut["ferry_error"]) == 0:
             if not params:
                 params = ""
             logging.info("action: %s(%s)" % (action, params))
@@ -301,41 +315,33 @@ def fetch_ferry():
 
     unameUid = {}
 
-    url = source["hostname"] + source["api_get_users"]
-    logging.debug("Fetching Ferry users: %s" % url)
-    tmpOut = openURL(url, context=ferryContext)
-    if not tmpOut:
+    logging.debug("Fetching Ferry users")
+    jUsers = readFromFerry("api_get_users")
+    if not jUsers:
             exit(9)
-    jUsers = json.loads(tmpOut)["ferry_output"]
     for jUser in jUsers:
         users[str(jUser["uid"])] = User(str(jUser["uid"]), jUser["username"], jUser["fullname"], jUser["status"], dateSwitcher(jUser["expirationdate"]))
         unameUid[jUser["username"]] = str(jUser["uid"])
 
-    url = source["hostname"] + source["api_get_certificates"]
-    logging.debug("Fetching Ferry certificates: %s" % url)
-    tmpOut = openURL(url, context=ferryContext)
-    if not tmpOut:
+    logging.debug("Fetching Ferry certificates")
+    jCerts = readFromFerry("api_get_certificates")
+    if not jCerts:
             exit(10)
-    jCerts = json.loads(tmpOut)["ferry_output"]
     for jUser in jCerts:
         for jCert in jUser["certificates"]:
             users[unameUid[jUser["username"]]].certificates.append(jCert["dn"])
 
-    url = source["hostname"] + source["api_get_groups"]
-    logging.debug("Fetching Ferry groups: %s" % url)
-    tmpOut = openURL(url, context=ferryContext)
-    if not tmpOut:
+    logging.debug("Fetching Ferry groups")
+    jGroups = readFromFerry("api_get_groups")
+    if not jGroups:
             exit(11)
-    jGroups = json.loads(tmpOut)["ferry_output"]
     for jGroup in jGroups:
         groups[str(jGroup["gid"])] = Group(str(jGroup["gid"]), jGroup["groupname"], jGroup["grouptype"])
 
-    url = source["hostname"] + source["api_get_group_members"]
-    logging.debug("Fetching Ferry group members: %s" % url)
-    tmpOut = openURL(url, context=ferryContext)
-    if not tmpOut:
+    logging.debug("Fetching Ferry group members")
+    jGroups = readFromFerry("api_get_group_members")
+    if not jGroups:
             exit(12)
-    jGroups = json.loads(tmpOut)["ferry_output"]
     for jGroup in jGroups:
         if jGroup["members"] != None:
             for jUser in jGroup["members"]:
@@ -343,27 +349,21 @@ def fetch_ferry():
                     continue
                 groups[str(jGroup["gid"])].members.append(str(jUser["uid"]))
 
-    url = source["hostname"] + source["api_get_users_fqans"]
-    tmpOut = openURL(url, context=ferryContext)
-    if not tmpOut:
+    jFQANs = readFromFerry("api_get_users_fqans")
+    if not jFQANs:
             exit(13)
-    jFQANs = json.loads(tmpOut)["ferry_output"]
     for uname, items in jFQANs.items():
         for item in items:
             users[unameUid[uname]].fqans.append((item["fqan"], item["unitname"]))
 
     for accessString in source["compute_resources"].split(";"):
         resource = accessString.split(":")[0]
-        url = source["hostname"] + source["api_get_passwd_file"] + "?resourcename=%s" % resource
-        logging.debug("Fetching Ferry users access to %s: %s" % (resource, url))
-        tmpOut = openURL(url, context=ferryContext)
-        if not tmpOut:
-            exit(14)
-        jPasswd = json.loads(tmpOut)
-        if len(jPasswd["ferry_error"]) > 0 or len(jPasswd["ferry_output"]) == 0:
+        logging.debug("Fetching Ferry users access to %s" % resource)
+        jPasswd = readFromFerry("api_get_passwd_file", {"resourcename": resource})
+        if not jPasswd:
             logging.debug("Resorce %s not found." % resource)
             continue
-        jPasswd = list(jPasswd["ferry_output"].values())[0] # get first affiliation unit
+        jPasswd = list(jPasswd.values())[0] # get first affiliation unit
         jPasswd = jPasswd["resources"][resource]
         for access in jPasswd:
             users[str(access["uid"])].addComputeAccess(accessString)
