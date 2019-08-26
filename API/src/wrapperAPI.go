@@ -332,6 +332,7 @@ func createExperiment(c APIContext, i Input) (interface{}, []APIError) {
 	userName := i[UserName].Default(i[UnitName].Data.(string) + "pro")
 	groupName := i[GroupName].Default(i[UnitName].Data.(string))
 	groupType := NewNullAttribute(GroupType).Default("UnixGroup")
+	resourceName := NewNullAttribute(ResourceName).Default("fermigrid")
 	
 	vomsURL := NewNullAttribute(VOMSURL).Default("https://voms.fnal.gov:8443/voms/fermilab/" + i[UnitName].Data.(string))
 	if i[Standalone].Valid {
@@ -419,6 +420,30 @@ func createExperiment(c APIContext, i Input) (interface{}, []APIError) {
 
 		_, apiErr = createFQAN(c, input)
 		if len(apiErr) > 0 && apiErr[0].Type != ErrorDuplicateData {
+			return nil, apiErr
+		}
+	}
+	
+	var quotaExists bool
+	err := c.DBtx.QueryRow(`select ($1, $2) in (select b.name, c.name from compute_batch b join compute_resources c using(compid))`,
+							i[UnitName], resourceName).Scan(&quotaExists)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !quotaExists {
+		input = Input {
+			CondorGroup: i[UnitName],
+			ResourceName: NewNullAttribute(ResourceName).Default("fermigrid"),
+			Quota: NewNullAttribute(Quota).Default("1"),
+			ExpirationDate: NewNullAttribute(ExpirationDate),
+			Surplus: NewNullAttribute(Surplus),
+		}
+
+		_, apiErr = setCondorQuota(c, input)
+		if len(apiErr) > 0 {
 			return nil, apiErr
 		}
 	}
