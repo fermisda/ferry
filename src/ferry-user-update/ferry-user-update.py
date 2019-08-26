@@ -474,13 +474,23 @@ def update_certificates():
                     if any(c in "," for c in certificate):
                         logging.warning("Certificate \"%s\" contains illegal characters" % certificate)
                         continue
-                    params = {
-                        "username": user.uname,
-                        "unitname": "fermilab",
-                        "dn": certificate
-                    }
-                    if writeToFerry("api_add_user_certificate", params):
-                        ferryUsers[user.uid].certificates.append(certificate)
+                    jUnits = readFromFerry("api_get_user_affiliations", {"username": user.uname})
+                    if not jUnits:
+                        logging.debug("could not fetch affiliation units for %s" % user.uname)
+                        jUnits = []
+                    if len(jUnits) == 0:
+                        jUnits.append({
+                            "alternativename": "",
+                            "unitname": "fermilab"
+                        })
+                    for unit in jUnits:
+                        params = {
+                            "username": user.uname,
+                            "unitname": unit["unitname"],
+                            "dn": certificate
+                        }
+                        if writeToFerry("api_add_user_certificate", params):
+                            ferryUsers[user.uid].certificates.append(certificate)
                     changes = True
     if not changes:
         logging.info("Certificates are up to date")
