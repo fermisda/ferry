@@ -212,8 +212,8 @@ func IncludeGroupAPIs(c *APICollection) {
 	removeUserAccessFromResource := BaseAPI {
 		InputModel {
 			Parameter{UserName, true},
-			Parameter{GroupName, true},
 			Parameter{ResourceName, true},
+			Parameter{GroupName, false},
 		},
 		removeUserAccessFromResource,
 		RoleRead,
@@ -1115,7 +1115,7 @@ func removeUserAccessFromResource(c APIContext, i Input) (interface{}, []APIErro
 	if !uid.Valid {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
 	}
-	if !groupid.Valid {
+	if !groupid.Valid && i[GroupName].Valid {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
 	}
 	if !compid.Valid {
@@ -1128,7 +1128,7 @@ func removeUserAccessFromResource(c APIContext, i Input) (interface{}, []APIErro
 		return nil, apiErr
 	}
 
-	res, err := c.DBtx.Exec(`delete from compute_access_group where uid = $1 and groupid = $2 and compid = $3`, uid, groupid, compid)
+	res, err := c.DBtx.Exec(`delete from compute_access_group where uid = $1 and (groupid = $2 or $2 is null) and compid = $3`, uid, groupid, compid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
