@@ -263,23 +263,23 @@ func (a Attribute) Type() (AttributeType) {
 		UserName:			TypeString,
 		GroupName:			TypeString,
 		UnitName: 			TypeString,
-		FullName:			TypeString,
-		ResourceName:		TypeString,
+		FullName:			TypeSstring,
+		ResourceName:		TypeSstring,
 		AlternativeName:	TypeString,
-		GroupType:			TypeString,
+		GroupType:			TypeSstring,
 		UnitType:			TypeString,
 		ResourceType:		TypeString,
-		DN:					TypeString,
+		DN:					TypeSstring,
 		UserAttribute:		TypeString,
-		Value:				TypeString,
+		Value:				TypeSstring,
 		ExternalUsername:	TypeString,
 		QuotaUnit:			TypeString,
-		Path:				TypeString,
-		Shell:				TypeString,
-		HomeDir:			TypeString,
-		FQAN:				TypeString,
+		Path:				TypeSstring,
+		Shell:				TypeSstring,
+		HomeDir:			TypeSstring,
+		FQAN:				TypeSstring,
 		VOMSURL:			TypeString,
-		Role:				TypeString,
+		Role:				TypeSstring,
 		CondorGroup:		TypeString,
 		VOName:				TypeString,
 		UID:				TypeInt,
@@ -318,6 +318,7 @@ const (
 	TypeFloat	AttributeType = "float"
 	TypeBool	AttributeType = "boolean"
 	TypeString	AttributeType = "string"
+	TypeSstring	AttributeType = "case sensitive string"
 	TypeDate	AttributeType = "date"
 	TypeFlag	AttributeType = "flag"
 )
@@ -332,6 +333,11 @@ func (at AttributeType) Parse(value interface{}) (interface{}, bool) {
 
 	switch at {
 	case TypeString:
+		parsedValue, valid = value.(string)
+		if valid {
+			parsedValue = strings.ToLower(parsedValue.(string))
+		}
+	case TypeSstring:
 		parsedValue, valid = value.(string)
 	case TypeInt:
 		parsedValue, valid = value.(int64)
@@ -366,6 +372,8 @@ func (at AttributeType) ParseString(value string) (interface{}, bool) {
 
 	switch at {
 	case TypeString:
+		parsedValue, valid = strings.ToLower(value), true
+	case TypeSstring:
 		parsedValue, valid = value, true
 	case TypeInt:
 		parsedValue, err = strconv.ParseInt(value, 10, 64)
