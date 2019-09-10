@@ -11,7 +11,7 @@ services:
     volumes:
     - ~/certs/ferry_cert.pem:/home/ferry/.cert/hostcert.pem
     - ~/certs/ferry_key.pem:/home/ferry/.cert/hostkey.pem
-    - ./API/src/default.yaml:/home/ferry/default.yaml
+    - ./API/src/${CONFIG_FILE:-default.yaml}:/home/ferry/default.yaml
     network_mode: "bridge"
     restart: always
     ports:
