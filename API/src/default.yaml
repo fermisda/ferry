@@ -25,7 +25,6 @@ certificates:
   - /etc/grid-security/certificates/InCommon-IGTF-Server-CA.pem
 
 ip_whitelist:
-  - 131.225.108.153     # fermi-snow-trn.fnal.gov
   - 131.225.108.60      # fermi-snow.fnal.gov
   - 131.225.240.59      # ssiadmin1.fnal.gov
   - 131.225.27.36       # merricat.fnal.gov
