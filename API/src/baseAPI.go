@@ -268,7 +268,7 @@ func (a Attribute) Type() (AttributeType) {
 		AlternativeName:	TypeString,
 		GroupType:			TypeSstring,
 		UnitType:			TypeString,
-		ResourceType:		TypeString,
+		ResourceType:		TypeSstring,
 		DN:					TypeSstring,
 		UserAttribute:		TypeString,
 		Value:				TypeSstring,
