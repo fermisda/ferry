@@ -457,6 +457,14 @@ func (na NullAttribute) Default(value interface{}) NullAttribute {
 	return na
 }
 
+// Coalesce returns value if na is not Valid or AbsoluteNull and na.Data otherwise
+func (na NullAttribute) Coalesce(value interface{}) interface{} {
+	if !na.Valid && !na.AbsoluteNull {
+		return value
+	}
+	return na.Data
+}
+
 // APIError is returned by a BaseAPI
 type APIError struct {
 	Error error
