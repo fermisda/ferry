@@ -886,7 +886,7 @@ func getCondorQuotas(c APIContext, i Input) (interface{}, []APIError) {
 					ResourceType: row[ResourceType].Data,
 					UnitName: row[UnitName].Data,
 					Surplus: row[Surplus].Data,
-					ExpirationDate: row[ExpirationDate].Data,
+					ExpirationDate: row[ExpirationDate].Coalesce(""),
 				})
 			} else {
 				out[row[ResourceName].Data.(string)][len(out[row[ResourceName].Data.(string)]) - 1] = jsonquota{
@@ -895,7 +895,7 @@ func getCondorQuotas(c APIContext, i Input) (interface{}, []APIError) {
 					ResourceType: row[ResourceType].Data,
 					UnitName: row[UnitName].Data,
 					Surplus: row[Surplus].Data,
-					ExpirationDate: row[ExpirationDate].Data,
+					ExpirationDate: row[ExpirationDate].Coalesce(""),
 				}
 			}
 		}
