@@ -124,7 +124,7 @@ def readFromFerry(action, params = None):
     url = source["hostname"] + source[action]
     if params:
         url += "?" + urllib.parse.urlencode(params)
-    logging.debug("reading from url: %s" % url)
+    logging.debug("downloading from url: %s" % url)
     tmpOut = openURL(url, context=ferryContext)
     if not tmpOut:
         exit(15)
@@ -191,6 +191,10 @@ def fetch_userdb():
             outFile.write(out)
             outFile.close()
 
+    # TO BE REMOVED
+    # This section of the code is to identify pottential problems with services-users.csv
+    os.system("curl -s https://metrics.fnal.gov/authentication/datafiles/services-users.csv > cache/services-users.csv.debug")
+
     for f, url in config.items("userdb"):
         if f not in ["uid.lis", "gid.lis", "services-users.csv"]:
             logging.error("invalid userdb file %s" % f)
@@ -200,7 +204,7 @@ def fetch_userdb():
             logging.error("bad %s file detected on a previous cycle" % f)
             postToSlack("Update Script Halted!", "Bad %s file detected on a previous cycle." % f)
             exit(5)
-        logging.debug("Downloading %s: %s" % (f, url))
+        logging.debug("downloading %s: %s" % (f, url))
         thread = Thread(target=work, args=[f, url])
         thread.start()
         threads.append(thread)
@@ -242,7 +246,7 @@ def fetch_userdb():
     
     unameUid = {}
 
-    logging.debug("Reading gid.lis")
+    logging.debug("reading gid.lis")
     gidLines = re.findall(r"(\d+)\t(.+)\t\t.+", open(files["gid.lis"], "r").read())
     for line in gidLines:
         gid, name = line
@@ -250,7 +254,7 @@ def fetch_userdb():
         name = name.strip().lower()
         groups[gid] = Group(gid, name)
 
-    logging.debug("Reading uid.lis")
+    logging.debug("reading uid.lis")
     uidLines = re.findall(r"(\d+)\t\t(\d+)\t\t(.+)\t\t(.+)\t\t(.+)", open(files["uid.lis"], "r").read())
     for line in uidLines:
         uid, gid, last_name, first_name, uname = line
@@ -281,7 +285,7 @@ def fetch_userdb():
     for uname in unameToDelete:
         unameUid.__delitem__(uname)
 
-    logging.debug("Reading services-users.csv")
+    logging.debug("reading services-users.csv")
     fileText = open(files["services-users.csv"], "r").read()
     servicesUsersLines = re.findall(r"(\w+)\,(\".+\"),(No\sExpiration\sdate|\d{4}-\d{2}-\d{2}|EXPIRED)", fileText)
     # Check number of users
@@ -344,7 +348,6 @@ def fetch_ferry():
 
     for accessString in source["compute_resources"].split(";"):
         resource = accessString.split(":")[0]
-        logging.debug("Fetching Ferry users access to %s" % resource)
         threads.append(Thread(target=work, args=["api_get_passwd_file", {"resourcename": resource}, resource]))
 
     for thread in threads:
@@ -352,27 +355,27 @@ def fetch_ferry():
     for thread in threads:
         thread.join()
 
-    logging.debug("Fetching Ferry users")
+    logging.debug("reading ferry users")
     if not ferryOut["api_get_users"]:
             exit(9)
     for jUser in ferryOut["api_get_users"]:
         users[str(jUser["uid"])] = User(str(jUser["uid"]), jUser["username"], jUser["fullname"], jUser["status"], dateSwitcher(jUser["expirationdate"]))
         unameUid[jUser["username"]] = str(jUser["uid"])
 
-    logging.debug("Fetching Ferry certificates")
+    logging.debug("reading ferry certificates")
     if not ferryOut["api_get_certificates"]:
             exit(10)
     for jUser in ferryOut["api_get_certificates"]:
         for jCert in jUser["certificates"]:
             users[unameUid[jUser["username"]]].certificates.append(jCert["dn"])
 
-    logging.debug("Fetching Ferry groups")
+    logging.debug("reading ferry groups")
     if not ferryOut["api_get_groups"]:
             exit(11)
     for jGroup in ferryOut["api_get_groups"]:
         groups[str(jGroup["gid"])] = Group(str(jGroup["gid"]), jGroup["groupname"], jGroup["grouptype"])
 
-    logging.debug("Fetching Ferry group members")
+    logging.debug("reading ferry group members")
     if not ferryOut["api_get_group_members"]:
             exit(12)
     for jGroup in ferryOut["api_get_group_members"]:
@@ -390,7 +393,7 @@ def fetch_ferry():
 
     for accessString in source["compute_resources"].split(";"):
         resource = accessString.split(":")[0]
-        logging.debug("Fetching Ferry users access to %s" % resource)
+        logging.debug("reading ferry users access to %s" % resource)
         jPasswd = ferryOut[resource]
         if not jPasswd:
             logging.debug("Resorce %s not found." % resource)
