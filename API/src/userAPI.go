@@ -728,6 +728,10 @@ func removeUserFromGroup(c APIContext, i Input) (interface{}, []APIError) {
 	_, err = c.DBtx.Exec(`delete from user_group where uid = $1 and groupid = $2`, uid, groupid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
+		if strings.Contains(err.Error(), `fk_compute_access_group_user_group`) {
+			apiErr = append(apiErr, APIError{errors.New("user belongs to this group in one or more compute resources"), ErrorAPIRequirement})
+			return nil, apiErr
+		}
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
