@@ -5,9 +5,7 @@ import (
 	"regexp"
 	"database/sql"
 	"fmt"
-	"net/http"
 	"strings"
-	"time"
 	_ "github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
 )
@@ -414,14 +412,6 @@ func getGroupLeadersinAffiliationUnit(c APIContext, i Input) (interface{}, []API
 	}
 
 	return out, nil
-}
-
-func getAffiliationUnitStorageResources(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	//	q := r.URL.Query()
-	//	collabunit := q.Get("unitname")
-	NotDoneYet(w, r, startTime)
 }
 
 func getAffiliationUnitComputeResources(c APIContext, i Input) (interface{}, []APIError) {

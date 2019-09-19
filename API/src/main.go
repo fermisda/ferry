@@ -213,7 +213,6 @@ func main() {
 	//user API calls
 	grouter.HandleFunc("/getUserCertificateDNs", APIs["getUserCertificateDNs"].Run)
 	grouter.HandleFunc("/getUserFQANs", APIs["getUserFQANs"].Run)
-	grouter.HandleFunc("/getSuperUserList", APIs["getSuperUserList"].Run)
 	grouter.HandleFunc("/getUserGroups", APIs["getUserGroups"].Run)
 	grouter.HandleFunc("/getUserInfo", APIs["getUserInfo"].Run)
 	grouter.HandleFunc("/addUserToGroup", APIs["addUserToGroup"].Run)
@@ -314,17 +313,16 @@ func main() {
 	grouter.HandleFunc("/addLPCCollaborationGroup", APIs["addLPCCollaborationGroup"].Run)
 
 	//legacy API calls
-	grouter.HandleFunc("/setSuperUser", setSuperUser)
-	grouter.HandleFunc("/removeSuperUser", removeSuperUser)
-	grouter.HandleFunc("/setUserStorageQuota", APIs["setStorageQuota"].Run)
-	grouter.HandleFunc("/setGroupStorageQuota", setGroupStorageQuota)
+	// grouter.HandleFunc("/setSuperUser", setSuperUser)
+	// grouter.HandleFunc("/removeSuperUser", removeSuperUser)
+	// grouter.HandleFunc("/setGroupStorageQuota", setGroupStorageQuota)
 
 	//never implemented API calls
-	grouter.HandleFunc("/setGroupBatchPriority", setGroupBatchPriority)
-	grouter.HandleFunc("/getAffiliationUnitStorageResources", getAffiliationUnitStorageResources)
-	grouter.HandleFunc("/deleteGroupt", deleteGroupt)
-	grouter.HandleFunc("/deleteGroup", deleteGroup)
-	grouter.HandleFunc("/removePrimaryStatusfromGroup", removePrimaryStatusfromGroup)
+	// grouter.HandleFunc("/setGroupBatchPriority", setGroupBatchPriority)
+	// grouter.HandleFunc("/getAffiliationUnitStorageResources", getAffiliationUnitStorageResources)
+	// grouter.HandleFunc("/deleteGroupt", deleteGroupt)
+	// grouter.HandleFunc("/deleteGroup", deleteGroup)
+	// grouter.HandleFunc("/removePrimaryStatusfromGroup", removePrimaryStatusfromGroup)
 
 	srvConfig := viper.GetStringMapString("server")
 	Mainsrv = &http.Server{
