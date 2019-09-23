@@ -444,6 +444,11 @@ def update_users():
             changes = True
         else:
             diff = user.diff(ferryUsers[user.uid])
+            if "uname" in diff:
+                msg = "User %s username has changed from %s to %s" % (user.uid, ferryUsers[user.uid].uname, user.uname)
+                logging.warning(msg)
+                postToSlack("Username Has Changed", msg)
+                continue
             if "full_name" in diff or "expiration_date" in diff or "status" in diff:
                 auxUser = ferryUsers[user.uid]
                 params = {"username": user.uname}
@@ -480,8 +485,11 @@ def update_groups():
             changes = True
 
         diff = group.diff(ferryGroups[group.gid])
-        if "groupname" in diff:
-            logging.warning("Group %s name has changed from %s to %s" % (group.gid, ferryGroups[group.gid].name, group.name))
+        if "name" in diff:
+            msg = "Group %s name has changed from %s to %s" % (group.gid, ferryGroups[group.gid].name, group.name)
+            logging.warning(msg)
+            postToSlack("Group Name Has Changed", msg)
+            continue
         if "members" in diff:
             for member in group.members:
                 if member not in ferryGroups[group.gid].members:
