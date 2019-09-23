@@ -138,6 +138,10 @@ func checkClientIP(client *tls.ClientHelloInfo) (*tls.Config, error) {
 	ip := client.Conn.RemoteAddr().String()
 
 	authIPs := viper.GetStringSlice("ip_whitelist")
+	ipRoles := viper.GetStringMapStringSlice("ip_roles")
+	for ip := range ipRoles {
+		authIPs = append(authIPs, ip)
+	}
 
 	for _, authIP := range authIPs {
 		if authIP == strings.Split(ip, ":")[0] {
