@@ -11,6 +11,7 @@ import ssl
 import datetime
 import json
 import logging
+from collections import defaultdict
 from threading import Thread
 
 class User:
@@ -164,7 +165,10 @@ def writeToFerry(action, params = None):
                 break
         return False
     else:
-        params = ", ".join(["%s=%s" % (x, y) for x, y in params.items()])
+        if params:
+            params = ", ".join(["%s=%s" % (x, y) for x, y in params.items()])
+        else:
+            params = ""
         logging.info("action: %s(%s)" % (action, params))
         return True
 
@@ -334,7 +338,7 @@ def fetch_ferry():
     unameUid = {}
 
     threads = []
-    ferryOut = {}
+    ferryOut = defaultdict(str)
     def work(action, params = None, id = None):
         if not id:
             id = action
