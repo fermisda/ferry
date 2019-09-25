@@ -905,7 +905,8 @@ func setUserShell(c APIContext, i Input) (interface{}, []APIError) {
 
 	var member bool
 	err = c.DBtx.QueryRow(`select ($1, $2) in (select uid, unitid from
-						   compute_access join compute_resources using(compid))`,
+						   compute_access join compute_resources using(compid)
+						   where unitid is not null)`,
 						  uid, unitid).Scan(&member)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
