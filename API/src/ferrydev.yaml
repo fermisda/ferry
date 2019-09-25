@@ -53,7 +53,7 @@ dn_roles:
   /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Dmitry Litvintsev/CN=UID:litvinse:   [read]
   /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Dave Dykstra/CN=UID:dwd:             [read]
   /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=vomsdev1.fnal.gov:              [read]
-  /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=vomsdev1.fnal.gov:              [read]
+  /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=vomsdev2.fnal.gov:              [read]
   /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=vomsitbgpvm01.fnal.gov:                             [read]
   /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=voms1.fnal.gov:                 [read]
   /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=fifebatch.fnal.gov:                                 [read]
