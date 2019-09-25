@@ -93,11 +93,6 @@ func authorize(c APIContext, r AccessRole) (AccessLevel, string) {
 	for _, presCert := range c.R.TLS.PeerCertificates {
 		certDN := ParseDN(presCert.Subject.Names, "/")
 
-		// authorize public role
-		if r == "public" {
-			return LevelPublic, fmt.Sprintf("public role authorized DN %s", certDN)
-		}
-
 		// authorize DN roles
 		if roles, ok := dnRoles[strings.ToLower(certDN)]; ok {
 			for _, role := range roles {
@@ -129,6 +124,11 @@ func authorize(c APIContext, r AccessRole) (AccessLevel, string) {
 		if authIP == ip {
 			return LevelIPWhitelist, fmt.Sprintf("ignoring DN of whitelisted IP %s", ip)
 		}
+	}
+
+	// authorize public role
+	if r == "public" {
+		return LevelPublic, fmt.Sprintf("public role authorized")
 	}
 
 	return LevelDenied, "unable to authorize access"
