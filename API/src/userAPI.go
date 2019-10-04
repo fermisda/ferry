@@ -1357,7 +1357,7 @@ func createUser(c APIContext, i Input) (interface{}, []APIError) {
 	groupid	:= NewNullAttribute(GroupID)
 	expDate	:= i[ExpirationDate].Default("2038-01-01")
 
-	err := c.DBtx.QueryRow(`select (select groupid from groups where name = $1)`, i[GroupName]).Scan(&groupid)
+	err := c.DBtx.QueryRow(`select (select groupid from groups where name = $1 and type = 'UnixGroup')`, i[GroupName]).Scan(&groupid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
