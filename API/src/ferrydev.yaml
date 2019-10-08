@@ -92,3 +92,4 @@ ip_roles:
   131.225.240.195:  [read]        # graphitesrv02
   131.225.240.196:  [read]        # graphitesrv03
   131.225.240.151:  [read, write] # lssrv02.fnal.gov
+  131.225.13.252:   [read]        # dmsdca06.fnal.gov
