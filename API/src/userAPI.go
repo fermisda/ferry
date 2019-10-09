@@ -1743,7 +1743,7 @@ func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIEr
 	// Add user to group in the resource (compute_access_group)
 	var priCount int
 	err = c.DBtx.QueryRow(`select count(*) from compute_access_group where uid = $1 and compid = $2 and is_primary`,
-							uid, groupid).Scan(&priCount)
+							uid, compid).Scan(&priCount)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
