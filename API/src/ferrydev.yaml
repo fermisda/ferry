@@ -65,6 +65,7 @@ dn_roles:
   /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=jobview-graphitesrv01.fnal.gov: [read]
   /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=jobview-graphitesrv02.fnal.gov: [read]
   /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=jobview-graphitesrv03.fnal.gov: [read]
+  /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=poms-pomsgpvm01.fnal.gov:       [read]
 
 ip_roles:
   131.225.108.61:   [read, write] # fermi-snow-dev.fnal.gov
