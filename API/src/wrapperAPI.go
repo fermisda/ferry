@@ -130,22 +130,25 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 
 	dn := NewNullAttribute(DN)
 	dn.Scan(fmt.Sprintf(dnTemplate, fullName.Data.(string), i[UserName].Data.(string)))
-
-	input := Input {
-		UserName:	i[UserName],
-		UnitName:	i[UnitName],
-		DN:			dn,
-	}
-	_, apiErr = addCertificateDNToUser(c, input)
-	if len(apiErr) > 0 {
-		return nil, apiErr
+  
+	fnalUnit := NewNullAttribute(UnitName).Default("fermilab")
+	for _, unitname := range []NullAttribute{i[UnitName], fnalUnit} {
+		input := Input {
+			UserName:	i[UserName],
+			UnitName:	unitname,
+			DN:			dn,
+		}
+		_, apiErr = addCertificateDNToUser(c, input)
+		if len(apiErr) > 0 {
+			return nil, apiErr
+		}
 	}
 
 	for _, r := range []string{"Analysis", "NULL"} {
 		role := NewNullAttribute(Role)
 		role.Scan(r)
 
-		input = Input {
+		input := Input {
 			UserName:	i[UserName],
 			UnitName:	i[UnitName],
 			Role:		role,
@@ -192,7 +195,7 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 	primary := NewNullAttribute(Primary)
 	primary.Scan(true)
 
-	input = Input {
+	input := Input {
 		UserName: i[UserName],
 		GroupName: compGroup,
 		ResourceName: compResource,
