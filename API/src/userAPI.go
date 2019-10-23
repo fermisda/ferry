@@ -360,12 +360,13 @@ func getUserCertificateDNs(c APIContext, i Input) (interface{}, []APIError) {
 	}
 
 	rows, queryerr := c.DBtx.Query(`select distinct uname, dn from
-							   user_certificates as uc
-							   join users as u using(uid)
-							   join affiliation_unit_user_certificate ac using(dnid)
-							   where uid = coalesce($1, uid) and unitid = coalesce($2, unitid)
-							   order by uname`,
-							uid, unitid)
+									user_certificates as uc
+									join users as u using(uid)
+									join affiliation_unit_user_certificate ac using(dnid)
+									where uid = coalesce($1, uid)
+									and ($2 in (select distinct unitid from grid_fqan where fqan like '%' || $3 || '%') or $3 is null)
+									order by uname`,
+								   uid, unitid, i[UnitName])
 	if queryerr != nil {
 		log.WithFields(QueryFields(c)).Error(queryerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
