@@ -364,7 +364,7 @@ func getUserCertificateDNs(c APIContext, i Input) (interface{}, []APIError) {
 									join users as u using(uid)
 									join affiliation_unit_user_certificate ac using(dnid)
 									where uid = coalesce($1, uid)
-									and ($2 in (select distinct unitid from grid_fqan where fqan like '%' || $3 || '%') or $3 is null)
+									and (unitid in (select distinct unitid from grid_fqan where fqan like '%' || $3 || '%') or $3 is null)
 									order by uname`,
 								   uid, unitid, i[UnitName])
 	if queryerr != nil {
