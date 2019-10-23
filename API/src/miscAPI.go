@@ -728,6 +728,9 @@ func getMappedGidFile(c APIContext, i Input) (interface{}, []APIError) {
 	type jsonmapping map[Attribute]interface{}
 	var out []jsonmapping
 
+	const MappedUname Attribute = "mapped_uname"
+	const MappedGID	  Attribute = "mapped_gid"
+
 	for rows.Next() {
 		row := NewMapNullAttribute(FQAN, UserName, GID)
 		rows.Scan(row[FQAN], row[UserName], row[GID])
@@ -740,8 +743,8 @@ func getMappedGidFile(c APIContext, i Input) (interface{}, []APIError) {
 				(row[FQAN].Data.(string) == "/des/Role=Production/Capability=NULL" && row[UserName].Data.(string) == "des")) {
 				out = append(out, jsonmapping{
 					FQAN: row[FQAN].Data,
-					UserName: row[UserName].Data,
-					GID: row[GID].Data,
+					MappedUname: row[UserName].Data,
+					MappedGID: row[GID].Data,
 				})
 			}
 		}
