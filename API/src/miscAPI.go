@@ -410,7 +410,7 @@ func getGroupFile(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	rows, err := c.DBtx.Query(`select distinct g.name, gid, uname, is_primary, cg.last_updated
+	rows, err := c.DBtx.Query(`select g.name, gid, uname, is_primary, cg.last_updated
                                 from compute_access_group cg
 								join compute_resources using (compid)
 								join groups g using(groupid)
@@ -435,6 +435,7 @@ func getGroupFile(c APIContext, i Input) (interface{}, []APIError) {
 
 	lastTime  := NewNullAttribute(LastUpdated)
 	prevGname := NewNullAttribute(GroupName)
+	prevUname := NewNullAttribute(UserName)
 	for rows.Next() {
 		row := NewMapNullAttribute(GroupName, GID, UserName, Primary, LastUpdated)
 		rows.Scan(row[GroupName], row[GID], row[UserName], row[Primary], row[LastUpdated])
@@ -453,8 +454,9 @@ func getGroupFile(c APIContext, i Input) (interface{}, []APIError) {
 				entry[GID] = row[GID].Data
 				prevGname = *row[GroupName]
 			}
-			if !row[Primary].Data.(bool) {
+			if !row[Primary].Data.(bool) && prevUname != *row[UserName] {
 				users = append(users, row[UserName].Data)
+				prevUname = *row[UserName]
 			}
 			
 			if row[LastUpdated].Valid {
