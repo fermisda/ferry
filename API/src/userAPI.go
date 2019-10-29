@@ -360,12 +360,13 @@ func getUserCertificateDNs(c APIContext, i Input) (interface{}, []APIError) {
 	}
 
 	rows, queryerr := c.DBtx.Query(`select distinct uname, dn from
-							   user_certificates as uc
-							   join users as u using(uid)
-							   join affiliation_unit_user_certificate ac using(dnid)
-							   where uid = coalesce($1, uid) and unitid = coalesce($2, unitid)
-							   order by uname`,
-							uid, unitid)
+									user_certificates as uc
+									join users as u using(uid)
+									join affiliation_unit_user_certificate ac using(dnid)
+									where uid = coalesce($1, uid)
+									and (unitid in (select distinct unitid from grid_fqan where fqan like '%' || $2 || '%') or $2 is null)
+									order by uname`,
+								   uid, i[UnitName])
 	if queryerr != nil {
 		log.WithFields(QueryFields(c)).Error(queryerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1743,7 +1744,7 @@ func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIEr
 	// Add user to group in the resource (compute_access_group)
 	var priCount int
 	err = c.DBtx.QueryRow(`select count(*) from compute_access_group where uid = $1 and compid = $2 and is_primary`,
-							uid, groupid).Scan(&priCount)
+							uid, compid).Scan(&priCount)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
