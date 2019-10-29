@@ -1,13 +1,13 @@
 package main
 
 import (
-	"strings"
-	"regexp"
 	"database/sql"
 	"flag"
 	"fmt"
 	"net"
+	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/fsnotify/fsnotify"
 
@@ -93,7 +93,9 @@ func gatekeeper(c net.Conn, s http.ConnState) {
 func main() {
 	//Read command-line arguments
 	var configDir string
+	var configFile string
 	flag.StringVar(&configDir, "c", ".", "Specify a configuration directory.")
+	flag.StringVar(&configFile, "f", "default", "Specify the configuration file name.")
 	flag.Parse()
 
 	//Setup configutation manager
@@ -103,11 +105,11 @@ func main() {
 	viper.BindEnv("db_host")
 	viper.BindEnv("db_port")
 	viper.BindEnv("db_name")
-	viper.SetConfigName("default")
+	viper.SetConfigName(configFile)
 	viper.AddConfigPath(configDir)
 	cfgErr := viper.ReadInConfig()
 	if cfgErr != nil {
-		panic(fmt.Errorf("Fatal error config file: %s \n", cfgErr))
+		panic(fmt.Errorf("fatal error config file: %s ", cfgErr))
 	}
 	viper.WatchConfig()
 	viper.OnConfigChange(func(e fsnotify.Event) {
