@@ -25,7 +25,7 @@ class User:
         self.certificates = []
         self.fqans = []
         self.compute_access = {}
-    
+
     def __str__(self):
         self.string = "User object:\n\
                         \tuid: %s\n\
@@ -142,7 +142,8 @@ def writeToFerry(action, params = None):
     url = target["hostname"] + target[action]
     if params:
         url += "?" + urllib.parse.urlencode(params)
-    if not opts.dry_run:
+    # if not opts.dry_run:
+    if False:   # DEBUG
         logging.debug(url)
         tmpOut = openURL(url, context=ferryContext)
         if not tmpOut:
@@ -247,7 +248,7 @@ def fetch_userdb():
 
     users = {}
     groups = {}
-    
+
     unameUid = {}
 
     logging.debug("reading gid.lis")
@@ -280,14 +281,18 @@ def fetch_userdb():
         if len(unameUid[uname]) == 1:
             unameUid[uname] = unameUid[uname][0]
         else:
-            for uid in unameUid[uname]:
+            logging.debug("duplicated uname: %s", uname)     # DEBUG
+            for uid in unameUid[uname][:-1]:
+                logging.debug("delete uid %s", uid)
                 users.__delitem__(uid)
                 for gid in groups.keys():
                     if uid in groups[gid].members:
                             groups[gid].members.remove(uid)
-            unameToDelete.append(uname)
-    for uname in unameToDelete:
-        unameUid.__delitem__(uname)
+            unameUid[uname] = unameUid[uname][-1]
+            # unameToDelete.append(uname)
+    # for uname in unameToDelete:
+    #     logging.debug("delete uname %s", uname)
+    #     unameUid.__delitem__(uname)
 
     logging.debug("reading services-users.csv")
     fileText = open(files["services-users.csv"], "r").read()
@@ -321,8 +326,8 @@ def fetch_userdb():
             users[unameUid[uname]].expiration_date = expiration_date
             users[unameUid[uname]].certificates.append(dn)
             users[unameUid[uname]].fqans = [tuple(i.split(":")) for i in config.get("ferry", "fqans").split(",")]
-            for resoruce in config.get("ferry", "compute_resources").split(";"):
-                users[unameUid[uname]].addComputeAccess(resoruce)
+            for resource in config.get("ferry", "compute_resources").split(";"):
+                users[unameUid[uname]].addComputeAccess(resource)
             if expiration_date != "":
                 users[unameUid[uname]].status = True
 
@@ -343,7 +348,7 @@ def fetch_ferry():
         if not id:
             id = action
         ferryOut[id] = readFromFerry(action, params)
-    
+
     threads.append(Thread(target=work, args=["api_get_users"]))
     threads.append(Thread(target=work, args=["api_get_certificates"]))
     threads.append(Thread(target=work, args=["api_get_groups"]))
@@ -422,6 +427,7 @@ def openURL(url, data = None, context = None):
 def update_users():
     changes = False
     for user in userdbUsers.values():
+        # logging.debug("user: %s", user)     # DEBUG
         if user.uid not in ferryUsers.keys():
             if user.gid not in ferryGroups.keys():
                 params = {
@@ -474,6 +480,24 @@ def update_users():
     if not changes:
         logging.info("Users are up to date")
 
+# Updates users with data from uid.lis and services-users.csv
+def cleanup_users():
+    changes = False
+    idx = 0
+    logging.debug("ferryUsers len = %d:", len(ferryUsers))
+    logging.debug("userdbUsers len = %d:", len(userdbUsers))
+    for uid in ferryUsers:
+        if uid not in userdbUsers:
+            # logging.debug("uid type: %s", type(uid))
+            idx += 1
+            logging.debug("%d: user not in UserDb: '%s, %s, %s'",
+                idx,
+                ferryUsers[uid].uid, ferryUsers[uid].uname, ferryUsers[uid].full_name
+            )     # DEBUG
+            # logging.debug("similar: %s", [l for l in userdbUsers if ferryUsers[uid].uname in l[-1].lower()])
+    if not changes:
+        logging.info("Users are up to date")
+
 # Updates groups with data from gid.lis
 def update_groups():
     changes = False
@@ -518,7 +542,8 @@ def update_certificates():
         if "certificates" in diff:
             for certificate in user.certificates:
                 if certificate not in ferryUsers[user.uid].certificates:
-                    if any(c in "," for c in certificate):
+                    # if any(c in "," for c in certificate):
+                    if "," in certificate:
                         logging.warning("Certificate \"%s\" contains illegal characters" % certificate)
                         continue
                     jUnits = readFromFerry("api_get_user_affiliations", {"username": user.uname})
@@ -651,6 +676,9 @@ if __name__ == "__main__":
 
     logging.info("Updating users...")
     update_users()
+
+    logging.info("Cleanup users...")
+    cleanup_users()
 
     logging.info("Updating groups...")
     update_groups()

@@ -1,17 +1,18 @@
 package main
 
 import (
-	"errors"
 	"database/sql"
-	log "github.com/sirupsen/logrus"
+	"errors"
 	"strings"
+
 	_ "github.com/lib/pq"
+	log "github.com/sirupsen/logrus"
 )
 
 // IncludeUserAPIs includes all APIs described in this file in an APICollection
 func IncludeUserAPIs(c *APICollection) {
-	getUserInfo := BaseAPI {
-		InputModel {
+	getUserInfo := BaseAPI{
+		InputModel{
 			Parameter{UserName, true},
 		},
 		getUserInfo,
@@ -19,8 +20,8 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("getUserInfo", &getUserInfo)
 
-	setUserInfo := BaseAPI {
-		InputModel {
+	setUserInfo := BaseAPI{
+		InputModel{
 			Parameter{UserName, true},
 			Parameter{FullName, false},
 			Parameter{Status, false},
@@ -32,8 +33,8 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("setUserInfo", &setUserInfo)
 
-	createUser := BaseAPI {
-		InputModel {
+	createUser := BaseAPI{
+		InputModel{
 			Parameter{UID, true},
 			Parameter{UserName, true},
 			Parameter{FullName, true},
@@ -46,8 +47,8 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("createUser", &createUser)
 
-	getSuperUserList := BaseAPI {
-		InputModel {
+	getSuperUserList := BaseAPI{
+		InputModel{
 			Parameter{UnitName, true},
 		},
 		getSuperUserList,
@@ -55,8 +56,8 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("getSuperUserList", &getSuperUserList)
 
-	deleteUser := BaseAPI {
-		InputModel {
+	deleteUser := BaseAPI{
+		InputModel{
 			Parameter{UserName, true},
 		},
 		deleteUser,
@@ -64,8 +65,8 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("deleteUser", &deleteUser)
 
-	addCertificateDNToUser := BaseAPI {
-		InputModel {
+	addCertificateDNToUser := BaseAPI{
+		InputModel{
 			Parameter{UserName, true},
 			Parameter{UnitName, true},
 			Parameter{DN, true},
@@ -75,8 +76,8 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("addCertificateDNToUser", &addCertificateDNToUser)
 
-	getUserExternalAffiliationAttributes := BaseAPI {
-		InputModel {
+	getUserExternalAffiliationAttributes := BaseAPI{
+		InputModel{
 			Parameter{UserName, false},
 			Parameter{LastUpdated, false},
 		},
@@ -85,8 +86,8 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("getUserExternalAffiliationAttributes", &getUserExternalAffiliationAttributes)
 
-	setUserExternalAffiliationAttribute := BaseAPI {
-		InputModel {
+	setUserExternalAffiliationAttribute := BaseAPI{
+		InputModel{
 			Parameter{UserName, true},
 			Parameter{UserAttribute, true},
 			Parameter{Value, true},
@@ -96,8 +97,8 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("setUserExternalAffiliationAttribute", &setUserExternalAffiliationAttribute)
 
-	getUserStorageQuota := BaseAPI {
-		InputModel {
+	getUserStorageQuota := BaseAPI{
+		InputModel{
 			Parameter{UserName, true},
 			Parameter{UnitName, true},
 			Parameter{ResourceName, true},
@@ -107,8 +108,8 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("getUserStorageQuota", &getUserStorageQuota)
 
-	getStorageQuotas := BaseAPI {
-		InputModel {
+	getStorageQuotas := BaseAPI{
+		InputModel{
 			Parameter{UserName, false},
 			Parameter{GroupName, false},
 			Parameter{ResourceName, false},
@@ -119,8 +120,8 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("getStorageQuotas", &getStorageQuotas)
 
-	getUserAccessToComputeResources := BaseAPI {
-		InputModel {
+	getUserAccessToComputeResources := BaseAPI{
+		InputModel{
 			Parameter{UserName, true},
 			Parameter{LastUpdated, false},
 		},
@@ -129,8 +130,8 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("getUserAccessToComputeResources", &getUserAccessToComputeResources)
 
-	setUserAccessToComputeResource := BaseAPI {
-		InputModel {
+	setUserAccessToComputeResource := BaseAPI{
+		InputModel{
 			Parameter{UserName, true},
 			Parameter{GroupName, true},
 			Parameter{ResourceName, true},
@@ -143,8 +144,8 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("setUserAccessToComputeResource", &setUserAccessToComputeResource)
 
-	setUserExperimentFQAN := BaseAPI {
-		InputModel {
+	setUserExperimentFQAN := BaseAPI{
+		InputModel{
 			Parameter{UserName, true},
 			Parameter{UnitName, true},
 			Parameter{FQAN, false},
@@ -155,8 +156,8 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("setUserExperimentFQAN", &setUserExperimentFQAN)
 
-	getUserFQANs := BaseAPI {
-		InputModel {
+	getUserFQANs := BaseAPI{
+		InputModel{
 			Parameter{UserName, true},
 			Parameter{UnitName, false},
 			Parameter{LastUpdated, false},
@@ -166,8 +167,8 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("getUserFQANs", &getUserFQANs)
 
-	getUserCertificateDNs := BaseAPI {
-		InputModel {
+	getUserCertificateDNs := BaseAPI{
+		InputModel{
 			Parameter{UserName, false},
 			Parameter{UnitName, false},
 		},
@@ -176,8 +177,8 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("getUserCertificateDNs", &getUserCertificateDNs)
 
-	getAllUsersCertificateDNs := BaseAPI {
-		InputModel {
+	getAllUsersCertificateDNs := BaseAPI{
+		InputModel{
 			Parameter{UnitName, false},
 			Parameter{Status, false},
 			Parameter{LastUpdated, false},
@@ -187,8 +188,8 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("getAllUsersCertificateDNs", &getAllUsersCertificateDNs)
 
-	getUserGroups := BaseAPI {
-		InputModel {
+	getUserGroups := BaseAPI{
+		InputModel{
 			Parameter{UserName, true},
 			Parameter{LastUpdated, false},
 		},
@@ -197,8 +198,8 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("getUserGroups", &getUserGroups)
 
-	addUserToGroup := BaseAPI {
-		InputModel {
+	addUserToGroup := BaseAPI{
+		InputModel{
 			Parameter{UserName, true},
 			Parameter{GroupName, true},
 			Parameter{GroupType, true},
@@ -209,8 +210,8 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("addUserToGroup", &addUserToGroup)
 
-	setUserShellAndHomeDir := BaseAPI {
-		InputModel {
+	setUserShellAndHomeDir := BaseAPI{
+		InputModel{
 			Parameter{UserName, true},
 			Parameter{ResourceName, true},
 			Parameter{Shell, true},
@@ -221,8 +222,8 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("setUserShellAndHomeDir", &setUserShellAndHomeDir)
 
-	getUserShellAndHomeDir := BaseAPI {
-		InputModel {
+	getUserShellAndHomeDir := BaseAPI{
+		InputModel{
 			Parameter{UserName, true},
 			Parameter{ResourceName, true},
 			Parameter{LastUpdated, false},
@@ -232,8 +233,8 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("getUserShellAndHomeDir", &getUserShellAndHomeDir)
 
-	setUserShell := BaseAPI {
-		InputModel {
+	setUserShell := BaseAPI{
+		InputModel{
 			Parameter{UserName, true},
 			Parameter{UnitName, true},
 			Parameter{Shell, true},
@@ -243,8 +244,8 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("setUserShell", &setUserShell)
 
-	removeUserFromGroup := BaseAPI {
-		InputModel {
+	removeUserFromGroup := BaseAPI{
+		InputModel{
 			Parameter{UserName, true},
 			Parameter{GroupName, true},
 			Parameter{GroupType, true},
@@ -254,8 +255,8 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("removeUserFromGroup", &removeUserFromGroup)
 
-	getUserUname := BaseAPI {
-		InputModel {
+	getUserUname := BaseAPI{
+		InputModel{
 			Parameter{UID, true},
 		},
 		getUserUname,
@@ -263,8 +264,8 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("getUserUname", &getUserUname)
 
-	getUserUID := BaseAPI {
-		InputModel {
+	getUserUID := BaseAPI{
+		InputModel{
 			Parameter{UserName, true},
 		},
 		getUserUID,
@@ -272,8 +273,8 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("getUserUID", &getUserUID)
 
-	getAllUsers := BaseAPI {
-		InputModel {
+	getAllUsers := BaseAPI{
+		InputModel{
 			Parameter{Status, false},
 			Parameter{LastUpdated, false},
 		},
@@ -282,8 +283,8 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("getAllUsers", &getAllUsers)
 
-	getAllUsersFQANs := BaseAPI {
-		InputModel {
+	getAllUsersFQANs := BaseAPI{
+		InputModel{
 			Parameter{Suspend, false},
 			Parameter{LastUpdated, false},
 		},
@@ -292,8 +293,8 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("getAllUsersFQANs", &getAllUsersFQANs)
 
-	getMemberAffiliations := BaseAPI {
-		InputModel {
+	getMemberAffiliations := BaseAPI{
+		InputModel{
 			Parameter{UserName, true},
 			Parameter{Experiment, false},
 			Parameter{LastUpdated, false},
@@ -303,8 +304,8 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("getMemberAffiliations", &getMemberAffiliations)
 
-	setUserGridAccess := BaseAPI {
-		InputModel {
+	setUserGridAccess := BaseAPI{
+		InputModel{
 			Parameter{UserName, true},
 			Parameter{UnitName, true},
 			Parameter{Suspend, true},
@@ -314,8 +315,8 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("setUserGridAccess", &setUserGridAccess)
 
-	removeUserCertificateDN := BaseAPI {
-		InputModel {
+	removeUserCertificateDN := BaseAPI{
+		InputModel{
 			Parameter{UserName, true},
 			Parameter{DN, true},
 		},
@@ -324,8 +325,8 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("removeUserCertificateDN", &removeUserCertificateDN)
 
-	removeUserExternalAffiliationAttribute := BaseAPI {
-		InputModel {
+	removeUserExternalAffiliationAttribute := BaseAPI{
+		InputModel{
 			Parameter{UserName, true},
 			Parameter{UserAttribute, true},
 		},
@@ -342,7 +343,7 @@ func getUserCertificateDNs(c APIContext, i Input) (interface{}, []APIError) {
 	unitid := NewNullAttribute(UnitID)
 	queryerr := c.DBtx.QueryRow(`select (select uid from users where uname=$1),
 									    (select unitid from affiliation_units where name=$2)`,
-							  i[UserName], i[UnitName]).Scan(&uid, &unitid)
+		i[UserName], i[UnitName]).Scan(&uid, &unitid)
 	if queryerr != nil {
 		log.WithFields(QueryFields(c)).Error(queryerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -366,7 +367,7 @@ func getUserCertificateDNs(c APIContext, i Input) (interface{}, []APIError) {
 									where uid = coalesce($1, uid)
 									and (unitid in (select distinct unitid from grid_fqan where fqan like '%' || $2 || '%') or $2 is null)
 									order by uname`,
-								   uid, i[UnitName])
+		uid, i[UnitName])
 	if queryerr != nil {
 		log.WithFields(QueryFields(c)).Error(queryerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -380,8 +381,8 @@ func getUserCertificateDNs(c APIContext, i Input) (interface{}, []APIError) {
 	type jsoncerts []interface{}
 
 	entry := jsonentry{
-		UserName: 		"",
-		Certificates:	make(jsoncerts, 0),
+		UserName:     "",
+		Certificates: make(jsoncerts, 0),
 	}
 	var out jsoncerts
 
@@ -414,7 +415,7 @@ func getAllUsersCertificateDNs(c APIContext, i Input) (interface{}, []APIError) 
 	unitid := NewNullAttribute(UnitID)
 
 	queryerr := c.DBtx.QueryRow(`select unitid from affiliation_units where name=$1`,
-								i[UnitName]).Scan(&unitid)
+		i[UnitName]).Scan(&unitid)
 	if queryerr != nil && queryerr != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(queryerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -427,7 +428,7 @@ func getAllUsersCertificateDNs(c APIContext, i Input) (interface{}, []APIError) 
 	}
 
 	activeOnly := i[Status].Default(false)
-	
+
 	rows, queryerr := c.DBtx.Query(`select uname, name, dn from
 										affiliation_unit_user_certificate as ac
 										join user_certificates using(dnid)
@@ -473,12 +474,12 @@ func getAllUsersCertificateDNs(c APIContext, i Input) (interface{}, []APIError) 
 func getUserFQANs(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	uid 	:= NewNullAttribute(UID)
-	unitid	:= NewNullAttribute(UnitID)
+	uid := NewNullAttribute(UID)
+	unitid := NewNullAttribute(UnitID)
 
 	err := c.DBtx.QueryRow(`select (select uid from users where uname = $1),
 								   (select unitid from affiliation_units where name=$2)`,
-						   i[UserName], i[UnitName]).Scan(&uid, &unitid)
+		i[UserName], i[UnitName]).Scan(&uid, &unitid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -582,7 +583,7 @@ func getUserGroups(c APIContext, i Input) (interface{}, []APIError) {
 									groups join
 									user_group using(groupid)
 							   where uid = $1 and (user_group.last_updated >= $2 or $2 is null)`,
-							  uid, i[LastUpdated])
+		uid, i[LastUpdated])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -597,12 +598,12 @@ func getUserGroups(c APIContext, i Input) (interface{}, []APIError) {
 		row := NewMapNullAttribute(GID, GroupName, GroupType)
 		rows.Scan(row[GID], row[GroupName], row[GroupType])
 		out = append(out, jsongroup{
-			GID: 		row[GID].Data,
-			GroupName:	row[GroupName].Data,
-			GroupType:	row[GroupType].Data,
+			GID:       row[GID].Data,
+			GroupName: row[GroupName].Data,
+			GroupType: row[GroupType].Data,
 		})
 	}
-	
+
 	return out, nil
 }
 
@@ -619,7 +620,7 @@ func getUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 
 	out := make(map[Attribute]interface{})
 	row := NewMapNullAttribute(FullName, UID, Status, GroupAccount, ExpirationDate)
-	
+
 	for rows.Next() {
 		rows.Scan(row[FullName], row[UID], row[Status], row[GroupAccount], row[ExpirationDate])
 		for _, column := range row {
@@ -657,7 +658,7 @@ func addUserToGroup(c APIContext, i Input) (interface{}, []APIError) {
 
 	err = c.DBtx.QueryRow(`select (select uid from users where uname = $1),
 								  (select groupid from groups where name = $2 and type = $3)`,
-						  i[UserName], i[GroupName], i[GroupType]).Scan(&uid, &groupid)
+		i[UserName], i[GroupName], i[GroupType]).Scan(&uid, &groupid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -677,7 +678,7 @@ func addUserToGroup(c APIContext, i Input) (interface{}, []APIError) {
 	_, err = c.DBtx.Exec(`insert into user_group (uid, groupid, is_leader, last_updated) values ($1, $2, $3, NOW())
 						  on conflict (uid, groupid) do
 						  update set is_leader = $3, last_updated = NOW() where $4`,
-						 uid, groupid, leader, i[Leader].Valid)
+		uid, groupid, leader, i[Leader].Valid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -709,7 +710,7 @@ func removeUserFromGroup(c APIContext, i Input) (interface{}, []APIError) {
 
 	err = c.DBtx.QueryRow(`select (select uid from users where uname = $1),
 								  (select groupid from groups where name = $2 and type = $3)`,
-						  i[UserName], i[GroupName], i[GroupType]).Scan(&uid, &groupid)
+		i[UserName], i[GroupName], i[GroupType]).Scan(&uid, &groupid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -761,7 +762,7 @@ func setUserExperimentFQAN(c APIContext, i Input) (interface{}, []APIError) {
 	unitid := NewNullAttribute(UnitID)
 	queryerr := c.DBtx.QueryRow(`select (select uid from users where uname=$1),
 									    (select unitid from affiliation_units where name=$2)`,
-							  i[UserName], i[UnitName]).Scan(&uid, &unitid)
+		i[UserName], i[UnitName]).Scan(&uid, &unitid)
 	if queryerr != nil {
 		log.WithFields(QueryFields(c)).Error(queryerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -829,12 +830,12 @@ func setUserExperimentFQAN(c APIContext, i Input) (interface{}, []APIError) {
 func setUserShellAndHomeDir(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	uid 		:= NewNullAttribute(UID)
-	resourceid	:= NewNullAttribute(ResourceID)
+	uid := NewNullAttribute(UID)
+	resourceid := NewNullAttribute(ResourceID)
 
 	err := c.DBtx.QueryRow(`select (select uid from users where uname = $1),
 								   (select compid from compute_resources where name = $2)`,
-						   i[UserName], i[ResourceName]).Scan(&uid, &resourceid)
+		i[UserName], i[ResourceName]).Scan(&uid, &resourceid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -853,7 +854,7 @@ func setUserShellAndHomeDir(c APIContext, i Input) (interface{}, []APIError) {
 
 	var member bool
 	err = c.DBtx.QueryRow(`select ($1, $2) in (select uid, compid from compute_access)`,
-						  uid, resourceid).Scan(&member)
+		uid, resourceid).Scan(&member)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -882,12 +883,12 @@ func setUserShellAndHomeDir(c APIContext, i Input) (interface{}, []APIError) {
 func setUserShell(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	uid 	:= NewNullAttribute(UID)
-	unitid	:= NewNullAttribute(UnitID)
+	uid := NewNullAttribute(UID)
+	unitid := NewNullAttribute(UnitID)
 
 	err := c.DBtx.QueryRow(`select (select uid from users where uname = $1),
 								   (select unitid from affiliation_units where name = $2)`,
-						   i[UserName], i[UnitName]).Scan(&uid, &unitid)
+		i[UserName], i[UnitName]).Scan(&uid, &unitid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -908,7 +909,7 @@ func setUserShell(c APIContext, i Input) (interface{}, []APIError) {
 	err = c.DBtx.QueryRow(`select ($1, $2) in (select uid, unitid from
 						   compute_access join compute_resources using(compid)
 						   where unitid is not null)`,
-						  uid, unitid).Scan(&member)
+		uid, unitid).Scan(&member)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -926,7 +927,7 @@ func setUserShell(c APIContext, i Input) (interface{}, []APIError) {
 	_, err = c.DBtx.Exec(`update compute_access set shell = $1, last_updated = NOW()
 						  where uid = $2 and
 						  compid in (select compid from compute_resources where unitid = $3)`, i[Shell], uid, unitid)
-	if err != nil {	
+	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
@@ -938,12 +939,12 @@ func setUserShell(c APIContext, i Input) (interface{}, []APIError) {
 func getUserShellAndHomeDir(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	uid 		:= NewNullAttribute(UID)
-	resourceid	:= NewNullAttribute(ResourceID)
+	uid := NewNullAttribute(UID)
+	resourceid := NewNullAttribute(ResourceID)
 
 	err := c.DBtx.QueryRow(`select (select uid from users where uname = $1),
 								   (select compid from compute_resources where name = $2)`,
-						   i[UserName], i[ResourceName]).Scan(&uid, &resourceid)
+		i[UserName], i[ResourceName]).Scan(&uid, &resourceid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -962,7 +963,7 @@ func getUserShellAndHomeDir(c APIContext, i Input) (interface{}, []APIError) {
 
 	var member bool
 	err = c.DBtx.QueryRow(`select ($1, $2) in (select uid, compid from compute_access)`,
-						  uid, resourceid).Scan(&member)
+		uid, resourceid).Scan(&member)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -980,7 +981,7 @@ func getUserShellAndHomeDir(c APIContext, i Input) (interface{}, []APIError) {
 	row := NewMapNullAttribute(Shell, HomeDir)
 	err = c.DBtx.QueryRow(`select shell, home_dir from compute_access
 						   where uid = $1 and compid = $2 and (last_updated >= $3 or $3 is null)`,
-						  uid, resourceid, i[LastUpdated]).Scan(row[Shell], row[HomeDir])
+		uid, resourceid, i[LastUpdated]).Scan(row[Shell], row[HomeDir])
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -992,7 +993,7 @@ func getUserShellAndHomeDir(c APIContext, i Input) (interface{}, []APIError) {
 
 	if row[Shell].Valid {
 		out = jsonout{
-			Shell:	 row[Shell].Data,
+			Shell:   row[Shell].Data,
 			HomeDir: row[HomeDir].Data,
 		}
 	}
@@ -1003,14 +1004,14 @@ func getUserShellAndHomeDir(c APIContext, i Input) (interface{}, []APIError) {
 func getUserStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	uid 		:= NewNullAttribute(UID)
-	unitid		:= NewNullAttribute(UnitID)
-	resourceid	:= NewNullAttribute(ResourceID)
+	uid := NewNullAttribute(UID)
+	unitid := NewNullAttribute(UnitID)
+	resourceid := NewNullAttribute(ResourceID)
 
 	err := c.DBtx.QueryRow(`select (select uid from users where uname = $1),
 								   (select unitid from affiliation_units where name = $2),
 								   (select storageid from storage_resources where name = $3)`,
-						   i[UserName], i[UnitName], i[ResourceName]).Scan(&uid, &unitid, &resourceid)
+		i[UserName], i[UnitName], i[ResourceName]).Scan(&uid, &unitid, &resourceid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1042,16 +1043,16 @@ func getUserStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
 
 	type jsonentry map[Attribute]interface{}
 	out := make(jsonentry)
-	
+
 	for rows.Next() {
 		row := NewMapNullAttribute(Path, Value, QuotaUnit, ExpirationDate)
 		rows.Scan(row[Path], row[Value], row[QuotaUnit], row[ExpirationDate])
 		if row[Value].Valid {
 			out = jsonentry{
-				Path:			row[Path].Data,
-				Value:			row[Value].Data,
-				QuotaUnit:		row[QuotaUnit].Data,
-				ExpirationDate:	row[ExpirationDate].Data,
+				Path:           row[Path].Data,
+				Value:          row[Value].Data,
+				QuotaUnit:      row[QuotaUnit].Data,
+				ExpirationDate: row[ExpirationDate].Data,
 			}
 		}
 	}
@@ -1083,7 +1084,7 @@ func setUserExternalAffiliationAttribute(c APIContext, i Input) (interface{}, []
 	if !validAttribute {
 		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, UserAttribute))
 	}
-	
+
 	if len(apiErr) > 0 {
 		return nil, apiErr
 	}
@@ -1105,7 +1106,7 @@ func removeUserExternalAffiliationAttribute(c APIContext, i Input) (interface{},
 	uid := NewNullAttribute(UID)
 	err := c.DBtx.QueryRow(`select (select uid from users where uname = $1),
 								   (select $2 = any (enum_range(null::external_affiliation_attribute_attribute_type)::text[]))`,
-						   i[UserName], i[UserAttribute]).Scan(&uid, &validAttribute)
+		i[UserName], i[UserAttribute]).Scan(&uid, &validAttribute)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1118,13 +1119,13 @@ func removeUserExternalAffiliationAttribute(c APIContext, i Input) (interface{},
 	if !validAttribute {
 		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, UserAttribute))
 	}
-	
+
 	if len(apiErr) > 0 {
 		return nil, apiErr
 	}
 
 	_, err = c.DBtx.Exec(`delete from external_affiliation_attribute where uid = $1 and attribute = $2`,
-						 uid, i[UserAttribute])
+		uid, i[UserAttribute])
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1191,14 +1192,14 @@ func addCertificateDNToUser(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	uid    := NewNullAttribute(UID)
-	dnid   := NewNullAttribute(DNID)
+	uid := NewNullAttribute(UID)
+	dnid := NewNullAttribute(DNID)
 	unitid := NewNullAttribute(UnitID)
 
 	err = c.DBtx.QueryRow(`select (select uid from users where uname = $1),
 								  (select dnid from user_certificates where dn=$2),
 								  (select unitid from affiliation_units where name=$3)`,
-								i[UserName], dn, i[UnitName]).Scan(&uid, &dnid, &unitid)
+		i[UserName], dn, i[UnitName]).Scan(&uid, &dnid, &unitid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1252,14 +1253,14 @@ func removeUserCertificateDN(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	uid    := NewNullAttribute(UID)
-	dnid   := NewNullAttribute(DNID)
+	uid := NewNullAttribute(UID)
+	dnid := NewNullAttribute(DNID)
 
 	var countUnique int64
 
 	err = c.DBtx.QueryRow(`select (select uid from users where uname = $1),
 								  (select dnid from user_certificates where dn=$2)`,
-						  i[UserName], dn).Scan(&uid, &dnid)
+		i[UserName], dn).Scan(&uid, &dnid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1274,7 +1275,7 @@ func removeUserCertificateDN(c APIContext, i Input) (interface{}, []APIError) {
 								 join user_certificates using(dnid) where uid = $1 and dnid = $2)
 							 group by unitid, uid order by uid, unitid, count) as c
 						   where c.count = 1`,
-						  uid, dnid).Scan(&countUnique)
+		uid, dnid).Scan(&countUnique)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1315,7 +1316,7 @@ func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
 	if !i[FullName].Valid && !i[Status].Valid && !i[GroupAccount].Valid &&
-	   !i[ExpirationDate].Valid && !i[ExpirationDate].AbsoluteNull {
+		!i[ExpirationDate].Valid && !i[ExpirationDate].AbsoluteNull {
 		apiErr = append(apiErr, APIError{errors.New("not enough arguments"), ErrorAPIRequirement})
 		return nil, apiErr
 	}
@@ -1324,7 +1325,7 @@ func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 	expDate := NewNullAttribute(ExpirationDate)
 
 	queryerr := c.DBtx.tx.QueryRow(`select uid, expiration_date from users where uname = $1`,
-								   i[UserName]).Scan(&uid, &expDate)
+		i[UserName]).Scan(&uid, &expDate)
 	if queryerr == sql.ErrNoRows {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
 		return nil, apiErr
@@ -1342,7 +1343,7 @@ func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 												expiration_date = $5,
 												last_updated = NOW()
 							   where uid = $1`,
-							  uid, i[FullName], i[Status], i[GroupAccount], expDate)
+		uid, i[FullName], i[Status], i[GroupAccount], expDate)
 	if queryerr != nil {
 		log.WithFields(QueryFields(c)).Error(queryerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1354,9 +1355,9 @@ func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 
 func createUser(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
-	
-	groupid	:= NewNullAttribute(GroupID)
-	expDate	:= i[ExpirationDate].Default("2038-01-01")
+
+	groupid := NewNullAttribute(GroupID)
+	expDate := i[ExpirationDate].Default("2038-01-01")
 
 	err := c.DBtx.QueryRow(`select (select groupid from groups where name = $1 and type = 'UnixGroup')`, i[GroupName]).Scan(&groupid)
 	if err != nil {
@@ -1372,7 +1373,7 @@ func createUser(c APIContext, i Input) (interface{}, []APIError) {
 
 	_, err = c.DBtx.Exec(`insert into users (uname, uid, full_name, status, expiration_date, last_updated)
 						  values ($1, $2, $3, $4, $5, NOW())`,
-						 i[UserName], i[UID], i[FullName], i[Status], expDate)
+		i[UserName], i[UID], i[FullName], i[Status], expDate)
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key value violates unique constraint \"pk_users\"") {
 			apiErr = append(apiErr, DefaultAPIError(ErrorDuplicateData, UID))
@@ -1380,14 +1381,14 @@ func createUser(c APIContext, i Input) (interface{}, []APIError) {
 			apiErr = append(apiErr, DefaultAPIError(ErrorDuplicateData, UserName))
 		} else {
 			log.WithFields(QueryFields(c)).Error(err)
-			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))	
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		}
 		return nil, apiErr
 	}
 
 	_, err = c.DBtx.Exec(`insert into user_group (uid, groupid, is_leader, last_updated)
 						  values ($1, $2, false, NOW())`,
-						 i[UID], groupid)
+		i[UID], groupid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1400,8 +1401,8 @@ func createUser(c APIContext, i Input) (interface{}, []APIError) {
 func getMemberAffiliations(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	uid			:= NewNullAttribute(UID)
-	experiment	:= i[Experiment].Default(false)
+	uid := NewNullAttribute(UID)
+	experiment := i[Experiment].Default(false)
 
 	err := c.DBtx.QueryRow(`select uid from users where uname = $1`, i[UserName]).Scan(&uid)
 	if err != nil && err != sql.ErrNoRows {
@@ -1438,8 +1439,8 @@ func getMemberAffiliations(c APIContext, i Input) (interface{}, []APIError) {
 
 		if row[UnitName].Valid {
 			out = append(out, jsonentry{
-				UnitName:			row[UnitName].Data,
-				AlternativeName:	row[AlternativeName].Data,
+				UnitName:        row[UnitName].Data,
+				AlternativeName: row[AlternativeName].Data,
 			})
 		} else {
 			apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
@@ -1451,7 +1452,7 @@ func getMemberAffiliations(c APIContext, i Input) (interface{}, []APIError) {
 
 func getUserUname(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
-	
+
 	uname := NewNullAttribute(UserName)
 
 	err := c.DBtx.QueryRow(`select uname from users where uid = $1`, i[UID]).Scan(&uname)
@@ -1471,7 +1472,7 @@ func getUserUname(c APIContext, i Input) (interface{}, []APIError) {
 
 func getUserUID(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
-	
+
 	uid := NewNullAttribute(UID)
 
 	err := c.DBtx.QueryRow(`select uid from users where uname = $1`, i[UserName]).Scan(&uid)
@@ -1491,7 +1492,38 @@ func getUserUID(c APIContext, i Input) (interface{}, []APIError) {
 
 func deleteUser(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
-	
+
+	uid := NewNullAttribute(UID)
+
+	err := c.DBtx.QueryRow(`select uid from users where uname = $1`, i[UserName]).Scan(&uid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !uid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
+		return nil, apiErr
+	}
+
+	_, err = c.DBtx.Exec(`delete from users where uid = $1`, uid)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		if strings.Contains(err.Error(), "violates foreign key constraint") {
+			apiErr = append(apiErr, APIError{errors.New("all associations with this user shall be removed before it can be deleted"), ErrorAPIRequirement})
+		} else {
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		}
+		return nil, apiErr
+	}
+
+	return nil, nil
+}
+
+func dropUser(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+
 	uid := NewNullAttribute(UID)
 
 	err := c.DBtx.QueryRow(`select uid from users where uname = $1`, i[UserName]).Scan(&uid)
@@ -1522,7 +1554,7 @@ func deleteUser(c APIContext, i Input) (interface{}, []APIError) {
 
 func getUserAccessToComputeResources(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
-	
+
 	uid := NewNullAttribute(UID)
 
 	err := c.DBtx.tx.QueryRow(`select uid from users where uname = $1`, i[UserName]).Scan(&uid)
@@ -1541,7 +1573,7 @@ func getUserAccessToComputeResources(c APIContext, i Input) (interface{}, []APIE
 								compute_access as ca join
 								compute_resources using(compid)
 							   where uid = $1 and (ca.last_updated>=$2 or $2 is null)`,
-							  uid, i[LastUpdated])
+		uid, i[LastUpdated])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1557,11 +1589,11 @@ func getUserAccessToComputeResources(c APIContext, i Input) (interface{}, []APIE
 		rows.Scan(row[ResourceName], row[ResourceType], row[Shell], row[HomeDir])
 
 		if row[ResourceName].Valid {
-			entry := jsonentry {
-				ResourceName:	row[ResourceName].Data,
-				ResourceType:	row[ResourceType].Data,
-				Shell:			row[Shell].Data,
-				HomeDir:		row[HomeDir].Data,
+			entry := jsonentry{
+				ResourceName: row[ResourceName].Data,
+				ResourceType: row[ResourceType].Data,
+				Shell:        row[Shell].Data,
+				HomeDir:      row[HomeDir].Data,
 			}
 			out = append(out, entry)
 		}
@@ -1573,15 +1605,15 @@ func getUserAccessToComputeResources(c APIContext, i Input) (interface{}, []APIE
 func getStorageQuotas(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	uid 		:= NewNullAttribute(UID)
-	groupid		:= NewNullAttribute(GroupID)
-	resourceid	:= NewNullAttribute(ResourceID)
+	uid := NewNullAttribute(UID)
+	groupid := NewNullAttribute(GroupID)
+	resourceid := NewNullAttribute(ResourceID)
 
 	err := c.DBtx.QueryRow(`select
 								(select uid from users where uname = $1),
 								(select groupid from groups where name = $2 and type = 'UnixGroup'),
 								(select storageid from storage_resources where name = $3)`,
-						   i[UserName], i[GroupName], i[ResourceName]).Scan(&uid, &groupid, &resourceid)
+		i[UserName], i[GroupName], i[ResourceName]).Scan(&uid, &groupid, &resourceid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1613,7 +1645,7 @@ func getStorageQuotas(c APIContext, i Input) (interface{}, []APIError) {
 								and (valid_until is null or valid_until >= NOW())
 								and (sq.last_updated >= $4 or $4 is null)
 							  order by uname asc, g.name asc, sr.name asc, valid_until desc`,
-							 uid, groupid, resourceid, i[LastUpdated])
+		uid, groupid, resourceid, i[LastUpdated])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1624,13 +1656,13 @@ func getStorageQuotas(c APIContext, i Input) (interface{}, []APIError) {
 	const Users Attribute = "users"
 	const Groups Attribute = "groups"
 
-	type jsonquota 		map[Attribute]interface{}
-	type jsonstorage	map[string]jsonquota
-	type jsonowner		map[string]jsonstorage
-	
+	type jsonquota map[Attribute]interface{}
+	type jsonstorage map[string]jsonquota
+	type jsonowner map[string]jsonstorage
+
 	out := make(map[Attribute]jsonowner)
-	out[Users] 	= make(jsonowner)
-	out[Groups]	= make(jsonowner)
+	out[Users] = make(jsonowner)
+	out[Groups] = make(jsonowner)
 
 	for rows.Next() {
 		row := NewMapNullAttribute(UserName, GroupName, ResourceName, Path, Quota, QuotaUnit, ExpirationDate)
@@ -1650,11 +1682,11 @@ func getStorageQuotas(c APIContext, i Input) (interface{}, []APIError) {
 			if _, ok := out[ownerType][row[ownerName].Data.(string)]; !ok {
 				out[ownerType][row[ownerName].Data.(string)] = make(jsonstorage)
 			}
-			out[ownerType][row[ownerName].Data.(string)][row[ResourceName].Data.(string)] = jsonquota {
-				Path: 			row[Path].Data,
-				Quota: 			row[Quota].Data,
-				QuotaUnit:		row[QuotaUnit].Data,
-				ExpirationDate:	row[ExpirationDate].Data,
+			out[ownerType][row[ownerName].Data.(string)][row[ResourceName].Data.(string)] = jsonquota{
+				Path:           row[Path].Data,
+				Quota:          row[Quota].Data,
+				QuotaUnit:      row[QuotaUnit].Data,
+				ExpirationDate: row[ExpirationDate].Data,
 			}
 		}
 	}
@@ -1667,17 +1699,17 @@ func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIEr
 
 	primary := i[Primary].Default(false)
 
-	dShell	:= NewNullAttribute(Shell)
-	dHome	:= NewNullAttribute(HomeDir)
-	groupid	:= NewNullAttribute(GroupID)
-	compid	:= NewNullAttribute(ResourceID)
-	uid		:= NewNullAttribute(UID)
+	dShell := NewNullAttribute(Shell)
+	dHome := NewNullAttribute(HomeDir)
+	groupid := NewNullAttribute(GroupID)
+	compid := NewNullAttribute(ResourceID)
+	uid := NewNullAttribute(UID)
 
 	err := c.DBtx.QueryRow(`select
 								(select uid from users where uname = $1),
 								(select groupid from groups where name = $2 and type = 'UnixGroup'),
 								(select compid from compute_resources where name = $3)`,
-						   i[UserName], i[GroupName], i[ResourceName]).Scan(&uid, &groupid, &compid)
+		i[UserName], i[GroupName], i[ResourceName]).Scan(&uid, &groupid, &compid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1705,10 +1737,10 @@ func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIEr
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
-	
+
 	// Grant user access to the resource (compute_access)
 	err = c.DBtx.QueryRow(`select default_shell, default_home_dir from compute_resources where compid = $1`,
-						 compid).Scan(&dShell, &dHome)
+		compid).Scan(&dShell, &dHome)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1723,9 +1755,9 @@ func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIEr
 		homeStr = homeStr + "/" + i[UserName].Data.(string)
 		dHome.Scan(homeStr)
 	}
-	
+
 	shell := i[Shell].Default(dShell.Data.(string))
-	home  := i[HomeDir].Default(dHome.Data.(string))
+	home := i[HomeDir].Default(dHome.Data.(string))
 
 	if !shell.Valid {
 		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, Shell))
@@ -1734,7 +1766,7 @@ func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIEr
 
 	_, err = c.DBtx.Exec(`insert into compute_access as ca (compid, uid, shell, home_dir) values ($1, $2, $3, $4)
 						  on conflict (compid, uid) do update set shell = coalesce($5, ca.shell), home_dir = coalesce($6, ca.home_dir)`,
-						compid, uid, shell, home, i[Shell], i[HomeDir])
+		compid, uid, shell, home, i[Shell], i[HomeDir])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1744,7 +1776,7 @@ func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIEr
 	// Add user to group in the resource (compute_access_group)
 	var priCount int
 	err = c.DBtx.QueryRow(`select count(*) from compute_access_group where uid = $1 and compid = $2 and is_primary`,
-							uid, compid).Scan(&priCount)
+		uid, compid).Scan(&priCount)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1756,7 +1788,7 @@ func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIEr
 
 	if primary.Data.(bool) {
 		_, err = c.DBtx.Exec(`update compute_access_group set is_primary = false where uid = $1 and compid = $2 and is_primary`,
-							uid, compid)
+			uid, compid)
 		if err != nil {
 			log.WithFields(QueryFields(c)).Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1767,7 +1799,7 @@ func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIEr
 	_, err = c.DBtx.Exec(`insert into compute_access_group as cg (compid, uid, groupid, is_primary)
 						  values ($1, $2, $3, $4)
 						  on conflict (compid, uid, groupid) do update set is_primary = coalesce($5, cg.is_primary)`,
-						compid, uid, groupid, primary, i[Primary])
+		compid, uid, groupid, primary, i[Primary])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1794,7 +1826,7 @@ func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 
 	type jsonout map[Attribute]interface{}
 	var out []jsonout
-	
+
 	for rows.Next() {
 		row := NewMapNullAttribute(UserName, UID, FullName, Status, ExpirationDate)
 		rows.Scan(row[UserName], row[UID], row[FullName], row[Status], row[ExpirationDate])
@@ -1805,11 +1837,11 @@ func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 		}
 
 		out = append(out, jsonout{
-			UserName:		row[UserName].Data,
-			UID:			row[UID].Data,
-			FullName:		row[FullName].Data,
-			Status:			row[Status].Data,
-			ExpirationDate:	expirationDate,
+			UserName:       row[UserName].Data,
+			UID:            row[UID].Data,
+			FullName:       row[FullName].Data,
+			Status:         row[Status].Data,
+			ExpirationDate: expirationDate,
 		})
 	}
 
@@ -1826,24 +1858,24 @@ func getAllUsersFQANs(c APIContext, i Input) (interface{}, []APIError) {
 							  where (ga.last_updated>=$2 or gf.last_updated>=$2 or
 									  u.last_updated>=$2 or au.last_updated>=$2 or $2 is null)
 									and (is_banned = $1 or $1 is null)  order by uname`,
-							 i[Suspend], i[LastUpdated])
+		i[Suspend], i[LastUpdated])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
 	defer rows.Close()
-	
+
 	type jsonfqan map[Attribute]interface{}
 	out := make(map[string][]jsonfqan)
-	
+
 	for rows.Next() {
 		row := NewMapNullAttribute(UserName, FQAN, UnitName, Suspend)
 		rows.Scan(row[UserName], row[FQAN], row[UnitName], row[Suspend])
 		out[row[UserName].Data.(string)] = append(out[row[UserName].Data.(string)], jsonfqan{
-			FQAN: row[FQAN].Data,
+			FQAN:     row[FQAN].Data,
 			UnitName: row[UnitName].Data,
-			Suspend: row[Suspend].Data,
+			Suspend:  row[Suspend].Data,
 		})
 	}
 
@@ -1857,7 +1889,7 @@ func setUserGridAccess(c APIContext, i Input) (interface{}, []APIError) {
 	unitid := NewNullAttribute(UnitID)
 	queryerr := c.DBtx.QueryRow(`select (select uid from users where uname=$1),
 									    (select unitid from affiliation_units where name=$2)`,
-							  i[UserName], i[UnitName]).Scan(&uid, &unitid)
+		i[UserName], i[UnitName]).Scan(&uid, &unitid)
 	if queryerr != nil {
 		log.WithFields(QueryFields(c)).Error(queryerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1876,7 +1908,7 @@ func setUserGridAccess(c APIContext, i Input) (interface{}, []APIError) {
 
 	_, err := c.DBtx.Exec(`update grid_access set is_banned = $1, last_updated = NOW()
 						   where uid = $2 and fqanid in (select fqanid from grid_fqan where unitid = $3)`,
-					   	  i[Suspend], uid, unitid)
+		i[Suspend], uid, unitid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
