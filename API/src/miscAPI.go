@@ -278,7 +278,7 @@ func getPasswdFile(c APIContext, i Input) (interface{}, []APIError) {
 	compid := NewNullAttribute(ResourceID)
 	err := c.DBtx.QueryRow(`select (select unitid from affiliation_units where name = $1),
 								   (select compid from compute_resources where name = $2)`,
-						   i[UnitName], i[ResourceName]).Scan(&unitid, &compid)
+		i[UnitName], i[ResourceName]).Scan(&unitid, &compid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -296,10 +296,10 @@ func getPasswdFile(c APIContext, i Input) (interface{}, []APIError) {
 	}
 
 	rows, err := c.DBtx.Query(`select au.name, cr.name, uname, uid, gid, full_name, home_dir, shell, cag.last_updated
-							   from compute_access_group as cag 
-                               left join compute_access as ca using(compid, uid) 
-                               join groups as g using(groupid) 
-                               join compute_resources as cr using(compid) 
+							   from compute_access_group as cag
+                               left join compute_access as ca using(compid, uid)
+                               join groups as g using(groupid)
+                               join compute_resources as cr using(compid)
                         	   left join affiliation_units as au using(unitid)
                                join users as u using(uid)
 							   where cag.is_primary = true
@@ -319,7 +319,7 @@ func getPasswdFile(c APIContext, i Input) (interface{}, []APIError) {
 	const GECOS Attribute = "gecos"
 	const Resources Attribute = "resources"
 	type jsonmap map[Attribute]interface{}
-	
+
 	out := make(map[string]jsonmap)
 
 	lastTime := int64(0)
@@ -336,7 +336,7 @@ func getPasswdFile(c APIContext, i Input) (interface{}, []APIError) {
 		}
 
 		*row[UnitName] = row[UnitName].Default("null")
-		
+
 		if !prevRname.Valid {
 			prevRname = *row[ResourceName]
 		}
@@ -352,7 +352,7 @@ func getPasswdFile(c APIContext, i Input) (interface{}, []APIError) {
 			}
 			if prevUname != *row[UnitName] {
 				out[prevUname.Data.(string)] = jsonmap{
-					Resources: tmpResources,
+					Resources:   tmpResources,
 					LastUpdated: lastTime,
 				}
 				tmpResources = make(map[string][]jsonmap, 0)
@@ -367,18 +367,18 @@ func getPasswdFile(c APIContext, i Input) (interface{}, []APIError) {
 			}
 			tmpUsers = append(tmpUsers, jsonmap{
 				UserName: row[UserName].Data,
-				UID: row[UID].Data,
-				GID: row[GID].Data,
-				GECOS: row[FullName].Data,
-				HomeDir: row[HomeDir].Data,
-				Shell: row[Shell].Data,
+				UID:      row[UID].Data,
+				GID:      row[GID].Data,
+				GECOS:    row[FullName].Data,
+				HomeDir:  row[HomeDir].Data,
+				Shell:    row[Shell].Data,
 			})
 		}
 	}
 	if prevUname.Valid || prevUname.AbsoluteNull {
 		tmpResources[prevRname.Data.(string)] = tmpUsers
 		out[prevUname.Data.(string)] = jsonmap{
-			Resources: tmpResources,
+			Resources:   tmpResources,
 			LastUpdated: lastTime,
 		}
 	}
@@ -393,7 +393,7 @@ func getGroupFile(c APIContext, i Input) (interface{}, []APIError) {
 	compid := NewNullAttribute(ResourceID)
 	err := c.DBtx.QueryRow(`select (select unitid from affiliation_units where name = $1),
 								   (select compid from compute_resources where name = $2)`,
-						   i[UnitName], i[ResourceName]).Scan(&unitid, &compid)
+		i[UnitName], i[ResourceName]).Scan(&unitid, &compid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -418,7 +418,7 @@ func getGroupFile(c APIContext, i Input) (interface{}, []APIError) {
 							   where (unitid = $1 or $1 is null) and (compid = $2 or $2 is null)
 									  and (g.type = 'UnixGroup') and (cg.last_updated>=$3 or $3 is null)
 							   order by name, uname`,
-							  unitid, compid, i[LastUpdated])
+		unitid, compid, i[LastUpdated])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -433,7 +433,7 @@ func getGroupFile(c APIContext, i Input) (interface{}, []APIError) {
 	const Users Attribute = "users"
 	users := make([]interface{}, 0)
 
-	lastTime  := NewNullAttribute(LastUpdated)
+	lastTime := NewNullAttribute(LastUpdated)
 	prevGname := NewNullAttribute(GroupName)
 	prevUname := NewNullAttribute(UserName)
 	for rows.Next() {
@@ -458,7 +458,7 @@ func getGroupFile(c APIContext, i Input) (interface{}, []APIError) {
 				users = append(users, row[UserName].Data)
 				prevUname = *row[UserName]
 			}
-			
+
 			if row[LastUpdated].Valid {
 				if !lastTime.Valid || (row[LastUpdated].Data.(time.Time).Unix() > lastTime.Data.(time.Time).Unix()) {
 					lastTime = *row[LastUpdated]
@@ -481,7 +481,7 @@ func getGridMapFile(c APIContext, i Input) (interface{}, []APIError) {
 	compid := NewNullAttribute(ResourceID)
 	err := c.DBtx.QueryRow(`select (select unitid from affiliation_units where name = $1),
 								   (select compid from compute_resources where name = $2)`,
-						   i[UnitName], i[ResourceName]).Scan(&unitid, &compid)
+		i[UnitName], i[ResourceName]).Scan(&unitid, &compid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -498,14 +498,14 @@ func getGridMapFile(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	rows, err := c.DBtx.Query(`select distinct dn, uname 
+	rows, err := c.DBtx.Query(`select distinct dn, uname
 								from affiliation_unit_user_certificate as ac
 								left join user_certificates as uc using(dnid)
 								left join users as us using(uid)
 								left join compute_access as ca using(uid)
 							   where (unitid = $1 or $1 is null) and (compid = $2 or $2 is null) and
 									 (ac.last_updated>=$3 or uc.last_updated>=$3 or us.last_updated>=$3 or $3 is null)`,
-							  unitid, compid, i[LastUpdated])
+		unitid, compid, i[LastUpdated])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -521,7 +521,7 @@ func getGridMapFile(c APIContext, i Input) (interface{}, []APIError) {
 		rows.Scan(row[DN], row[UserName])
 		if row[DN].Valid {
 			out = append(out, jsondnmap{
-				DN: row[DN].Data,
+				DN:       row[DN].Data,
 				UserName: row[UserName].Data,
 			})
 		}
@@ -546,14 +546,14 @@ func getGridMapFileByVO(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	rows, err := c.DBtx.Query(`select name, dn, uname 
+	rows, err := c.DBtx.Query(`select name, dn, uname
 								from  affiliation_unit_user_certificate as ac
 								left join user_certificates as uc using(dnid)
 								left join users as us using(uid)
 								left join affiliation_units as au using(unitid)
 								where (unitid = $1 or $1 is null) and (ac.last_updated >= $2 or uc.last_updated >= $2 or
 									   us.last_updated >= $2 or au.last_updated >= $2 or $2 is null)`,
-							  unitid, i[LastUpdated])
+		unitid, i[LastUpdated])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -569,7 +569,7 @@ func getGridMapFileByVO(c APIContext, i Input) (interface{}, []APIError) {
 		rows.Scan(row[UnitName], row[DN], row[UserName])
 		if row[DN].Valid {
 			out[row[UnitName].Data.(string)] = append(out[row[UnitName].Data.(string)], jsondnmap{
-				DN: row[DN].Data,
+				DN:       row[DN].Data,
 				UserName: row[UserName].Data,
 			})
 		}
@@ -600,7 +600,7 @@ func getVORoleMapFile(c APIContext, i Input) (interface{}, []APIError) {
 								join compute_access_group as cag on (cag.groupid=gf.mapped_group and gf.mapped_user=cag.uid)
 								left join affiliation_units using(unitid)
 							  where (compid = $1 or $1 is null) and (gf.last_updated >= $2 or u.last_updated >= $2 or $2 is null)`,
-							 compid, i[LastUpdated])
+		compid, i[LastUpdated])
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -616,7 +616,7 @@ func getVORoleMapFile(c APIContext, i Input) (interface{}, []APIError) {
 		rows.Scan(row[FQAN], row[UserName], row[UnitName])
 		if row[FQAN].Valid {
 			out = append(out, jsonmapping{
-				FQAN: row[FQAN].Data,
+				FQAN:     row[FQAN].Data,
 				UserName: row[UserName].Data,
 				UnitName: row[UnitName].Data,
 			})
@@ -694,7 +694,7 @@ func lookupCertificateDN(c APIContext, i Input) (interface{}, []APIError) {
 
 	row := NewMapNullAttribute(UID, UserName)
 	err = c.DBtx.QueryRow(`select uid, uname from user_certificates join users using(uid) where dnid = $1;`,
-						  dnid).Scan(row[UID], row[UserName])
+		dnid).Scan(row[UID], row[UserName])
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -706,7 +706,7 @@ func lookupCertificateDN(c APIContext, i Input) (interface{}, []APIError) {
 
 	if row[UID].Valid {
 		out = jsonuser{
-			UID: row[UID].Data,
+			UID:      row[UID].Data,
 			UserName: row[UserName].Data,
 		}
 	}
@@ -731,7 +731,7 @@ func getMappedGidFile(c APIContext, i Input) (interface{}, []APIError) {
 	var out []jsonmapping
 
 	const MappedUname Attribute = "mapped_uname"
-	const MappedGID	  Attribute = "mapped_gid"
+	const MappedGID Attribute = "mapped_gid"
 
 	for rows.Next() {
 		row := NewMapNullAttribute(FQAN, UserName, GID)
@@ -744,9 +744,9 @@ func getMappedGidFile(c APIContext, i Input) (interface{}, []APIError) {
 			if !((strings.Contains(row[FQAN].Data.(string), "Role=Analysis") && row[UserName].Valid) ||
 				(row[FQAN].Data.(string) == "/des/Role=Production/Capability=NULL" && row[UserName].Data.(string) == "des")) {
 				out = append(out, jsonmapping{
-					FQAN: row[FQAN].Data,
+					FQAN:        row[FQAN].Data,
 					MappedUname: row[UserName].Data,
-					MappedGID: row[GID].Data,
+					MappedGID:   row[GID].Data,
 				})
 			}
 		}
@@ -829,19 +829,19 @@ func getStorageAuthzDBFile(c APIContext, i Input) (interface{}, []APIError) {
 			}
 
 			if *row[UserName] != prevUname {
-				tmpMap["all"] = append(tmpMap["all"], jsonmap {
+				tmpMap["all"] = append(tmpMap["all"], jsonmap{
 					UserName: row[UserName].Data,
-					UID: row[UID].Data,
-					GID: row[GID].Data,
-					GECOS: row[FullName].Data,
-					HomeDir: "/home/" + row[UserName].Data.(string),
-					Shell: "/sbin/nologin",
+					UID:      row[UID].Data,
+					GID:      row[GID].Data,
+					GECOS:    row[FullName].Data,
+					HomeDir:  "/home/" + row[UserName].Data.(string),
+					Shell:    "/sbin/nologin",
 				})
 				prevUname = *row[UserName]
 			}
 		}
 		out["fermilab"] = jsonmap{
-			Resources: tmpMap,
+			Resources:   tmpMap,
 			LastUpdated: lasttime,
 		}
 
@@ -882,7 +882,7 @@ func getAffiliationMembersRoles(c APIContext, i Input) (interface{}, []APIError)
 								join users using(uid)
 								left join affiliation_units using(unitid)
 							  where (unitid = $1 or $1 is null) and (lower(fqan) like lower($2))`,
-							 unitid, "%/role=" + role.Data.(string) + "/%")
+		unitid, "%/role="+role.Data.(string)+"/%")
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -898,8 +898,8 @@ func getAffiliationMembersRoles(c APIContext, i Input) (interface{}, []APIError)
 		rows.Scan(row[UnitName], row[FQAN], row[UserName], row[FullName])
 
 		if row[FQAN].Valid {
-			out[row[UnitName].Data.(string)] = append(out[row[UnitName].Data.(string)], jsonentry {
-				FQAN: row[FQAN].Data,
+			out[row[UnitName].Data.(string)] = append(out[row[UnitName].Data.(string)], jsonentry{
+				FQAN:     row[FQAN].Data,
 				UserName: row[UserName].Data,
 				FullName: row[FullName].Data,
 			})
@@ -940,7 +940,7 @@ func getStorageAccessLists(c APIContext, i Input) (interface{}, []APIError) {
 				entry = make(map[string][]jsonhost)
 			}
 			entry[tmpVolume.String] = append(entry[tmpVolume.String], jsonhost{
-				Host: tmpHost.String,
+				Host:        tmpHost.String,
 				AccessLevel: tmpAccess.String,
 			})
 		}
@@ -962,7 +962,7 @@ func createComputeResource(c APIContext, i Input) (interface{}, []APIError) {
 	compid := NewNullAttribute(ResourceID)
 	err := c.DBtx.QueryRow(`select (select unitid from affiliation_units where name = $1),
 								   (select compid from compute_resources where name = $2)`,
-						   i[UnitName], i[ResourceName]).Scan(&unitid, &compid)
+		i[UnitName], i[ResourceName]).Scan(&unitid, &compid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -984,7 +984,7 @@ func createComputeResource(c APIContext, i Input) (interface{}, []APIError) {
 
 	_, err = c.DBtx.Exec(`insert into compute_resources (name, default_shell, unitid, last_updated, default_home_dir, type)
 						  values ($1, $2, $3, NOW(), $4, $5)`,
-						 i[ResourceName], shell, unitid, i[HomeDir], i[ResourceType])
+		i[ResourceName], shell, unitid, i[HomeDir], i[ResourceType])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1001,7 +1001,7 @@ func setComputeResourceInfo(c APIContext, i Input) (interface{}, []APIError) {
 	compid := NewNullAttribute(ResourceID)
 	err := c.DBtx.QueryRow(`select (select unitid from affiliation_units where name = $1),
 								   (select compid from compute_resources where name = $2)`,
-						   i[UnitName], i[ResourceName]).Scan(&unitid, &compid)
+		i[UnitName], i[ResourceName]).Scan(&unitid, &compid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1045,7 +1045,7 @@ func createStorageResource(c APIContext, i Input) (interface{}, []APIError) {
 
 	storageid := NewNullAttribute(ResourceID)
 	err := c.DBtx.QueryRow(`select storageid from storage_resources where name = $1`,
-						   i[ResourceName]).Scan(&storageid)
+		i[ResourceName]).Scan(&storageid)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1076,7 +1076,7 @@ func createStorageResource(c APIContext, i Input) (interface{}, []APIError) {
 
 	_, err = c.DBtx.Exec(`insert into storage_resources (name, default_path, default_quota, last_updated, default_unit, type)
 						  values ($1,$2,$3,NOW(),$4,$5)`,
-						i[ResourceName], i[Path], i[Quota], i[QuotaUnit], i[ResourceType])
+		i[ResourceName], i[Path], i[Quota], i[QuotaUnit], i[ResourceType])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1091,7 +1091,7 @@ func getStorageResourceInfo(c APIContext, i Input) (interface{}, []APIError) {
 
 	storageid := NewNullAttribute(ResourceID)
 	err := c.DBtx.QueryRow(`select storageid from storage_resources where name = $1`,
-						   i[ResourceName]).Scan(&storageid)
+		i[ResourceName]).Scan(&storageid)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1120,11 +1120,11 @@ func getStorageResourceInfo(c APIContext, i Input) (interface{}, []APIError) {
 		rows.Scan(row[ResourceName], row[Path], row[Quota], row[QuotaUnit], row[ResourceType])
 
 		if row[ResourceName].Valid {
-			out = append(out, jsonresource {
+			out = append(out, jsonresource{
 				ResourceName: row[ResourceName].Data,
-				Path: row[Path].Data,
-				Quota: row[Quota].Data,
-				QuotaUnit: row[QuotaUnit].Data,
+				Path:         row[Path].Data,
+				Quota:        row[Quota].Data,
+				QuotaUnit:    row[QuotaUnit].Data,
 				ResourceType: row[ResourceType].Data,
 			})
 		}
@@ -1138,7 +1138,7 @@ func setStorageResourceInfo(c APIContext, i Input) (interface{}, []APIError) {
 
 	storageid := NewNullAttribute(ResourceID)
 	err := c.DBtx.QueryRow(`select storageid from storage_resources where name = $1`,
-						   i[ResourceName]).Scan(&storageid)
+		i[ResourceName]).Scan(&storageid)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1202,12 +1202,12 @@ func getAllComputeResources(c APIContext, i Input) (interface{}, []APIError) {
 	for rows.Next() {
 		row := NewMapNullAttribute(ResourceName, Shell, HomeDir, ResourceType, UnitName)
 		rows.Scan(row[ResourceName], row[Shell], row[HomeDir], row[ResourceType], row[UnitName])
-		out = append(out, jsonresource {
+		out = append(out, jsonresource{
 			ResourceName: row[ResourceName].Data,
-			Shell: row[Shell].Data,
-			HomeDir: row[HomeDir].Data,
+			Shell:        row[Shell].Data,
+			HomeDir:      row[HomeDir].Data,
 			ResourceType: row[ResourceType].Data,
-			UnitName: row[UnitName].Data,
+			UnitName:     row[UnitName].Data,
 		})
 	}
 
@@ -1215,10 +1215,19 @@ func getAllComputeResources(c APIContext, i Input) (interface{}, []APIError) {
 }
 
 func ping(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
 	const ReleaseVersion Attribute = "releaseversion"
 	const BuildDate Attribute = "builddate"
 
-	return map[Attribute]interface{} {ReleaseVersion: release_ver, BuildDate: build_date}, nil
+	rows, err := DBptr.Query(`select now();`)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+	defer rows.Close()
+
+	return map[Attribute]interface{}{ReleaseVersion: release_ver, BuildDate: build_date}, nil
 }
 
 func getVOUserMap(c APIContext, i Input) (interface{}, []APIError) {
@@ -1228,7 +1237,7 @@ func getVOUserMap(c APIContext, i Input) (interface{}, []APIError) {
 	err := c.DBtx.QueryRow(`select ($1 in (select uname from users)),
 								   ($2 in (select name from affiliation_units)),
 								   ($3 in (select fqan from grid_fqan))`,
-						   i[UserName], i[UnitName], i[FQAN]).Scan(&validUser, &validrUnit, &validFQAN)
+		i[UserName], i[UnitName], i[FQAN]).Scan(&validUser, &validrUnit, &validFQAN)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1257,14 +1266,14 @@ func getVOUserMap(c APIContext, i Input) (interface{}, []APIError) {
 								au.name as unitname,
 								gf.fqan as fqan,
 								coalesce(u2.uname, u1.uname) as mapped_user
-							  from     
-								grid_access g 
+							  from
+								grid_access g
 								join users u1 using(uid)
 								join grid_fqan gf using(fqanid)
 								join affiliation_units au using(unitid)
-								left outer join users u2 on gf.mapped_user = u2.uid 
-							  where 
-								u1.uname like $1 
+								left outer join users u2 on gf.mapped_user = u2.uid
+							  where
+								u1.uname like $1
 								and au.name like $2
 								and gf.fqan like $3
 							  order by u1.uname`, user, unit, fqan)
@@ -1439,10 +1448,10 @@ func setStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
 		queryerr = c.DBtx.tx.QueryRow(`select path from storage_quota
 									   where storageid = $1 and `+column+` = $2 and
 									   unitid = $3 and valid_until is NULL`,
-			                          vStorageid, vDataid, vUnitid).Scan(&vPath)
+			vStorageid, vDataid, vUnitid).Scan(&vPath)
 		if queryerr == sql.ErrNoRows && !i[ExpirationDate].Valid { // New permanent quota
 			queryerr = c.DBtx.tx.QueryRow(`select concat(default_path, '/', $1::varchar) from storage_resources where storageid = $2`,
-										  i[dataAttr], vStorageid).Scan(&vPath)
+				i[dataAttr], vStorageid).Scan(&vPath)
 		}
 		if queryerr != nil && queryerr != sql.ErrNoRows {
 			log.WithFields(QueryFields(c)).Error(queryerr)
