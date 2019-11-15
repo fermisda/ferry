@@ -65,6 +65,15 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("deleteUser", &deleteUser)
 
+	dropUser := BaseAPI{
+		InputModel{
+			Parameter{UserName, true},
+		},
+		dropUser,
+		RoleWrite,
+	}
+	c.Add("dropUser", &dropUser)
+
 	addCertificateDNToUser := BaseAPI{
 		InputModel{
 			Parameter{UserName, true},
@@ -1537,8 +1546,17 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
 		return nil, apiErr
 	}
-
-	_, err = c.DBtx.Exec(`delete from users where uid = $1`, uid)
+	// Process the user groups first
+	_, err = c.DBtx.Exec(`with foo as (delete from user_group where uid=$1 returning *, now() when_deleted)
+						  	insert into user_group_deletions select * from foo`, uid)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+	// Now process the user record
+	_, err = c.DBtx.Exec(`with foo as (delete from users where uid=$1 returning *, now() when_deleted)
+							insert into user_deletions select * from foo`, uid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		if strings.Contains(err.Error(), "violates foreign key constraint") {

@@ -8,9 +8,7 @@ CREATE TABLE user_deletions (
 	expiration_date      date   ,
 	last_updated         timestamptz DEFAULT ('now'::text)::date NOT NULL ,
 	is_groupaccount      bool DEFAULT false NOT NULL ,
-	when_deleted         timestamptz  NOT NULL ,
-	CONSTRAINT idx_user_deletions PRIMARY KEY ( uid ),
-	CONSTRAINT idx_user_deletions_0 UNIQUE ( uname )
+	when_deleted         timestamptz  NOT NULL
  ) ;
 
 COMMENT ON COLUMN user_deletions.uid IS 'unix user id';
@@ -21,14 +19,9 @@ CREATE TABLE user_group_deletions (
 	uid                  bigint  NOT NULL ,
 	groupid              integer  NOT NULL ,
 	is_leader            bool DEFAULT false NOT NULL ,
-	last_updated         timestamptz DEFAULT ('now'::text)::date NOT NULL ,
-	CONSTRAINT pk_user_group_0 PRIMARY KEY ( uid, groupid )
+	last_updated         timestamptz DEFAULT ('now'::text)::date NOT NULL,
+	when_deleted         timestamptz  NOT NULL
  ) ;
 
-CREATE INDEX idx_user_group_uid_0 ON user_group_deletions ( uid ) ;
-
-CREATE INDEX idx_user_group_groupid_0 ON user_group_deletions ( groupid ) ;
-
-ALTER TABLE user_group_deletions ADD CONSTRAINT fk_user_group_user_deletions FOREIGN KEY ( uid ) REFERENCES user_deletions( uid )  ;
 
 \i grants.sql
