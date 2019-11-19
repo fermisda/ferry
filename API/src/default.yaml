@@ -9,7 +9,7 @@ database:
   user:
   password:
   timeout: 60
-  sslmode: disable 
+  sslmode: disable
   certificate: /etc/grid-security/certificates/cilogon-osg.pem
   max_open_conns: 200
   max_idle_conns: 0
@@ -66,6 +66,9 @@ dn_roles:
   /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=jobview-graphitesrv02.fnal.gov: [read]
   /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=jobview-graphitesrv03.fnal.gov: [read]
   /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=poms-pomsgpvm01.fnal.gov:       [read]
+  /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=fermicloud042.fnal.gov:         [read]
+  /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=jobsubdevgpvm01.fnal.gov:       [read]
+  /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=fifebatch.fnal.gov:             [read]
 
 ip_roles:
   131.225.108.60:   [read, write] # fermi-snow.fnal.gov
