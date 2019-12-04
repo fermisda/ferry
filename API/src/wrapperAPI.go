@@ -418,7 +418,7 @@ func createExperiment(c APIContext, i Input) (interface{}, []APIError) {
 				}
 			}
 
-			input[UnitName] = NewNullAttribute(UserName).Default(userName)
+			input[UserName] = userName
 		}
 
 		_, apiErr = createFQAN(c, input)

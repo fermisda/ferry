@@ -234,6 +234,7 @@ func main() {
 	grouter.HandleFunc("/removeUserExternalAffiliationAttribute", APIs["removeUserExternalAffiliationAttribute"].Run)
 	grouter.HandleFunc("/createUser", APIs["createUser"].Run)
 	grouter.HandleFunc("/deleteUser", APIs["deleteUser"].Run)
+	grouter.HandleFunc("/dropUser", APIs["dropUser"].Run)
 	grouter.HandleFunc("/getUserUname", APIs["getUserUname"].Run)
 	grouter.HandleFunc("/getUserUID", APIs["getUserUID"].Run)
 	grouter.HandleFunc("/getMemberAffiliations", APIs["getMemberAffiliations"].Run)
