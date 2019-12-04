@@ -3,10 +3,10 @@
 CREATE TABLE user_deletions (
 	uid                  bigint  NOT NULL ,
 	uname                varchar(100)  NOT NULL ,
-	full_name            varchar(255)   ,
 	status               bool DEFAULT false NOT NULL ,
 	expiration_date      date   ,
 	last_updated         timestamptz DEFAULT ('now'::text)::date NOT NULL ,
+	full_name            varchar(255)   ,
 	is_groupaccount      bool DEFAULT false NOT NULL ,
 	when_deleted         timestamptz  NOT NULL
  ) ;
