@@ -95,3 +95,5 @@ ip_roles:
   131.225.240.196:  [read]        # graphitesrv03
   131.225.240.28:   [read, write] # lssrv01.fnal.gov
   131.225.13.252:   [read]        # dmsdca06.fnal.gov
+  131.225.69.151:   [read]        # fndca3a.fnal.gov
+  131.225.69.153:   [read]        # fndca5a.fnal.gov

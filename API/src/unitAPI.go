@@ -520,17 +520,15 @@ func createFQAN(c APIContext, i Input) (interface{}, []APIError) {
 
 		}
 		if unitid.Valid {
-			var userInUnit bool
-			err = c.DBtx.QueryRow(`select count(*) > 0  from affiliation_unit_user_certificate
-								   left join user_certificates using(dnid)
-                                   where unitid = $1 and uid = $2`, unitid, uid).Scan(&userInUnit)
+			var groupInUnit bool
+			err = c.DBtx.QueryRow(`select ($1, $2) in (select unitid, groupid from affiliation_unit_group)`, unitid, groupid).Scan(&groupInUnit)
 			if err != nil {
 				log.WithFields(QueryFields(c)).Error(err)
 				apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 				return nil, apiErr
 			}
-			if !userInUnit {
-				apiErr = append(apiErr, APIError{errors.New("user not a member of this experiment"), ErrorAPIRequirement})
+			if !groupInUnit {
+				apiErr = append(apiErr, APIError{errors.New("group not in this experiment"), ErrorAPIRequirement})
 				return nil, apiErr
 			}
 		}
