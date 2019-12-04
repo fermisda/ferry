@@ -134,7 +134,7 @@ def readFromFerry(action, params = None):
         return None
     return jOut["ferry_output"]
 
-def writeToFerry(action, params = None):
+def writeToFerry(action, params=None):
     for item in ["username", "groupname"]:
         if params and item in params and params[item] in skipList:
             return
@@ -142,11 +142,11 @@ def writeToFerry(action, params = None):
     url = target["hostname"] + target[action]
     if params:
         url += "?" + urllib.parse.urlencode(params)
-    # if not opts.dry_run:
-    if False:   # DEBUG
+    if not opts.dry_run:
         logging.debug(url)
         tmpOut = openURL(url, context=ferryContext)
         if not tmpOut:
+            logging.error("Oops! openURL '%s' returns error" % url)
             exit(14)
         jOut = json.loads(tmpOut)
         logging.debug(jOut)
@@ -283,11 +283,12 @@ def fetch_userdb():
         else:
             logging.debug("duplicated uname: %s", uname)     # DEBUG
             for uid in unameUid[uname][:-1]:
-                logging.debug("delete uid %s", uid)
+                # logging.debug("delete uid %s", uid)
                 users.__delitem__(uid)
                 for gid in groups.keys():
                     if uid in groups[gid].members:
                             groups[gid].members.remove(uid)
+            logging.debug("delete uid %s", ",".join(uid for uid in unameUid[uname][:-1]))
             unameUid[uname] = unameUid[uname][-1]
             # unameToDelete.append(uname)
     # for uname in unameToDelete:
@@ -489,12 +490,26 @@ def cleanup_users():
     for uid in ferryUsers:
         if uid not in userdbUsers:
             # logging.debug("uid type: %s", type(uid))
+            changes = True
             idx += 1
             logging.debug("%d: user not in UserDb: '%s, %s, %s'",
                 idx,
-                ferryUsers[uid].uid, ferryUsers[uid].uname, ferryUsers[uid].full_name
+                uid, ferryUsers[uid].uname, ferryUsers[uid].full_name
             )     # DEBUG
             # logging.debug("similar: %s", [l for l in userdbUsers if ferryUsers[uid].uname in l[-1].lower()])
+            params = {
+                "uid": uid,
+            }
+            if writeToFerry("api_drop_user", params):
+                logging.info("User '%s, %s, %s' %s dropped",
+                             uid,
+                             ferryUsers[uid].uname,
+                             ferryUsers[uid].full_name,
+                             "will be" if opts.dry_run else "",
+                )
+                pass
+            else:
+                logging.error("cannot drop user '%s, %s, %s'", uid, ferryUsers[uid].uname, ferryUsers[uid].full_name)
     if not changes:
         logging.info("Users are up to date")
 
@@ -674,11 +689,11 @@ if __name__ == "__main__":
     logging.info("Fetching Ferry data...")
     ferryUsers, ferryGroups = fetch_ferry()
 
-    logging.info("Updating users...")
-    update_users()
-
     logging.info("Cleanup users...")
     cleanup_users()
+
+    logging.info("Updating users...")
+    update_users()
 
     logging.info("Updating groups...")
     update_groups()
