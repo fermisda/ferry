@@ -67,7 +67,7 @@ func IncludeUserAPIs(c *APICollection) {
 
 	dropUser := BaseAPI{
 		InputModel{
-			Parameter{UserName, true},
+			Parameter{UID, true},
 		},
 		dropUser,
 		RoleWrite,
@@ -1533,25 +1533,18 @@ func deleteUser(c APIContext, i Input) (interface{}, []APIError) {
 func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	uid := NewNullAttribute(UID)
+	uid := i[UID]
 
-	err := c.DBtx.QueryRow(`select uid from users where uname = $1`, i[UserName]).Scan(&uid)
-	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c)).Error(err)
-		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-		return nil, apiErr
-	}
-
-	if !uid.Valid {
-		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
-		return nil, apiErr
-	}
 	// Process the user groups first
-	_, err = c.DBtx.Exec(`with foo as (delete from user_group where uid=$1 returning *, now() when_deleted)
+	_, err := c.DBtx.Exec(`with foo as (delete from user_group where uid=$1 returning *, now() when_deleted)
 						  	insert into user_group_deletions select * from foo`, uid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
-		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		if strings.Contains(err.Error(), "violates foreign key constraint") {
+			apiErr = append(apiErr, APIError{errors.New("all associations with this user shall be removed before it can be deleted"), ErrorAPIRequirement})
+		} else {
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		}
 		return nil, apiErr
 	}
 	// Now process the user record
