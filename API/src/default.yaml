@@ -44,6 +44,7 @@ dn_roles:
   /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Nikolay Kuropatkin/CN=UID:kuropat:   [read, write]
   /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Vito Di Benedetto/CN=UID:vito:       [read, write]
   /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Lisa Goodenough/CN=UID:goodenou:     [read, write]
+  /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Stephen White/CN=UID:swhite:         [read, write]
   /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Jeny Teheran/CN=UID:jteheran:        [read]
   /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Mine Altunay/CN=UID:maltunay:        [read]
   /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Steven Timm/CN=UID:timm:             [read]
@@ -69,6 +70,8 @@ dn_roles:
   /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=fermicloud042.fnal.gov:         [read]
   /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=jobsubdevgpvm01.fnal.gov:       [read]
   /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=fifebatch.fnal.gov:             [read]
+  /DC=org/DC=incommon/C=US/ST=Illinois/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=fifebatch.fnal.gov:       [read]
+  /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=fermicloud074.fnal.gov:         [read]
 
 ip_roles:
   131.225.108.60:   [read, write] # fermi-snow.fnal.gov
@@ -97,3 +100,9 @@ ip_roles:
   131.225.13.252:   [read]        # dmsdca06.fnal.gov
   131.225.69.151:   [read]        # fndca3a.fnal.gov
   131.225.69.153:   [read]        # fndca5a.fnal.gov
+  131.225.240.136:  [read]        # hepcjobsub01
+  131.225.240.137:  [read]        # hepcjobsub02
+  131.225.154.88:   [read]        # htcjsdev01
+  131.225.154.92:   [read]        # htcjsdev02
+  131.225.154.20:   [read]        # htcjsdev03
+
