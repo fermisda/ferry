@@ -75,6 +75,7 @@ dn_roles:
 
 ip_roles:
   131.225.108.60:   [read, write] # fermi-snow.fnal.gov
+  131.225.108.98:   [read, write] # fermi-sn-prd1.fnal.gov
   131.225.240.59:   [read]        # ssiadmin1.fnal.gov
   131.225.27.36:    [read]        # merricat.fnal.gov
   131.225.27.37:    [read]        # testify.fnal.gov
