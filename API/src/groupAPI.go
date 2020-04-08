@@ -39,6 +39,18 @@ func IncludeGroupAPIs(c *APICollection) {
 	}
 	c.Add("addGroupToUnit", &addGroupToUnit)
 
+	setGroupRequired := BaseAPI{
+		InputModel{
+			Parameter{GroupName, true},
+			Parameter{GroupType, true},
+			Parameter{UnitName, true},
+			Parameter{Required, true},
+		},
+		setGroupRequired,
+		RoleWrite,
+	}
+	c.Add("setGroupRequired", &setGroupRequired)
+
 	removeGroupFromUnit := BaseAPI{
 		InputModel{
 			Parameter{GroupName, true},
@@ -310,6 +322,56 @@ func addGroupToUnit(c APIContext, i Input) (interface{}, []APIError) {
 			log.WithFields(QueryFields(c)).Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		}
+		return nil, apiErr
+	}
+
+	return nil, nil
+}
+
+func setGroupRequired(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+
+	groupid := NewNullAttribute(GroupID)
+	unitid := NewNullAttribute(UnitID)
+
+	var validType bool
+
+	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, i[GroupType]).Scan(&validType)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !validType {
+		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, GroupType))
+		return nil, apiErr
+	}
+
+	err = c.DBtx.QueryRow(`select (select groupid from groups where name = $1 and type = $2),
+						  (select unitid from affiliation_units where name = $3)`,
+		i[GroupName], i[GroupType], i[UnitName]).Scan(&groupid, &unitid)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !unitid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+	}
+	if !groupid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	_, err = c.DBtx.Exec(`update affiliation_unit_group set is_required = $1, last_updated = NOW()
+						  where unitid = $2 and groupid = $3`, i[Required], unitid, groupid)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
 
