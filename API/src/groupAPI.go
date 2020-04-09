@@ -1,19 +1,22 @@
 package main
+
 import (
-	"math"
-	"strings"
 	"database/sql"
+	"math"
+	"strconv"
+	"strings"
+
 	_ "github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
-	"strconv"
-//	"io/ioutil"
+
+	//	"io/ioutil"
 	"errors"
 )
 
 // IncludeGroupAPIs includes all APIs described in this file in an APICollection
 func IncludeGroupAPIs(c *APICollection) {
-	createGroup := BaseAPI {
-		InputModel {
+	createGroup := BaseAPI{
+		InputModel{
 			Parameter{GroupName, true},
 			Parameter{GroupType, true},
 			Parameter{GID, false},
@@ -23,8 +26,8 @@ func IncludeGroupAPIs(c *APICollection) {
 	}
 	c.Add("createGroup", &createGroup)
 
-	addGroupToUnit := BaseAPI {
-		InputModel {
+	addGroupToUnit := BaseAPI{
+		InputModel{
 			Parameter{GroupName, true},
 			Parameter{GroupType, true},
 			Parameter{UnitName, true},
@@ -35,8 +38,8 @@ func IncludeGroupAPIs(c *APICollection) {
 	}
 	c.Add("addGroupToUnit", &addGroupToUnit)
 
-	removeGroupFromUnit := BaseAPI {
-		InputModel {
+	removeGroupFromUnit := BaseAPI{
+		InputModel{
 			Parameter{GroupName, true},
 			Parameter{GroupType, true},
 			Parameter{UnitName, true},
@@ -46,8 +49,8 @@ func IncludeGroupAPIs(c *APICollection) {
 	}
 	c.Add("removeGroupFromUnit", &removeGroupFromUnit)
 
-	setPrimaryStatusGroup := BaseAPI {
-		InputModel {
+	setPrimaryStatusGroup := BaseAPI{
+		InputModel{
 			Parameter{GroupName, true},
 			Parameter{UnitName, true},
 		},
@@ -56,8 +59,8 @@ func IncludeGroupAPIs(c *APICollection) {
 	}
 	c.Add("setPrimaryStatusGroup", &setPrimaryStatusGroup)
 
-	getGroupMembers := BaseAPI {
-		InputModel {
+	getGroupMembers := BaseAPI{
+		InputModel{
 			Parameter{GroupName, true},
 			Parameter{GroupType, false},
 			Parameter{Leader, false},
@@ -67,8 +70,8 @@ func IncludeGroupAPIs(c *APICollection) {
 	}
 	c.Add("getGroupMembers", &getGroupMembers)
 
-	isUserMemberOfGroup := BaseAPI {
-		InputModel {
+	isUserMemberOfGroup := BaseAPI{
+		InputModel{
 			Parameter{UserName, true},
 			Parameter{GroupName, true},
 			Parameter{GroupType, false},
@@ -78,8 +81,8 @@ func IncludeGroupAPIs(c *APICollection) {
 	}
 	c.Add("isUserMemberOfGroup", &isUserMemberOfGroup)
 
-	isUserLeaderOfGroup := BaseAPI {
-		InputModel {
+	isUserLeaderOfGroup := BaseAPI{
+		InputModel{
 			Parameter{UserName, true},
 			Parameter{GroupName, true},
 			Parameter{GroupType, false},
@@ -89,8 +92,8 @@ func IncludeGroupAPIs(c *APICollection) {
 	}
 	c.Add("isUserLeaderOfGroup", &isUserLeaderOfGroup)
 
-	setGroupLeader := BaseAPI {
-		InputModel {
+	setGroupLeader := BaseAPI{
+		InputModel{
 			Parameter{UserName, true},
 			Parameter{GroupName, true},
 			Parameter{GroupType, true},
@@ -100,8 +103,8 @@ func IncludeGroupAPIs(c *APICollection) {
 	}
 	c.Add("setGroupLeader", &setGroupLeader)
 
-	removeGroupLeader := BaseAPI {
-		InputModel {
+	removeGroupLeader := BaseAPI{
+		InputModel{
 			Parameter{UserName, true},
 			Parameter{GroupName, true},
 			Parameter{GroupType, true},
@@ -111,8 +114,8 @@ func IncludeGroupAPIs(c *APICollection) {
 	}
 	c.Add("removeGroupLeader", &removeGroupLeader)
 
-	getGroupUnits := BaseAPI {
-		InputModel {
+	getGroupUnits := BaseAPI{
+		InputModel{
 			Parameter{GroupName, true},
 			Parameter{GroupType, false},
 			Parameter{Experiment, false},
@@ -123,8 +126,9 @@ func IncludeGroupAPIs(c *APICollection) {
 	}
 	c.Add("getGroupUnits", &getGroupUnits)
 
-	getAllGroups := BaseAPI {
-		InputModel {
+	getAllGroups := BaseAPI{
+		InputModel{
+			Parameter{GroupType, false},
 			Parameter{LastUpdated, false},
 		},
 		getAllGroups,
@@ -132,8 +136,8 @@ func IncludeGroupAPIs(c *APICollection) {
 	}
 	c.Add("getAllGroups", &getAllGroups)
 
-	getAllGroupsMembers := BaseAPI {
-		InputModel {
+	getAllGroupsMembers := BaseAPI{
+		InputModel{
 			Parameter{LastUpdated, false},
 		},
 		getAllGroupsMembers,
@@ -141,8 +145,8 @@ func IncludeGroupAPIs(c *APICollection) {
 	}
 	c.Add("getAllGroupsMembers", &getAllGroupsMembers)
 
-	getGroupAccessToResource := BaseAPI {
-		InputModel {
+	getGroupAccessToResource := BaseAPI{
+		InputModel{
 			Parameter{UnitName, true},
 			Parameter{ResourceName, true},
 			Parameter{LastUpdated, false},
@@ -152,8 +156,8 @@ func IncludeGroupAPIs(c *APICollection) {
 	}
 	c.Add("getGroupAccessToResource", &getGroupAccessToResource)
 
-	getBatchPriorities := BaseAPI {
-		InputModel {
+	getBatchPriorities := BaseAPI{
+		InputModel{
 			Parameter{UnitName, false},
 			Parameter{ResourceName, false},
 			Parameter{LastUpdated, false},
@@ -163,8 +167,8 @@ func IncludeGroupAPIs(c *APICollection) {
 	}
 	c.Add("getBatchPriorities", &getBatchPriorities)
 
-	getCondorQuotas := BaseAPI {
-		InputModel {
+	getCondorQuotas := BaseAPI{
+		InputModel{
 			Parameter{UnitName, false},
 			Parameter{ResourceName, false},
 		},
@@ -173,8 +177,8 @@ func IncludeGroupAPIs(c *APICollection) {
 	}
 	c.Add("getCondorQuotas", &getCondorQuotas)
 
-	setCondorQuota := BaseAPI {
-		InputModel {
+	setCondorQuota := BaseAPI{
+		InputModel{
 			Parameter{CondorGroup, true},
 			Parameter{ResourceName, true},
 			Parameter{Quota, true},
@@ -186,8 +190,8 @@ func IncludeGroupAPIs(c *APICollection) {
 	}
 	c.Add("setCondorQuota", &setCondorQuota)
 
-	removeCondorQuota := BaseAPI {
-		InputModel {
+	removeCondorQuota := BaseAPI{
+		InputModel{
 			Parameter{CondorGroup, true},
 			Parameter{ResourceName, true},
 		},
@@ -196,8 +200,8 @@ func IncludeGroupAPIs(c *APICollection) {
 	}
 	c.Add("removeCondorQuota", &removeCondorQuota)
 
-	getGroupStorageQuota := BaseAPI {
-		InputModel {
+	getGroupStorageQuota := BaseAPI{
+		InputModel{
 			Parameter{GroupName, true},
 			Parameter{ResourceName, true},
 			Parameter{UnitName, true},
@@ -209,8 +213,8 @@ func IncludeGroupAPIs(c *APICollection) {
 	}
 	c.Add("getGroupStorageQuota", &getGroupStorageQuota)
 
-	removeUserAccessFromResource := BaseAPI {
-		InputModel {
+	removeUserAccessFromResource := BaseAPI{
+		InputModel{
 			Parameter{UserName, true},
 			Parameter{ResourceName, true},
 			Parameter{GroupName, false},
@@ -223,7 +227,7 @@ func IncludeGroupAPIs(c *APICollection) {
 
 func createGroup(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
-	
+
 	var validType bool
 
 	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, i[GroupType]).Scan(&validType)
@@ -239,7 +243,7 @@ func createGroup(c APIContext, i Input) (interface{}, []APIError) {
 	}
 
 	_, err = c.DBtx.Exec("insert into groups (gid, name, type, last_updated) values ($1, $2, $3, NOW())",
-						 i[GID], i[GroupName], i[GroupType])
+		i[GID], i[GroupName], i[GroupType])
 	if err != nil {
 		if strings.Contains(err.Error(), `duplicate key value violates unique constraint "idx_groups_gid"`) {
 			apiErr = append(apiErr, DefaultAPIError(ErrorDuplicateData, GID))
@@ -258,10 +262,10 @@ func createGroup(c APIContext, i Input) (interface{}, []APIError) {
 func addGroupToUnit(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	groupid	:= NewNullAttribute(GroupID)
-	unitid	:= NewNullAttribute(UnitID)
-	primary	:= i[Primary].Default(false)
-	
+	groupid := NewNullAttribute(GroupID)
+	unitid := NewNullAttribute(UnitID)
+	primary := i[Primary].Default(false)
+
 	var validType bool
 
 	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, i[GroupType]).Scan(&validType)
@@ -278,7 +282,7 @@ func addGroupToUnit(c APIContext, i Input) (interface{}, []APIError) {
 
 	err = c.DBtx.QueryRow(`select (select groupid from groups where name = $1 and type = $2),
 								  (select unitid from affiliation_units where name = $3)`,
-						  i[GroupName], i[GroupType], i[UnitName]).Scan(&groupid, &unitid)
+		i[GroupName], i[GroupType], i[UnitName]).Scan(&groupid, &unitid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -297,7 +301,7 @@ func addGroupToUnit(c APIContext, i Input) (interface{}, []APIError) {
 
 	_, err = c.DBtx.Exec(`insert into affiliation_unit_group (groupid, unitid, is_primary, last_updated) values ($1, $2, $3, NOW())
 						  on conflict (groupid, unitid) do nothing`,
-						 groupid, unitid, primary)
+		groupid, unitid, primary)
 	if err != nil && !strings.Contains(err.Error(), "pk_affiliation_unit_group") {
 		if strings.Contains(err.Error(), `unq_affiliation_unit_group_unitid_is_primary`) {
 			apiErr = append(apiErr, APIError{errors.New("affiliation unit already has a primary group"), ErrorAPIRequirement})
@@ -314,10 +318,10 @@ func addGroupToUnit(c APIContext, i Input) (interface{}, []APIError) {
 func removeGroupFromUnit(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	groupid	:= NewNullAttribute(GroupID)
-	unitid	:= NewNullAttribute(UnitID)
-	primary	:= NewNullAttribute(Primary)
-	
+	groupid := NewNullAttribute(GroupID)
+	unitid := NewNullAttribute(UnitID)
+	primary := NewNullAttribute(Primary)
+
 	var validType bool
 
 	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, i[GroupType]).Scan(&validType)
@@ -334,7 +338,7 @@ func removeGroupFromUnit(c APIContext, i Input) (interface{}, []APIError) {
 
 	err = c.DBtx.QueryRow(`select (select groupid from groups where name = $1 and type = $2),
 								  (select unitid from affiliation_units where name = $3)`,
-						  i[GroupName], i[GroupType], i[UnitName]).Scan(&groupid, &unitid)
+		i[GroupName], i[GroupType], i[UnitName]).Scan(&groupid, &unitid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -342,7 +346,7 @@ func removeGroupFromUnit(c APIContext, i Input) (interface{}, []APIError) {
 	}
 
 	err = c.DBtx.QueryRow(`select is_primary from affiliation_unit_group where groupid = $1 and unitid = $2`,
-						  groupid, unitid).Scan(&primary)
+		groupid, unitid).Scan(&primary)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -375,14 +379,14 @@ func removeGroupFromUnit(c APIContext, i Input) (interface{}, []APIError) {
 func setPrimaryStatusGroup(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	groupid	:= NewNullAttribute(GroupID)
-	unitid	:= NewNullAttribute(UnitID)
+	groupid := NewNullAttribute(GroupID)
+	unitid := NewNullAttribute(UnitID)
 
 	var groupInUnit bool
 
 	err := c.DBtx.QueryRow(`select (select groupid from groups where name = $1 and type = 'UnixGroup'),
 								   (select unitid from affiliation_units where name = $2)`,
-						  i[GroupName], i[UnitName]).Scan(&groupid, &unitid)
+		i[GroupName], i[UnitName]).Scan(&groupid, &unitid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -400,7 +404,7 @@ func setPrimaryStatusGroup(c APIContext, i Input) (interface{}, []APIError) {
 	}
 
 	err = c.DBtx.QueryRow(`select ($1, $2) in (select groupid, unitid from affiliation_unit_group)`,
-						  groupid, unitid).Scan(&groupInUnit)
+		groupid, unitid).Scan(&groupInUnit)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -434,10 +438,10 @@ func setPrimaryStatusGroup(c APIContext, i Input) (interface{}, []APIError) {
 func getGroupMembers(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	grouptype		:= i[GroupType].Default("UnixGroup")
-	groupLeaders	:= i[Leader].Default(false)
-	groupid			:= NewNullAttribute(GroupID)
-	
+	grouptype := i[GroupType].Default("UnixGroup")
+	groupLeaders := i[Leader].Default(false)
+	groupid := NewNullAttribute(GroupID)
+
 	var validType bool
 
 	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, grouptype).Scan(&validType)
@@ -470,8 +474,8 @@ func getGroupMembers(c APIContext, i Input) (interface{}, []APIError) {
 							   where
 								groupid = $1 and
 								(user_group.last_updated>=$2 or $2 is null)`,
-							  groupid, i[LastUpdated])
-	if err != nil {	
+		groupid, i[LastUpdated])
+	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
@@ -480,7 +484,7 @@ func getGroupMembers(c APIContext, i Input) (interface{}, []APIError) {
 
 	type jsonuser map[Attribute]interface{}
 	out := make([]jsonuser, 0)
-	
+
 	for rows.Next() {
 		row := NewMapNullAttribute(UserName, UID, Leader)
 		rows.Scan(row[UserName], row[UID], row[Leader])
@@ -495,17 +499,17 @@ func getGroupMembers(c APIContext, i Input) (interface{}, []APIError) {
 			out = append(out, entry)
 		}
 	}
-	
+
 	return out, nil
 }
 
 func isUserMemberOfGroup(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	uid			:= NewNullAttribute(UID)
-	groupid		:= NewNullAttribute(GroupID)
-	grouptype	:= i[GroupType].Default("UnixGroup")
-	
+	uid := NewNullAttribute(UID)
+	groupid := NewNullAttribute(GroupID)
+	grouptype := i[GroupType].Default("UnixGroup")
+
 	var validType bool
 
 	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, grouptype).Scan(&validType)
@@ -522,7 +526,7 @@ func isUserMemberOfGroup(c APIContext, i Input) (interface{}, []APIError) {
 
 	err = c.DBtx.QueryRow(`select (select uid from users where uname = $1),
 								  (select groupid from groups where name = $2 and type = $3)`,
-						  i[UserName], i[GroupName], grouptype).Scan(&uid, &groupid)
+		i[UserName], i[GroupName], grouptype).Scan(&uid, &groupid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -542,7 +546,7 @@ func isUserMemberOfGroup(c APIContext, i Input) (interface{}, []APIError) {
 	var out bool
 	err = c.DBtx.QueryRow(`select ($1, $2) in
 							(select uid, groupid from user_group join groups using(groupid) where type = $3)`,
-						  uid, groupid, grouptype).Scan(&out)
+		uid, groupid, grouptype).Scan(&out)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -555,10 +559,10 @@ func isUserMemberOfGroup(c APIContext, i Input) (interface{}, []APIError) {
 func isUserLeaderOfGroup(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	uid			:= NewNullAttribute(UID)
-	groupid		:= NewNullAttribute(GroupID)
-	grouptype	:= i[GroupType].Default("UnixGroup")
-	
+	uid := NewNullAttribute(UID)
+	groupid := NewNullAttribute(GroupID)
+	grouptype := i[GroupType].Default("UnixGroup")
+
 	var validType bool
 
 	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, grouptype).Scan(&validType)
@@ -575,7 +579,7 @@ func isUserLeaderOfGroup(c APIContext, i Input) (interface{}, []APIError) {
 
 	err = c.DBtx.QueryRow(`select (select uid from users where uname = $1),
 								  (select groupid from groups where name = $2 and type = $3)`,
-						  i[UserName], i[GroupName], grouptype).Scan(&uid, &groupid)
+		i[UserName], i[GroupName], grouptype).Scan(&uid, &groupid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -594,22 +598,22 @@ func isUserLeaderOfGroup(c APIContext, i Input) (interface{}, []APIError) {
 
 	leader := NewNullAttribute(Leader)
 	leader.Scan(false)
-	err = c.DBtx.QueryRow(`select is_leader from user_group where uid = $1 and groupid = $2`, uid ,groupid).Scan(&leader)
+	err = c.DBtx.QueryRow(`select is_leader from user_group where uid = $1 and groupid = $2`, uid, groupid).Scan(&leader)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
 
-	return leader.Data, nil				
+	return leader.Data, nil
 }
 
 func setGroupLeader(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	uid			:= NewNullAttribute(UID)
-	groupid		:= NewNullAttribute(GroupID)
-	
+	uid := NewNullAttribute(UID)
+	groupid := NewNullAttribute(GroupID)
+
 	var validType bool
 
 	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, i[GroupType]).Scan(&validType)
@@ -626,7 +630,7 @@ func setGroupLeader(c APIContext, i Input) (interface{}, []APIError) {
 
 	err = c.DBtx.QueryRow(`select (select uid from users where uname = $1),
 								  (select groupid from groups where name = $2 and type = $3)`,
-						  i[UserName], i[GroupName], i[GroupType]).Scan(&uid, &groupid)
+		i[UserName], i[GroupName], i[GroupType]).Scan(&uid, &groupid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -645,22 +649,22 @@ func setGroupLeader(c APIContext, i Input) (interface{}, []APIError) {
 
 	_, err = c.DBtx.Exec(`insert into user_group (uid, groupid, is_leader) values($1, $2, true)
 						  on conflict (uid, groupid) do update set is_leader = true`,
-						 uid, groupid)
+		uid, groupid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
-	
+
 	return nil, nil
 }
 
 func removeGroupLeader(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	uid			:= NewNullAttribute(UID)
-	groupid		:= NewNullAttribute(GroupID)
-	
+	uid := NewNullAttribute(UID)
+	groupid := NewNullAttribute(GroupID)
+
 	var validType bool
 
 	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, i[GroupType]).Scan(&validType)
@@ -677,7 +681,7 @@ func removeGroupLeader(c APIContext, i Input) (interface{}, []APIError) {
 
 	err = c.DBtx.QueryRow(`select (select uid from users where uname = $1),
 								  (select groupid from groups where name = $2 and type = $3)`,
-						  i[UserName], i[GroupName], i[GroupType]).Scan(&uid, &groupid)
+		i[UserName], i[GroupName], i[GroupType]).Scan(&uid, &groupid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -695,7 +699,7 @@ func removeGroupLeader(c APIContext, i Input) (interface{}, []APIError) {
 	}
 
 	_, err = c.DBtx.Exec(`update user_group set is_leader = false, last_updated = NOW() where uid = $1 and groupid = $2`,
-						 uid, groupid)
+		uid, groupid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -708,10 +712,10 @@ func removeGroupLeader(c APIContext, i Input) (interface{}, []APIError) {
 func getGroupUnits(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	groupid		:= NewNullAttribute(GroupID)
-	groupType	:= i[GroupType].Default("UnixGroup")
-	experiment	:= i[Experiment].Default(false)
-	
+	groupid := NewNullAttribute(GroupID)
+	groupType := i[GroupType].Default("UnixGroup")
+	experiment := i[Experiment].Default(false)
+
 	var validType bool
 
 	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, groupType).Scan(&validType)
@@ -727,7 +731,7 @@ func getGroupUnits(c APIContext, i Input) (interface{}, []APIError) {
 	}
 
 	err = c.DBtx.QueryRow(`select groupid from groups where name = $1 and type = $2`,
-						  i[GroupName], groupType).Scan(&groupid)
+		i[GroupName], groupType).Scan(&groupid)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -745,7 +749,7 @@ func getGroupUnits(c APIContext, i Input) (interface{}, []APIError) {
 									voms_url as vu using(unitid)
 								where groupid = $1 and ((url is not null = $2) or not $2)
 								and (vu.last_updated>=$3 or ag.last_updated>=$3 or $3 is null)`,
-								groupid, experiment, i[LastUpdated])
+		groupid, experiment, i[LastUpdated])
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -762,10 +766,10 @@ func getGroupUnits(c APIContext, i Input) (interface{}, []APIError) {
 
 		if row[UnitName].Valid {
 			out = append(out, jsonentry{
-				UnitName:			row[UnitName].Data,
-				UnitType:			row[UnitType].Data,
-				VOMSURL:			row[VOMSURL].Data,
-				AlternativeName:	row[AlternativeName].Data,
+				UnitName:        row[UnitName].Data,
+				UnitType:        row[UnitType].Data,
+				VOMSURL:         row[VOMSURL].Data,
+				AlternativeName: row[AlternativeName].Data,
 			})
 		}
 	}
@@ -781,7 +785,7 @@ func getBatchPriorities(c APIContext, i Input) (interface{}, []APIError) {
 
 	err := c.DBtx.QueryRow(`select (select unitid from affiliation_units where name = $1),
 								   (select compid from compute_resources where name = $2)`,
-						   i[UnitName], i[ResourceName]).Scan(&unitid, &compid)
+		i[UnitName], i[ResourceName]).Scan(&unitid, &compid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -816,17 +820,17 @@ func getBatchPriorities(c APIContext, i Input) (interface{}, []APIError) {
 	for rows.Next() {
 		row := NewMapNullAttribute(CondorGroup, Value, ExpirationDate)
 		rows.Scan(row[CondorGroup], row[Value], row[ExpirationDate])
-		
+
 		priority := make(jsonpriority)
 		priority[CondorGroup] = row[CondorGroup].Data
 		priority[Value] = row[Value].Data
 		if row[ExpirationDate].Valid {
 			priority[ExpirationDate] = row[ExpirationDate].Data
 		}
-		
+
 		out = append(out, priority)
 	}
-	
+
 	return out, nil
 }
 
@@ -838,7 +842,7 @@ func getCondorQuotas(c APIContext, i Input) (interface{}, []APIError) {
 
 	err := c.DBtx.QueryRow(`select (select unitid from affiliation_units where name = $1),
 								   (select compid from compute_resources where name = $2)`,
-						   i[UnitName], i[ResourceName]).Scan(&unitid, &compid)
+		i[UnitName], i[ResourceName]).Scan(&unitid, &compid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -881,20 +885,20 @@ func getCondorQuotas(c APIContext, i Input) (interface{}, []APIError) {
 		if row[CondorGroup].Valid {
 			if *row[CondorGroup] != prevGroup {
 				out[row[ResourceName].Data.(string)] = append(out[row[ResourceName].Data.(string)], jsonquota{
-					CondorGroup: row[CondorGroup].Data,
-					Value: row[Value].Data,
-					ResourceType: row[ResourceType].Data,
-					UnitName: row[UnitName].Data,
-					Surplus: row[Surplus].Data,
+					CondorGroup:    row[CondorGroup].Data,
+					Value:          row[Value].Data,
+					ResourceType:   row[ResourceType].Data,
+					UnitName:       row[UnitName].Data,
+					Surplus:        row[Surplus].Data,
 					ExpirationDate: row[ExpirationDate].Coalesce(""),
 				})
 			} else {
-				out[row[ResourceName].Data.(string)][len(out[row[ResourceName].Data.(string)]) - 1] = jsonquota{
-					CondorGroup: row[CondorGroup].Data,
-					Value: row[Value].Data,
-					ResourceType: row[ResourceType].Data,
-					UnitName: row[UnitName].Data,
-					Surplus: row[Surplus].Data,
+				out[row[ResourceName].Data.(string)][len(out[row[ResourceName].Data.(string)])-1] = jsonquota{
+					CondorGroup:    row[CondorGroup].Data,
+					Value:          row[Value].Data,
+					ResourceType:   row[ResourceType].Data,
+					UnitName:       row[UnitName].Data,
+					Surplus:        row[Surplus].Data,
 					ExpirationDate: row[ExpirationDate].Coalesce(""),
 				}
 			}
@@ -921,7 +925,7 @@ func setCondorQuota(c APIContext, i Input) (interface{}, []APIError) {
 	err := c.DBtx.QueryRow(`select (select unitid from affiliation_units where name = $1),
 								   (select compid from compute_resources where name = $2),
 								   (select $1 in (select name from compute_batch))`,
-						   unitName, i[ResourceName]).Scan(&unitid, &compid, &baseQuota)
+		unitName, i[ResourceName]).Scan(&unitid, &compid, &baseQuota)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -963,7 +967,7 @@ func setCondorQuota(c APIContext, i Input) (interface{}, []APIError) {
 						  values ($1, $2, $3, $4, $5, coalesce($6, true), $7, NOW())
 						  on conflict (compid, name) where (valid_until is null) = ($7 is null) do
 						  update set value = $3, valid_until = $7, surplus = coalesce($6, compute_batch.surplus), last_updated = NOW()`,
-						 compid, condorGroup, quota, quotaType, unitid, i[Surplus], i[ExpirationDate])
+		compid, condorGroup, quota, quotaType, unitid, i[Surplus], i[ExpirationDate])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1019,7 +1023,7 @@ func getGroupStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
 	err := c.DBtx.QueryRow(`select (select groupid from groups where name = $1 and type = 'UnixGroup'),
 								   (select storageid from storage_resources where name = $2),
 								   (select unitid from affiliation_units where name = $3)`,
-						   i[GroupName], i[ResourceName], i[UnitName]).Scan(&groupid, &storageid, &unitid)
+		i[GroupName], i[ResourceName], i[UnitName]).Scan(&groupid, &storageid, &unitid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1036,11 +1040,11 @@ func getGroupStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
 	}
 	if i[QuotaUnit].Valid {
-		ok := checkUnits(i[QuotaUnit].Data.(string))	
-			if !ok {
-				apiErr = append(apiErr, APIError{errors.New("invalid quotaunit specified in http query"), ErrorAPIRequirement})
-			}
+		ok := checkUnits(i[QuotaUnit].Data.(string))
+		if !ok {
+			apiErr = append(apiErr, APIError{errors.New("invalid quotaunit specified in http query"), ErrorAPIRequirement})
 		}
+	}
 	if len(apiErr) > 0 {
 		return nil, apiErr
 	}
@@ -1049,17 +1053,17 @@ func getGroupStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
 							  where groupid = $1 and storageid = $2 and unitid = $3
 							  and (valid_until is null or valid_until >= NOW()) and (last_updated>=$4 or $4 is null)
 							  order by valid_until desc`,
-							 groupid, storageid, unitid, i[LastUpdated])
+		groupid, storageid, unitid, i[LastUpdated])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
-	defer rows.Close()	
-	
+	defer rows.Close()
+
 	type jsonentry map[Attribute]interface{}
 	out := make(jsonentry)
-	
+
 	for rows.Next() {
 		row := NewMapNullAttribute(Quota, QuotaUnit, ExpirationDate)
 		rows.Scan(row[Quota], row[QuotaUnit], row[ExpirationDate])
@@ -1073,13 +1077,13 @@ func getGroupStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
 				}
 			}
 			out = jsonentry{
-				Quota: row[Quota].Data,
-				QuotaUnit: row[QuotaUnit].Data,
+				Quota:          row[Quota].Data,
+				QuotaUnit:      row[QuotaUnit].Data,
 				ExpirationDate: row[ExpirationDate].Data,
 			}
 		}
 	}
-	
+
 	return out, nil
 }
 
@@ -1105,7 +1109,7 @@ func removeUserAccessFromResource(c APIContext, i Input) (interface{}, []APIErro
 									join users as u on cg.uid = u.uid
 									join compute_resources as cr on cg.compid = cr.compid
 									where u.uname = $1 and cr.name = $3)`,
-						   i[UserName], i[GroupName], i[ResourceName]).Scan(&uid, &groupid, &compid, &isPrimary, &groupCount)
+		i[UserName], i[GroupName], i[ResourceName]).Scan(&uid, &groupid, &compid, &isPrimary, &groupCount)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1140,7 +1144,7 @@ func removeUserAccessFromResource(c APIContext, i Input) (interface{}, []APIErro
 		nRows, _ = res.RowsAffected()
 	}
 
-	if nRows == groupCount{
+	if nRows == groupCount {
 		_, err := c.DBtx.Exec(`delete from compute_access where uid = $1 and compid = $2`, uid, compid)
 		if err != nil {
 			log.WithFields(QueryFields(c)).Error(err)
@@ -1155,7 +1159,30 @@ func removeUserAccessFromResource(c APIContext, i Input) (interface{}, []APIErro
 func getAllGroups(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	rows, err := DBptr.Query(`select name, type, gid from groups where groups.last_updated>=$1 or $1 is null`, i[LastUpdated])
+	var rows *sql.Rows
+	var err error
+	var validType bool
+
+	groupType := i[GroupType].Default("*")
+
+	err = c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, groupType).Scan(&validType)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !validType && groupType.Data.(string) != "*" {
+		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, GroupType))
+		return nil, apiErr
+	}
+
+	if validType {
+		rows, err = DBptr.Query(`select name, type, gid from groups
+		where (groups.last_updated>=$1 or $1 is null) and type = $2`, i[LastUpdated], groupType)
+	} else {
+		rows, err = DBptr.Query(`select name, type, gid from groups where groups.last_updated>=$1 or $1 is null`, i[LastUpdated])
+	}
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1165,14 +1192,14 @@ func getAllGroups(c APIContext, i Input) (interface{}, []APIError) {
 
 	type jsonentry map[Attribute]interface{}
 	out := make([]jsonentry, 0)
-	
+
 	for rows.Next() {
 		row := NewMapNullAttribute(GroupName, GroupType, GID)
 		rows.Scan(row[GroupName], row[GroupType], row[GID])
 		out = append(out, jsonentry{
-			GroupName: 	row[GroupName].Data,
-			GroupType: 	row[GroupType].Data,
-			GID: 		row[GID].Data,
+			GroupName: row[GroupName].Data,
+			GroupType: row[GroupType].Data,
+			GID:       row[GID].Data,
 		})
 	}
 
@@ -1198,14 +1225,14 @@ func getAllGroupsMembers(c APIContext, i Input) (interface{}, []APIError) {
 	type jsonentry map[Attribute]interface{}
 
 	const Members Attribute = "members"
-	group := jsonentry {
-		GroupName: 	"",
-		GroupType: 	"",
-		GID:		nil,
-		Members:	make([]jsonentry, 0),
+	group := jsonentry{
+		GroupName: "",
+		GroupType: "",
+		GID:       nil,
+		Members:   make([]jsonentry, 0),
 	}
 	out := make([]jsonentry, 0)
-	
+
 	for rows.Next() {
 		row := NewMapNullAttribute(GroupName, GroupType, GID, UserName, UID)
 		rows.Scan(row[GroupName], row[GroupType], row[GID], row[UserName], row[UID])
@@ -1213,10 +1240,10 @@ func getAllGroupsMembers(c APIContext, i Input) (interface{}, []APIError) {
 			if group[GroupName] != "" {
 				out = append(out, group)
 			}
-			group = jsonentry {
-				GroupName: 	row[GroupName].Data,
-				GroupType: 	row[GroupType].Data,
-				Members:	make([]jsonentry, 0),
+			group = jsonentry{
+				GroupName: row[GroupName].Data,
+				GroupType: row[GroupType].Data,
+				Members:   make([]jsonentry, 0),
 			}
 			if row[GroupType].Data.(string) == "UnixGroup" {
 				group[GID] = row[GID].Data
@@ -1224,15 +1251,15 @@ func getAllGroupsMembers(c APIContext, i Input) (interface{}, []APIError) {
 				group[GID] = nil
 			}
 			if row[UserName].Data != "" {
-				group[Members] = append(group[Members].([]jsonentry), jsonentry {
-					UserName:	row[UserName].Data,
-					UID:		row[UID].Data,
+				group[Members] = append(group[Members].([]jsonentry), jsonentry{
+					UserName: row[UserName].Data,
+					UID:      row[UID].Data,
 				})
 			}
 		} else {
-			group[Members] = append(group[Members].([]jsonentry), jsonentry {
-				UserName:	row[UserName].Data,
-				UID:		row[UID].Data,
+			group[Members] = append(group[Members].([]jsonentry), jsonentry{
+				UserName: row[UserName].Data,
+				UID:      row[UID].Data,
 			})
 		}
 	}
@@ -1244,12 +1271,12 @@ func getAllGroupsMembers(c APIContext, i Input) (interface{}, []APIError) {
 func getGroupAccessToResource(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	unitid		:= NewNullAttribute(UnitID)
-	resourceid	:= NewNullAttribute(ResourceID)
+	unitid := NewNullAttribute(UnitID)
+	resourceid := NewNullAttribute(ResourceID)
 
 	err := c.DBtx.QueryRow(`select (select unitid from affiliation_units where name = $1),
 								   (select compid from compute_resources where name = $2)`,
-						  i[UnitName], i[ResourceName]).Scan(&unitid, &resourceid)
+		i[UnitName], i[ResourceName]).Scan(&unitid, &resourceid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1286,6 +1313,6 @@ func getGroupAccessToResource(c APIContext, i Input) (interface{}, []APIError) {
 		rows.Scan(&row)
 		out = append(out, row.Data)
 	}
-	
+
 	return out, nil
 }
