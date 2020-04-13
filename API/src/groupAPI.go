@@ -1222,7 +1222,30 @@ func removeUserAccessFromResource(c APIContext, i Input) (interface{}, []APIErro
 func getAllGroups(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	rows, err := DBptr.Query(`select name, type, gid from groups where groups.last_updated>=$1 or $1 is null`, i[LastUpdated])
+	var rows *sql.Rows
+	var err error
+	var validType bool
+
+	groupType := i[GroupType].Default("*")
+
+	err = c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, groupType).Scan(&validType)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !validType && groupType.Data.(string) != "*" {
+		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, GroupType))
+		return nil, apiErr
+	}
+
+	if validType {
+		rows, err = DBptr.Query(`select name, type, gid from groups
+		where (groups.last_updated>=$1 or $1 is null) and type = $2`, i[LastUpdated], groupType)
+	} else {
+		rows, err = DBptr.Query(`select name, type, gid from groups where groups.last_updated>=$1 or $1 is null`, i[LastUpdated])
+	}
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
