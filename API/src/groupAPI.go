@@ -141,6 +141,7 @@ func IncludeGroupAPIs(c *APICollection) {
 
 	getAllGroups := BaseAPI{
 		InputModel{
+                        Parameter{GroupType, false},
 			Parameter{LastUpdated, false},
 		},
 		getAllGroups,
