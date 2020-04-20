@@ -309,6 +309,7 @@ func main() {
 
 	//wrapper API calls
 	grouter.HandleFunc("/testWrapper", APIs["testWrapper"].Run)
+	grouter.HandleFunc("/addUserToExperiment", APIs["addUserToExperiment"].Run) //Added to fix missed init-cap on next line
 	grouter.HandleFunc("/addUsertoExperiment", APIs["addUserToExperiment"].Run)
 	grouter.HandleFunc("/setLPCStorageAccess", APIs["setLPCStorageAccess"].Run)
 	grouter.HandleFunc("/createExperiment", APIs["createExperiment"].Run)

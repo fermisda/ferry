@@ -210,6 +210,21 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
+	// Add user to wilson_cluster and wilson group
+	input = Input{
+		UserName:     i[UserName],
+		GroupName:    NewNullAttribute(GroupName).Default("wilson"),
+		ResourceName: NewNullAttribute(ResourceName).Default("wilson_cluster"),
+		Primary:      NewNullAttribute(Primary).Default(false),
+		Shell:        NewNullAttribute(Shell),
+		HomeDir:      NewNullAttribute(HomeDir),
+	}
+
+	_, apiErr = setUserAccessToComputeResource(c, input)
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
 	// Add new experimenter to all required groups, if any
 	rows, err := c.DBtx.Query(`select name from affiliation_unit_group
 							   left join groups as g using(groupid)
