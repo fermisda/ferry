@@ -379,7 +379,7 @@ func createExperiment(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
 	homeDir := i[HomeDir].Default("/nashome")
-	userName := i[UserName].Default(i[UnitName].Data.(string) + "pro")
+	userName := i[UserName].Default(i[UnitName].Data.(string))
 	groupName := i[GroupName].Default(i[UnitName].Data.(string))
 	groupType := NewNullAttribute(GroupType).Default("UnixGroup")
 	resourceName := NewNullAttribute(ResourceName).Default("fermigrid")
@@ -419,6 +419,7 @@ func createExperiment(c APIContext, i Input) (interface{}, []APIError) {
 		GroupType: groupType,
 		UnitName:  i[UnitName],
 		Primary:   NewNullAttribute(Primary).Default(true),
+		Required:   NewNullAttribute(Required).Default(false),
 	}
 
 	_, apiErr = addGroupToUnit(c, input)
@@ -443,6 +444,7 @@ func createExperiment(c APIContext, i Input) (interface{}, []APIError) {
 		}
 
 		if role == "Production" {
+			userName = i[UserName].Default(i[UnitName].Data.(string) + "pro")
 			var userInGroup bool
 			err := c.DBtx.QueryRow(`select ($1, $2) in (select uname, name from user_group join groups using (groupid) join users using(uid))`,
 				userName, groupName).Scan(&userInGroup)
@@ -466,6 +468,29 @@ func createExperiment(c APIContext, i Input) (interface{}, []APIError) {
 			}
 
 			input[UserName] = userName
+		}
+
+		if role == "Production" || role == "Analysis" {
+			for i, res := range []string{i[UnitName].Data.(string), "fermigrid", "fermi_workers"} {
+				for j, grp := range []string{"fnalgrid", groupName.Data.(string)} {
+					if i+j > 0 {	// Skip "fnalgrid" group for experiment interactive resource
+						primary := false
+						if i==0 && j==1 { primary = true }
+						anInput := Input{
+							UserName:     userName,
+							GroupName:    NewNullAttribute(GroupName).Default(grp),
+							ResourceName: NewNullAttribute(ResourceName).Default(res),
+							Primary:      NewNullAttribute(Primary).Default(primary),
+							Shell:        NewNullAttribute(Shell).Default("/bin/bash"),
+							HomeDir:      homeDir,
+						}
+						_, apiErr = setUserAccessToComputeResource(c, anInput)
+						if len(apiErr) > 0 {
+							return nil, apiErr
+						}
+					}
+				}
+			}
 		}
 
 		_, apiErr = createFQAN(c, input)
