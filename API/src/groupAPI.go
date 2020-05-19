@@ -141,7 +141,7 @@ func IncludeGroupAPIs(c *APICollection) {
 
 	getAllGroups := BaseAPI{
 		InputModel{
-                        Parameter{GroupType, false},
+			Parameter{GroupType, false},
 			Parameter{LastUpdated, false},
 		},
 		getAllGroups,
@@ -368,8 +368,17 @@ func setGroupRequired(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	_, err = c.DBtx.Exec(`update affiliation_unit_group set is_required = $1, last_updated = NOW()
+	result, err := c.DBtx.Exec(`update affiliation_unit_group set is_required = $1, last_updated = NOW()
 						  where unitid = $2 and groupid = $3`, i[Required], unitid, groupid)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+	numUpdated, err := result.RowsAffected()
+	if numUpdated == 0 {
+		_, err = c.DBtx.Exec("insert into affiliation_unit_group (unitid, groupid, is_required, last_updated) values ($1, $2, $3, NOW())", unitid, groupid, i[Required])
+	}
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))

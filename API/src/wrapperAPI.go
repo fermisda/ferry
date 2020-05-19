@@ -210,10 +210,25 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	// Add user to wilson_cluster and wilson group
+	// Add user to wilson_cluster and wilson group as primary
 	input = Input{
 		UserName:     i[UserName],
 		GroupName:    NewNullAttribute(GroupName).Default("wilson"),
+		ResourceName: NewNullAttribute(ResourceName).Default("wilson_cluster"),
+		Primary:      NewNullAttribute(Primary).Default(true),
+		Shell:        NewNullAttribute(Shell),
+		HomeDir:      NewNullAttribute(HomeDir),
+	}
+
+	_, apiErr = setUserAccessToComputeResource(c, input)
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	// Add user to wilson_cluster and experiment group as secondary
+	input = Input{
+		UserName:     i[UserName],
+		GroupName:    compGroup,
 		ResourceName: NewNullAttribute(ResourceName).Default("wilson_cluster"),
 		Primary:      NewNullAttribute(Primary).Default(false),
 		Shell:        NewNullAttribute(Shell),
@@ -226,7 +241,7 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 	}
 
 	// Add new experimenter to all required groups, if any
-	rows, err := c.DBtx.Query(`select name from affiliation_unit_group
+	rows, err := c.DBtx.Query(`select name, type::text as text from affiliation_unit_group
 							   left join groups as g using(groupid)
 						 	   where is_required and unitid = $1;`, unitid)
 	if err != nil {
@@ -235,19 +250,25 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	var names []string
+	var data [][]string
 	for rows.Next() {
+		var row []string
 		var name string
-		rows.Scan(&name)
-		names = append(names, name)
+		var gtype string
+		rows.Scan(&name, &gtype)
+		row = append(row, name)
+		row = append(row, gtype)
+		data = append(data, row)
 	}
 	rows.Close()
-	for _, name := range names {
-		groupName := NewNullAttribute(GroupName).Default(name)
+
+	for _, row := range data {
+		groupName := NewNullAttribute(GroupName).Default(row[0])
+		groupType := NewNullAttribute(GroupType).Default(row[1])
 		auxInput := Input{
 			UserName:  i[UserName],
 			GroupName: groupName,
-			GroupType: NewNullAttribute(GroupType).Default("UnixGroup"),
+			GroupType: groupType,
 			Leader:    NewNullAttribute(Leader).Default(false),
 		}
 		_, apiErr = addUserToGroup(c, auxInput)
