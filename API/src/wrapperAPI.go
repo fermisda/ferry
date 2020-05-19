@@ -1,17 +1,18 @@
 package main
 
 import (
-	"errors"
-	log "github.com/sirupsen/logrus"
-	"fmt"
- 	_ "github.com/lib/pq"
 	"database/sql"
+	"errors"
+	"fmt"
+
+	_ "github.com/lib/pq"
+	log "github.com/sirupsen/logrus"
 )
 
 // IncludeWrapperAPIs includes all APIs described in this file in an APICollection
 func IncludeWrapperAPIs(c *APICollection) {
-	addUserToExperiment := BaseAPI {
-		InputModel {
+	addUserToExperiment := BaseAPI{
+		InputModel{
 			Parameter{UserName, true},
 			Parameter{UnitName, true},
 		},
@@ -20,8 +21,8 @@ func IncludeWrapperAPIs(c *APICollection) {
 	}
 	c.Add("addUserToExperiment", &addUserToExperiment)
 
-	addLPCCollaborationGroup := BaseAPI {
-		InputModel {
+	addLPCCollaborationGroup := BaseAPI{
+		InputModel{
 			Parameter{GroupName, true},
 			Parameter{Quota, true},
 			Parameter{QuotaUnit, false},
@@ -31,8 +32,8 @@ func IncludeWrapperAPIs(c *APICollection) {
 	}
 	c.Add("addLPCCollaborationGroup", &addLPCCollaborationGroup)
 
-	setLPCStorageAccess := BaseAPI {
-		InputModel {
+	setLPCStorageAccess := BaseAPI{
+		InputModel{
 			Parameter{UserName, true},
 			Parameter{DN, true},
 			Parameter{ExternalUsername, true},
@@ -42,8 +43,8 @@ func IncludeWrapperAPIs(c *APICollection) {
 	}
 	c.Add("setLPCStorageAccess", &setLPCStorageAccess)
 
-	addLPCConvener := BaseAPI {
-		InputModel {
+	addLPCConvener := BaseAPI{
+		InputModel{
 			Parameter{UserName, true},
 			Parameter{GroupName, true},
 		},
@@ -52,8 +53,8 @@ func IncludeWrapperAPIs(c *APICollection) {
 	}
 	c.Add("addLPCConvener", &addLPCConvener)
 
-	removeLPCConvener := BaseAPI {
-		InputModel {
+	removeLPCConvener := BaseAPI{
+		InputModel{
 			Parameter{UserName, true},
 			Parameter{GroupName, true},
 			Parameter{RemoveGroup, false},
@@ -63,8 +64,8 @@ func IncludeWrapperAPIs(c *APICollection) {
 	}
 	c.Add("removeLPCConvener", &removeLPCConvener)
 
-	createExperiment := BaseAPI {
-		InputModel {
+	createExperiment := BaseAPI{
+		InputModel{
 			Parameter{UnitName, true},
 			Parameter{VOMSURL, false},
 			Parameter{HomeDir, false},
@@ -77,7 +78,7 @@ func IncludeWrapperAPIs(c *APICollection) {
 	}
 	c.Add("createExperiment", &createExperiment)
 
-	testWrapper := BaseAPI {
+	testWrapper := BaseAPI{
 		nil,
 		testWrapper,
 		RolePublic,
@@ -87,17 +88,17 @@ func IncludeWrapperAPIs(c *APICollection) {
 
 func testWrapper(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
-	
+
 	return "this is a test wrapper", apiErr
 }
 
 func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	dnTemplate	:= "/DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=%s/CN=UID:%s"
-	fullName 	:= NewNullAttribute(FullName)
-	status		:= NewNullAttribute(Status)
-	unitid		:= NewNullAttribute(UnitID)
+	dnTemplate := "/DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=%s/CN=UID:%s"
+	fullName := NewNullAttribute(FullName)
+	status := NewNullAttribute(Status)
+	unitid := NewNullAttribute(UnitID)
 
 	err := c.DBtx.QueryRow("select full_name, status from users where uname = $1", i[UserName]).Scan(&fullName, &status)
 	if err != nil && err != sql.ErrNoRows {
@@ -130,13 +131,13 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 
 	dn := NewNullAttribute(DN)
 	dn.Scan(fmt.Sprintf(dnTemplate, fullName.Data.(string), i[UserName].Data.(string)))
-  
+
 	fnalUnit := NewNullAttribute(UnitName).Default("fermilab")
 	for _, unitname := range []NullAttribute{i[UnitName], fnalUnit} {
-		input := Input {
-			UserName:	i[UserName],
-			UnitName:	unitname,
-			DN:			dn,
+		input := Input{
+			UserName: i[UserName],
+			UnitName: unitname,
+			DN:       dn,
 		}
 		_, apiErr = addCertificateDNToUser(c, input)
 		if len(apiErr) > 0 {
@@ -148,11 +149,11 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 		role := NewNullAttribute(Role)
 		role.Scan(r)
 
-		input := Input {
-			UserName:	i[UserName],
-			UnitName:	i[UnitName],
-			Role:		role,
-			FQAN:		NewNullAttribute(FQAN),
+		input := Input{
+			UserName: i[UserName],
+			UnitName: i[UnitName],
+			Role:     role,
+			FQAN:     NewNullAttribute(FQAN),
 		}
 
 		_, apiErr = setUserExperimentFQAN(c, input)
@@ -164,7 +165,7 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 	compResource := NewNullAttribute(ResourceName)
 	err = c.DBtx.QueryRow(`select name from compute_resources
 						   where unitid = $1 and type = 'Interactive';`,
-						  unitid).Scan(&compResource)
+		unitid).Scan(&compResource)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -180,7 +181,7 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 	err = c.DBtx.QueryRow(`select name from affiliation_unit_group
 						 left join groups as g using(groupid)
 						 where is_primary and unitid = $1;`,
-						unitid).Scan(&compGroup)
+		unitid).Scan(&compGroup)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -195,20 +196,87 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 	primary := NewNullAttribute(Primary)
 	primary.Scan(true)
 
-	input := Input {
-		UserName: i[UserName],
-		GroupName: compGroup,
+	input := Input{
+		UserName:     i[UserName],
+		GroupName:    compGroup,
 		ResourceName: compResource,
-		Primary: primary,
-		Shell: NewNullAttribute(Shell),
-		HomeDir: NewNullAttribute(HomeDir),
+		Primary:      primary,
+		Shell:        NewNullAttribute(Shell),
+		HomeDir:      NewNullAttribute(HomeDir),
 	}
 
 	_, apiErr = setUserAccessToComputeResource(c, input)
 	if len(apiErr) > 0 {
 		return nil, apiErr
 	}
-	
+
+	// Add user to wilson_cluster and wilson group as primary
+	input = Input{
+		UserName:     i[UserName],
+		GroupName:    NewNullAttribute(GroupName).Default("wilson"),
+		ResourceName: NewNullAttribute(ResourceName).Default("wilson_cluster"),
+		Primary:      NewNullAttribute(Primary).Default(true),
+		Shell:        NewNullAttribute(Shell),
+		HomeDir:      NewNullAttribute(HomeDir),
+	}
+
+	_, apiErr = setUserAccessToComputeResource(c, input)
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	// Add user to wilson_cluster and experiment group as secondary
+	input = Input{
+		UserName:     i[UserName],
+		GroupName:    compGroup,
+		ResourceName: NewNullAttribute(ResourceName).Default("wilson_cluster"),
+		Primary:      NewNullAttribute(Primary).Default(false),
+		Shell:        NewNullAttribute(Shell),
+		HomeDir:      NewNullAttribute(HomeDir),
+	}
+
+	_, apiErr = setUserAccessToComputeResource(c, input)
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	// Add new experimenter to all required groups, if any
+	rows, err := c.DBtx.Query(`select name, type::text as text from affiliation_unit_group
+							   left join groups as g using(groupid)
+						 	   where is_required and unitid = $1;`, unitid)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	var data [][]string
+	for rows.Next() {
+		var row []string
+		var name string
+		var gtype string
+		rows.Scan(&name, &gtype)
+		row = append(row, name)
+		row = append(row, gtype)
+		data = append(data, row)
+	}
+	rows.Close()
+
+	for _, row := range data {
+		groupName := NewNullAttribute(GroupName).Default(row[0])
+		groupType := NewNullAttribute(GroupType).Default(row[1])
+		auxInput := Input{
+			UserName:  i[UserName],
+			GroupName: groupName,
+			GroupType: groupType,
+			Leader:    NewNullAttribute(Leader).Default(false),
+		}
+		_, apiErr = addUserToGroup(c, auxInput)
+		if len(apiErr) > 0 {
+			return nil, apiErr
+		}
+	}
+
 	if i[UnitName].Data.(string) == "cms" {
 		rows, err := c.DBtx.Query(`select name, default_path, default_quota, default_unit from storage_resources`)
 		if err != nil {
@@ -221,7 +289,7 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 		for rows.Next() {
 			storageInfo := NewMapNullAttribute(ResourceName, Path, Quota, QuotaUnit)
 			err = rows.Scan(storageInfo[ResourceName], storageInfo[Path],
-					  storageInfo[Quota], storageInfo[QuotaUnit])
+				storageInfo[Quota], storageInfo[QuotaUnit])
 
 			*storageInfo[QuotaUnit] = storageInfo[QuotaUnit].Default("B")
 			fullPath := storageInfo[Path].Data.(string) + "/" + i[UserName].Data.(string)
@@ -242,7 +310,7 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 		}
 		rows.Close()
 
-		for _, input := range(inputs) {
+		for _, input := range inputs {
 			_, apiErr = setStorageQuota(c, input)
 			if len(apiErr) > 0 {
 				return nil, apiErr
@@ -260,10 +328,10 @@ func setLPCStorageAccess(c APIContext, i Input) (interface{}, []APIError) {
 	storageName := NewNullAttribute(ResourceName).Default("EOS")
 	groupName := NewNullAttribute(GroupName).Default("us_cms")
 
-	input := Input {
-		UserName:	i[UserName],
-		UnitName:	unitName,
-		DN:			i[DN],
+	input := Input{
+		UserName: i[UserName],
+		UnitName: unitName,
+		DN:       i[DN],
 	}
 
 	_, apiErr = addCertificateDNToUser(c, input)
@@ -271,10 +339,10 @@ func setLPCStorageAccess(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	input = Input {
-		UserName:		i[UserName],
-		UserAttribute:	NewNullAttribute(UserAttribute).Default("cern_username"),
-		Value:			i[ExternalUsername],
+	input = Input{
+		UserName:      i[UserName],
+		UserAttribute: NewNullAttribute(UserAttribute).Default("cern_username"),
+		Value:         i[ExternalUsername],
 	}
 
 	_, apiErr = setUserExternalAffiliationAttribute(c, input)
@@ -287,7 +355,7 @@ func setLPCStorageAccess(c APIContext, i Input) (interface{}, []APIError) {
 							join users using(uid)
 							join storage_resources using(storageid)
 							where uname = $1 and name = $2;`,
-						   i[UserName], storageName).Scan(&nQuotas)
+		i[UserName], storageName).Scan(&nQuotas)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -298,7 +366,7 @@ func setLPCStorageAccess(c APIContext, i Input) (interface{}, []APIError) {
 		defaultQuota := NewNullAttribute(Quota)
 		defaultUnit := NewNullAttribute(QuotaUnit)
 		err = c.DBtx.QueryRow("select default_path, default_quota, default_unit from storage_resources where name = $1",
-		storageName).Scan(&defaultPath, &defaultQuota, &defaultUnit)
+			storageName).Scan(&defaultPath, &defaultQuota, &defaultUnit)
 		if err != nil {
 			log.WithFields(QueryFields(c)).Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -307,15 +375,15 @@ func setLPCStorageAccess(c APIContext, i Input) (interface{}, []APIError) {
 
 		defaultPath.Scan(fmt.Sprintf("%s/%s", defaultPath.Data.(string), i[UserName].Data.(string)))
 
-		input = Input {
-			UserName:		i[UserName],
-			GroupName: groupName,
-			UnitName: unitName,
-			ResourceName: storageName,
-			Quota: defaultQuota,
-			QuotaUnit: defaultUnit,
-			Path: defaultPath,
-			GroupAccount: NewNullAttribute(GroupAccount),
+		input = Input{
+			UserName:       i[UserName],
+			GroupName:      groupName,
+			UnitName:       unitName,
+			ResourceName:   storageName,
+			Quota:          defaultQuota,
+			QuotaUnit:      defaultUnit,
+			Path:           defaultPath,
+			GroupAccount:   NewNullAttribute(GroupAccount),
 			ExpirationDate: NewNullAttribute(ExpirationDate),
 		}
 
@@ -332,21 +400,21 @@ func createExperiment(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
 	homeDir := i[HomeDir].Default("/nashome")
-	userName := i[UserName].Default(i[UnitName].Data.(string) + "pro")
+	userName := i[UserName].Default(i[UnitName].Data.(string))
 	groupName := i[GroupName].Default(i[UnitName].Data.(string))
 	groupType := NewNullAttribute(GroupType).Default("UnixGroup")
 	resourceName := NewNullAttribute(ResourceName).Default("fermigrid")
-	
+
 	vomsURL := NewNullAttribute(VOMSURL).Default("https://voms.fnal.gov:8443/voms/fermilab/" + i[UnitName].Data.(string))
 	if i[Standalone].Valid {
 		vomsURL = i[VOMSURL].Default("https://voms.fnal.gov:8443/voms/" + i[UnitName].Data.(string))
 	}
 
-	input := Input {
-		UnitName: i[UnitName],
-		VOMSURL: vomsURL,
+	input := Input{
+		UnitName:        i[UnitName],
+		VOMSURL:         vomsURL,
 		AlternativeName: NewNullAttribute(AlternativeName),
-		UnitType: NewNullAttribute(UnitType),
+		UnitType:        NewNullAttribute(UnitType),
 	}
 
 	_, apiErr = createAffiliationUnit(c, input)
@@ -354,33 +422,34 @@ func createExperiment(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	input = Input {
+	input = Input{
 		ResourceName: i[UnitName],
 		ResourceType: NewNullAttribute(ResourceType).Default("Interactive"),
-		HomeDir: homeDir,
-		Shell: NewNullAttribute(Shell).Default("/bin/bash"),
-		UnitName: i[UnitName],
+		HomeDir:      homeDir,
+		Shell:        NewNullAttribute(Shell).Default("/bin/bash"),
+		UnitName:     i[UnitName],
 	}
-	
+
 	_, apiErr = createComputeResource(c, input)
 	if len(apiErr) > 0 && apiErr[0].Type != ErrorDuplicateData {
 		return nil, apiErr
 	}
 
-	input = Input {
+	input = Input{
 		GroupName: groupName,
 		GroupType: groupType,
-		UnitName: i[UnitName],
-		Primary: NewNullAttribute(Primary).Default(true),
+		UnitName:  i[UnitName],
+		Primary:   NewNullAttribute(Primary).Default(true),
+		Required:   NewNullAttribute(Required).Default(false),
 	}
-	
+
 	_, apiErr = addGroupToUnit(c, input)
 	if len(apiErr) > 0 {
 		return nil, apiErr
 	}
 
 	for _, role := range []string{"Analysis", "NULL", "Production"} {
-		fqanString := "/Role=" + role  + "/Capability=NULL"
+		fqanString := "/Role=" + role + "/Capability=NULL"
 		if i[Standalone].Valid {
 			fqanString = "/" + i[UnitName].Data.(string) + fqanString
 		} else {
@@ -388,17 +457,18 @@ func createExperiment(c APIContext, i Input) (interface{}, []APIError) {
 		}
 		fqan := NewNullAttribute(FQAN).Default(fqanString)
 
-		input = Input {
-			FQAN: fqan,
+		input = Input{
+			FQAN:      fqan,
 			GroupName: groupName,
-			UserName: NewNullAttribute(UserName),
-			UnitName: i[UnitName],
+			UserName:  NewNullAttribute(UserName),
+			UnitName:  i[UnitName],
 		}
 
 		if role == "Production" {
+			userName = i[UserName].Default(i[UnitName].Data.(string) + "pro")
 			var userInGroup bool
 			err := c.DBtx.QueryRow(`select ($1, $2) in (select uname, name from user_group join groups using (groupid) join users using(uid))`,
-								   userName, groupName).Scan(&userInGroup)
+				userName, groupName).Scan(&userInGroup)
 			if err != nil {
 				log.WithFields(QueryFields(c)).Error(err)
 				apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -406,11 +476,11 @@ func createExperiment(c APIContext, i Input) (interface{}, []APIError) {
 			}
 
 			if !userInGroup {
-				auxInput := Input {
-					UserName: userName,
+				auxInput := Input{
+					UserName:  userName,
 					GroupName: groupName,
 					GroupType: groupType,
-					Leader: NewNullAttribute(Leader).Default(false),
+					Leader:    NewNullAttribute(Leader).Default(false),
 				}
 				_, apiErr = addUserToGroup(c, auxInput)
 				if len(apiErr) > 0 {
@@ -421,15 +491,38 @@ func createExperiment(c APIContext, i Input) (interface{}, []APIError) {
 			input[UserName] = userName
 		}
 
+		if role == "Production" || role == "Analysis" {
+			for i, res := range []string{i[UnitName].Data.(string), "fermigrid", "fermi_workers"} {
+				for j, grp := range []string{"fnalgrid", groupName.Data.(string)} {
+					if i+j > 0 {	// Skip "fnalgrid" group for experiment interactive resource
+						primary := false
+						if i==0 && j==1 { primary = true }
+						anInput := Input{
+							UserName:     userName,
+							GroupName:    NewNullAttribute(GroupName).Default(grp),
+							ResourceName: NewNullAttribute(ResourceName).Default(res),
+							Primary:      NewNullAttribute(Primary).Default(primary),
+							Shell:        NewNullAttribute(Shell).Default("/bin/bash"),
+							HomeDir:      homeDir,
+						}
+						_, apiErr = setUserAccessToComputeResource(c, anInput)
+						if len(apiErr) > 0 {
+							return nil, apiErr
+						}
+					}
+				}
+			}
+		}
+
 		_, apiErr = createFQAN(c, input)
 		if len(apiErr) > 0 && apiErr[0].Type != ErrorDuplicateData {
 			return nil, apiErr
 		}
 	}
-	
+
 	var quotaExists bool
 	err := c.DBtx.QueryRow(`select ($1, $2) in (select b.name, c.name from compute_batch b join compute_resources c using(compid))`,
-							i[UnitName], resourceName).Scan(&quotaExists)
+		i[UnitName], resourceName).Scan(&quotaExists)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -437,12 +530,12 @@ func createExperiment(c APIContext, i Input) (interface{}, []APIError) {
 	}
 
 	if !quotaExists {
-		input = Input {
-			CondorGroup: i[UnitName],
-			ResourceName: NewNullAttribute(ResourceName).Default("fermigrid"),
-			Quota: NewNullAttribute(Quota).Default("1"),
+		input = Input{
+			CondorGroup:    i[UnitName],
+			ResourceName:   NewNullAttribute(ResourceName).Default("fermigrid"),
+			Quota:          NewNullAttribute(Quota).Default("1"),
 			ExpirationDate: NewNullAttribute(ExpirationDate),
-			Surplus: NewNullAttribute(Surplus),
+			Surplus:        NewNullAttribute(Surplus),
 		}
 
 		_, apiErr = setCondorQuota(c, input)
@@ -450,7 +543,7 @@ func createExperiment(c APIContext, i Input) (interface{}, []APIError) {
 			return nil, apiErr
 		}
 	}
-	
+
 	return nil, nil
 }
 
@@ -462,8 +555,8 @@ func addLPCConvener(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	input := Input {
-		UserName: i[UserName],
+	input := Input{
+		UserName:  i[UserName],
 		GroupName: i[GroupName],
 		GroupType: NewNullAttribute(GroupType).Default("UnixGroup"),
 	}
@@ -473,13 +566,13 @@ func addLPCConvener(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	input = Input {
-		UserName: i[UserName],
-		GroupName: i[GroupName],
+	input = Input{
+		UserName:     i[UserName],
+		GroupName:    i[GroupName],
 		ResourceName: NewNullAttribute(ResourceName).Default("lpcinteractive"),
-		Shell: NewNullAttribute(Shell),
-		HomeDir: NewNullAttribute(HomeDir),
-		Primary: NewNullAttribute(Primary),
+		Shell:        NewNullAttribute(Shell),
+		HomeDir:      NewNullAttribute(HomeDir),
+		Primary:      NewNullAttribute(Primary),
 	}
 
 	_, apiErr = setUserAccessToComputeResource(c, input)
@@ -498,8 +591,8 @@ func removeLPCConvener(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	input := Input {
-		UserName: i[UserName],
+	input := Input{
+		UserName:  i[UserName],
 		GroupName: i[GroupName],
 		GroupType: NewNullAttribute(GroupType).Default("UnixGroup"),
 	}
@@ -510,9 +603,9 @@ func removeLPCConvener(c APIContext, i Input) (interface{}, []APIError) {
 	}
 
 	if i[RemoveGroup].Valid {
-		input = Input {
-			UserName: i[UserName],
-			GroupName: i[GroupName],
+		input = Input{
+			UserName:     i[UserName],
+			GroupName:    i[GroupName],
 			ResourceName: NewNullAttribute(ResourceName).Default("lpcinteractive"),
 		}
 
@@ -521,37 +614,37 @@ func removeLPCConvener(c APIContext, i Input) (interface{}, []APIError) {
 			return nil, apiErr
 		}
 	}
-	
+
 	return nil, nil
 }
 
 func addLPCCollaborationGroup(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	uid			:= NewNullAttribute(UID)
-	groupid		:= NewNullAttribute(GroupID)
-	unitid		:= NewNullAttribute(UnitID)
-	resourceid	:= NewNullAttribute(ResourceID)
+	uid := NewNullAttribute(UID)
+	groupid := NewNullAttribute(GroupID)
+	unitid := NewNullAttribute(UnitID)
+	resourceid := NewNullAttribute(ResourceID)
 
-	username	:= NewNullAttribute(UserName).Default(i[GroupName].Data)
-	unitname	:= NewNullAttribute(UnitName).Default("cms")
-	computeres	:= NewNullAttribute(ResourceName).Default("lpcinteractive")
-	storageres  := NewNullAttribute(ResourceName).Default("EOS")
-	grouptype	:= NewNullAttribute(GroupType).Default("UnixGroup")
-	primaryUnit	:= NewNullAttribute(Primary).Default(false)
-	primaryComp	:= NewNullAttribute(Primary).Default(true)
-	quotaunit	:= i[QuotaUnit].Default("B")
+	username := NewNullAttribute(UserName).Default(i[GroupName].Data)
+	unitname := NewNullAttribute(UnitName).Default("cms")
+	computeres := NewNullAttribute(ResourceName).Default("lpcinteractive")
+	storageres := NewNullAttribute(ResourceName).Default("EOS")
+	grouptype := NewNullAttribute(GroupType).Default("UnixGroup")
+	primaryUnit := NewNullAttribute(Primary).Default(false)
+	primaryComp := NewNullAttribute(Primary).Default(true)
+	quotaunit := i[QuotaUnit].Default("B")
 
 	if i[GroupName].Data.(string)[0:3] != "lpc" {
 		apiErr = append(apiErr, APIError{errors.New("groupname must begin with lpc"), ErrorAPIRequirement})
 		return nil, apiErr
 	}
-	
+
 	err := c.DBtx.QueryRow(`select (select uid from users where uname = $1),
 								   (select groupid from groups where name = $1 and type = $2),
 								   (select unitid from affiliation_units where name = $3),
 								   (select compid from compute_resources where name = $4);`,
-						   i[GroupName], grouptype, unitname, computeres).Scan(&uid, &groupid, &unitid, &resourceid)
+		i[GroupName], grouptype, unitname, computeres).Scan(&uid, &groupid, &unitid, &resourceid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -586,11 +679,11 @@ func addLPCCollaborationGroup(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	shell 	:= NewNullAttribute(Shell)
-	homedir	:= NewNullAttribute(HomeDir)
+	shell := NewNullAttribute(Shell)
+	homedir := NewNullAttribute(HomeDir)
 	err = c.DBtx.QueryRow(`select (select default_shell from compute_resources where name = $1),
 								  (select default_home_dir from compute_resources where name = $1)`,
-								  computeres).Scan(&shell, &homedir)
+		computeres).Scan(&shell, &homedir)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))

@@ -1,5 +1,4 @@
 
-
 CREATE TABLE user_deletions (
 	uid                  bigint  NOT NULL ,
 	uname                varchar(100)  NOT NULL ,
@@ -23,5 +22,7 @@ CREATE TABLE user_group_deletions (
 	when_deleted         timestamptz  NOT NULL
  ) ;
 
+
+ALTER TABLE affiliation_unit_group ADD is_required bool DEFAULT false NOT NULL ;
 
 \i grants.sql

@@ -1,22 +1,23 @@
 package main
 
 import (
-	"strings"
-	"strconv"
 	"database/sql/driver"
-	"errors"
-	"time"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
 	log "github.com/sirupsen/logrus"
 )
 
 // BaseAPI is a basic type to build APIs
 type BaseAPI struct {
-	InputModel InputModel
+	InputModel    InputModel
 	QueryFunction func(APIContext, Input) (interface{}, []APIError)
-	AccessRole AccessRole
+	AccessRole    AccessRole
 }
 
 // Run the API
@@ -72,12 +73,12 @@ func (b BaseAPI) Run(w http.ResponseWriter, r *http.Request) {
 				errType = err.Type
 			}
 		}
-		
+
 		switch {
 		case errType > HTTP500:
 			w.WriteHeader(http.StatusInternalServerError)
 		}
-		
+
 		return
 	}
 
@@ -100,8 +101,8 @@ func (i *InputModel) Add(attribute Attribute, optional bool) {
 func (i InputModel) Help() map[Attribute]map[string]interface{} {
 	out := make(map[Attribute]map[string]interface{})
 	for _, p := range i {
-		out[p.Attribute] = map[string]interface{} {
-			"type": p.Attribute.Type(),
+		out[p.Attribute] = map[string]interface{}{
+			"type":     p.Attribute.Type(),
 			"required": p.Required,
 		}
 	}
@@ -112,12 +113,12 @@ func (i InputModel) Help() map[Attribute]map[string]interface{} {
 type Input map[Attribute]NullAttribute
 
 // Parse an http.Request and returns a ParsedInput
-func (i Input) Parse(c APIContext, m InputModel) ([]error) {
+func (i Input) Parse(c APIContext, m InputModel) []error {
 	var errs []error
 	q := c.R.URL.Query()
 
 	m.Add(Help, false)
-	
+
 	for _, p := range m {
 		parsedAttribute := NewNullAttribute(p.Attribute)
 		value := q.Get(string(p.Attribute))
@@ -129,7 +130,7 @@ func (i Input) Parse(c APIContext, m InputModel) ([]error) {
 			parsedAttribute.Scan(value)
 			if !parsedAttribute.Valid && !parsedAttribute.AbsoluteNull {
 				errs = append(errs, fmt.Errorf(errString, p.Attribute, p.Attribute.Type()))
-				log.WithFields(QueryFields(c)).Error(errs[len(errs) - 1])
+				log.WithFields(QueryFields(c)).Error(errs[len(errs)-1])
 				continue
 			}
 		}
@@ -137,7 +138,7 @@ func (i Input) Parse(c APIContext, m InputModel) ([]error) {
 		errString = "required parameter %s not provided"
 		if !parsedAttribute.Valid && p.Required {
 			errs = append(errs, fmt.Errorf(errString, p.Attribute))
-			log.WithFields(QueryFields(c)).Error(errs[len(errs) - 1])
+			log.WithFields(QueryFields(c)).Error(errs[len(errs)-1])
 			continue
 		}
 
@@ -146,7 +147,7 @@ func (i Input) Parse(c APIContext, m InputModel) ([]error) {
 
 	for p := range q {
 		errs = append(errs, fmt.Errorf("%s is not a valid parameter for this api", p))
-		log.WithFields(QueryFields(c)).Error(errs[len(errs) - 1])
+		log.WithFields(QueryFields(c)).Error(errs[len(errs)-1])
 	}
 
 	return errs
@@ -167,18 +168,18 @@ func (i Input) AddValue(attribute Attribute, value interface{}) {
 // Output is the default structure for APIs to return information
 type Output struct {
 	Status bool
-	Err []error
-	Out interface{}
+	Err    []error
+	Out    interface{}
 }
 
 type jsonOutput struct {
-	Status string	`json:"ferry_status"`
-	Err []string	`json:"ferry_error"`
-	Out interface{}	`json:"ferry_output"`
+	Status string      `json:"ferry_status"`
+	Err    []string    `json:"ferry_error"`
+	Out    interface{} `json:"ferry_output"`
 }
 
 // Parse the Output and writes to an http.ResponseWriter
-func (o *Output) Parse(c APIContext, w http.ResponseWriter) () {
+func (o *Output) Parse(c APIContext, w http.ResponseWriter) {
 	var out jsonOutput
 
 	if o.Status {
@@ -189,7 +190,7 @@ func (o *Output) Parse(c APIContext, w http.ResponseWriter) () {
 
 	out.Err = make([]string, 0)
 	for _, err := range o.Err {
-		out.Err = append (out.Err, err.Error())
+		out.Err = append(out.Err, err.Error())
 	}
 
 	out.Out = o.Out
@@ -204,7 +205,7 @@ func (o *Output) Parse(c APIContext, w http.ResponseWriter) () {
 // Parameter for basic APIs
 type Parameter struct {
 	Attribute Attribute
-	Required bool
+	Required  bool
 }
 
 // Attribute represents a valid parameter names to be used by an API
@@ -212,97 +213,99 @@ type Attribute string
 
 // List of valid Attribute names
 const (
-	UserName 			Attribute = "username"
-	GroupName			Attribute = "groupname"
-	UnitName			Attribute = "unitname"
-	FullName 			Attribute = "fullname"
-	ResourceName		Attribute = "resourcename"
-	AlternativeName		Attribute = "alternativename"
-	GroupType			Attribute = "grouptype"
-	UnitType			Attribute = "unittype"
-	ResourceType		Attribute = "resourcetype"
-	DN					Attribute = "dn"
-	UserAttribute		Attribute = "attribute"
-	Value				Attribute = "value"
-	ExternalUsername	Attribute = "externalusername"
-	QuotaUnit			Attribute = "quotaunit"
-	Path				Attribute = "path"
-	Shell				Attribute = "shell"
-	HomeDir				Attribute = "homedir"
-	FQAN				Attribute = "fqan"
-	VOMSURL				Attribute = "vomsurl"
-	Role				Attribute = "role"
-	CondorGroup			Attribute = "condorgroup"
-	VOName				Attribute = "voname"
-	UID					Attribute = "uid"
-	GID					Attribute = "gid"
-	GroupID				Attribute = "groupid"
-	DNID				Attribute = "dnid"
-	FQANID				Attribute = "fqanid"
-	UnitID				Attribute = "unitid"
-	ResourceID			Attribute = "compid"
-	Quota				Attribute = "quota"
-	Status				Attribute = "status"
-	Primary				Attribute = "primary"
-	Leader				Attribute = "leader"
-	GroupAccount  		Attribute = "groupaccount"
-	Experiment			Attribute = "experiment"
-	Suspend				Attribute = "suspend"
-	Surplus				Attribute = "surplus"
-	ExpirationDate		Attribute = "expirationdate"
-	LastUpdated			Attribute = "lastupdated"
-	Help				Attribute = "help"
-	PasswdMode			Attribute = "passwdmode"
-	Standalone			Attribute = "standalone"
-	RemoveGroup			Attribute = "removegroup"
+	UserName         Attribute = "username"
+	GroupName        Attribute = "groupname"
+	UnitName         Attribute = "unitname"
+	FullName         Attribute = "fullname"
+	ResourceName     Attribute = "resourcename"
+	AlternativeName  Attribute = "alternativename"
+	GroupType        Attribute = "grouptype"
+	UnitType         Attribute = "unittype"
+	ResourceType     Attribute = "resourcetype"
+	DN               Attribute = "dn"
+	UserAttribute    Attribute = "attribute"
+	Value            Attribute = "value"
+	ExternalUsername Attribute = "externalusername"
+	QuotaUnit        Attribute = "quotaunit"
+	Path             Attribute = "path"
+	Shell            Attribute = "shell"
+	HomeDir          Attribute = "homedir"
+	FQAN             Attribute = "fqan"
+	VOMSURL          Attribute = "vomsurl"
+	Role             Attribute = "role"
+	CondorGroup      Attribute = "condorgroup"
+	VOName           Attribute = "voname"
+	UID              Attribute = "uid"
+	GID              Attribute = "gid"
+	GroupID          Attribute = "groupid"
+	DNID             Attribute = "dnid"
+	FQANID           Attribute = "fqanid"
+	UnitID           Attribute = "unitid"
+	ResourceID       Attribute = "compid"
+	Quota            Attribute = "quota"
+	Status           Attribute = "status"
+	Primary          Attribute = "primary"
+	Required         Attribute = "required"
+	Leader           Attribute = "leader"
+	GroupAccount     Attribute = "groupaccount"
+	Experiment       Attribute = "experiment"
+	Suspend          Attribute = "suspend"
+	Surplus          Attribute = "surplus"
+	ExpirationDate   Attribute = "expirationdate"
+	LastUpdated      Attribute = "lastupdated"
+	Help             Attribute = "help"
+	PasswdMode       Attribute = "passwdmode"
+	Standalone       Attribute = "standalone"
+	RemoveGroup      Attribute = "removegroup"
 )
 
 // Type returns the type of the Attribute
-func (a Attribute) Type() (AttributeType) {
+func (a Attribute) Type() AttributeType {
 	AttributeType := map[Attribute]AttributeType{
-		UserName:			TypeString,
-		GroupName:			TypeString,
-		UnitName: 			TypeString,
-		FullName:			TypeSstring,
-		ResourceName:		TypeSstring,
-		AlternativeName:	TypeString,
-		GroupType:			TypeSstring,
-		UnitType:			TypeString,
-		ResourceType:		TypeSstring,
-		DN:					TypeSstring,
-		UserAttribute:		TypeString,
-		Value:				TypeSstring,
-		ExternalUsername:	TypeString,
-		QuotaUnit:			TypeString,
-		Path:				TypeSstring,
-		Shell:				TypeSstring,
-		HomeDir:			TypeSstring,
-		FQAN:				TypeSstring,
-		VOMSURL:			TypeString,
-		Role:				TypeSstring,
-		CondorGroup:		TypeString,
-		VOName:				TypeString,
-		UID:				TypeInt,
-		GID:				TypeInt,
-		GroupID:			TypeInt,
-		DNID:				TypeInt,
-		FQANID:				TypeInt,
-		UnitID:				TypeInt,
-		ResourceID:			TypeInt,
-		Quota:				TypeFloat,
-		Status:				TypeBool,
-		Primary:			TypeBool,
-		Leader:				TypeBool,
-		GroupAccount:		TypeBool,
-		Experiment:			TypeBool,
-		Suspend:			TypeBool,
-		Surplus:			TypeBool,
-		ExpirationDate:		TypeDate,
-		LastUpdated:		TypeDate,
-		Help:				TypeFlag,
-		PasswdMode:			TypeFlag,
-		Standalone:			TypeFlag,
-		RemoveGroup:		TypeFlag,
+		UserName:         TypeString,
+		GroupName:        TypeString,
+		UnitName:         TypeString,
+		FullName:         TypeSstring,
+		ResourceName:     TypeSstring,
+		AlternativeName:  TypeString,
+		GroupType:        TypeSstring,
+		UnitType:         TypeString,
+		ResourceType:     TypeSstring,
+		DN:               TypeSstring,
+		UserAttribute:    TypeString,
+		Value:            TypeSstring,
+		ExternalUsername: TypeString,
+		QuotaUnit:        TypeString,
+		Path:             TypeSstring,
+		Shell:            TypeSstring,
+		HomeDir:          TypeSstring,
+		FQAN:             TypeSstring,
+		VOMSURL:          TypeString,
+		Role:             TypeSstring,
+		CondorGroup:      TypeString,
+		VOName:           TypeString,
+		UID:              TypeInt,
+		GID:              TypeInt,
+		GroupID:          TypeInt,
+		DNID:             TypeInt,
+		FQANID:           TypeInt,
+		UnitID:           TypeInt,
+		ResourceID:       TypeInt,
+		Quota:            TypeFloat,
+		Status:           TypeBool,
+		Primary:          TypeBool,
+		Required:         TypeBool,
+		Leader:           TypeBool,
+		GroupAccount:     TypeBool,
+		Experiment:       TypeBool,
+		Suspend:          TypeBool,
+		Surplus:          TypeBool,
+		ExpirationDate:   TypeDate,
+		LastUpdated:      TypeDate,
+		Help:             TypeFlag,
+		PasswdMode:       TypeFlag,
+		Standalone:       TypeFlag,
+		RemoveGroup:      TypeFlag,
 	}
 
 	return AttributeType[a]
@@ -313,14 +316,14 @@ type AttributeType string
 
 // List of valid parameter types
 const (
-	TypeInt 	AttributeType = "integer"
-	TypeUint	AttributeType = "unsigned integer"
-	TypeFloat	AttributeType = "float"
-	TypeBool	AttributeType = "boolean"
-	TypeString	AttributeType = "string"
-	TypeSstring	AttributeType = "case sensitive string"
-	TypeDate	AttributeType = "date"
-	TypeFlag	AttributeType = "flag"
+	TypeInt     AttributeType = "integer"
+	TypeUint    AttributeType = "unsigned integer"
+	TypeFloat   AttributeType = "float"
+	TypeBool    AttributeType = "boolean"
+	TypeString  AttributeType = "string"
+	TypeSstring AttributeType = "case sensitive string"
+	TypeDate    AttributeType = "date"
+	TypeFlag    AttributeType = "flag"
 )
 
 // DateFormat represents the default date format
@@ -360,7 +363,7 @@ func (at AttributeType) Parse(value interface{}) (interface{}, bool) {
 			parsedValue, valid = nil, false
 		}
 	}
-	
+
 	return parsedValue, valid
 }
 
@@ -408,7 +411,7 @@ func (at AttributeType) ParseString(value string) (interface{}, bool) {
 			parsedValue, valid = nil, false
 		}
 	}
-	
+
 	return parsedValue, valid
 }
 
@@ -416,9 +419,9 @@ func (at AttributeType) ParseString(value string) (interface{}, bool) {
 // sql.Scanner interface so it can be used as a scan destination, similar to
 // sql.NullString.
 type NullAttribute struct {
-	Attribute Attribute
-	Data interface{}
-	Valid bool // Valid is true if Value matches Attribute.Type
+	Attribute    Attribute
+	Data         interface{}
+	Valid        bool // Valid is true if Value matches Attribute.Type
 	AbsoluteNull bool // Valid is true if Scan receives is the string "NULL"
 }
 
@@ -468,7 +471,7 @@ func (na NullAttribute) Coalesce(value interface{}) interface{} {
 // APIError is returned by a BaseAPI
 type APIError struct {
 	Error error
-	Type ErrorType
+	Type  ErrorType
 }
 
 // ErrorType is a type of APIError
@@ -487,10 +490,10 @@ const (
 
 // DefaultMessage for BaseAPI errors
 func (t ErrorType) DefaultMessage() string {
-	messageMap := map[ErrorType]string {
-		ErrorDbQuery:		"error while querying the database",
-		ErrorDataNotFound:	"%s not found",
-		ErrorInvalidData:	"%s is invalid",
+	messageMap := map[ErrorType]string{
+		ErrorDbQuery:       "error while querying the database",
+		ErrorDataNotFound:  "%s not found",
+		ErrorInvalidData:   "%s is invalid",
 		ErrorDuplicateData: "%s already exists",
 	}
 	return messageMap[t]
@@ -507,12 +510,12 @@ func DefaultAPIError(t ErrorType, a interface{}) APIError {
 
 // APIContext stores metadata used through the API execution
 type APIContext struct {
-	R *http.Request
+	R         *http.Request
 	StartTime time.Time
 	AuthLevel AccessLevel
-	AuthRole AccessRole
-	DBtx *Transaction
-	Ckey int64
+	AuthRole  AccessRole
+	DBtx      *Transaction
+	Ckey      int64
 }
 
 // APICollection aggregates a collection of APIs to be called from a function
@@ -544,13 +547,13 @@ type AccessRole string
 
 // List of valid access roles
 const (
-	RolePublic 	AccessRole = "public"
-	RoleRead	AccessRole = "read"
-	RoleWrite	AccessRole = "write"
+	RolePublic AccessRole = "public"
+	RoleRead   AccessRole = "read"
+	RoleWrite  AccessRole = "write"
 )
 
 // String returns the AccessRole string representation
-func (a AccessRole) String() (string){
+func (a AccessRole) String() string {
 	return string(a)
 }
 
@@ -559,7 +562,7 @@ type AccessLevel int
 
 // List of valid access roles
 const (
-	LevelDenied AccessLevel = iota -1
+	LevelDenied AccessLevel = iota - 1
 	levelUnauth
 	LevelPublic
 	LevelDNRole
@@ -570,14 +573,14 @@ const (
 
 // String returns the AccessRole string representation
 func (a AccessLevel) String() string {
-	messageMap := map[AccessLevel]string {
-		LevelDenied:		"denied",
-		levelUnauth:		"unauthenticated",
-		LevelPublic:		"public",
-		LevelDNRole:		"dn_role",
-		LevelIPRole:		"ip_role",
-		LevelDNWhitelist:	"dn_whitelist",
-		LevelIPWhitelist:	"ip_whitelist",
+	messageMap := map[AccessLevel]string{
+		LevelDenied:      "denied",
+		levelUnauth:      "unauthenticated",
+		LevelPublic:      "public",
+		LevelDNRole:      "dn_role",
+		LevelIPRole:      "ip_role",
+		LevelDNWhitelist: "dn_whitelist",
+		LevelIPWhitelist: "ip_whitelist",
 	}
 	return messageMap[a]
 }

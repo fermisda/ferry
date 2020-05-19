@@ -251,6 +251,7 @@ func main() {
 	grouter.HandleFunc("/createGroup", APIs["createGroup"].Run)
 	grouter.HandleFunc("/addGroupToUnit", APIs["addGroupToUnit"].Run)
 	grouter.HandleFunc("/removeGroupFromUnit", APIs["removeGroupFromUnit"].Run)
+	grouter.HandleFunc("/setGroupRequired", APIs["setGroupRequired"].Run)
 	grouter.HandleFunc("/setPrimaryStatusGroup", APIs["setPrimaryStatusGroup"].Run)
 	grouter.HandleFunc("/IsUserLeaderOfGroup", APIs["isUserLeaderOfGroup"].Run)
 	grouter.HandleFunc("/IsUserMemberOfGroup", APIs["isUserMemberOfGroup"].Run)
@@ -308,6 +309,7 @@ func main() {
 
 	//wrapper API calls
 	grouter.HandleFunc("/testWrapper", APIs["testWrapper"].Run)
+	grouter.HandleFunc("/addUserToExperiment", APIs["addUserToExperiment"].Run) //Added to fix missed init-cap on next line
 	grouter.HandleFunc("/addUsertoExperiment", APIs["addUserToExperiment"].Run)
 	grouter.HandleFunc("/setLPCStorageAccess", APIs["setLPCStorageAccess"].Run)
 	grouter.HandleFunc("/createExperiment", APIs["createExperiment"].Run)
