@@ -200,16 +200,18 @@ def fetch_userdb():
     # This section of the code is to identify pottential problems with services-users.csv
     os.system("curl -s https://metrics.fnal.gov/authentication/datafiles/services-users.csv > cache/services-users.csv.debug")
 
+    timestamp = datetime.datetime.now().strftime("%Y%m%d%H%m")
     for f, url in config.items("userdb"):
         if f not in ["uid.lis", "gid.lis", "services-users.csv"]:
             logging.error("invalid userdb file %s" % f)
             exit(2)
-        files[f] = "%s/%s" % (cacheDir, f)
+        logging.debug("downloading %s: %s" % (f, url))
+        fparts = f.split(".")
+        files[f] = "%s/%s-%s.%s" % (cacheDir, fparts[0], timestamp, fparts[1])
         if os.path.isfile(files[f] + ".error"):
             logging.error("bad %s file detected on a previous cycle" % f)
             postToSlack("Update Script Halted!", "Bad %s file detected on a previous cycle." % f)
             exit(5)
-        logging.debug("downloading %s: %s" % (f, url))
         thread = Thread(target=work, args=[f, url])
         thread.start()
         threads.append(thread)
