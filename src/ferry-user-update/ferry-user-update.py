@@ -254,7 +254,7 @@ def fetch_userdb():
     unameUid = {}
 
     logging.debug("reading gid.lis")
-    gidLines = re.findall(r"(\d+)\t(.+)\t\t.+", open(files["gid.lis"], "r").read())
+    gidLines = re.findall(r"(\d+)\t(.+)\t\t.*", open(files["gid.lis"], "r").read())
     for line in gidLines:
         gid, name = line
         gid = gid
