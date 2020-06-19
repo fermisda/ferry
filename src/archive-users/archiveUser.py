@@ -116,7 +116,7 @@ def archive(cursor, uid, uname):
         logging.info("archive -->  Processing table: %s:", table)
         cursor.execute("select * from %s LIMIT 0" % table)
         fields_list = [desc[0] for desc in cursor.description]
-        fields = ", ".join(fields_list)
+        fields = ",".join(fields_list)
         logging.debug("archive --> table: %s fields: %s", table, str(fields))
         user_data[table] = fetch_records(cursor, uid, table, fields)
         delete_records(cursor, uid, table)
