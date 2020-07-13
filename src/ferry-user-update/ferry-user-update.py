@@ -302,20 +302,33 @@ def fetch_userdb():
     servicesUsersLines = re.findall(r"(\w+)\,(\".+\"),(No\sExpiration\sdate|\d{4}-\d{2}-\d{2}|EXPIRED)", fileText)
     # Check number of users
     complete = True
+    re_error = None
     complete = complete and bool(re.search(r"# SERVICES active users list made on  [A-z]{3} [A-z]{3} \d{2} \d{2}:\d{2} \d{4}", fileText))
-    loadedUsers =                re.search(r"# (\d+) username loaded from Active Directory", fileText)
-    complete = complete and bool(re.search(r"# \d+ users output to list", fileText))
-    complete = complete and bool(re.search(r"# SERVICES active users list completed on  [A-z]{3} [A-z]{3} \d{2} \d{2}:\d{2} \d{4}", fileText))
-    complete = complete and bool(loadedUsers)
     if not complete:
-        logging.error("file services-users.csv seem truncated")
+        re_error = 1
+    else:
+        loadedUsers =                re.search(r"# (\d+) username loaded from Active Directory", fileText)
+        complete = complete and bool(re.search(r"# \d+ users output to list", fileText))
+        if not complete:
+            re_error = 2
+        else:
+            complete = complete and bool(re.search(r"# SERVICES active users list completed on  [A-z]{3} [A-z]{3} \d{2} \d{2}:\d{2} \d{4}", fileText))
+            if not complete:
+                re_error = 3
+            else:
+                complete = complete and bool(loadedUsers)
+                if not complete:
+                    re_error = 4
+    if not complete:
+        logging.error("file services-users.csv seem truncated - RE Error %s", re_error)
         postToSlack("Update Script Halted!", "File services-users.csv seem truncated")
         os.rename(files["services-users.csv"], files["services-users.csv"] + ".error")
         os.rename(files["services-users.csv"] + ".cache", files[f])
         exit(6)
     if int(loadedUsers.group(1)) != len(servicesUsersLines):
-        logging.error("file services-users.csv is missing users")
-        postToSlack("Update Script Halted!", "File services-users.csv seem truncated")
+        logging.error("file services-users.csv is missing users loadedUsers.group(1): %s - len(servicesUsersLines): %s",
+                      loadedUsers.group(1), len(servicesUsersLines))
+        postToSlack("Update Script Halted!", "File services-users.csv seem truncated - missing users")
         os.rename(files["services-users.csv"], files["services-users.csv"] + ".error")
         os.rename(files["services-users.csv"] + ".cache", files[f])
         exit(7)
