@@ -210,25 +210,10 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	// Add user to wilson_cluster and wilson group as primary
+	// Add user to wilson_cluster and wilson group
 	input = Input{
 		UserName:     i[UserName],
 		GroupName:    NewNullAttribute(GroupName).Default("wilson"),
-		ResourceName: NewNullAttribute(ResourceName).Default("wilson_cluster"),
-		Primary:      NewNullAttribute(Primary).Default(true),
-		Shell:        NewNullAttribute(Shell),
-		HomeDir:      NewNullAttribute(HomeDir),
-	}
-
-	_, apiErr = setUserAccessToComputeResource(c, input)
-	if len(apiErr) > 0 {
-		return nil, apiErr
-	}
-
-	// Add user to wilson_cluster and experiment group as secondary
-	input = Input{
-		UserName:     i[UserName],
-		GroupName:    compGroup,
 		ResourceName: NewNullAttribute(ResourceName).Default("wilson_cluster"),
 		Primary:      NewNullAttribute(Primary).Default(false),
 		Shell:        NewNullAttribute(Shell),
@@ -240,8 +225,8 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	// Add new experimenter to all required groups, if any
-	rows, err := c.DBtx.Query(`select name, type::text as text from affiliation_unit_group
+	// Add new experimenter to all required groups with compute resource
+	rows, err := c.DBtx.Query(`select name from affiliation_unit_group
 							   left join groups as g using(groupid)
 						 	   where is_required and unitid = $1;`, unitid)
 	if err != nil {
@@ -250,28 +235,24 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	var data [][]string
+	var names []string
 	for rows.Next() {
-		var row []string
 		var name string
-		var gtype string
-		rows.Scan(&name, &gtype)
-		row = append(row, name)
-		row = append(row, gtype)
-		data = append(data, row)
+		rows.Scan(&name)
+		names = append(names, name)
 	}
 	rows.Close()
-
-	for _, row := range data {
-		groupName := NewNullAttribute(GroupName).Default(row[0])
-		groupType := NewNullAttribute(GroupType).Default(row[1])
+	for _, name := range names {
+		groupName := NewNullAttribute(GroupName).Default(name)
 		auxInput := Input{
-			UserName:  i[UserName],
-			GroupName: groupName,
-			GroupType: groupType,
-			Leader:    NewNullAttribute(Leader).Default(false),
+			UserName:     i[UserName],
+			GroupName:    groupName,
+			ResourceName: compResource,
+			Primary:      NewNullAttribute(Primary).Default(false),
+			Shell:        NewNullAttribute(Shell),
+			HomeDir:      NewNullAttribute(HomeDir),
 		}
-		_, apiErr = addUserToGroup(c, auxInput)
+		_, apiErr = setUserAccessToComputeResource(c, auxInput)
 		if len(apiErr) > 0 {
 			return nil, apiErr
 		}
@@ -400,7 +381,7 @@ func createExperiment(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
 	homeDir := i[HomeDir].Default("/nashome")
-	userName := i[UserName].Default(i[UnitName].Data.(string))
+	userName := i[UserName].Default(i[UnitName].Data.(string) + "pro")
 	groupName := i[GroupName].Default(i[UnitName].Data.(string))
 	groupType := NewNullAttribute(GroupType).Default("UnixGroup")
 	resourceName := NewNullAttribute(ResourceName).Default("fermigrid")
@@ -440,7 +421,6 @@ func createExperiment(c APIContext, i Input) (interface{}, []APIError) {
 		GroupType: groupType,
 		UnitName:  i[UnitName],
 		Primary:   NewNullAttribute(Primary).Default(true),
-		Required:   NewNullAttribute(Required).Default(false),
 	}
 
 	_, apiErr = addGroupToUnit(c, input)
@@ -465,7 +445,6 @@ func createExperiment(c APIContext, i Input) (interface{}, []APIError) {
 		}
 
 		if role == "Production" {
-			userName = i[UserName].Default(i[UnitName].Data.(string) + "pro")
 			var userInGroup bool
 			err := c.DBtx.QueryRow(`select ($1, $2) in (select uname, name from user_group join groups using (groupid) join users using(uid))`,
 				userName, groupName).Scan(&userInGroup)
@@ -489,29 +468,6 @@ func createExperiment(c APIContext, i Input) (interface{}, []APIError) {
 			}
 
 			input[UserName] = userName
-		}
-
-		if role == "Production" || role == "Analysis" {
-			for i, res := range []string{i[UnitName].Data.(string), "fermigrid", "fermi_workers"} {
-				for j, grp := range []string{"fnalgrid", groupName.Data.(string)} {
-					if i+j > 0 {	// Skip "fnalgrid" group for experiment interactive resource
-						primary := false
-						if i==0 && j==1 { primary = true }
-						anInput := Input{
-							UserName:     userName,
-							GroupName:    NewNullAttribute(GroupName).Default(grp),
-							ResourceName: NewNullAttribute(ResourceName).Default(res),
-							Primary:      NewNullAttribute(Primary).Default(primary),
-							Shell:        NewNullAttribute(Shell).Default("/bin/bash"),
-							HomeDir:      homeDir,
-						}
-						_, apiErr = setUserAccessToComputeResource(c, anInput)
-						if len(apiErr) > 0 {
-							return nil, apiErr
-						}
-					}
-				}
-			}
 		}
 
 		_, apiErr = createFQAN(c, input)
