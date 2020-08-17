@@ -581,7 +581,7 @@ func getGridMapFileByVO(c APIContext, i Input) (interface{}, []APIError) {
 func getVORoleMapFile(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	compid := NewNullAttribute(UnitID)
+	compid := NewNullAttribute(ResourceID)
 	err := c.DBtx.QueryRow(`select compid from compute_resources where name = $1`, i[ResourceName]).Scan(&compid)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
@@ -589,8 +589,8 @@ func getVORoleMapFile(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	if !compid.Valid && i[UnitName].Valid {
-		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, compid))
+	if !compid.Valid && i[ResourceName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, ResourceName))
 		return nil, apiErr
 	}
 

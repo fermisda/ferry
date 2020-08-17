@@ -10,20 +10,23 @@ database:
   password:
   timeout: 60
   sslmode: disable
-  certificate: /etc/grid-security/certificates/cilogon-osg.pem
+  # certificate: /etc/grid-security/certificates/cilogon-osg.pem
+  certificate: /home/dbiapp/local/etc/grid-security/certificates/cilogon-osg.pem
   max_open_conns: 200
   max_idle_conns: 0
 
 server:
   port: 8445
-  cert: /home/ferry/.cert/hostcert.pem
-  key: /home/ferry/.cert/hostkey.pem
-  cas: /etc/grid-security/certificates/
+  cert: /home/dbiapp/www/certs/ferry/dbweb6.fnal.gov-cert.pem
+  key: /home/dbiapp/www/certs/ferry/dbweb6.fnal.gov-key.pem
+  cas: /home/dbiapp/local/etc/grid-security/certificates/
 
 certificates:
-  - /etc/grid-security/certificates/cilogon-basic.pem
-  - /etc/grid-security/certificates/cilogon-silver.pem
-  - /etc/grid-security/certificates/InCommon-IGTF-Server-CA.pem
+  - /home/dbiapp/local/etc/grid-security/certificates/cilogon-basic.pem
+  - /home/dbiapp/local/etc/grid-security/certificates/cilogon-silver.pem
+  - /home/dbiapp/local/etc/grid-security/certificates/InCommon-IGTF-Server-CA.pem
+  #- /home/dbiapp/local/etc/grid-security/certificates/DigiCertSHA2HighAssuranceServerCA.pem
+  - /home/dbiapp/local/etc/grid-security/certificates/DigiCertHighAssuranceEVRootCA.pem
 
 ip_whitelist:
   # - 131.225.108.60      # fermi-snow.fnal.gov
@@ -46,6 +49,7 @@ dn_roles:
   /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Lisa Goodenough/CN=UID:goodenou:     [read, write]
   /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Stephen White/CN=UID:swhite:         [read, write]
   /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Steven Timm/CN=UID:timm:             [read, write]
+  /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Brandon White/CN=UID:bjwhite:        [read]
   /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Jeny Teheran/CN=UID:jteheran:        [read]
   /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Mine Altunay/CN=UID:maltunay:        [read]
   /DC=ch/DC=cern/OU=Organic Units/OU=Users/CN=fakhan/CN=762000/CN=Farrukh Aftab Khan:                               [read]
@@ -54,7 +58,9 @@ dn_roles:
   /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Dmitry Litvintsev/CN=UID:litvinse:   [read]
   /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Dave Dykstra/CN=UID:dwd:             [read]
   /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=vomsdev1.fnal.gov:              [read]
+  /DC=org/DC=incommon/C=US/ST=Illinois/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=vomsdev1.fnal.gov:        [read]
   /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=vomsdev2.fnal.gov:              [read]
+  /DC=org/DC=incommon/C=US/ST=Illinois/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=vomsdev2.fnal.gov:        [read]
   /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=vomsitbgpvm01.fnal.gov:                             [read]
   /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=voms1.fnal.gov:                 [read]
   /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=fifebatch.fnal.gov:                                 [read]
@@ -68,14 +74,20 @@ dn_roles:
   /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=jobview-graphitesrv02.fnal.gov: [read]
   /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=jobview-graphitesrv03.fnal.gov: [read]
   /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=poms-pomsgpvm01.fnal.gov:       [read]
-  /DC=org/DC=incommon/C=US/ST=Illinois/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=fermicloud042.fnal.gov:         [read]
+  /DC=org/DC=incommon/C=US/ST=Illinois/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=fermicloud042.fnal.gov:   [read]
   /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=jobsubdevgpvm01.fnal.gov:       [read]
   /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=fifebatch.fnal.gov:             [read]
   /DC=org/DC=incommon/C=US/ST=Illinois/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=fifebatch.fnal.gov:       [read]
   /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=fermicloud074.fnal.gov:         [read]
   /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=fifeutilgpvm01.fnal.gov:        [read]
   /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Felix Sotres/CN=UID:nsotres:         [read]
-  /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Brandon White/CN=UID:bjwhite:        [read]
+  /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Vladimir Podstavkov/CN=UID:podstvkv: [read]
+  /DC=org/DC=incommon/C=US/ST=Illinois/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=ferry-ingest.fnal.gov:    [read, write]
+  /DC=org/DC=incommon/C=US/ST=Illinois/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=reader-ferry.fnal.gov:    [read]
+  /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=samweb.fnal.gov:                [read]
+  /DC=org/DC=incommon/C=US/ST=Illinois/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=samweb.fnal.gov:          [read]
+  /DC=org/DC=incommon/C=US/ST=Illinois/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=jobsubdevgpvm01.fnal.gov: [read]
+
 
 ip_roles:
   131.225.108.60:   [read, write] # fermi-snow.fnal.gov
@@ -88,8 +100,8 @@ ip_roles:
   131.225.152.55:   [read]        # voms1.fnal.gov
   131.225.240.174:  [read]        # vomsitbgpvm01.fnal.gov
   131.225.153.41:   [read]        # voms2.fnal.gov
-  131.225.58.55:    [read]        # dbweb5.fnal.gov
-  131.225.58.54:    [read]        # dbweb6.fnal.gov
+  131.225.58.55:    [read, write] # dbweb5.fnal.gov
+  131.225.58.54:    [read, write] # dbweb6.fnal.gov
   131.225.65.26:    [read]        # rexdb03.fnal.gov
   131.225.155.96:   [read]        # fermicloud365.fnal.gov Tanya's test machine
   131.225.155.96:   [read]        # fermicloud360.fnal.gov Tanya's test machine

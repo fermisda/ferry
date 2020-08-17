@@ -1520,7 +1520,7 @@ func deleteUser(c APIContext, i Input) (interface{}, []APIError) {
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		if strings.Contains(err.Error(), "violates foreign key constraint") {
-			apiErr = append(apiErr, APIError{errors.New("all associations with this user shall be removed before it can be deleted"), ErrorAPIRequirement})
+			apiErr = append(apiErr, APIError{errors.New("all associations with this user must be removed before it can be deleted"), ErrorAPIRequirement})
 		} else {
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		}
@@ -1541,7 +1541,7 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		if strings.Contains(err.Error(), "violates foreign key constraint") {
-			apiErr = append(apiErr, APIError{errors.New("all associations with this user shall be removed before it can be deleted"), ErrorAPIRequirement})
+			apiErr = append(apiErr, APIError{errors.New("all associations with this user must be removed before it can be deleted"), ErrorAPIRequirement})
 		} else {
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		}
@@ -1553,7 +1553,7 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		if strings.Contains(err.Error(), "violates foreign key constraint") {
-			apiErr = append(apiErr, APIError{errors.New("all associations with this user shall be removed before it can be deleted"), ErrorAPIRequirement})
+			apiErr = append(apiErr, APIError{errors.New("all associations with this user must be removed before it can be deleted"), ErrorAPIRequirement})
 		} else {
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		}
