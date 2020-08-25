@@ -146,6 +146,6 @@ func ExtractValidDN(dn string) (string, error) {
 	if err != nil {
 		return formatedDN, err
 	}
-	log.Debug(fmt.Printf("Matched DN \"%s\" to CA \"%s\"", formatedDN, ca["subjectdn"]))
+	log.Debug(fmt.Printf("Matched DN \"%s\" to CA \"%s\"\n", formatedDN, ca["subjectdn"]))
 	return formatedDN, nil
 }
