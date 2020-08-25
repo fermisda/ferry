@@ -215,7 +215,7 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 		UserName:     i[UserName],
 		GroupName:    NewNullAttribute(GroupName).Default("wilson"),
 		ResourceName: NewNullAttribute(ResourceName).Default("wilson_cluster"),
-		Primary:      NewNullAttribute(Primary).Default(false),
+		Primary:      NewNullAttribute(Primary).Default(true),
 		Shell:        NewNullAttribute(Shell),
 		HomeDir:      NewNullAttribute(HomeDir),
 	}
