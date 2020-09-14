@@ -1449,9 +1449,14 @@ func setStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
 									   where storageid = $1 and `+column+` = $2 and
 									   unitid = $3 and valid_until is NULL`,
 			vStorageid, vDataid, vUnitid).Scan(&vPath)
-		if queryerr == sql.ErrNoRows && !i[ExpirationDate].Valid { // New permanent quota
-			queryerr = c.DBtx.tx.QueryRow(`select concat(default_path, '/', $1::varchar) from storage_resources where storageid = $2`,
-				i[dataAttr], vStorageid).Scan(&vPath)
+		if queryerr == sql.ErrNoRows {
+			if !i[ExpirationDate].Valid { // New permanent quota
+				queryerr = c.DBtx.tx.QueryRow(`select concat(default_path, '/', $1::varchar) from storage_resources where storageid = $2`,
+					i[dataAttr], vStorageid).Scan(&vPath)
+			} else {
+				apiErr = append(apiErr, APIError{errors.New("no permanent quota"), ErrorAPIRequirement})
+				return nil, apiErr
+			}
 		}
 		if queryerr != nil && queryerr != sql.ErrNoRows {
 			log.WithFields(QueryFields(c)).Error(queryerr)
@@ -1459,14 +1464,8 @@ func setStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
 			return nil, apiErr
 		}
 	}
-	if !vPath.Valid && !(gAccount.Data.(bool) && !i[ExpirationDate].Valid) {
-		var msg string
-		if !i[ExpirationDate].Valid && !gAccount.Data.(bool) {
-			msg = "null path for user quota"
-		} else {
-			msg = "no permanent quota"
-		}
-		apiErr = append(apiErr, APIError{errors.New(msg), ErrorAPIRequirement})
+	if !vPath.Valid && !gAccount.Data.(bool) {
+		apiErr = append(apiErr, APIError{errors.New("null path for user quota"), ErrorAPIRequirement})
 		return nil, apiErr
 	}
 
