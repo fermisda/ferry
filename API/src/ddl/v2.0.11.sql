@@ -1,12 +1,38 @@
 
-ALTER TABLE "public".groups ADD external_attributes json   ;
+drop table nas_storage;
+
+CREATE  TABLE "public".compute_resource_shared_account (
+	groupaccount_uid     bigint  NOT NULL ,
+	uid                  bigint  NOT NULL ,
+	compid               bigint  NOT NULL ,
+	is_leader            boolean DEFAULT false NOT NULL ,
+	last_updated         timestamptz  NOT NULL ,
+	CONSTRAINT pk_compute_resource_shared_account_groupaccount_uid PRIMARY KEY ( groupaccount_uid, uid, compid )
+ ) ;
+
+CREATE UNIQUE INDEX idx_compute_resource_shared_account ON "public".compute_resource_shared_account ( uid, groupaccount_uid, compid ) ;
+
+ALTER TABLE "public".compute_resource_shared_account ADD CONSTRAINT fk_compute_resource_shared_account_compute_resources FOREIGN KEY ( compid ) REFERENCES "public".compute_resources( compid )  ;
+
+ALTER TABLE "public".compute_resource_shared_account ADD CONSTRAINT fk_compute_resource_shared_account_users FOREIGN KEY ( groupaccount_uid ) REFERENCES "public".users( uid )  ;
+
+ALTER TABLE "public".compute_resource_shared_account ADD CONSTRAINT fk_compute_resource_shared_account_users_0 FOREIGN KEY ( uid ) REFERENCES "public".users( uid )  ;
+
+
+grant select, insert, update, delete on all tables in schema public to ferry_writer;
 
 -- Function and associated triggers to ensure last_updated is changed even when inserted/updated through psql.
 
 CREATE OR REPLACE FUNCTION common_update_stamp() RETURNS trigger AS $common_update_stamp$
     BEGIN
-        IF NEW.last_updated IS NULL OR NEW.last_updated = OLD.last_updated THEN
-            NEW.last_updated := current_timestamp;
+        IF TG_OP='UPDATE' then
+            IF NEW.last_updated IS NULL OR NEW.last_updated = OLD.last_updated THEN
+                NEW.last_updated := current_timestamp;
+            END IF;
+        ELSE
+            IF NEW.last_updated IS NULL THEN
+                NEW.last_updated := current_timestamp;
+            END IF;
         END IF;
         RETURN NEW;
     END;
@@ -45,9 +71,6 @@ CREATE TRIGGER storage_quota_common_update_stamp BEFORE INSERT OR UPDATE ON stor
 CREATE TRIGGER storage_resources_common_update_stamp BEFORE INSERT OR UPDATE ON storage_resources
     FOR EACH ROW EXECUTE PROCEDURE common_update_stamp();
 
-CREATE TRIGGER nas_storage_common_update_stamp BEFORE INSERT OR UPDATE ON nas_storage
-    FOR EACH ROW EXECUTE PROCEDURE common_update_stamp();
-
 CREATE TRIGGER grid_access_common_update_stamp BEFORE INSERT OR UPDATE ON grid_access
     FOR EACH ROW EXECUTE PROCEDURE common_update_stamp();
 
@@ -64,4 +87,7 @@ CREATE TRIGGER affiliation_unit_user_certificate_common_update_stamp BEFORE INSE
     FOR EACH ROW EXECUTE PROCEDURE common_update_stamp();
 
 CREATE TRIGGER affiliation_unit_common_update_stamp BEFORE INSERT OR UPDATE ON affiliation_unit_group
+    FOR EACH ROW EXECUTE PROCEDURE common_update_stamp();
+
+CREATE TRIGGER compute_resource_shared_account_common_update_stamp BEFORE INSERT OR UPDATE ON compute_resource_shared_account
     FOR EACH ROW EXECUTE PROCEDURE common_update_stamp();

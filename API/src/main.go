@@ -149,6 +149,7 @@ func main() {
 	IncludeMiscAPIs(&APIs)
 	IncludeWrapperAPIs(&APIs)
 	IncludeUnitAPIs(&APIs)
+	IncludeResourceAPIs(&APIs)
 
 	log.Debug("Here we go...")
 
@@ -317,17 +318,8 @@ func main() {
 	grouter.HandleFunc("/removeLPCConvener", APIs["removeLPCConvener"].Run)
 	grouter.HandleFunc("/addLPCCollaborationGroup", APIs["addLPCCollaborationGroup"].Run)
 
-	//legacy API calls
-	// grouter.HandleFunc("/setSuperUser", setSuperUser)
-	// grouter.HandleFunc("/removeSuperUser", removeSuperUser)
-	// grouter.HandleFunc("/setGroupStorageQuota", setGroupStorageQuota)
-
-	//never implemented API calls
-	// grouter.HandleFunc("/setGroupBatchPriority", setGroupBatchPriority)
-	// grouter.HandleFunc("/getAffiliationUnitStorageResources", getAffiliationUnitStorageResources)
-	// grouter.HandleFunc("/deleteGroupt", deleteGroupt)
-	// grouter.HandleFunc("/deleteGroup", deleteGroup)
-	// grouter.HandleFunc("/removePrimaryStatusfromGroup", removePrimaryStatusfromGroup)
+	// resource API calls
+	grouter.HandleFunc("/getUsersForSharedAccountComputeResource", APIs["getUsersForSharedAccountComputeResource"].Run)
 
 	srvConfig := viper.GetStringMapString("server")
 	Mainsrv = &http.Server{
