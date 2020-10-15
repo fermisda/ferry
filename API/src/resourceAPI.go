@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"errors"
 
 	_ "github.com/lib/pq"
@@ -43,15 +44,6 @@ func IncludeResourceAPIs(c *APICollection) {
 	}
 	c.Add("removeUserFromSharedAccountComputeResource", &removeUserFromSharedAccountComputeResource)
 
-	getSharedAccountForComputeResource := BaseAPI{
-		InputModel{
-			Parameter{ResourceName, true},
-		},
-		getSharedAccountForComputeResource,
-		RoleRead,
-	}
-	c.Add("getSharedAccountForComputeResource", &getSharedAccountForComputeResource)
-
 	setSharedAccountComputeResourceApprover := BaseAPI{
 		InputModel{
 			Parameter{UserName, true},
@@ -64,15 +56,14 @@ func IncludeResourceAPIs(c *APICollection) {
 	}
 	c.Add("setSharedAccountComputeResourceApprover", &setSharedAccountComputeResourceApprover)
 
-	getShareAccountComputeResourceApprovers := BaseAPI{
+	getSharedAccountForComputeResource := BaseAPI{
 		InputModel{
 			Parameter{ResourceName, true},
-			Parameter{AccountName, true},
 		},
-		getShareAccountComputeResourceApprovers,
+		getSharedAccountForComputeResource,
 		RoleRead,
 	}
-	c.Add("getShareAccountComputeResourceApprovers", &getShareAccountComputeResourceApprovers)
+	c.Add("getSharedAccountForComputeResource", &getSharedAccountForComputeResource)
 
 }
 
@@ -228,14 +219,16 @@ func setSharedAccountComputeResourceApprover(c APIContext, i Input) (interface{}
 		return nil, apiErr
 	}
 
-	res, err := c.DBtx.Exec(`update compute_resource_shared_account set leader = $1 where groupaccount_uid = $2 and uid = $3 and compuid = $4`, &leader, &accountid, &uid, &resourceid)
+	res, err := c.DBtx.Exec(`update compute_resource_shared_account set is_leader = $1 where groupaccount_uid = $2 and uid = $3 and compid = $4`,
+		&leader, &accountid, &uid, &resourceid)
 	aRows, _ := res.RowsAffected()
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	} else if aRows == 0 {
-		apiErr = append(apiErr, APIError{errors.New("username is not a member of the group account for the resourcename"), ErrorAPIRequirement})
+		log.Warn("username is not a member of the shared account")
+		apiErr = append(apiErr, APIError{errors.New("username is not a member of the shared account"), ErrorAPIRequirement})
 		return nil, apiErr
 	}
 
@@ -245,11 +238,43 @@ func setSharedAccountComputeResourceApprover(c APIContext, i Input) (interface{}
 func getSharedAccountForComputeResource(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	return nil, apiErr
-}
+	resourceid := NewNullAttribute(ResourceID)
 
-func getShareAccountComputeResourceApprovers(c APIContext, i Input) (interface{}, []APIError) {
-	var apiErr []APIError
+	err := c.DBtx.QueryRow(`select compid from compute_resources where name = $1`, i[ResourceName]).Scan(&resourceid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	} else if !resourceid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, ResourceName))
+		return nil, apiErr
+	}
 
-	return nil, apiErr
+	rows, err := c.DBtx.Query(`select distinct u.uid, u.uname
+							   from users as u
+								  join compute_resource_shared_account as crsa on u.uid = crsa.groupaccount_uid
+								  join compute_resources as cr using (compid)
+							   where cr.name = $1`, i[ResourceName])
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+	defer rows.Close()
+
+	type groupaccount map[Attribute]interface{}
+	out := make([]groupaccount, 0)
+
+	for rows.Next() {
+		row := NewMapNullAttribute(UID, UserName)
+		rows.Scan(row[UID], row[UserName])
+		if row[UID].Valid {
+			entry := make(groupaccount)
+			entry[UserName] = row[UserName].Data
+			entry[UID] = row[UID].Data
+			out = append(out, entry)
+		}
+	}
+
+	return out, nil
 }
