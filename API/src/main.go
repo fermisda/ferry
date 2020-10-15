@@ -320,6 +320,11 @@ func main() {
 
 	// resource API calls
 	grouter.HandleFunc("/getUsersForSharedAccountComputeResource", APIs["getUsersForSharedAccountComputeResource"].Run)
+	grouter.HandleFunc("/addUserToSharedAccountComputeResource", APIs["addUserToSharedAccountComputeResource"].Run)
+	grouter.HandleFunc("/removeUserFromSharedAccountComputeResource", APIs["removeUserFromSharedAccountComputeResource"].Run)
+	grouter.HandleFunc("/getSharedAccountForComputeResource", APIs["getSharedAccountForComputeResource"].Run)
+	grouter.HandleFunc("/setSharedAccountComputeResourceApprover", APIs["setSharedAccountComputeResourceApprover"].Run)
+	grouter.HandleFunc("/getShareAccountComputeResourceApprovers", APIs["getShareAccountComputeResourceApprovers"].Run)
 
 	srvConfig := viper.GetStringMapString("server")
 	Mainsrv = &http.Server{
