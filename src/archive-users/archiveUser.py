@@ -105,6 +105,7 @@ def archive(cursor, uid, uname):
     user_data = {}
     # Add in reverse order of DB relationships so all the deletes work.
     schema = [
+        "compute_resource_shared_account",
         "storage_quota",
         "affiliation_unit_user_certificate", "user_certificates",
         "external_affiliation_attribute", "grid_access",

@@ -215,6 +215,7 @@ type Attribute string
 const (
 	UserName         Attribute = "username"
 	GroupName        Attribute = "groupname"
+	AccountName      Attribute = "accountname"
 	UnitName         Attribute = "unitname"
 	FullName         Attribute = "fullname"
 	ResourceName     Attribute = "resourcename"
@@ -264,6 +265,7 @@ func (a Attribute) Type() AttributeType {
 	AttributeType := map[Attribute]AttributeType{
 		UserName:         TypeString,
 		GroupName:        TypeString,
+		AccountName:      TypeString,
 		UnitName:         TypeString,
 		FullName:         TypeSstring,
 		ResourceName:     TypeSstring,
