@@ -220,6 +220,7 @@ func IncludeMiscAPIs(c *APICollection) {
 
 	getAllComputeResources := BaseAPI{
 		InputModel{
+			Parameter{ResourceType, false},
 			Parameter{LastUpdated, false},
 		},
 		getAllComputeResources,
@@ -1184,10 +1185,25 @@ func setStorageResourceInfo(c APIContext, i Input) (interface{}, []APIError) {
 func getAllComputeResources(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
+	resourceType := NewNullAttribute(ResourceType)
+
+	if i[ResourceType].Valid {
+		err := c.DBtx.QueryRow(`select type from compute_resources where type = $1`, i[ResourceType]).Scan(&resourceType)
+		if err != nil && err != sql.ErrNoRows {
+			log.WithFields(QueryFields(c)).Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+			return nil, apiErr
+		} else if err == sql.ErrNoRows {
+			apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, ResourceType))
+			return nil, apiErr
+		}
+	}
+
 	rows, err := DBptr.Query(`select cr.name, default_shell, default_home_dir, cr.type, au.name
 							  from compute_resources as cr
 							  left join affiliation_units as au using(unitid)
-							  where (cr.last_updated>=$1 or $1 is null);`, i[LastUpdated])
+							  where (cr.last_updated>=$1 or $1 is null)
+							    and (cr.type=$2 or $2 is null);`, i[LastUpdated], resourceType)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
