@@ -73,7 +73,7 @@ func getUsersForSharedAccountComputeResource(c APIContext, i Input) (interface{}
 	accountid := NewNullAttribute(UID)
 	resourceid := NewNullAttribute(ResourceID)
 
-	err := c.DBtx.QueryRow(`select (select uid from users where uname = $1 and is_groupaccount = 'true'),
+	err := c.DBtx.QueryRow(`select (select uid from users where uname = $1 and is_sharedaccount = 'true'),
 								   (select compid from compute_resources where name = $2)`, i[AccountName], i[ResourceName]).Scan(&accountid, &resourceid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
@@ -90,7 +90,7 @@ func getUsersForSharedAccountComputeResource(c APIContext, i Input) (interface{}
 	rows, err := c.DBtx.Query(`select u.uname, u.uid, c.is_leader
 							   from users u
 								 join compute_resource_shared_account c using (uid)
-							   where c.groupaccount_uid = $1
+							   where c.sharedaccount_uid = $1
 							     and c.compid = $2
 							     and (c.last_updated>=$3 or $3 is null)`, accountid, resourceid, i[LastUpdated])
 	if err != nil {
@@ -127,9 +127,9 @@ func addUserToSharedAccountComputeResource(c APIContext, i Input) (interface{}, 
 	uid := NewNullAttribute(UID)
 	leader := i[Leader].Default(false)
 
-	err := c.DBtx.QueryRow(`select (select uid from users where uname = $1 and is_groupaccount = 'true'),
+	err := c.DBtx.QueryRow(`select (select uid from users where uname = $1 and is_sharedaccount = 'true'),
 								   (select compid from compute_resources where name = $2),
-								   (select uid from users where uname = $3 and is_groupaccount = 'false')`,
+								   (select uid from users where uname = $3 and is_sharedaccount = 'false')`,
 		i[AccountName], i[ResourceName], i[UserName]).Scan(&accountid, &resourceid, &uid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
@@ -143,9 +143,9 @@ func addUserToSharedAccountComputeResource(c APIContext, i Input) (interface{}, 
 		return nil, apiErr
 	}
 
-	_, err = c.DBtx.Exec(`insert into compute_resource_shared_account (groupaccount_uid, uid, compid, is_leader, last_updated)
+	_, err = c.DBtx.Exec(`insert into compute_resource_shared_account (sharedaccount_uid, uid, compid, is_leader, last_updated)
 							values ($1, $2, $3, $4, NOW())
-							on conflict (groupaccount_uid, uid, compid) do update set is_leader = $4`,
+							on conflict (sharedaccount_uid, uid, compid) do update set is_leader = $4`,
 		accountid, uid, resourceid, leader)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
@@ -163,9 +163,9 @@ func removeUserFromSharedAccountComputeResource(c APIContext, i Input) (interfac
 	resourceid := NewNullAttribute(ResourceID)
 	uid := NewNullAttribute(UID)
 
-	err := c.DBtx.QueryRow(`select (select uid from users where uname = $1 and is_groupaccount = 'true'),
+	err := c.DBtx.QueryRow(`select (select uid from users where uname = $1 and is_sharedaccount = 'true'),
 								   (select compid from compute_resources where name = $2),
-								   (select uid from users where uname = $3 and is_groupaccount = 'false')`,
+								   (select uid from users where uname = $3 and is_sharedaccount = 'false')`,
 		i[AccountName], i[ResourceName], i[UserName]).Scan(&accountid, &resourceid, &uid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
@@ -182,7 +182,7 @@ func removeUserFromSharedAccountComputeResource(c APIContext, i Input) (interfac
 		return nil, apiErr
 	}
 
-	_, err = c.DBtx.Exec(`delete from compute_resource_shared_account where groupaccount_uid = $1 and uid = $2 and compid = $3`, &accountid, &uid, &resourceid)
+	_, err = c.DBtx.Exec(`delete from compute_resource_shared_account where sharedaccount_uid = $1 and uid = $2 and compid = $3`, &accountid, &uid, &resourceid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -200,9 +200,9 @@ func setSharedAccountComputeResourceApprover(c APIContext, i Input) (interface{}
 	uid := NewNullAttribute(UID)
 	leader := i[Leader].Default(false)
 
-	err := c.DBtx.QueryRow(`select (select uid from users where uname = $1 and is_groupaccount = 'true'),
+	err := c.DBtx.QueryRow(`select (select uid from users where uname = $1 and is_sharedaccount = 'true'),
 								   (select compid from compute_resources where name = $2),
-								   (select uid from users where uname = $3 and is_groupaccount = 'false')`,
+								   (select uid from users where uname = $3 and is_sharedaccount = 'false')`,
 		i[AccountName], i[ResourceName], i[UserName]).Scan(&accountid, &resourceid, &uid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
@@ -219,7 +219,7 @@ func setSharedAccountComputeResourceApprover(c APIContext, i Input) (interface{}
 		return nil, apiErr
 	}
 
-	res, err := c.DBtx.Exec(`update compute_resource_shared_account set is_leader = $1 where groupaccount_uid = $2 and uid = $3 and compid = $4`,
+	res, err := c.DBtx.Exec(`update compute_resource_shared_account set is_leader = $1 where sharedaccount_uid = $2 and uid = $3 and compid = $4`,
 		&leader, &accountid, &uid, &resourceid)
 	aRows, _ := res.RowsAffected()
 	if err != nil {
@@ -252,7 +252,7 @@ func getSharedAccountForComputeResource(c APIContext, i Input) (interface{}, []A
 
 	rows, err := c.DBtx.Query(`select distinct u.uid, u.uname
 							   from users as u
-								  join compute_resource_shared_account as crsa on u.uid = crsa.groupaccount_uid
+								  join compute_resource_shared_account as crsa on u.uid = crsa.sharedaccount_uid
 								  join compute_resources as cr using (compid)
 							   where cr.name = $1`, i[ResourceName])
 	if err != nil {
@@ -262,14 +262,14 @@ func getSharedAccountForComputeResource(c APIContext, i Input) (interface{}, []A
 	}
 	defer rows.Close()
 
-	type groupaccount map[Attribute]interface{}
-	out := make([]groupaccount, 0)
+	type sharedaccount map[Attribute]interface{}
+	out := make([]sharedaccount, 0)
 
 	for rows.Next() {
 		row := NewMapNullAttribute(UID, UserName)
 		rows.Scan(row[UID], row[UserName])
 		if row[UID].Valid {
-			entry := make(groupaccount)
+			entry := make(sharedaccount)
 			entry[UserName] = row[UserName].Data
 			entry[UID] = row[UID].Data
 			out = append(out, entry)

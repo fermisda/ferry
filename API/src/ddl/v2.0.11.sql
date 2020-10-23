@@ -1,22 +1,25 @@
 
 drop table nas_storage;
 
+ALTER TABLE "public".users ADD is_sharedaccount boolean DEFAULT false NOT NULL;
+
 CREATE  TABLE "public".compute_resource_shared_account (
-	groupaccount_uid     bigint  NOT NULL ,
+	sharedaccount_uid    bigint  NOT NULL ,
 	uid                  bigint  NOT NULL ,
 	compid               bigint  NOT NULL ,
 	is_leader            boolean DEFAULT false NOT NULL ,
-	last_updated         timestamptz  NOT NULL ,
-	CONSTRAINT pk_compute_resource_shared_account_groupaccount_uid PRIMARY KEY ( groupaccount_uid, uid, compid )
+	last_updated         timestamptz DEFAULT ('now'::text)::date NOT NULL,
+	CONSTRAINT pk_compute_resource_shared_account_sharedaccount_uid PRIMARY KEY ( sharedaccount_uid, uid, compid )
  ) ;
 
-CREATE UNIQUE INDEX idx_compute_resource_shared_account ON "public".compute_resource_shared_account ( uid, groupaccount_uid, compid ) ;
+CREATE UNIQUE INDEX idx_compute_resource_shared_account ON "public".compute_resource_shared_account ( uid, sharedaccount_uid, compid ) ;
 
-ALTER TABLE "public".compute_resource_shared_account ADD CONSTRAINT fk_compute_resource_shared_account_compute_resources FOREIGN KEY ( compid ) REFERENCES "public".compute_resources( compid )  ;
+ALTER TABLE "public".compute_resource_shared_account ADD CONSTRAINT fk_compute_resource_shared_account_compute_resources FOREIGN KEY ( compid ) REFERENCES "public".compute_resources( compid )   ;
 
-ALTER TABLE "public".compute_resource_shared_account ADD CONSTRAINT fk_compute_resource_shared_account_users FOREIGN KEY ( groupaccount_uid ) REFERENCES "public".users( uid )  ;
+ALTER TABLE "public".compute_resource_shared_account ADD CONSTRAINT fk_compute_resource_shared_account_users_0 FOREIGN KEY ( uid ) REFERENCES "public".users( uid )   ;
 
-ALTER TABLE "public".compute_resource_shared_account ADD CONSTRAINT fk_compute_resource_shared_account_users_0 FOREIGN KEY ( uid ) REFERENCES "public".users( uid )  ;
+ALTER TABLE "public".compute_resource_shared_account ADD CONSTRAINT fk_compute_resource_shared_account_users FOREIGN KEY ( sharedaccount_uid ) REFERENCES "public".users( uid )   ;
+
 
 
 grant select, insert, update, delete on all tables in schema public to ferry_writer;

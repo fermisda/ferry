@@ -249,6 +249,7 @@ const (
 	Required         Attribute = "required"
 	Leader           Attribute = "leader"
 	GroupAccount     Attribute = "groupaccount"
+	SharedAccount    Attribute = "sharedaccount"
 	Experiment       Attribute = "experiment"
 	Suspend          Attribute = "suspend"
 	Surplus          Attribute = "surplus"
@@ -299,6 +300,7 @@ func (a Attribute) Type() AttributeType {
 		Required:         TypeBool,
 		Leader:           TypeBool,
 		GroupAccount:     TypeBool,
+		SharedAccount:    TypeBool,
 		Experiment:       TypeBool,
 		Suspend:          TypeBool,
 		Surplus:          TypeBool,
