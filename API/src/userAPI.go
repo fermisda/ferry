@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 
 	_ "github.com/lib/pq"
@@ -1784,19 +1785,7 @@ func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIEr
 		return nil, apiErr
 	}
 
-	// Add user to group in the resource (compute_access_group)
-	var priCount int
-	err = c.DBtx.QueryRow(`select count(*) from compute_access_group where uid = $1 and compid = $2 and is_primary`,
-		uid, compid).Scan(&priCount)
-	if err != nil {
-		log.WithFields(QueryFields(c)).Error(err)
-		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-		return nil, apiErr
-	}
-	if priCount == 0 {
-		primary.Scan(true)
-	}
-
+	// Add user to group in the resource (compute_access_group) ensuring one and only one compute_access_group is primary.
 	if primary.Data.(bool) {
 		_, err = c.DBtx.Exec(`update compute_access_group set is_primary = false where uid = $1 and compid = $2 and is_primary`,
 			uid, compid)
@@ -1806,17 +1795,40 @@ func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIEr
 			return nil, apiErr
 		}
 	}
-
-	_, err = c.DBtx.Exec(`insert into compute_access_group as cg (compid, uid, groupid, is_primary)
-						  values ($1, $2, $3, $4)
-						  on conflict (compid, uid, groupid) do update set is_primary = coalesce($5, cg.is_primary)`,
-		compid, uid, groupid, primary, i[Primary])
+	_, err = c.DBtx.Exec(`insert into compute_access_group as cg (compid, uid, groupid, is_primary) values ($1, $2, $3, $4)
+							on conflict (compid, uid, groupid) do update set is_primary = coalesce($5, cg.is_primary)`,
+		compid, uid, groupid, primary, primary)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
-
+	// Incase someone adds a user manually - not with addUserToExperiment, be sure there is one and only one primary.
+	var priCount int
+	err = c.DBtx.QueryRow(`select count(*) from compute_access_group where uid = $1 and compid = $2 and is_primary`,
+		uid, compid).Scan(&priCount)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+	if priCount != 1 {
+		var priCount int
+		err = c.DBtx.QueryRow(`select count(*) from compute_access_group where uid = $1 and compid = $2 and is_primary`,
+			uid, compid).Scan(&priCount)
+		if err != nil {
+			log.WithFields(QueryFields(c)).Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+			return nil, apiErr
+		} else if priCount != 1 {
+			msg := "requires one compute_access_group as primary, attributes selected would leave zero"
+			if priCount != 0 {
+				msg = fmt.Sprintf("requires one and only one compute_access_group as primary, attributes selected would leave %d", priCount)
+			}
+			apiErr = append(apiErr, APIError{fmt.Errorf(msg), ErrorAPIRequirement})
+			return nil, apiErr
+		}
+	}
 	return nil, nil
 }
 
