@@ -210,6 +210,31 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
+	// Add user to affiliation's  WilsonCluster group, if it exists
+	wcGroup := NewNullAttribute(GroupName)
+	err = c.DBtx.QueryRow(`select name
+						   from affiliation_unit_group
+						     join groups using (groupid)
+						   where unitid = $1 and is_wilsoncluster = true`,
+		unitid).Scan(&wcGroup)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	} else if err != sql.ErrNoRows {
+		input = Input{
+			UserName:  i[UserName],
+			GroupName: wcGroup,
+			GroupType: NewNullAttribute(GroupType).Default("WilsonCluster"),
+		}
+		_, apiErr = addUserToGroup(c, input)
+		if len(apiErr) > 0 {
+			return nil, apiErr
+		}
+	} else {
+		log.Warn(fmt.Sprintf("Affiliation: %s does not have a WilsonCluster group.", i[UnitName].Data))
+	}
+
 	// Add user to wilson_cluster and wilson group
 	input = Input{
 		UserName:     i[UserName],
