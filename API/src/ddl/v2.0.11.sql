@@ -1,6 +1,12 @@
+-- Here for record, done manually.
+-- ALTER TABLE "public".affiliation_unit_group ADD is_wilsoncluster boolean DEFAULT false NOT NULL ;
+-- CREATE UNIQUE INDEX unq_affiliation_unit_group_unitid_is_wilsoncluster ON "public".affiliation_unit_group ( unitid, is_wilsoncluster )
+--   where is_wilsoncluster IS TRUE;
 
+-- Table is not used.
 drop table nas_storage;
 
+-- New for shared accounts
 ALTER TABLE "public".users ADD is_sharedaccount boolean DEFAULT false NOT NULL;
 
 CREATE  TABLE "public".compute_resource_shared_account (
@@ -22,7 +28,6 @@ ALTER TABLE "public".compute_resource_shared_account ADD CONSTRAINT fk_compute_r
 
 
 
-grant select, insert, update, delete on all tables in schema public to ferry_writer;
 
 -- Function and associated triggers to ensure last_updated is changed even when inserted/updated through psql.
 
@@ -94,3 +99,7 @@ CREATE TRIGGER affiliation_unit_common_update_stamp BEFORE INSERT OR UPDATE ON a
 
 CREATE TRIGGER compute_resource_shared_account_common_update_stamp BEFORE INSERT OR UPDATE ON compute_resource_shared_account
     FOR EACH ROW EXECUTE PROCEDURE common_update_stamp();
+
+
+
+grant select, insert, update, delete on all tables in schema public to ferry_writer;
