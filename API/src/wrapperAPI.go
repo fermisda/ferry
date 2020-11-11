@@ -226,6 +226,7 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 			UserName:  i[UserName],
 			GroupName: wcGroup,
 			GroupType: NewNullAttribute(GroupType).Default("WilsonCluster"),
+			Leader:    NewNullAttribute(Leader).Default(false),
 		}
 		_, apiErr = addUserToGroup(c, input)
 		if len(apiErr) > 0 {
