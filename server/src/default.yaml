@@ -1,0 +1,125 @@
+log:
+  level: info
+  file:
+
+database:
+  host:
+  port:
+  name:
+  user:
+  password:
+  timeout: 60
+  sslmode: disable
+  # certificate: /etc/grid-security/certificates/cilogon-osg.pem
+  certificate: /home/dbiapp/local/etc/grid-security/certificates/cilogon-osg.pem
+  max_open_conns: 200
+  max_idle_conns: 0
+
+server:
+  port: 8445
+  cert: /home/dbiapp/www/certs/ferry/dbweb6.fnal.gov-cert.pem
+  key: /home/dbiapp/www/certs/ferry/dbweb6.fnal.gov-key.pem
+  cas: /home/dbiapp/local/etc/grid-security/certificates/
+
+certificates:
+  - /home/dbiapp/local/etc/grid-security/certificates/cilogon-basic.pem
+  - /home/dbiapp/local/etc/grid-security/certificates/cilogon-silver.pem
+  - /home/dbiapp/local/etc/grid-security/certificates/InCommon-IGTF-Server-CA.pem
+  #- /home/dbiapp/local/etc/grid-security/certificates/DigiCertSHA2HighAssuranceServerCA.pem
+  - /home/dbiapp/local/etc/grid-security/certificates/DigiCertHighAssuranceEVRootCA.pem
+
+ip_whitelist:
+  # - 131.225.108.60      # fermi-snow.fnal.gov
+
+dn_whitelist:
+  # - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Kenneth Herner/CN=UID:kherner
+  # - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Tanya Levshina/CN=UID:tlevshin
+  # - /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Bruno Coimbra/CN=UID:coimbra
+
+dn_roles:
+  /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Bruno Coimbra/CN=UID:coimbra:        [read, write]
+  /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Kenneth Schumacher/CN=UID:kschu:     [read, write]
+  /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Kenneth Herner/CN=UID:kherner:       [read, write]
+  /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Tanya Levshina/CN=UID:tlevshin:      [read, write]
+  /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Joe Boyd/CN=UID:boyd:                [read, write]
+  /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Kevin Retzke/CN=UID:kretzke:         [read, write]
+  /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Shreyas Bhat/CN=UID:sbhat:           [read, write]
+  /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Nikolay Kuropatkin/CN=UID:kuropat:   [read, write]
+  /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Vito Di Benedetto/CN=UID:vito:       [read, write]
+  /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Lisa Goodenough/CN=UID:goodenou:     [read, write]
+  /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Stephen White/CN=UID:swhite:         [read, write]
+  /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Steven Timm/CN=UID:timm:             [read, write]
+  /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Brandon White/CN=UID:bjwhite:        [read]
+  /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Jeny Teheran/CN=UID:jteheran:        [read]
+  /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Mine Altunay/CN=UID:maltunay:        [read]
+  /DC=ch/DC=cern/OU=Organic Units/OU=Users/CN=fakhan/CN=762000/CN=Farrukh Aftab Khan:                               [read]
+  /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=David Mason/CN=UID:dmason:           [read]
+  /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Farrukh Khan/CN=UID:fkhan:           [read]
+  /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Dmitry Litvintsev/CN=UID:litvinse:   [read]
+  /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Dave Dykstra/CN=UID:dwd:             [read]
+  /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=vomsdev1.fnal.gov:              [read]
+  /DC=org/DC=incommon/C=US/ST=Illinois/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=vomsdev1.fnal.gov:        [read]
+  /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=vomsdev2.fnal.gov:              [read]
+  /DC=org/DC=incommon/C=US/ST=Illinois/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=vomsdev2.fnal.gov:        [read]
+  /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=vomsitbgpvm01.fnal.gov:                             [read]
+  /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=voms1.fnal.gov:                 [read]
+  /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=fifebatch.fnal.gov:                                 [read]
+  /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=jobsub-dev.fnal.gov:                                [read]
+  /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=scsgpvm01.fnal.gov:                                 [read]
+  /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=scsgpvm01.fnal.gov:             [read]
+  /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=usdc/fifeutilgpvm01.fnal.gov:                       [read]
+  /DC=org/DC=opensciencegrid/O=Open Science Grid/OU=Services/CN=fermicloud044.fnal.gov:                             [read]
+  /DC=org/DC=incommon/C=US/ST=Illinois/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=jobview-graphitesrv01.fnal.gov: [read]
+  /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=jobview-graphitesrv01.fnal.gov: [read]
+  /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=jobview-graphitesrv02.fnal.gov: [read]
+  /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=jobview-graphitesrv03.fnal.gov: [read]
+  /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=poms-pomsgpvm01.fnal.gov:       [read]
+  /DC=org/DC=incommon/C=US/ST=Illinois/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=fermicloud042.fnal.gov:   [read]
+  /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=jobsubdevgpvm01.fnal.gov:       [read]
+  /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=fifebatch.fnal.gov:             [read]
+  /DC=org/DC=incommon/C=US/ST=Illinois/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=fifebatch.fnal.gov:       [read]
+  /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=fermicloud074.fnal.gov:         [read]
+  /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=fifeutilgpvm01.fnal.gov:        [read]
+  /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Felix Sotres/CN=UID:nsotres:         [read]
+  /DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=Vladimir Podstavkov/CN=UID:podstvkv: [read]
+  /DC=org/DC=incommon/C=US/ST=Illinois/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=ferry-ingest.fnal.gov:    [read, write]
+  /DC=org/DC=incommon/C=US/ST=Illinois/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=reader-ferry.fnal.gov:    [read]
+  /DC=org/DC=incommon/C=US/ST=IL/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=samweb.fnal.gov:                [read]
+  /DC=org/DC=incommon/C=US/ST=Illinois/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=samweb.fnal.gov:          [read]
+  /DC=org/DC=incommon/C=US/ST=Illinois/L=Batavia/O=Fermi Research Alliance/OU=Fermilab/CN=jobsubdevgpvm01.fnal.gov: [read]
+
+
+ip_roles:
+  131.225.108.60:   [read, write] # fermi-snow.fnal.gov
+  131.225.108.98:   [read, write] # fermi-sn-prd1.fnal.gov
+  131.225.240.59:   [read]        # ssiadmin1.fnal.gov
+  131.225.27.36:    [read]        # merricat.fnal.gov
+  131.225.27.37:    [read]        # testify.fnal.gov
+  131.225.193.77:   [read]        # slam-sat6.fnal.gov
+  131.225.240.123:  [read]        # ssiferrygpvm01.fnal.gov
+  131.225.152.55:   [read]        # voms1.fnal.gov
+  131.225.240.174:  [read]        # vomsitbgpvm01.fnal.gov
+  131.225.153.41:   [read]        # voms2.fnal.gov
+  131.225.58.55:    [read, write] # dbweb5.fnal.gov
+  131.225.58.54:    [read, write] # dbweb6.fnal.gov
+  131.225.65.26:    [read]        # rexdb03.fnal.gov
+  131.225.155.96:   [read]        # fermicloud365.fnal.gov Tanya's test machine
+  131.225.155.96:   [read]        # fermicloud360.fnal.gov Tanya's test machine
+  131.225.205.240:  [read]        # cmsvulcan.fnal.gov
+  131.225.240.187:  [read]        # cmsgpvm01.fnal.gov
+  131.225.155.96:   [read, write] # fermicloud365.fnal.gov Tanya's test machine
+  131.225.155.96:   [read]        # fermicloud360.fnal.gov Tanya's test machine
+  131.225.154.167:  [read]        # fermicloud033
+  131.225.240.194:  [read]        # graphitesrv01
+  131.225.240.195:  [read]        # graphitesrv02
+  131.225.240.196:  [read]        # graphitesrv03
+  131.225.240.28:   [read, write] # lssrv01.fnal.gov
+  131.225.13.252:   [read]        # dmsdca06.fnal.gov
+  131.225.69.150:   [read]        # fndca2a.fnal.gov
+  131.225.69.151:   [read]        # fndca3a.fnal.gov
+  131.225.69.153:   [read]        # fndca5a.fnal.gov
+  131.225.240.136:  [read]        # hepcjobsub01
+  131.225.240.137:  [read]        # hepcjobsub02
+  131.225.154.88:   [read]        # htcjsdev01
+  131.225.154.92:   [read]        # htcjsdev02
+  131.225.154.20:   [read]        # htcjsdev03
