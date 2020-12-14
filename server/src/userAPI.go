@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 
 	_ "github.com/lib/pq"
@@ -1536,8 +1537,14 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	uid := i[UID]
 
 	// Process the user groups first
-	_, err := c.DBtx.Exec(`with foo as (delete from user_group where uid=$1 returning *, now() when_deleted)
-						  	insert into user_group_deletions select * from foo`, uid)
+	colList, apiErr := getTableColumns(c, "user_group")
+	if apiErr != nil {
+		return nil, apiErr
+	}
+	columns := strings.Join(colList, ",")
+	sql := fmt.Sprintf("with foo as (delete from user_group where uid=%d returning *, now() when_deleted) insert into user_group_deletions (%s, when_deleted) select * from foo",
+		uid.Data, columns)
+	_, err := c.DBtx.Exec(sql)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		if strings.Contains(err.Error(), "violates foreign key constraint") {
@@ -1548,8 +1555,13 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 	// Now process the user record
-	_, err = c.DBtx.Exec(`with foo as (delete from users where uid=$1 returning *, now() when_deleted)
-							insert into user_deletions select * from foo`, uid)
+	colList, apiErr = getTableColumns(c, "users")
+	if apiErr != nil {
+		return nil, apiErr
+	}
+	columns = strings.Join(colList, ",")
+	sql = fmt.Sprintf(`with foo as (delete from users where uid=%d returning *, now() when_deleted) insert into user_deletions (%s, when_deleted) select * from foo`, uid.Data, columns)
+	_, err = c.DBtx.Exec(sql)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		if strings.Contains(err.Error(), "violates foreign key constraint") {
