@@ -1,0 +1,20 @@
+FROM centos
+RUN groupadd --gid 9102 ferry
+RUN adduser --gid 9102 --uid 45438 ferry
+RUN rpm -Uvh --nosignature https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+RUN rpm -Uvh --nosignature https://repo.opensciencegrid.org/osg/3.4/osg-3.4-el7-release-latest.rpm
+RUN yum -y --nogpgcheck install osg-ca-certs
+RUN yum -y --nogpgcheck install net-tools
+RUN yum -y --nogpgcheck install bind-utils
+RUN yum -y --nogpgcheck install python36
+WORKDIR /home/ferry
+COPY src/ferry-user-update/ferry-user-update.py .
+COPY src/ferry-user-update/ferry-user-update.config .
+COPY src/ferry-user-update/entrypoint.sh .
+
+RUN chown ferry.ferry *
+RUN chmod +x /home/ferry/entrypoint.sh
+
+USER ferry
+
+CMD ["/home/ferry/entrypoint.sh"]
