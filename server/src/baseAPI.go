@@ -122,6 +122,7 @@ func (i Input) Parse(c APIContext, m InputModel) []error {
 	for _, p := range m {
 		parsedAttribute := NewNullAttribute(p.Attribute)
 		value := q.Get(string(p.Attribute))
+		value = strings.TrimSpace(value)
 		_, present := q[string(p.Attribute)]
 		q.Del(string(p.Attribute))
 
