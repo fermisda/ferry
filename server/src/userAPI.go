@@ -344,6 +344,28 @@ func IncludeUserAPIs(c *APICollection) {
 		RoleWrite,
 	}
 	c.Add("removeUserExternalAffiliationAttribute", &removeUserExternalAffiliationAttribute)
+
+	getUserGroupsForComputeResource := BaseAPI{
+		InputModel{
+			Parameter{ResourceType, false},
+			Parameter{UnitName, false},
+		},
+		getUserGroupsForComputeResource,
+		RoleRead,
+	}
+	c.Add("getUserGroupsForComputeResource", &getUserGroupsForComputeResource)
+
+	removeUserFromComputeResource := BaseAPI{
+		InputModel{
+			Parameter{UserName, true},
+			Parameter{ResourceType, true},
+			Parameter{ResourceName, true},
+		},
+		removeUserFromComputeResource,
+		RoleWrite,
+	}
+	c.Add("removeUserFromComputeResource", &removeUserFromComputeResource)
+
 }
 
 func getUserCertificateDNs(c APIContext, i Input) (interface{}, []APIError) {
@@ -1942,6 +1964,63 @@ func setUserGridAccess(c APIContext, i Input) (interface{}, []APIError) {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
+
+	return nil, nil
+}
+
+func getUserGroupsForComputeResource(c APIContext, i Input) (interface{}, []APIError) {
+
+	var apiErr []APIError
+
+	rows, err := c.DBtx.Query(`select cr.type, cr.name, au.name, u.uname, g.name, cag.is_primary
+							   from compute_resources cr
+									left join affiliation_units au using(unitid)
+									left join compute_access_group cag using(compid)
+									join users u using (uid)
+									join groups g using(groupid)
+								where (cr.type=$1 or $1 is null)
+									and (au.name = $2 or $2 is null)
+								order by cr.type, cr.name, au.name, u.uname`, i[ResourceType], i[UnitName])
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+	defer rows.Close()
+
+	type resources map[Attribute]interface{}
+	out := make([]resources, 0)
+	type users map[Attribute]interface{}
+	uout := make([]users, 0)
+	rname := NewNullAttribute(ResourceName)
+
+	for rows.Next() {
+		row := NewMapNullAttribute(ResourceType, ResourceName, UnitName, UserName, GroupName, Primary)
+		rows.Scan(row[ResourceType], row[ResourceName], row[UnitName], row[UserName], row[GroupName], row[Primary])
+
+		user := make(users)
+		user[UserName] = row[UserName].Data
+		user[GroupName] = row[GroupName].Data
+		user[Primary] = row[Primary].Data
+		uout = append(uout, user)
+
+		if rname.Data != row[ResourceName].Data {
+			/* A resource has only one type and belongs to only one resource, so put this out togather. */
+			entry := make(resources)
+			entry[ResourceName] = row[ResourceName].Data
+			entry[ResourceType] = row[ResourceType].Data
+			entry[UnitName] = row[UnitName].Data
+			entry["users"] = uout
+			out = append(out, entry)
+			rname.Data = row[ResourceName].Data
+			uout = make([]users, 0)
+		}
+	}
+
+	return out, nil
+}
+
+func removeUserFromComputeResource(c APIContext, i Input) (interface{}, []APIError) {
 
 	return nil, nil
 }
