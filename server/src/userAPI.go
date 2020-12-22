@@ -2022,5 +2022,41 @@ func getUserGroupsForComputeResource(c APIContext, i Input) (interface{}, []APIE
 
 func removeUserFromComputeResource(c APIContext, i Input) (interface{}, []APIError) {
 
+	var apiErr []APIError
+	var uid = NewNullAttribute(UID)
+	var compid = NewNullAttribute(ResourceID)
+
+	err := c.DBtx.QueryRow(`select
+							(select uid from users where uname = $1),
+							(select compid from compute_resources where name = $2 and type = $3)`,
+		i[UserName], i[ResourceName], i[ResourceType]).Scan(&uid, &compid)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+	if !uid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
+	}
+	if !compid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, ResourceName))
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	_, err = c.DBtx.Exec(`delete from compute_access_group where compid=$1 and uid=$2`, compid, uid)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+	_, err = c.DBtx.Exec(`delete from compute_access where compid=$1 and uid=$2`, compid, uid)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
 	return nil, nil
 }
