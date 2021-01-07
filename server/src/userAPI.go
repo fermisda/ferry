@@ -1980,7 +1980,7 @@ func getUserGroupsForComputeResource(c APIContext, i Input) (interface{}, []APIE
 									join groups g using(groupid)
 								where (cr.type=$1 or $1 is null)
 									and (au.name = $2 or $2 is null)
-								order by cr.type, cr.name, au.name, u.uname`, i[ResourceType], i[UnitName])
+								order by au.name, cr.name, cr.type, u.uname`, i[ResourceType], i[UnitName])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1988,33 +1988,65 @@ func getUserGroupsForComputeResource(c APIContext, i Input) (interface{}, []APIE
 	}
 	defer rows.Close()
 
-	type resources map[Attribute]interface{}
-	out := make([]resources, 0)
-	type users map[Attribute]interface{}
-	uout := make([]users, 0)
-	rname := NewNullAttribute(ResourceName)
+	type jsonentry map[Attribute]interface{}
+
+	const Users Attribute = "users"
+	user := jsonentry{
+		UserName:  "",
+		GroupName: "",
+		Primary:   "",
+	}
+
+	const Resources Attribute = "resources"
+	resource := jsonentry{
+		ResourceName: "",
+		ResourceType: "",
+		Users:        make([]jsonentry, 0),
+	}
+
+	const UNITS Attribute = "units"
+	unit := jsonentry{
+		UnitName:  "",
+		Resources: make([]jsonentry, 0),
+	}
+
+	out := make([]jsonentry, 0)
 
 	for rows.Next() {
 		row := NewMapNullAttribute(ResourceType, ResourceName, UnitName, UserName, GroupName, Primary)
 		rows.Scan(row[ResourceType], row[ResourceName], row[UnitName], row[UserName], row[GroupName], row[Primary])
-
-		user := make(users)
-		user[UserName] = row[UserName].Data
-		user[GroupName] = row[GroupName].Data
-		user[Primary] = row[Primary].Data
-		uout = append(uout, user)
-
-		if rname.Data != row[ResourceName].Data {
-			/* A resource has only one type and belongs to only one resource, so put this out togather. */
-			entry := make(resources)
-			entry[ResourceName] = row[ResourceName].Data
-			entry[ResourceType] = row[ResourceType].Data
-			entry[UnitName] = row[UnitName].Data
-			entry["users"] = uout
-			out = append(out, entry)
-			rname.Data = row[ResourceName].Data
-			uout = make([]users, 0)
+		if row[UnitName].Data != unit[UnitName] {
+			if unit[UnitName] != "" {
+				out = append(out, unit)
+			}
+			unit = jsonentry{
+				UnitName:  row[UnitName].Data,
+				Resources: make([]jsonentry, 0),
+			}
 		}
+		if (row[ResourceName].Data != resource[ResourceName]) || (row[ResourceType].Data != resource[ResourceType]) {
+			if resource[ResourceName] != "" {
+				unit[Resources] = append(unit[Resources].([]jsonentry), resource)
+			}
+			resource = jsonentry{
+				ResourceName: row[ResourceName].Data,
+				ResourceType: row[ResourceType].Data,
+				Users:        make([]jsonentry, 0),
+			}
+		}
+		user = jsonentry{
+			UserName:  row[UserName].Data,
+			GroupName: row[GroupName].Data,
+			Primary:   row[Primary].Data,
+		}
+		resource[Users] = append(resource[Users].([]jsonentry), user)
+	}
+	// Add the last entry
+	if resource[ResourceName] != "" {
+		unit[Resources] = append(unit[Resources].([]jsonentry), resource)
+	}
+	if unit[UnitName] != "" {
+		out = append(out, unit)
 	}
 
 	return out, nil
