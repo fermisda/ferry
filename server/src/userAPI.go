@@ -2010,30 +2010,36 @@ func getUserGroupsForComputeResource(c APIContext, i Input) (interface{}, []APIE
 		Resources: make([]jsonentry, 0),
 	}
 
+	var dejaVu bool = false
 	out := make([]jsonentry, 0)
 
 	for rows.Next() {
 		row := NewMapNullAttribute(ResourceType, ResourceName, UnitName, UserName, GroupName, Primary)
 		rows.Scan(row[ResourceType], row[ResourceName], row[UnitName], row[UserName], row[GroupName], row[Primary])
-		if row[UnitName].Data != unit[UnitName] {
-			if unit[UnitName] != "" {
-				out = append(out, unit)
-			}
-			unit = jsonentry{
-				UnitName:  row[UnitName].Data,
-				Resources: make([]jsonentry, 0),
-			}
+		if dejaVu == false {
+			dejaVu = true
+			unit[UnitName] = row[UnitName].Data
+			resource[ResourceName] = row[ResourceName].Data
+			resource[ResourceType] = row[ResourceType].Data
 		}
+
 		if (row[ResourceName].Data != resource[ResourceName]) || (row[ResourceType].Data != resource[ResourceType]) {
-			if resource[ResourceName] != "" {
-				unit[Resources] = append(unit[Resources].([]jsonentry), resource)
-			}
+			unit[Resources] = append(unit[Resources].([]jsonentry), resource)
 			resource = jsonentry{
 				ResourceName: row[ResourceName].Data,
 				ResourceType: row[ResourceType].Data,
 				Users:        make([]jsonentry, 0),
 			}
 		}
+
+		if row[UnitName].Data != unit[UnitName] {
+			out = append(out, unit)
+			unit = jsonentry{
+				UnitName:  row[UnitName].Data,
+				Resources: make([]jsonentry, 0),
+			}
+		}
+
 		user = jsonentry{
 			UserName:  row[UserName].Data,
 			GroupName: row[GroupName].Data,
@@ -2042,10 +2048,8 @@ func getUserGroupsForComputeResource(c APIContext, i Input) (interface{}, []APIE
 		resource[Users] = append(resource[Users].([]jsonentry), user)
 	}
 	// Add the last entry
-	if resource[ResourceName] != "" {
+	if dejaVu == true {
 		unit[Resources] = append(unit[Resources].([]jsonentry), resource)
-	}
-	if unit[UnitName] != "" {
 		out = append(out, unit)
 	}
 
