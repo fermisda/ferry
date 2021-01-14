@@ -349,6 +349,7 @@ func IncludeUserAPIs(c *APICollection) {
 		InputModel{
 			Parameter{ResourceType, false},
 			Parameter{UnitName, false},
+			Parameter{Status, false},
 		},
 		getUserGroupsForComputeResource,
 		RoleRead,
@@ -1972,15 +1973,16 @@ func getUserGroupsForComputeResource(c APIContext, i Input) (interface{}, []APIE
 
 	var apiErr []APIError
 
-	rows, err := c.DBtx.Query(`select cr.type, cr.name, au.name, u.uname, g.name, cag.is_primary
+	rows, err := c.DBtx.Query(`select cr.type, cr.name, au.name, u.uname, g.name, cag.is_primary, u.status
 							   from compute_resources cr
 									left join affiliation_units au using(unitid)
 									left join compute_access_group cag using(compid)
 									join users u using (uid)
 									join groups g using(groupid)
-								where (cr.type=$1 or $1 is null)
+								where (cr.type = $1 or $1 is null)
 									and (au.name = $2 or $2 is null)
-								order by au.name, cr.name, cr.type, u.uname`, i[ResourceType], i[UnitName])
+									and (u.status = $3 or $3 is null)
+								order by au.name, cr.name, cr.type, u.uname`, i[ResourceType], i[UnitName], i[Status])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1995,6 +1997,7 @@ func getUserGroupsForComputeResource(c APIContext, i Input) (interface{}, []APIE
 		UserName:  "",
 		GroupName: "",
 		Primary:   "",
+		Status:    "",
 	}
 
 	const Resources Attribute = "resources"
@@ -2014,8 +2017,8 @@ func getUserGroupsForComputeResource(c APIContext, i Input) (interface{}, []APIE
 	out := make([]jsonentry, 0)
 
 	for rows.Next() {
-		row := NewMapNullAttribute(ResourceType, ResourceName, UnitName, UserName, GroupName, Primary)
-		rows.Scan(row[ResourceType], row[ResourceName], row[UnitName], row[UserName], row[GroupName], row[Primary])
+		row := NewMapNullAttribute(ResourceType, ResourceName, UnitName, UserName, GroupName, Primary, Status)
+		rows.Scan(row[ResourceType], row[ResourceName], row[UnitName], row[UserName], row[GroupName], row[Primary], row[Status])
 		if dejaVu == false {
 			dejaVu = true
 			unit[UnitName] = row[UnitName].Data
@@ -2044,6 +2047,7 @@ func getUserGroupsForComputeResource(c APIContext, i Input) (interface{}, []APIE
 			UserName:  row[UserName].Data,
 			GroupName: row[GroupName].Data,
 			Primary:   row[Primary].Data,
+			Status:    row[Status].Data,
 		}
 		resource[Users] = append(resource[Users].([]jsonentry), user)
 	}
