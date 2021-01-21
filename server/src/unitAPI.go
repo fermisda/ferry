@@ -38,7 +38,9 @@ func IncludeUnitAPIs(c *APICollection) {
 
 	getGroupsInAffiliationUnit := BaseAPI{
 		InputModel{
-			Parameter{UnitName, true},
+			Parameter{UnitName, false},
+			Parameter{GroupType, false},
+			Parameter{LastUpdated, false},
 		},
 		getGroupsInAffiliationUnit,
 		RoleRead,
@@ -304,23 +306,33 @@ func getGroupsInAffiliationUnit(c APIContext, i Input) (interface{}, []APIError)
 	var apiErr []APIError
 
 	unitid := NewNullAttribute(UnitID)
+	grouptype := NewNullAttribute(GroupType)
 
-	checkerr := c.DBtx.QueryRow(`select unitid from affiliation_units where name=$1`, i[UnitName]).Scan(&unitid)
+	checkerr := c.DBtx.QueryRow(`select (select unitid from affiliation_units where name=$1),
+										(select distinct type from groups where type = $2) `, i[UnitName], i[GroupType]).Scan(&unitid, &grouptype)
 	if checkerr != nil && checkerr != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(checkerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
-	if !unitid.Valid {
+	if i[UnitName].Data != nil && !unitid.Valid {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
 		return nil, apiErr
 	}
+	if grouptype.Data != "" && !grouptype.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupType))
+		return nil, apiErr
+	}
 
-	rows, checkerr := c.DBtx.Query(`select gid, groups.name, groups.type, aug.is_primary
-	from affiliation_unit_group as aug
-	join groups on aug.groupid = groups.groupid
-	where aug.unitid=$1 and (aug.last_updated>=$2 or $2 is null)`,
-		unitid, i[LastUpdated])
+	rows, checkerr := c.DBtx.Query(`select au.name, gid, groups.name, groups.type, aug.is_primary
+									from affiliation_unit_group as aug
+									join groups on aug.groupid = groups.groupid
+									join affiliation_units au on aug.unitid = au.unitid
+									where (au.name=$1 or $1 is null)
+										and (aug.last_updated>=$2 or $2 is null)
+										and (groups.type = $3 or $3 is null)
+									order by au.name, groups.name`,
+		i[UnitName], i[LastUpdated], i[GroupType])
 	if checkerr != nil {
 		log.WithFields(QueryFields(c)).Error(checkerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -332,9 +344,10 @@ func getGroupsInAffiliationUnit(c APIContext, i Input) (interface{}, []APIError)
 	out := make([]jsonentry, 0)
 
 	for rows.Next() {
-		row := NewMapNullAttribute(GID, GroupName, GroupType, Primary)
-		rows.Scan(row[GID], row[GroupName], row[GroupType], row[Primary])
+		row := NewMapNullAttribute(UnitName, GID, GroupName, GroupType, Primary)
+		rows.Scan(row[UnitName], row[GID], row[GroupName], row[GroupType], row[Primary])
 		entry := jsonentry{
+			UnitName:  row[UnitName].Data,
 			GID:       row[GID].Data,
 			GroupName: row[GroupName].Data,
 			GroupType: row[GroupType].Data,
