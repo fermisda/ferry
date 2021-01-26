@@ -655,6 +655,7 @@ func addLPCCollaborationGroup(c APIContext, i Input) (interface{}, []APIError) {
 	input.Add(grouptype)
 	input.Add(unitname)
 	input.Add(primaryUnit)
+	input.Add(NewNullAttribute(Required).Default(false))
 
 	_, apiErr = addGroupToUnit(c, input)
 	if len(apiErr) > 0 {
