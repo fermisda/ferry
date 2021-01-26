@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -252,6 +253,11 @@ func createGroup(c APIContext, i Input) (interface{}, []APIError) {
 
 	if !validType {
 		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, GroupType))
+		return nil, apiErr
+	}
+
+	if i[GroupType].Data == "UnixGroup" && i[GID].Valid == false {
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "GID is required for UnixGroup"))
 		return nil, apiErr
 	}
 
@@ -1269,6 +1275,9 @@ func getAllGroups(c APIContext, i Input) (interface{}, []APIError) {
 	for rows.Next() {
 		row := NewMapNullAttribute(GroupName, GroupType, GID)
 		rows.Scan(row[GroupName], row[GroupType], row[GID])
+		if row[GroupName].Data == "celeritas" {
+			log.Info(fmt.Sprintf("GID: %s    name: %s     type: %s", row[GID].Data, row[GroupName].Data, row[GroupType].Data))
+		}
 		out = append(out, jsonentry{
 			GroupName: row[GroupName].Data,
 			GroupType: row[GroupType].Data,
