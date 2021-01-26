@@ -491,6 +491,7 @@ const (
 	ErrorAPIRequirement
 	HTTP500
 	ErrorDbQuery
+	ErrorText
 )
 
 // DefaultMessage for BaseAPI errors
@@ -500,6 +501,7 @@ func (t ErrorType) DefaultMessage() string {
 		ErrorDataNotFound:  "%s not found",
 		ErrorInvalidData:   "%s is invalid",
 		ErrorDuplicateData: "%s already exists",
+		ErrorText:          "%s", // Define your own
 	}
 	return messageMap[t]
 }
