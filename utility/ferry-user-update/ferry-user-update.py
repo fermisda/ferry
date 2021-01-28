@@ -433,7 +433,7 @@ def fetch_ferry():
 # Checks to see if urls can be accessed successfully
 def openURL(url, data = None, context = None):
     try:
-        return (urllib.request.urlopen(url, data=data, context=context).read().decode())
+        return (urllib.request.urlopen(url, data=data, context=context).read().decode("latin-1"))
     except:
         logging.error("Failed to access remote server: %s", url)
         return None
