@@ -1,15 +1,15 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
 import sys
 import os
 import glob
 import logging
 import argparse
-import ConfigParser
-import urllib2
+import configparser
 import ssl
 import json
 import subprocess
+from urllib import request
 
 # Set script arguments
 parser = argparse.ArgumentParser(description = "Script to hold jobs of users suspended in FERRY")
@@ -19,7 +19,7 @@ opts = parser.parse_args()
 
 # Load config file
 try:
-    config = ConfigParser.ConfigParser()
+    config = configparser.ConfigParser()
     if opts.config:
         configpath = opts.config
     else:
@@ -38,7 +38,7 @@ logArgs = {
     "datefmt": "%m/%d/%Y %H:%M:%S"
 }
 if config.has_option("log", "level"):
-    logArgs["level"] = getattr(logging, config.get("log", "level"))
+    logArgs["level"] = getattr(logging, str.upper(config.get("log", "level")))
 else:
     logArgs["level"] = logging.DEBUG
 if config.has_option("log", "file"):
@@ -60,7 +60,7 @@ except Exception as error:
 
 # Fetch suspended users and create constraints
 url = config.get("ferry", "hostname") + config.get("ferry", "api")
-ferryOut = urllib2.urlopen(url, context=ferryContext).read().decode()
+ferryOut = request.urlopen(url, context=ferryContext).read().decode()
 if not ferryOut:
     logging.error("could not contact ferry")
     exit(1)
@@ -68,7 +68,7 @@ if "Query returned no FQANs." in ferryOut:
     logging.debug("no suspended users")
     exit(0)
 
-suspendedUsers = json.loads(ferryOut)
+suspendedUsers = json.loads(ferryOut)["ferry_output"]
 constraints = []
 for user, items in suspendedUsers.items():
     for item in items:
@@ -81,7 +81,7 @@ if len(constraint) == 0:
     exit(0)
 
 # Hold jobs
-command = config.get("condor", "hold_command") % " || ".join(constraints)
+command = f"{config.get('condor', 'hold_command')} '{' || '.join(constraints)}'"
 
 if not opts.dry_run:
     logging.debug(command)
