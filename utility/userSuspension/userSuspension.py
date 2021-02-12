@@ -77,7 +77,7 @@ for user, items in suspendedUsers.items():
             logging.info("holding jobs from %s at %s" % (user, item["unitname"]))
             constraints.append(constraint)
 
-if len(constraint) == 0:
+if len(constraints) == 0:
     exit(0)
 
 # Hold jobs
