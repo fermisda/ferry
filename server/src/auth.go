@@ -1,43 +1,104 @@
 package main
+
 import (
-	"crypto/x509"
-	"fmt"
-	log "github.com/sirupsen/logrus"
-	"os"
-	"bytes"
 	"bufio"
-	"strings"
+	"bytes"
 	"crypto/tls"
-	"github.com/spf13/viper"
+	"crypto/x509"
 	"crypto/x509/pkix"
+	"database/sql"
+	"fmt"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/patrickmn/go-cache"
+	log "github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
 )
 
+var accCache *cache.Cache
+
+type accessor struct {
+	accid   int
+	name    string
+	active  bool
+	write   bool
+	accType string
+}
+
+func queryAccessors(c APIContext, key string) (accessor, bool) {
+	var found = true
+	var acc accessor
+
+	err := c.DBtx.QueryRow(`select accid, name, active, write type from accessors where name = $1 and active = true`,
+		key).Scan(acc.accid, acc.name, acc.active, acc.write, acc.accType)
+	if err == sql.ErrNoRows {
+		found = false
+	} else if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		found = false
+	}
+	// So we can know who is using FERRY
+	if found {
+		_, err = c.DBtx.Exec(`update accessors set last_used=NOW() where accid = $1`, acc.accid)
+		if err != nil {
+			log.WithFields(QueryFields(c)).Error(err)
+			found = false
+		}
+	}
+	return acc, found
+}
+
+func getAccessor(c APIContext, key string) (accessor, bool) {
+	var found bool
+	var acc accessor
+
+	if accCache == nil {
+		// Cache for data from the accessors table, with (Expiration time in minutes, purged time in  minutes).
+		// TODO: Get this from Viper
+		accCache = cache.New(60*time.Minute, 30*time.Minute)
+	}
+
+	data, found := accCache.Get(key)
+	if found {
+		acc = data.(accessor)
+	} else {
+		acc, found = queryAccessors(c, key)
+		if found == true {
+			accCache.Set(key, acc, cache.DefaultExpiration)
+		}
+	}
+
+	return acc, found
+}
+
 // we probably need   list of authorized DNs too
-func createDNlist (filename string)  ( []string, error) {
+func createDNlist(filename string) ([]string, error) {
 	var DNlist []string
 	f, err := os.Open(filename)
 
 	if err != nil {
-		return DNlist,err
+		return DNlist, err
 	}
 	scanner := bufio.NewScanner(f)
 	defer f.Close()
 	for scanner.Scan() {
-		DNlist = append(DNlist,scanner.Text())
+		DNlist = append(DNlist, scanner.Text())
 	}
 
 	if err := scanner.Err(); err != nil {
 		fmt.Println("Error reading authorized DN file " + filename + ".")
 	}
 
-	return DNlist,err
+	return DNlist, err
 }
 func loadCerts(certs []string) (*x509.CertPool, error) {
 	pool := x509.NewCertPool()
 	for _, ca := range certs {
 		f, err := os.Open(ca)
 		if err != nil {
-			fmt.Println("Something went wrong opening " + ca) 
+			fmt.Println("loadCerts: Something went wrong opening " + ca)
 			return nil, err
 		}
 		defer f.Close()
@@ -84,53 +145,45 @@ func ParseDN(names []pkix.AttributeTypeAndValue, sep string) string {
 }
 
 func authorize(c APIContext, r AccessRole) (AccessLevel, string) {
-	ip := strings.Split(c.R.RemoteAddr, ":")[0]
-	authIPs := viper.GetStringSlice("ip_whitelist")
-	authDNs := viper.GetStringSlice("dn_whitelist")
-	dnRoles	:= viper.GetStringMapStringSlice("dn_roles")
-	ipRoles := viper.GetStringMapStringSlice("ip_roles")
 
+	// Try authorizing the Certs
 	for _, presCert := range c.R.TLS.PeerCertificates {
 		certDN := ParseDN(presCert.Subject.Names, "/")
 
-		// authorize DN roles
-		if roles, ok := dnRoles[strings.ToLower(certDN)]; ok {
-			for _, role := range roles {
-				if r.String() == role {
-					return LevelDNRole, fmt.Sprintf("cert matches authorized role %s DN %s", role, certDN)
-				}
+		acc, found := getAccessor(c, certDN)
+		if found == false {
+			continue
+		} else if acc.accType == "dn_role" {
+			// authorize DN roles
+			if r == RoleRead || (r == RoleWrite && acc.write) {
+				return LevelDNRole, fmt.Sprintf("cert matches authorized role %s DN %s", r, certDN)
 			}
-		}
-
-		// authorize whitelisted DNs
-		for _, authDN := range authDNs {
-			if authDN == certDN {
-				return LevelDNWhitelist, fmt.Sprintf("cert matches whitelisted DN %s", certDN)
-			}
+		} else if acc.accType == "dn_whitelist" {
+			// authorize Whitelisted DN s
+			return LevelDNWhitelist, fmt.Sprintf("cert matches whitelisted DN %s", certDN)
 		}
 	}
 
-	// authorize IP roles
-	if roles, ok := ipRoles[ip]; ok {
-		for _, role := range roles {
-			if r.String() == role {
-				return LevelIPRole, fmt.Sprintf("ignoring DN of authorized IP %s with role %s", ip, role)
+	// Try authorizing the  IP address
+	ip := strings.Split(c.R.RemoteAddr, ":")[0]
+	acc, found := getAccessor(c, ip)
+	if found {
+		// authorize IP roles
+		if acc.accType == "ip_roles" {
+			if r == RoleRead || (r == RoleWrite && acc.write) {
+				return LevelIPRole, fmt.Sprintf("ignoring DN of authorized IP %s with role %s", ip, r)
 			}
-		}
-	}
-
-	// authorize whitelisted IPs
-	for _, authIP := range authIPs {
-		if authIP == ip {
+			// authorize whitelisted IPs
+		} else if acc.accType == "ip_whitelist" {
 			return LevelIPWhitelist, fmt.Sprintf("ignoring DN of whitelisted IP %s", ip)
 		}
 	}
 
-	// authorize public role
-	if r == "public" {
+	// See, if the API allows public access
+	if r == RolePublic {
 		return LevelPublic, fmt.Sprintf("public role authorized")
 	}
-
+	// Go away, we don't like you
 	return LevelDenied, "unable to authorize access"
 }
 
@@ -146,7 +199,7 @@ func checkClientIP(client *tls.ClientHelloInfo) (*tls.Config, error) {
 	for _, authIP := range authIPs {
 		if authIP == strings.Split(ip, ":")[0] {
 			log.WithFields(log.Fields{"client": ip}).Info("Host matches authorized IP.")
-			
+
 			var err error
 			srvConfig := viper.GetStringMapString("server")
 			newConfig := Mainsrv.TLSConfig.Clone()
