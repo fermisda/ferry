@@ -31,8 +31,8 @@ func queryAccessors(c APIContext, key string) (accessor, bool) {
 	var found = true
 	var acc accessor
 
-	err := c.DBtx.QueryRow(`select accid, name, active, write type from accessors where name = $1 and active = true`,
-		key).Scan(acc.accid, acc.name, acc.active, acc.write, acc.accType)
+	err := c.DBtx.QueryRow(`select accid, name, active, write, type from accessors where name = $1 and active = true`,
+		key).Scan(&acc.accid, &acc.name, &acc.active, &acc.write, &acc.accType)
 	if err == sql.ErrNoRows {
 		found = false
 	} else if err != nil {
@@ -58,13 +58,16 @@ func getAccessor(c APIContext, key string) (accessor, bool) {
 		// Cache for data from the accessors table, with (Expiration time in minutes, purged time in  minutes).
 		// TODO: Get this from Viper
 		accCache = cache.New(60*time.Minute, 30*time.Minute)
+		log.Info("Accessors Cache Created")
 	}
 
 	data, found := accCache.Get(key)
 	if found {
 		acc = data.(accessor)
+		log.Info(fmt.Sprintf("Accessors: Key found in cache.  Key: %s:", key))
 	} else {
 		acc, found = queryAccessors(c, key)
+		log.Info(fmt.Sprintf("Accessors: Queried database for : %s  Key found: %t", key, found))
 		if found == true {
 			accCache.Set(key, acc, cache.DefaultExpiration)
 		}
@@ -146,6 +149,11 @@ func ParseDN(names []pkix.AttributeTypeAndValue, sep string) string {
 
 func authorize(c APIContext, r AccessRole) (AccessLevel, string) {
 
+	// See, if the API allows public access
+	if r == RolePublic {
+		return LevelPublic, fmt.Sprintf("public role authorized")
+	}
+
 	// Try authorizing the Certs
 	for _, presCert := range c.R.TLS.PeerCertificates {
 		certDN := ParseDN(presCert.Subject.Names, "/")
@@ -179,10 +187,6 @@ func authorize(c APIContext, r AccessRole) (AccessLevel, string) {
 		}
 	}
 
-	// See, if the API allows public access
-	if r == RolePublic {
-		return LevelPublic, fmt.Sprintf("public role authorized")
-	}
 	// Go away, we don't like you
 	return LevelDenied, "unable to authorize access"
 }
