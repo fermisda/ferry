@@ -149,11 +149,6 @@ func ParseDN(names []pkix.AttributeTypeAndValue, sep string) string {
 
 func authorize(c APIContext, r AccessRole) (AccessLevel, string) {
 
-	// See, if the API allows public access
-	if r == RolePublic {
-		return LevelPublic, fmt.Sprintf("public role authorized")
-	}
-
 	// Try authorizing the Certs
 	for _, presCert := range c.R.TLS.PeerCertificates {
 		certDN := ParseDN(presCert.Subject.Names, "/")
@@ -185,6 +180,11 @@ func authorize(c APIContext, r AccessRole) (AccessLevel, string) {
 		} else if acc.accType == "ip_whitelist" {
 			return LevelIPWhitelist, fmt.Sprintf("ignoring DN of whitelisted IP %s", ip)
 		}
+	}
+
+	// See, if the API allows public access
+	if r == RolePublic {
+		return LevelPublic, fmt.Sprintf("public role authorized")
 	}
 
 	// Go away, we don't like you
