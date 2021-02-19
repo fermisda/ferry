@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -27,30 +28,51 @@ type accessor struct {
 	accType string
 }
 
-func queryAccessors(c APIContext, key string) (accessor, bool) {
+func queryAccessors(key string) (accessor, bool) {
 	var found = true
 	var acc accessor
 
-	err := c.DBtx.QueryRow(`select accid, name, active, write, type from accessors where name = $1 and active = true`,
+	// Not using the transaction.go logic as it is written to be called with Run(....)
+
+	ctx := context.Background()
+
+	tx, err := DBptr.BeginTx(ctx, nil)
+	if err != nil {
+		log.Error("quer2yAccessors - begin transaction")
+		return acc, false
+	}
+
+	err = tx.QueryRow(`select accid, name, active, write, type from accessors where name = $1 and active = true`,
 		key).Scan(&acc.accid, &acc.name, &acc.active, &acc.write, &acc.accType)
 	if err == sql.ErrNoRows {
 		found = false
 	} else if err != nil {
-		log.WithFields(QueryFields(c)).Error(err)
+		log.Error("queryAccessors - select")
 		found = false
 	}
 	// So we can know who is using FERRY
 	if found {
-		_, err = c.DBtx.Exec(`update accessors set last_used=NOW() where accid = $1`, acc.accid)
+		_, err = tx.ExecContext(ctx, `update accessors set last_used=NOW() where accid = $1`, acc.accid)
 		if err != nil {
-			log.WithFields(QueryFields(c)).Error(err)
+			log.Error("queryAccessors - update")
 			found = false
 		}
 	}
+
+	if found == true {
+		err = tx.Commit()
+	} else {
+		err = tx.Rollback()
+	}
+	if err != nil {
+		log.Error("queryAccessors - Commit")
+		found = false
+	}
+
 	return acc, found
 }
 
-func getAccessor(c APIContext, key string) (accessor, bool) {
+func getAccessor(key string) (accessor, bool) {
 	var found bool
 	var acc accessor
 
@@ -66,7 +88,7 @@ func getAccessor(c APIContext, key string) (accessor, bool) {
 		acc = data.(accessor)
 		log.Info(fmt.Sprintf("Accessors: Key found in cache.  Key: %s:", key))
 	} else {
-		acc, found = queryAccessors(c, key)
+		acc, found = queryAccessors(key)
 		log.Info(fmt.Sprintf("Accessors: Queried database for : %s  Key found: %t", key, found))
 		if found == true {
 			accCache.Set(key, acc, cache.DefaultExpiration)
@@ -153,7 +175,7 @@ func authorize(c APIContext, r AccessRole) (AccessLevel, string) {
 	for _, presCert := range c.R.TLS.PeerCertificates {
 		certDN := ParseDN(presCert.Subject.Names, "/")
 
-		acc, found := getAccessor(c, certDN)
+		acc, found := getAccessor(certDN)
 		if found == false {
 			continue
 		} else if acc.accType == "dn_role" {
@@ -169,10 +191,10 @@ func authorize(c APIContext, r AccessRole) (AccessLevel, string) {
 
 	// Try authorizing the  IP address
 	ip := strings.Split(c.R.RemoteAddr, ":")[0]
-	acc, found := getAccessor(c, ip)
+	acc, found := getAccessor(ip)
 	if found {
 		// authorize IP roles
-		if acc.accType == "ip_roles" {
+		if acc.accType == "ip_role" {
 			if r == RoleRead || (r == RoleWrite && acc.write) {
 				return LevelIPRole, fmt.Sprintf("ignoring DN of authorized IP %s with role %s", ip, r)
 			}
@@ -193,30 +215,24 @@ func authorize(c APIContext, r AccessRole) (AccessLevel, string) {
 
 func checkClientIP(client *tls.ClientHelloInfo) (*tls.Config, error) {
 	ip := client.Conn.RemoteAddr().String()
+	ip = strings.Split(ip, ":")[0]
+	_, found := getAccessor(ip)
 
-	authIPs := viper.GetStringSlice("ip_whitelist")
-	ipRoles := viper.GetStringMapStringSlice("ip_roles")
-	for ip := range ipRoles {
-		authIPs = append(authIPs, ip)
-	}
+	if found {
+		log.WithFields(log.Fields{"client": ip}).Info("Host matches authorized IP.")
 
-	for _, authIP := range authIPs {
-		if authIP == strings.Split(ip, ":")[0] {
-			log.WithFields(log.Fields{"client": ip}).Info("Host matches authorized IP.")
-
-			var err error
-			srvConfig := viper.GetStringMapString("server")
-			newConfig := Mainsrv.TLSConfig.Clone()
-			newConfig.ClientAuth = tls.VerifyClientCertIfGiven
-			newConfig.Certificates = make([]tls.Certificate, 1)
-			newConfig.Certificates[0], err = tls.LoadX509KeyPair(srvConfig["cert"], srvConfig["key"])
-			if err != nil {
-				log.Print(err)
-				return nil, err
-			}
-
-			return newConfig, nil
+		var err error
+		srvConfig := viper.GetStringMapString("server")
+		newConfig := Mainsrv.TLSConfig.Clone()
+		newConfig.ClientAuth = tls.VerifyClientCertIfGiven
+		newConfig.Certificates = make([]tls.Certificate, 1)
+		newConfig.Certificates[0], err = tls.LoadX509KeyPair(srvConfig["cert"], srvConfig["key"])
+		if err != nil {
+			log.Print(err)
+			return nil, err
 		}
+
+		return newConfig, nil
 	}
 
 	return nil, nil

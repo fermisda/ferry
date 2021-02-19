@@ -30,17 +30,6 @@ func (b BaseAPI) Run(w http.ResponseWriter, r *http.Request) {
 	var output Output
 	defer output.Parse(context, w)
 
-	// authorize needs a DB connection, so do this first.
-	var err error
-	context.DBtx, context.Ckey, err = LoadTransaction(r, DBptr)
-	if err != nil {
-		err := errors.New("error starting database transaction")
-		output.Err = append(output.Err, err)
-		log.WithFields(QueryFields(context)).Error(err)
-		return
-	}
-	defer context.DBtx.Rollback(context.Ckey)
-
 	authLevel, message := authorize(context, b.AccessRole)
 	context.AuthRole = b.AccessRole
 	context.AuthLevel = authLevel
@@ -51,6 +40,16 @@ func (b BaseAPI) Run(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.WithFields(QueryFields(context)).Debug(message)
+
+	var err error
+	context.DBtx, context.Ckey, err = LoadTransaction(r, DBptr)
+	if err != nil {
+		err := errors.New("error starting database transaction")
+		output.Err = append(output.Err, err)
+		log.WithFields(QueryFields(context)).Error(err)
+		return
+	}
+	defer context.DBtx.Rollback(context.Ckey)
 
 	input := make(Input)
 	parseErr := input.Parse(context, b.InputModel)
