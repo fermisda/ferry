@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/patrickmn/go-cache"
 	log "github.com/sirupsen/logrus"
@@ -39,6 +38,7 @@ func queryAccessors(key string) (accessor, bool) {
 	tx, err := DBptr.BeginTx(ctx, nil)
 	if err != nil {
 		log.Error("quer2yAccessors - begin transaction")
+		log.Error(err)
 		return acc, false
 	}
 
@@ -48,6 +48,7 @@ func queryAccessors(key string) (accessor, bool) {
 		found = false
 	} else if err != nil {
 		log.Error("queryAccessors - select")
+		log.Error(err)
 		found = false
 	}
 	// So we can know who is using FERRY
@@ -55,6 +56,7 @@ func queryAccessors(key string) (accessor, bool) {
 		_, err = tx.ExecContext(ctx, `update accessors set last_used=NOW() where accid = $1`, acc.accid)
 		if err != nil {
 			log.Error("queryAccessors - update")
+			log.Error(err)
 			found = false
 		}
 	}
@@ -66,6 +68,7 @@ func queryAccessors(key string) (accessor, bool) {
 	}
 	if err != nil {
 		log.Error("queryAccessors - Commit")
+		log.Error(err)
 		found = false
 	}
 
@@ -76,22 +79,15 @@ func getAccessor(key string) (accessor, bool) {
 	var found bool
 	var acc accessor
 
-	if accCache == nil {
-		// Cache for data from the accessors table, with (Expiration time in minutes, purged time in  minutes).
-		// TODO: Get this from Viper
-		accCache = cache.New(60*time.Minute, 30*time.Minute)
-		log.Info("Accessors Cache Created")
-	}
-
-	data, found := accCache.Get(key)
+	data, found := AccCache.Get(key)
 	if found {
 		acc = data.(accessor)
-		log.Info(fmt.Sprintf("Accessors: Key found in cache.  Key: %s:", key))
+		//log.Info(fmt.Sprintf("Accessors: Key found in cache.  Key: %s:", key))
 	} else {
 		acc, found = queryAccessors(key)
-		log.Info(fmt.Sprintf("Accessors: Queried database for : %s  Key found: %t", key, found))
+		//log.Info(fmt.Sprintf("Accessors: Queried database for : %s  Key found: %t", key, found))
 		if found == true {
-			accCache.Set(key, acc, cache.DefaultExpiration)
+			AccCache.Set(key, acc, cache.DefaultExpiration)
 		}
 	}
 
