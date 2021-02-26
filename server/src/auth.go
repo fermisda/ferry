@@ -51,6 +51,7 @@ func queryAccessors(key string) (accessor, bool) {
 		log.Error(err)
 		found = false
 	}
+	log.Info(fmt.Sprintf("queryAccessors: queried accessors for %s.  found: %v", key, found))
 	// So we can know who is using FERRY
 	if found {
 		_, err = tx.ExecContext(ctx, `update accessors set last_used=NOW() where accid = $1`, acc.accid)
