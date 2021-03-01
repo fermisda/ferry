@@ -20,6 +20,7 @@ import (
 
 	"github.com/gorilla/mux"
 	_ "github.com/lib/pq"
+	"github.com/patrickmn/go-cache"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
@@ -28,6 +29,7 @@ var DBptr *sql.DB
 var DBtx Transaction
 var Mainsrv *http.Server
 var ValidCAs CAs
+var AccCache *cache.Cache
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	var c APIContext
@@ -200,6 +202,19 @@ func main() {
 			log.Error("error converting max_idel_conns")
 			log.Fatal(err)
 		}
+
+		accConfig := viper.GetStringMapString("accessors")
+		expTime, err := strconv.Atoi(accConfig["expire"])
+		if err != nil {
+			log.Error("error converting expire")
+			log.Fatal(err)
+		}
+		verTime, err := strconv.Atoi(accConfig["verify"])
+		if err != nil {
+			log.Error("error converting verify")
+			log.Fatal(err)
+		}
+		AccCache = cache.New(time.Duration(expTime)*time.Minute, time.Duration(verTime)*time.Minute)
 
 		DBptr = Mydb
 		Mydb.SetMaxOpenConns(maxOpen)
