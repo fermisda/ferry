@@ -55,7 +55,7 @@ def main():
                 os.rename(sqlfile, newFileName)
             outfile = open(sqlfile, 'w')
 
-        outfile.write("insert into accessors (name, active, write, accType, last_updated, last_used, comments) values ('%s', %s %s, '%s', '%s', '%s', '%s');\n" %
+        outfile.write("insert into accessors (name, active, write, type, last_updated, last_used, comments) values ('%s', %s, %s, '%s', '%s', '%s', '%s');\n" %
                 (name, active, write, accType, last_updated, last_used, comments))
 
 if __name__ == "__main__":
