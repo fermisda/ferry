@@ -1,126 +1,43 @@
 package main
-
 import (
-	"bufio"
-	"bytes"
-	"context"
-	"crypto/tls"
 	"crypto/x509"
-	"crypto/x509/pkix"
-	"database/sql"
 	"fmt"
-	"os"
-	"strings"
-
-	"github.com/patrickmn/go-cache"
 	log "github.com/sirupsen/logrus"
+	"os"
+	"bytes"
+	"bufio"
+	"strings"
+	"crypto/tls"
 	"github.com/spf13/viper"
+	"crypto/x509/pkix"
 )
 
-var accCache *cache.Cache
-
-type accessor struct {
-	accid   int
-	name    string
-	active  bool
-	write   bool
-	accType string
-}
-
-func queryAccessors(key string) (accessor, bool) {
-	var found = true
-	var acc accessor
-
-	// Not using the transaction.go logic as it is written to be called with Run(....)
-
-	ctx := context.Background()
-
-	tx, err := DBptr.BeginTx(ctx, nil)
-	if err != nil {
-		log.Error("quer2yAccessors - begin transaction")
-		log.Error(err)
-		return acc, false
-	}
-
-	err = tx.QueryRow(`select accid, name, active, write, type from accessors where name = $1 and active = true`,
-		key).Scan(&acc.accid, &acc.name, &acc.active, &acc.write, &acc.accType)
-	if err == sql.ErrNoRows {
-		found = false
-	} else if err != nil {
-		log.Error("queryAccessors - select")
-		log.Error(err)
-		found = false
-	}
-	log.Info(fmt.Sprintf("queryAccessors: queried accessors for %s.  found: %v", key, found))
-	// So we can know who is using FERRY
-	if found {
-		_, err = tx.ExecContext(ctx, `update accessors set last_used=NOW() where accid = $1`, acc.accid)
-		if err != nil {
-			log.Error("queryAccessors - update")
-			log.Error(err)
-			found = false
-		}
-	}
-
-	if found == true {
-		err = tx.Commit()
-	} else {
-		err = tx.Rollback()
-	}
-	if err != nil {
-		log.Error("queryAccessors - Commit")
-		log.Error(err)
-		found = false
-	}
-
-	return acc, found
-}
-
-func getAccessor(key string) (accessor, bool) {
-	var found bool
-	var acc accessor
-
-	data, found := AccCache.Get(key)
-	if found {
-		acc = data.(accessor)
-		//log.Info(fmt.Sprintf("Accessors: Key found in cache.  Key: %s:", key))
-	} else {
-		acc, found = queryAccessors(key)
-		//log.Info(fmt.Sprintf("Accessors: Queried database for : %s  Key found: %t", key, found))
-		if found == true {
-			AccCache.Set(key, acc, cache.DefaultExpiration)
-		}
-	}
-
-	return acc, found
-}
-
 // we probably need   list of authorized DNs too
-func createDNlist(filename string) ([]string, error) {
+func createDNlist (filename string)  ( []string, error) {
 	var DNlist []string
 	f, err := os.Open(filename)
 
 	if err != nil {
-		return DNlist, err
+		return DNlist,err
 	}
 	scanner := bufio.NewScanner(f)
 	defer f.Close()
 	for scanner.Scan() {
-		DNlist = append(DNlist, scanner.Text())
+		DNlist = append(DNlist,scanner.Text())
 	}
 
 	if err := scanner.Err(); err != nil {
 		fmt.Println("Error reading authorized DN file " + filename + ".")
 	}
 
-	return DNlist, err
+	return DNlist,err
 }
 func loadCerts(certs []string) (*x509.CertPool, error) {
 	pool := x509.NewCertPool()
 	for _, ca := range certs {
 		f, err := os.Open(ca)
 		if err != nil {
-			fmt.Println("loadCerts: Something went wrong opening " + ca)
+			fmt.Println("Something went wrong opening " + ca) 
 			return nil, err
 		}
 		defer f.Close()
@@ -167,69 +84,82 @@ func ParseDN(names []pkix.AttributeTypeAndValue, sep string) string {
 }
 
 func authorize(c APIContext, r AccessRole) (AccessLevel, string) {
+	ip := strings.Split(c.R.RemoteAddr, ":")[0]
+	authIPs := viper.GetStringSlice("ip_whitelist")
+	authDNs := viper.GetStringSlice("dn_whitelist")
+	dnRoles	:= viper.GetStringMapStringSlice("dn_roles")
+	ipRoles := viper.GetStringMapStringSlice("ip_roles")
 
-	// Try authorizing the Certs
 	for _, presCert := range c.R.TLS.PeerCertificates {
 		certDN := ParseDN(presCert.Subject.Names, "/")
 
-		acc, found := getAccessor(certDN)
-		if found == false {
-			continue
-		} else if acc.accType == "dn_role" {
-			// authorize DN roles
-			if r == RoleRead || (r == RoleWrite && acc.write) {
-				return LevelDNRole, fmt.Sprintf("cert matches authorized role %s DN %s", r, certDN)
+		// authorize DN roles
+		if roles, ok := dnRoles[strings.ToLower(certDN)]; ok {
+			for _, role := range roles {
+				if r.String() == role {
+					return LevelDNRole, fmt.Sprintf("cert matches authorized role %s DN %s", role, certDN)
+				}
 			}
-		} else if acc.accType == "dn_whitelist" {
-			// authorize Whitelisted DN s
-			return LevelDNWhitelist, fmt.Sprintf("cert matches whitelisted DN %s", certDN)
+		}
+
+		// authorize whitelisted DNs
+		for _, authDN := range authDNs {
+			if authDN == certDN {
+				return LevelDNWhitelist, fmt.Sprintf("cert matches whitelisted DN %s", certDN)
+			}
 		}
 	}
 
-	// Try authorizing the  IP address
-	ip := strings.Split(c.R.RemoteAddr, ":")[0]
-	acc, found := getAccessor(ip)
-	if found {
-		// authorize IP roles
-		if acc.accType == "ip_role" {
-			if r == RoleRead || (r == RoleWrite && acc.write) {
-				return LevelIPRole, fmt.Sprintf("ignoring DN of authorized IP %s with role %s", ip, r)
+	// authorize IP roles
+	if roles, ok := ipRoles[ip]; ok {
+		for _, role := range roles {
+			if r.String() == role {
+				return LevelIPRole, fmt.Sprintf("ignoring DN of authorized IP %s with role %s", ip, role)
 			}
-			// authorize whitelisted IPs
-		} else if acc.accType == "ip_whitelist" {
+		}
+	}
+
+	// authorize whitelisted IPs
+	for _, authIP := range authIPs {
+		if authIP == ip {
 			return LevelIPWhitelist, fmt.Sprintf("ignoring DN of whitelisted IP %s", ip)
 		}
 	}
 
-	// See, if the API allows public access
-	if r == RolePublic {
+	// authorize public role
+	if r == "public" {
 		return LevelPublic, fmt.Sprintf("public role authorized")
 	}
 
-	// Go away, we don't like you
 	return LevelDenied, "unable to authorize access"
 }
 
 func checkClientIP(client *tls.ClientHelloInfo) (*tls.Config, error) {
 	ip := client.Conn.RemoteAddr().String()
-	ip = strings.Split(ip, ":")[0]
-	_, found := getAccessor(ip)
 
-	if found {
-		log.WithFields(log.Fields{"client": ip}).Info("Host matches authorized IP.")
+	authIPs := viper.GetStringSlice("ip_whitelist")
+	ipRoles := viper.GetStringMapStringSlice("ip_roles")
+	for ip := range ipRoles {
+		authIPs = append(authIPs, ip)
+	}
 
-		var err error
-		srvConfig := viper.GetStringMapString("server")
-		newConfig := Mainsrv.TLSConfig.Clone()
-		newConfig.ClientAuth = tls.VerifyClientCertIfGiven
-		newConfig.Certificates = make([]tls.Certificate, 1)
-		newConfig.Certificates[0], err = tls.LoadX509KeyPair(srvConfig["cert"], srvConfig["key"])
-		if err != nil {
-			log.Print(err)
-			return nil, err
+	for _, authIP := range authIPs {
+		if authIP == strings.Split(ip, ":")[0] {
+			log.WithFields(log.Fields{"client": ip}).Info("Host matches authorized IP.")
+			
+			var err error
+			srvConfig := viper.GetStringMapString("server")
+			newConfig := Mainsrv.TLSConfig.Clone()
+			newConfig.ClientAuth = tls.VerifyClientCertIfGiven
+			newConfig.Certificates = make([]tls.Certificate, 1)
+			newConfig.Certificates[0], err = tls.LoadX509KeyPair(srvConfig["cert"], srvConfig["key"])
+			if err != nil {
+				log.Print(err)
+				return nil, err
+			}
+
+			return newConfig, nil
 		}
-
-		return newConfig, nil
 	}
 
 	return nil, nil
