@@ -98,7 +98,7 @@ func getAccessor(key string, ip string) (accessor, bool) {
 			whereFound = "accessors table"
 		}
 	}
-	log.Info(fmt.Sprintf("getAccessor key %s -- found in: %s", key, whereFound))
+	log.Debug(fmt.Sprintf("getAccessor key %s -- found in: %s", key, whereFound))
 	return acc, found
 }
 
