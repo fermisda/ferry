@@ -168,6 +168,7 @@ func main() {
 	if dbUser == nil {
 		dbUser = dbConfig["user"]
 	}
+	// Password can be obtained from the enviroment variable, config file or .pgpass
 	dbPass := viper.Get("db_pass")
 	if dbPass == nil {
 		dbPass = dbConfig["password"]
@@ -184,9 +185,13 @@ func main() {
 	if dbPort == nil {
 		dbPort = dbConfig["port"]
 	}
-	connString := fmt.Sprintf("user=%s password=%s host=%s port=%s dbname=%s connect_timeout=%s sslmode=%s sslrootcert=%s",
-		dbUser, dbPass, dbHost, dbPort, dbName,
+	// Allow the use of .pgpass by not requiring the password in the connection string
+	connString := fmt.Sprintf("user=%s host=%s port=%s dbname=%s connect_timeout=%s sslmode=%s sslrootcert=%s",
+		dbUser, dbHost, dbPort, dbName,
 		dbConfig["timeout"], dbConfig["sslmode"], dbConfig["certificate"])
+	if dbPass != "" {
+		connString = fmt.Sprintf("%s password=%s", connString, dbPass)
+	}
 	Mydb, err := sql.Open("postgres", connString)
 	if err != nil {
 		log.Error("there is an issue here")
