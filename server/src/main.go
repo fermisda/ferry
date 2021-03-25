@@ -145,6 +145,11 @@ func main() {
 		}
 	}
 
+	ldapErr := LDAPinitialize()
+	if ldapErr != nil {
+		log.Error(ldapErr)
+	}
+
 	APIs := make(APICollection)
 	IncludeUserAPIs(&APIs)
 	IncludeGroupAPIs(&APIs)
@@ -152,6 +157,7 @@ func main() {
 	IncludeWrapperAPIs(&APIs)
 	IncludeUnitAPIs(&APIs)
 	IncludeResourceAPIs(&APIs)
+	IncludeLdapAPIs(&APIs)
 
 	log.Debug("Here we go...")
 
@@ -346,6 +352,11 @@ func main() {
 	grouter.HandleFunc("/removeUserFromSharedAccountComputeResource", APIs["removeUserFromSharedAccountComputeResource"].Run)
 	grouter.HandleFunc("/setSharedAccountComputeResourceApprover", APIs["setSharedAccountComputeResourceApprover"].Run)
 	grouter.HandleFunc("/getSharedAccountForComputeResource", APIs["getSharedAccountForComputeResource"].Run)
+
+	// ldap API Calls
+	grouter.HandleFunc("/getUserLdapInfo", APIs["getUserLdapInfo"].Run)
+	grouter.HandleFunc("/addUserToLdap", APIs["addUserToLdap"].Run)
+	grouter.HandleFunc("/addAffiliationUsersToLdap", APIs["addAffiliationUsersToLdap"].Run)
 
 	srvConfig := viper.GetStringMapString("server")
 	Mainsrv = &http.Server{
