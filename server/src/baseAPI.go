@@ -221,6 +221,9 @@ const (
 	FullName         Attribute = "fullname"
 	ResourceName     Attribute = "resourcename"
 	AlternativeName  Attribute = "alternativename"
+	SetName          Attribute = "setname"
+	Definition       Attribute = "definition"
+	Pattern          Attribute = "pattern"
 	GroupType        Attribute = "grouptype"
 	UnitType         Attribute = "unittype"
 	ResourceType     Attribute = "resourcetype"
@@ -243,6 +246,7 @@ const (
 	DNID             Attribute = "dnid"
 	FQANID           Attribute = "fqanid"
 	UnitID           Attribute = "unitid"
+	SetID            Attribute = "setid"
 	ResourceID       Attribute = "compid"
 	Quota            Attribute = "quota"
 	Status           Attribute = "status"
@@ -272,6 +276,9 @@ func (a Attribute) Type() AttributeType {
 		FullName:         TypeSstring,
 		ResourceName:     TypeSstring,
 		AlternativeName:  TypeString,
+		SetName:          TypeString,
+		Definition:       TypeString,
+		Pattern:          TypeString,
 		GroupType:        TypeSstring,
 		UnitType:         TypeString,
 		ResourceType:     TypeSstring,
@@ -294,6 +301,7 @@ func (a Attribute) Type() AttributeType {
 		DNID:             TypeInt,
 		FQANID:           TypeInt,
 		UnitID:           TypeInt,
+		SetID:            TypeInt,
 		ResourceID:       TypeInt,
 		Quota:            TypeFloat,
 		Status:           TypeBool,
