@@ -356,7 +356,9 @@ func main() {
 	// ldap API Calls
 	grouter.HandleFunc("/getUserLdapInfo", APIs["getUserLdapInfo"].Run)
 	grouter.HandleFunc("/addUserToLdap", APIs["addUserToLdap"].Run)
-	grouter.HandleFunc("/addAffiliationUsersToLdap", APIs["addAffiliationUsersToLdap"].Run)
+	grouter.HandleFunc("/addUsersToLdapByAffiliation", APIs["addUsersToLdapByAffiliation"].Run)
+	grouter.HandleFunc("/removeUserFromLdap", APIs["removeUserFromLdap"].Run)
+	grouter.HandleFunc("/addCapabilitySet", APIs["addCapabilitySet"].Run)
 
 	srvConfig := viper.GetStringMapString("server")
 	Mainsrv = &http.Server{
