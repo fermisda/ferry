@@ -1,6 +1,7 @@
 package main
 
-// https://godoc.org/gopkg.in/ldap.v3  (documentation)
+// go get github.com/go-ldap/ldap/v3
+// https://godoc.org/gopkg.in/ldap.v3
 // https://github.com/go-ldap/ldap
 
 import (
@@ -44,26 +45,26 @@ type LDAPSetData struct {
 func LDAPinitialize() error {
 	var fields []string
 
-	ldapConfig := viper.GetStringMapString("ldap")
+	ldapConfig := viper.GetStringMapString("xxldap")
 	ldapURL = ldapConfig["url"]
 	ldapWriteDN = ldapConfig["writedn"]
 	ldapPass = ldapConfig["password"]
 	ldapBaseDN = ldapConfig["basedn"]
 	ldapBaseSetDN = ldapConfig["basesetdn"]
 
-	if len(ldapURL) < 0 {
+	if len(ldapURL) == 0 {
 		fields = append(fields, "url")
 	}
-	if len(ldapWriteDN) < 0 {
+	if len(ldapWriteDN) == 0 {
 		fields = append(fields, "writedn")
 	}
-	if len(ldapPass) < 0 {
+	if len(ldapPass) == 0 {
 		fields = append(fields, "password")
 	}
-	if len(ldapBaseDN) < 0 {
+	if len(ldapBaseDN) == 0 {
 		fields = append(fields, "basedn")
 	}
-	if len(ldapBaseSetDN) < 0 {
+	if len(ldapBaseSetDN) == 0 {
 		fields = append(fields, "basesetdn")
 	}
 	if len(fields) > 0 {
