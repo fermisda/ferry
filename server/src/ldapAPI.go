@@ -67,6 +67,49 @@ func IncludeLdapAPIs(c *APICollection) {
 		RoleWrite,
 	}
 	c.Add("removeCapabilitySet", &removeCapabilitySet)
+
+	addScopeToCapabilitySet := BaseAPI{
+		InputModel{
+			Parameter{SetName, true},
+			Parameter{Pattern, true},
+		},
+		addScopeToCapabilitySet,
+		RoleWrite,
+	}
+	c.Add("addScopeToCapabilitySet", &addScopeToCapabilitySet)
+
+	removeScopeFromCapabilitySet := BaseAPI{
+		InputModel{
+			Parameter{SetName, true},
+			Parameter{Pattern, true},
+		},
+		removeScopeFromCapabilitySet,
+		RoleWrite,
+	}
+	c.Add("removeScopeFromCapabilitySet", &removeScopeFromCapabilitySet)
+
+	addCapabilitySetToFQAN := BaseAPI{
+		InputModel{
+			Parameter{SetName, true},
+			Parameter{UnitName, true},
+			Parameter{Role, true},
+		},
+		addCapabilitySetToFQAN,
+		RoleWrite,
+	}
+	c.Add("addCapabilitySetToFQAN", &addCapabilitySetToFQAN)
+
+	removeCapabilitySetFromFQAN := BaseAPI{
+		InputModel{
+			Parameter{SetName, true},
+			Parameter{UnitName, true},
+			Parameter{Role, true},
+		},
+		removeCapabilitySetFromFQAN,
+		RoleWrite,
+	}
+	c.Add("removeCapabilitySetFromFQAN", &removeCapabilitySetFromFQAN)
+
 }
 
 func getUserLdapInfo(c APIContext, i Input) (interface{}, []APIError) {
@@ -355,14 +398,14 @@ func addCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 
 	unitid := NewNullAttribute(UnitID)
 	setid := NewNullAttribute(SetID)
-	var fqanCnt int
+	var roleCnt int
 	role := "%/role=" + i[Role].Data.(string) + "/%"
 
 	err := c.DBtx.QueryRow(`select (select unitid  from affiliation_units  where name=$1),
 								   (select setid from capability_sets where name=$2),
 								   (select count(fqan) from grid_fqan join affiliation_units using (unitid)
 								     where name=$1 and (lower(fqan) like lower($3)))`,
-		i[UnitName], i[SetName], role).Scan(&unitid, &setid, &fqanCnt)
+		i[UnitName], i[SetName], role).Scan(&unitid, &setid, &roleCnt)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -374,7 +417,7 @@ func addCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	if setid.Valid {
 		apiErr = append(apiErr, DefaultAPIError(ErrorText, "Capability set name already exists."))
 	}
-	if fqanCnt == 0 {
+	if roleCnt == 0 {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, Role))
 	}
 	if len(apiErr) > 0 {
@@ -398,12 +441,12 @@ func addCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	err = LDAPaddRole(rData, con)
+	err = LDAPaddCapabilitySet(rData, con)
 	if err != nil {
 		con.Close()
-		msg := fmt.Sprintf("ldap: LDAPaddRole: %s", err)
+		msg := fmt.Sprintf("ldap: LDAPaddCapabilitySet: %s", err)
 		log.Error(msg)
-		apiErr = append(apiErr, DefaultAPIError(ErrorText, "Unable to store role in LDAP"))
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "Unable to store capability set in LDAP"))
 		return nil, apiErr
 	}
 	con.Close()
@@ -442,20 +485,51 @@ func removeCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	setid := NewNullAttribute(SetID)
 	var setidCnt int
 
-	err := c.DBtx.QueryRow(`select
-							  (select setid from capability_sets where name=$1)
-	                          (select count(setid) from grid_fqan join capability_sets using (setid) where name = $1)`, i[SetName]).Scan(&setid, &setidCnt)
+	err := c.DBtx.QueryRow(`select (select setid from capability_sets where name=$1),
+	                               (select count(setid) from grid_fqan join capability_sets using (setid) where name = $1)`, i[SetName]).Scan(&setid, &setidCnt)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
-	if !unitid.Valid {
-		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+	if !setid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, SetName))
 		return nil, apiErr
 	}
 	if setidCnt > 0 {
-		appErr = append(appErr, DefaultAPIError(ErrorText, fmt.Sprintf("Capability set is in use by %d fqan records.", setidCnt)))
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, fmt.Sprintf("Capability set is in use by %d fqan records.", setidCnt)))
+		return nil, apiErr
+	}
+
+	con, err := LDAPgetConnection()
+	if err != nil {
+		msg := fmt.Sprintf("LDAP, connection failed: %v", err)
+		log.Error(msg)
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, msg))
+		return nil, apiErr
+	}
+
+	err = LDAPremoveCapabilitySet(i[SetName], con)
+	if err != nil {
+		con.Close()
+		msg := fmt.Sprintf("ldap: LDAPremoveCapabilitySet: %s", err)
+		log.Error(msg)
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "Unable to remove capability set from LDAP"))
+		return nil, apiErr
+	}
+	con.Close()
+
+	_, err = c.DBtx.Exec(`delete from scopes where setid = $1`, setid)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	_, err = c.DBtx.Exec(`delete from capability_sets where setid=$1`, setid)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
 
@@ -465,11 +539,100 @@ func removeCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 func addScopeToCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
+	setid := NewNullAttribute(SetID)
+	var patternCnt int
+
+	err := c.DBtx.QueryRow(`select (select setid from capability_sets where name=$1),
+	                               (select count(setid) from scopes join capability_sets using (setid)
+								      where name=$1 and pattern=$2)`, i[SetName], i[Pattern]).Scan(&setid, &patternCnt)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+	if !setid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, SetName))
+		return nil, apiErr
+	}
+	if patternCnt > 0 {
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "pattern already exists"))
+		return nil, apiErr
+	}
+
+	con, err := LDAPgetConnection()
+	if err != nil {
+		msg := fmt.Sprintf("LDAP, connection failed: %v", err)
+		log.Error(msg)
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, msg))
+		return nil, apiErr
+	}
+
+	err = LDAPaddScope(i[SetName], i[Pattern], con)
+	if err != nil {
+		con.Close()
+		msg := fmt.Sprintf("ldap: LDAPaddScope: %s", err)
+		log.Error(msg)
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "Unable to remove scope from LDAP"))
+		return nil, apiErr
+	}
+	con.Close()
+
+	_, err = c.DBtx.Exec(`insert into scopes (setid, pattern) values($1, $2)`, setid, i[Pattern])
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
 	return nil, apiErr
 }
 
 func removeScopeFromCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
+
+	setid := NewNullAttribute(SetID)
+	var patternCnt int
+
+	err := c.DBtx.QueryRow(`select (select setid from capability_sets where name=$1),
+	                               (select count(setid) from scopes join capability_sets using (setid)
+								      where name=$1 and pattern=$2)`, i[SetName], i[Pattern]).Scan(&setid, &patternCnt)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+	if !setid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, SetName))
+		return nil, apiErr
+	}
+	if patternCnt == 0 {
+		return nil, nil
+	}
+
+	con, err := LDAPgetConnection()
+	if err != nil {
+		msg := fmt.Sprintf("LDAP, connection failed: %v", err)
+		log.Error(msg)
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, msg))
+		return nil, apiErr
+	}
+
+	err = LDAPremoveScope(i[SetName], i[Pattern], con)
+	if err != nil {
+		con.Close()
+		msg := fmt.Sprintf("ldap: LDAPremoveScope: %s", err)
+		log.Error(msg)
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "Unable to remove scope from LDAP"))
+		return nil, apiErr
+	}
+	con.Close()
+
+	_, err = c.DBtx.Exec(`delete from scopes where setid=$1 and pattern=$2`, setid, i[Pattern])
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
 
 	return nil, apiErr
 }
@@ -477,23 +640,96 @@ func removeScopeFromCapabilitySet(c APIContext, i Input) (interface{}, []APIErro
 func addCapabilitySetToFQAN(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
+	setid := NewNullAttribute(SetID)
+	unitid := NewNullAttribute(UnitID)
+	var roleCnt int
+
+	role := "%/role=" + i[Role].Data.(string) + "/%"
+
+	err := c.DBtx.QueryRow(`select (select setid from capability_sets where name=$1),
+								   (select unitid from affiliation_units where name=$2),
+								   (select count(fqan) from grid_fqan join affiliation_units using (unitid)
+								     where name=$2 and (lower(fqan) like lower($3)))`,
+		i[SetName], i[UnitName], role).Scan(&setid, &unitid, &roleCnt)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+	if !unitid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+		return nil, apiErr
+	}
+	if !setid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, SetName))
+		return nil, apiErr
+	}
+	if roleCnt == 0 {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, Role))
+		return nil, apiErr
+	}
+
+	_, err = c.DBtx.Exec(`update grid_fqan set setid = $1 where unitid=$2 and (lower(fqan) like lower($3))`,
+		setid, unitid, role)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
 	return nil, apiErr
 }
 
 func removeCapabilitySetFromFQAN(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
+	setid := NewNullAttribute(SetID)
+	unitid := NewNullAttribute(UnitID)
+	var roleCnt int
+
+	role := "%/role=" + i[Role].Data.(string) + "/%"
+
+	err := c.DBtx.QueryRow(`select (select setid from capability_sets where name=$1),
+								   (select unitid from affiliation_units where name=$2),
+								   (select count(fqan) from grid_fqan join affiliation_units using (unitid)
+								     where name=$2 and (lower(fqan) like lower($3)))`,
+		i[SetName], i[UnitName], role).Scan(&setid, &unitid, &roleCnt)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+	if !unitid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+		return nil, apiErr
+	}
+	if !setid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, SetName))
+		return nil, apiErr
+	}
+	if roleCnt == 0 {
+		return nil, nil
+	}
+
+	_, err = c.DBtx.Exec(`update grid_fqan set setid = null where unitid=$1 and (lower(fqan) like lower($2))`,
+		unitid, role)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
 	return nil, apiErr
 }
 
-func (c APIContext, i Input) (interface{}, []APIError) {
+func getCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 	// returns all sets with scope data for UnitName or SetName or Role or ALL
 	// JSON order   Capability Set (name, definition, patternS), UnitName, RoleS (FQAN)
 	return nil, apiErr
 }
 
-func updateLdap(c APIContext, i Input) (interface{}, []APIError) {
+func updateLdapForUser(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 	// For a user, experiment, capability set -- update all users where
 	// the eduPersonEntitlemen record differs from the Scope records for that user's

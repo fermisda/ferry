@@ -92,7 +92,7 @@ func LDAPgetUserData(voPersonID string, con *ldap.Conn) (LDAPData, error) {
 	var lData LDAPData
 	attributes := []string{"dn", "objectClass", "voPersonID", "voPersonExternalID", "sn", "cn", "givenName", "mail", "eduPersonPrincipalName", "eduPersonEntitlement"}
 
-	filter := fmt.Sprintf("(voPersonID=%s)", ldap.EscapeFilter(voPersonID)) // fmt.Sprintf("%v", i[UserName].Data)
+	filter := fmt.Sprintf("(voPersonID=%s)", ldap.EscapeFilter(voPersonID))
 	searchReq := ldap.NewSearchRequest("ou=people,o=Fermilab,o=CO,dc=cilogon,dc=org", ldap.ScopeWholeSubtree, 0, 0, 0, false, filter, attributes, []ldap.Control{})
 
 	result, err := con.Search(searchReq)
@@ -153,7 +153,7 @@ func LDAPremoveUser(voPersonID NullAttribute, con *ldap.Conn) error {
 	return err
 }
 
-func LDAPaddRole(rData LDAPSetData, con *ldap.Conn) error {
+func LDAPaddCapabilitySet(rData LDAPSetData, con *ldap.Conn) error {
 
 	voPersonExternalID := []string{rData.voPersonExternalID}
 	uid := []string{rData.uid}
@@ -166,4 +166,35 @@ func LDAPaddRole(rData LDAPSetData, con *ldap.Conn) error {
 	err := con.Add(addReq)
 
 	return err
+}
+
+func LDAPremoveCapabilitySet(voPersonExternalID NullAttribute, con *ldap.Conn) error {
+
+	DN := fmt.Sprintf("uid=%s,%s", voPersonExternalID.Data, ldapBaseSetDN)
+	delReq := ldap.NewDelRequest(DN, []ldap.Control{})
+	err := con.Del(delReq)
+
+	return err
+}
+
+func LDAPaddScope(setName NullAttribute, pattern NullAttribute, con *ldap.Conn) error {
+
+	DN := fmt.Sprintf("uid=%s,%s", setName.Data, ldapBaseSetDN)
+	modify := ldap.NewModifyRequest(DN, nil)
+	modify.Add("eduPersonEntitlement", []string{pattern.Data.(string)})
+	err := con.Modify(modify)
+
+	return err
+
+}
+
+func LDAPremoveScope(setName NullAttribute, pattern NullAttribute, con *ldap.Conn) error {
+
+	DN := fmt.Sprintf("uid=%s,%s", setName.Data, ldapBaseSetDN)
+	modify := ldap.NewModifyRequest(DN, nil)
+	modify.Delete("eduPersonEntitlement", []string{pattern.Data.(string)})
+	err := con.Modify(modify)
+
+	return err
+
 }
