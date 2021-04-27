@@ -18,6 +18,7 @@ var ldapWriteDN string
 var ldapPass string
 var ldapBaseDN string
 var ldapBaseSetDN string
+var ldapCapabitySet string
 
 // For LDAP USER data
 type LDAPData struct {
@@ -45,12 +46,13 @@ type LDAPSetData struct {
 func LDAPinitialize() error {
 	var fields []string
 
-	ldapConfig := viper.GetStringMapString("xxldap")
+	ldapConfig := viper.GetStringMapString("ldap")
 	ldapURL = ldapConfig["url"]
 	ldapWriteDN = ldapConfig["writedn"]
 	ldapPass = ldapConfig["password"]
 	ldapBaseDN = ldapConfig["basedn"]
 	ldapBaseSetDN = ldapConfig["basesetdn"]
+	ldapCapabitySet = ldapConfig["capabilityset"]
 
 	if len(ldapURL) == 0 {
 		fields = append(fields, "url")
@@ -198,4 +200,22 @@ func LDAPremoveScope(setName NullAttribute, pattern NullAttribute, con *ldap.Con
 
 	return err
 
+}
+
+func LDAPmodifyEduPersonEntitlements(dn string, setsToDrop []string, setsToAdd []string, con *ldap.Conn) error {
+	var err error
+
+	modify := ldap.NewModifyRequest(dn, nil)
+
+	for _, cset := range setsToDrop {
+		modify.Delete("eduPersonEntitlement", []string{cset})
+	}
+	for _, cset := range setsToAdd {
+		modify.Add("eduPersonEntitlement", []string{cset})
+	}
+
+	if (len(setsToDrop) > 0) || (len(setsToAdd) > 0) {
+		err = con.Modify(modify)
+	}
+	return err
 }

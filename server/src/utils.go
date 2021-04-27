@@ -176,3 +176,19 @@ func ExtractValidDN(dn string) (string, error) {
 	log.Debug(fmt.Printf("Matched DN \"%s\" to CA \"%s\"\n", formatedDN, ca["subjectdn"]))
 	return formatedDN, nil
 }
+
+func arrayCompare(a, b []string) []string {
+	var a1 []string
+	for _, x := range a {
+		a1 = append(a1, x)
+	}
+	for i := len(a1) - 1; i >= 0; i-- {
+		for _, vD := range b {
+			if a1[i] == vD {
+				a1 = append(a1[:i], a1[i+1:]...)
+				break
+			}
+		}
+	}
+	return a1
+}

@@ -366,6 +366,7 @@ func main() {
 	grouter.HandleFunc("/removeCapabilitySetFromFQAN", APIs["removeCapabilitySetFromFQAN"].Run)
 	grouter.HandleFunc("/addCapabilitySetToFQAN", APIs["addCapabilitySetToFQAN"].Run)
 	grouter.HandleFunc("/removeCapabilitySetFromFQAN", APIs["removeCapabilitySetFromFQAN"].Run)
+	grouter.HandleFunc("/updateLdapForUser", APIs["updateLdapForUser"].Run)
 
 	srvConfig := viper.GetStringMapString("server")
 	Mainsrv = &http.Server{
