@@ -46,6 +46,18 @@ func IncludeLdapAPIs(c *APICollection) {
 	}
 	c.Add("removeUserFromLdap", &removeUserFromLdap)
 
+	getCapabilitySet := BaseAPI{
+		InputModel{
+			Parameter{UnitName, false},
+			Parameter{SetName, false},
+			Parameter{Pattern, false},
+			Parameter{Role, false},
+		},
+		getCapabilitySet,
+		RoleWrite,
+	}
+	c.Add("getCapabilitySet", &getCapabilitySet)
+
 	addCapabilitySet := BaseAPI{
 		InputModel{
 			Parameter{UnitName, true},
@@ -117,6 +129,24 @@ func IncludeLdapAPIs(c *APICollection) {
 		RoleWrite,
 	}
 	c.Add("updateLdapForUser", &updateLdapForUser)
+
+	updateLdapForAffiliation := BaseAPI{
+		InputModel{
+			Parameter{UnitName, true},
+		},
+		updateLdapForAffiliation,
+		RoleWrite,
+	}
+	c.Add("updateLdapForAffiliation", &updateLdapForAffiliation)
+
+	updateLdapForCapabilitySet := BaseAPI{
+		InputModel{
+			Parameter{SetName, true},
+		},
+		updateLdapForCapabilitySet,
+		RoleWrite,
+	}
+	c.Add("updateLdapForCapabilitySet", &updateLdapForCapabilitySet)
 
 }
 
@@ -361,8 +391,8 @@ func addUsersToLdapByAffiliation(c APIContext, i Input) (interface{}, []APIError
 	                             and aug.is_primary = true
 	                             and ug.groupid = aug.groupid
 	                             and u.uid = ug.uid
-	                             and u.expiration_date > now()
-							   order by u.uid limit 5`, unitid)
+	                             and u.status = true
+							   order by u.uid`, unitid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -398,6 +428,127 @@ func addUsersToLdapByAffiliation(c APIContext, i Input) (interface{}, []APIError
 	con.Close()
 
 	return nil, nil
+}
+
+func getCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+
+	unitid := NewNullAttribute(UnitID)
+	setid := NewNullAttribute(SetID)
+	role := NewNullAttribute(Role)
+
+	var patternCnt int
+	var roleCnt int
+
+	if i[Role].Valid {
+		role.Default("%/role=" + i[Role].Data.(string) + "/%")
+	}
+
+	err := c.DBtx.QueryRow(`select (select unitid  from affiliation_units  where name=$1),
+								   (select setid from capability_sets where name=$2),
+								   (select count(fqan) from grid_fqan join affiliation_units using (unitid)
+								     where name=$1 and (lower(fqan) like lower($3))),
+								   (select count(*) from scopes where pattern = $4 )`,
+		i[UnitName], i[SetName], role, i[Pattern]).Scan(&unitid, &setid, &roleCnt, &patternCnt)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+	if i[UnitName].Valid && !unitid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+	}
+	if i[SetName].Valid && !setid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, SetName))
+	}
+	if i[Role].Valid && roleCnt == 0 {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, Role))
+	}
+	if i[Pattern].Valid && patternCnt == 0 {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, Pattern))
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	rows, err := c.DBtx.Query(`select cs.name, cs.last_updated, s.pattern, s.last_updated, au.name, gf.fqan
+							   from capability_sets cs
+	  						     join scopes s using (setid)
+						   	     join grid_fqan gf using (setid)
+	                             join affiliation_units au using (unitid)
+	                           where (au.unitid = $1 or $1 is null)
+	                             and (cs.setid = $2 or $2 is null)
+	                             and (s.pattern = $3 or $3 is null)
+	                             and ( (lower(fqan) like lower($4)) or $4 is null)
+	                           order by cs.name, au.name`, unitid, setid, i[Pattern], role)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	type jsonentry map[Attribute]interface{}
+	type jsonlist []interface{}
+
+	const Patterns Attribute = "patterns"
+	const Units Attribute = "units"
+
+	entry := jsonentry{
+		SetName:     "",
+		LastUpdated: "",
+		Patterns:    make(jsonlist, 0),
+		Units:       make(jsonlist, 0),
+	}
+
+	out := make([]jsonentry, 0)
+
+	row := NewMapNullAttribute(SetName, LastUpdated)  // Set Stuff
+	prow := NewMapNullAttribute(Pattern, LastUpdated) // Pattern stuff
+	grow := NewMapNullAttribute(UnitName, FQAN)       // Grid stuff
+
+	// Has this item already been saved?
+	dejavu := make(map[string]string)  // Patterns
+	dejavu2 := make(map[string]string) // Units
+
+	for rows.Next() {
+		rows.Scan(row[SetName], row[LastUpdated], prow[Pattern], prow[LastUpdated], grow[UnitName], grow[FQAN])
+
+		if entry[SetName] == "" {
+			entry[SetName] = row[SetName].Data
+			entry[LastUpdated] = row[LastUpdated].Data
+		} else if entry[SetName] != row[SetName].Data {
+			newEntry := make(jsonentry)
+			newEntry[SetName] = entry[SetName]
+			newEntry[LastUpdated] = entry[LastUpdated]
+			newEntry[Patterns] = entry[Patterns]
+			newEntry[Units] = entry[Units]
+			out = append(out, newEntry)
+			entry[SetName] = row[SetName].Data
+			entry[Patterns] = make(jsonlist, 0)
+			entry[Units] = make(jsonlist, 0)
+			dejavu2 = make(map[string]string)
+		}
+		var pkey = prow[Pattern].Data.(string)
+		if _, ok := dejavu[pkey]; !ok {
+			newPentry := make(jsonentry)
+			newPentry[Pattern] = prow[Pattern].Data
+			newPentry[LastUpdated] = prow[LastUpdated].Data
+			entry[Patterns] = append(entry[Patterns].(jsonlist), newPentry)
+			dejavu[pkey] = "blah"
+		}
+
+		var gkey = grow[UnitName].Data.(string)
+		if _, ok := dejavu2[gkey]; !ok {
+			newUentry := make(jsonentry)
+			newUentry[UnitName] = grow[UnitName].Data
+			newUentry[FQAN] = grow[FQAN].Data
+			entry[Units] = append(entry[Units].(jsonlist), newUentry)
+			dejavu2[gkey] = "blah"
+		}
+	}
+	out = append(out, entry)
+
+	return out, nil
 }
 
 func addCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
@@ -680,6 +831,8 @@ func addCapabilitySetToFQAN(c APIContext, i Input) (interface{}, []APIError) {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
+	// Update LDAP for all the users who have the FQAN for the newly added set.
+	_, apiErr = updateLdapForCapabilitySet(c, i)
 
 	return nil, apiErr
 }
@@ -715,6 +868,53 @@ func removeCapabilitySetFromFQAN(c APIContext, i Input) (interface{}, []APIError
 		return nil, nil
 	}
 
+	// Before dropping the set from the DB we MUST remove the LDAP entry for those using it.  Hence this query an the
+	// following block of code.  Do not touch the FQAN record until all user's have been updated.  Why?
+	// So, this can be re-run if there are LDAP issues.
+	rows, err := c.DBtx.Query(`select distinct e.value
+							   from external_affiliation_attribute e
+							     join users u using (uid)
+								 join grid_access ga using (uid)
+								 join grid_fqan gf using (fqanid)
+								 join capability_sets cs using (setid)
+							   where e.attribute = 'voPersonID'
+								 and cs.setid = $1 order by e.value`, &setid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	con, lErr := LDAPgetConnection()
+	if lErr != nil {
+		msg := fmt.Sprintf("LDAP, connection failed: %v", lErr)
+		log.Error(msg)
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, msg))
+		return nil, apiErr
+	}
+
+	var dn string
+	var setsToDrop []string
+	var setsToAdd []string
+	var voPersonID string
+
+	setsToDrop = append(setsToDrop, ldapCapabitySet+i[SetName].Data.(string))
+
+	for rows.Next() {
+		rows.Scan(&voPersonID)
+
+		dn = fmt.Sprintf("voPersonID=%s,%s", voPersonID, ldapBaseDN)
+		lErr = LDAPmodifyEduPersonEntitlements(dn, setsToDrop, setsToAdd, con)
+		if lErr != nil {
+			con.Close()
+			log.Error(lErr)
+			apiErr = append(apiErr, DefaultAPIError(ErrorText, "Unable to modify eduPersonEntitlment"))
+			return nil, apiErr
+		}
+	}
+	con.Close()
+
+	// Now the DB record and be updated!
 	_, err = c.DBtx.Exec(`update grid_fqan set setid = null where unitid=$1 and (lower(fqan) like lower($2))`,
 		unitid, role)
 	if err != nil {
@@ -723,13 +923,6 @@ func removeCapabilitySetFromFQAN(c APIContext, i Input) (interface{}, []APIError
 		return nil, apiErr
 	}
 
-	return nil, apiErr
-}
-
-func getCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
-	var apiErr []APIError
-	// returns all sets with scope data for UnitName or SetName or Role or ALL
-	// JSON order   Capability Set (name, patternS), UnitName, RoleS (FQAN)
 	return nil, apiErr
 }
 
@@ -816,7 +1009,7 @@ func updateLdapForUser(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 	if err == sql.ErrNoRows {
-		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, SetName))
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
 	}
 	if len(voPersonID) == 0 {
 		apiErr = append(apiErr, DefaultAPIError(ErrorText, "User is not in LDAP."))
@@ -829,6 +1022,107 @@ func updateLdapForUser(c APIContext, i Input) (interface{}, []APIError) {
 
 	voPersonIDs := make([]string, 0)
 	voPersonIDs = append(voPersonIDs, voPersonID)
+
+	apiErr = updateLdapForSet(c, voPersonIDs)
+
+	return nil, apiErr
+}
+
+func updateLdapForAffiliation(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+
+	unitid := NewNullAttribute(UnitID)
+
+	err := c.DBtx.QueryRow(`select unitid from affiliation_units where name=$1`, i[UnitName]).Scan(&unitid)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+		} else {
+			log.WithFields(QueryFields(c)).Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		}
+		return nil, apiErr
+	}
+
+	rows, err := c.DBtx.Query(`select distinct e.value
+							   from affiliation_unit_group aug
+							   	   join groups using (groupid)
+							       join user_group ug using (groupid)
+								   join users u using (uid)
+								   join external_affiliation_attribute e using (uid)
+							   where aug.unitid = $1
+	                             and aug.is_primary = true
+	                             and u.status = true
+								 and e.attribute = 'voPersonID'
+							   order by e.value`, unitid)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			apiErr = append(apiErr, DefaultAPIError(ErrorText, "No voPersonIDs found for affiliation."))
+		} else {
+			log.WithFields(QueryFields(c)).Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		}
+		return nil, apiErr
+	}
+	defer rows.Close()
+
+	var voPersonIDs []string
+	var voPersonID string
+
+	for rows.Next() {
+		rows.Scan(&voPersonID)
+		voPersonIDs = append(voPersonIDs, voPersonID)
+	}
+
+	apiErr = updateLdapForSet(c, voPersonIDs)
+
+	return nil, apiErr
+}
+
+func updateLdapForCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+
+	setid := NewNullAttribute(SetID)
+
+	err := c.DBtx.QueryRow(`select setid from capability_sets where name=$1`, i[SetName]).Scan(&setid)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+		} else {
+			log.WithFields(QueryFields(c)).Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		}
+		return nil, apiErr
+	}
+
+	rows, err := c.DBtx.Query(`select distinct e.value
+							   from external_affiliation_attribute e
+							     join users u using (uid)
+								 join grid_access ga using (uid)
+								 join grid_fqan gf using (fqanid)
+								 join capability_sets cs using (setid)
+							   where ga.is_banned = false
+								 and u.status = true
+								 and e.attribute = 'voPersonID'
+								 and cs.setid = $1 order by e.value`, &setid)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			apiErr = append(apiErr, DefaultAPIError(ErrorText, "No voPersonIDs found for affiliation."))
+		} else {
+			log.WithFields(QueryFields(c)).Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		}
+		return nil, apiErr
+	}
+	defer rows.Close()
+
+	var voPersonIDs []string
+	var voPersonID string
+
+	for rows.Next() {
+		rows.Scan(&voPersonID)
+		voPersonIDs = append(voPersonIDs, voPersonID)
+	}
 
 	apiErr = updateLdapForSet(c, voPersonIDs)
 
