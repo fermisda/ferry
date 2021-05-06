@@ -358,6 +358,7 @@ func main() {
 	grouter.HandleFunc("/addUserToLdap", APIs["addUserToLdap"].Run)
 	grouter.HandleFunc("/addUsersToLdapByAffiliation", APIs["addUsersToLdapByAffiliation"].Run)
 	grouter.HandleFunc("/removeUserFromLdap", APIs["removeUserFromLdap"].Run)
+	grouter.HandleFunc("/getCapabilitySet", APIs["getCapabilitySet"].Run)
 	grouter.HandleFunc("/addCapabilitySet", APIs["addCapabilitySet"].Run)
 	grouter.HandleFunc("/removeCapabilitySet", APIs["removeCapabilitySet"].Run)
 	grouter.HandleFunc("/addScopeToCapabilitySet", APIs["addScopeToCapabilitySet"].Run)
@@ -367,6 +368,8 @@ func main() {
 	grouter.HandleFunc("/addCapabilitySetToFQAN", APIs["addCapabilitySetToFQAN"].Run)
 	grouter.HandleFunc("/removeCapabilitySetFromFQAN", APIs["removeCapabilitySetFromFQAN"].Run)
 	grouter.HandleFunc("/updateLdapForUser", APIs["updateLdapForUser"].Run)
+	grouter.HandleFunc("/updateLdapForAffiliation", APIs["updateLdapForAffiliation"].Run)
+	grouter.HandleFunc("/updateLdapForCapabilitySet", APIs["updateLdapForCapabilitySet"].Run)
 
 	srvConfig := viper.GetStringMapString("server")
 	Mainsrv = &http.Server{
