@@ -26,6 +26,7 @@ type LDAPData struct {
 	objectClass            []string
 	voPersonID             string
 	voPersonExternalID     string
+	uid                    string
 	sn                     string
 	cn                     string
 	givenName              string
@@ -93,7 +94,7 @@ func LDAPgetConnection() (*ldap.Conn, error) {
 
 func LDAPgetUserData(voPersonID string, con *ldap.Conn) (LDAPData, error) {
 	var lData LDAPData
-	attributes := []string{"dn", "objectClass", "voPersonID", "voPersonExternalID", "sn", "cn", "givenName", "mail", "eduPersonPrincipalName", "eduPersonEntitlement"}
+	attributes := []string{"dn", "objectClass", "voPersonID", "voPersonExternalID", "uid", "sn", "cn", "givenName", "mail", "eduPersonPrincipalName", "eduPersonEntitlement"}
 
 	filter := fmt.Sprintf("(voPersonID=%s)", ldap.EscapeFilter(voPersonID))
 	searchReq := ldap.NewSearchRequest("ou=people,o=Fermilab,o=CO,dc=cilogon,dc=org", ldap.ScopeWholeSubtree, 0, 0, 0, false, filter, attributes, []ldap.Control{})
@@ -108,6 +109,7 @@ func LDAPgetUserData(voPersonID string, con *ldap.Conn) (LDAPData, error) {
 		lData.objectClass = result.Entries[0].GetAttributeValues("objectClass")
 		lData.voPersonID = result.Entries[0].GetAttributeValue("voPersonID")
 		lData.voPersonExternalID = result.Entries[0].GetAttributeValue("voPersonExternalID")
+		lData.uid = result.Entries[0].GetAttributeValue("uid")
 		lData.sn = result.Entries[0].GetAttributeValue("sn")
 		lData.cn = result.Entries[0].GetAttributeValue("cn")
 		lData.givenName = result.Entries[0].GetAttributeValue("givenName")
@@ -125,6 +127,7 @@ func LDAPgetUserData(voPersonID string, con *ldap.Conn) (LDAPData, error) {
 func LDAPaddUser(lData LDAPData, con *ldap.Conn) error {
 
 	givenName := []string{lData.givenName}
+	uid := []string{lData.uid}
 	sn := []string{lData.sn}
 	cn := []string{lData.cn}
 	mail := []string{lData.mail}
@@ -135,6 +138,7 @@ func LDAPaddUser(lData LDAPData, con *ldap.Conn) error {
 	addReq := ldap.NewAddRequest(lData.dn, []ldap.Control{})
 	addReq.Attribute("objectClass", lData.objectClass)
 	addReq.Attribute("givenName", givenName)
+	addReq.Attribute("uid", uid)
 	addReq.Attribute("sn", sn)
 	addReq.Attribute("cn", cn)
 	addReq.Attribute("mail", mail)

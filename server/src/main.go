@@ -356,7 +356,7 @@ func main() {
 	// ldap API Calls
 	grouter.HandleFunc("/getUserLdapInfo", APIs["getUserLdapInfo"].Run)
 	grouter.HandleFunc("/addUserToLdap", APIs["addUserToLdap"].Run)
-	grouter.HandleFunc("/addUsersToLdapByAffiliation", APIs["addUsersToLdapByAffiliation"].Run)
+	grouter.HandleFunc("/addAllUsersToLdap", APIs["addAllUsersToLdap"].Run)
 	grouter.HandleFunc("/removeUserFromLdap", APIs["removeUserFromLdap"].Run)
 	grouter.HandleFunc("/getCapabilitySet", APIs["getCapabilitySet"].Run)
 	grouter.HandleFunc("/addCapabilitySet", APIs["addCapabilitySet"].Run)
