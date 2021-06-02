@@ -857,6 +857,22 @@ func setUserExperimentFQAN(c APIContext, i Input) (interface{}, []APIError) {
 		}
 	}
 
+	if len(fqanids) > 0 {
+		_, apiErr := updateLdapForUser(c, i)
+		if apiErr != nil {
+			if len(apiErr) > 0 {
+				log.Warning(apiErr[0].Error)
+			}
+			msg := fmt.Sprintf("Shifter Alert!  LDAP update failed.  Run updateLdapForUser?username=%s when ldap is available.", i[UserName].Data.(string))
+			log.Warningf(msg)
+			ctx := c.R.Context()
+			err := SlackMessage(ctx, msg, FerryAlertsURL)
+			if err != nil {
+				log.Warningf("Failure sending message to #ferryalerts.  err: %s", err)
+			}
+		}
+	}
+
 	return nil, nil
 }
 
