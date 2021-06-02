@@ -30,6 +30,7 @@ var DBtx Transaction
 var Mainsrv *http.Server
 var ValidCAs CAs
 var AccCache *cache.Cache
+var FerryAlertsURL string
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	var c APIContext
@@ -378,6 +379,10 @@ func main() {
 		Handler:     grouter,
 		ConnState:   gatekeeper,
 		ErrorLog:    golog.New(log.StandardLogger().WriterLevel(log.DebugLevel), "", 0),
+	}
+	FerryAlertsURL = srvConfig["ferryalertsurl"]
+	if len(FerryAlertsURL) == 0 {
+		log.Fatal("ferryalertsurl not defined in config file")
 	}
 
 	certslice := viper.GetStringSlice("certificates")
