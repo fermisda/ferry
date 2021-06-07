@@ -16,6 +16,7 @@ import (
 var (
 	release_ver = "unknown"
 	build_date  = "unknown"
+	server_ver  = "unknown"
 )
 
 // IncludeMiscAPIs includes all APIs described in this file in an APICollection
@@ -1234,6 +1235,7 @@ func ping(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 	const ReleaseVersion Attribute = "releaseversion"
 	const BuildDate Attribute = "builddate"
+	const Server Attribute = "server"
 
 	rows, err := DBptr.Query(`select now();`)
 	if err != nil {
@@ -1243,7 +1245,7 @@ func ping(c APIContext, i Input) (interface{}, []APIError) {
 	}
 	defer rows.Close()
 
-	return map[Attribute]interface{}{ReleaseVersion: release_ver, BuildDate: build_date}, nil
+	return map[Attribute]interface{}{ReleaseVersion: release_ver, BuildDate: build_date, Server: server_ver}, nil
 }
 
 func getVOUserMap(c APIContext, i Input) (interface{}, []APIError) {
