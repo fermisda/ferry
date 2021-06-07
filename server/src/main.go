@@ -148,7 +148,7 @@ func main() {
 
 	ldapErr := LDAPinitialize()
 	if ldapErr != nil {
-		log.Error(ldapErr)
+		log.Fatal(ldapErr)
 	}
 
 	APIs := make(APICollection)
@@ -423,7 +423,7 @@ func main() {
 	}
 
 	// We should probably make the cert and key paths variables in a config file at some point
-	log.WithFields(log.Fields{"port": Mainsrv.Addr[1:]}).Infof("Starting FERRY API")
+	log.WithFields(log.Fields{"port": Mainsrv.Addr[1:]}).Infof("Starting FERRY API Database: %s  ldap: %s", dbName, ldapURL)
 	serverror := Mainsrv.ListenAndServeTLS(srvConfig["cert"], srvConfig["key"])
 	if serverror != nil {
 		log.Fatal(serverror)
