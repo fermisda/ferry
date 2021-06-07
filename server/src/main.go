@@ -374,7 +374,7 @@ func main() {
 
 	srvConfig := viper.GetStringMapString("server")
 	Mainsrv = &http.Server{
-		Addr:        fmt.Sprintf(":%s", srvConfig["port"]),
+		Addr:        fmt.Sprintf("%s", srvConfig["port"]),
 		ReadTimeout: 10 * time.Second,
 		Handler:     grouter,
 		ConnState:   gatekeeper,
