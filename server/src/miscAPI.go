@@ -1245,7 +1245,7 @@ func ping(c APIContext, i Input) (interface{}, []APIError) {
 	}
 	defer rows.Close()
 
-	return map[Attribute]interface{}{ReleaseVersion: release_ver, BuildDate: build_date, Server: server_ver}, nil
+	return map[Attribute]interface{}{ReleaseVersion: release_ver, BuildDate: build_date, Server: serverRole}, nil
 }
 
 func getVOUserMap(c APIContext, i Input) (interface{}, []APIError) {
