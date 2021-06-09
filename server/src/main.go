@@ -31,6 +31,7 @@ var Mainsrv *http.Server
 var ValidCAs CAs
 var AccCache *cache.Cache
 var FerryAlertsURL string
+var serverRole string
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	var c APIContext
@@ -380,6 +381,12 @@ func main() {
 		ConnState:   gatekeeper,
 		ErrorLog:    golog.New(log.StandardLogger().WriterLevel(log.DebugLevel), "", 0),
 	}
+
+	serverRole = srvConfig["role"]
+	if len(serverRole) == 0 {
+		serverRole = "unknown"
+	}
+
 	FerryAlertsURL = srvConfig["ferryalertsurl"]
 	if len(FerryAlertsURL) == 0 {
 		log.Fatal("ferryalertsurl not defined in config file")
