@@ -28,12 +28,12 @@ func IncludeLdapAPIs(c *APICollection) {
 	}
 	c.Add("addUserToLdap", &addUserToLdap)
 
-	addAllUsersToLdap := BaseAPI{
+	loadAndUpdateLdapWithFerry := BaseAPI{
 		InputModel{},
-		addAllUsersToLdap,
+		loadAndUpdateLdapWithFerry,
 		RoleWrite,
 	}
-	c.Add("addAllUsersToLdap", &addAllUsersToLdap)
+	c.Add("loadAndUpdateLdapWithFerry", &loadAndUpdateLdapWithFerry)
 
 	removeUserFromLdap := BaseAPI{
 		InputModel{
@@ -225,34 +225,40 @@ func addUserToLdap(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, apiErr
 }
 
-// This method is for the initial load of everyone into LDAP.  It only inserts those who FERRY identifies
-// as not being in LDAP.  It can be modified to call updateLdapForSet to update everyone who exists in LDAP.
-func addAllUsersToLdap(c APIContext, i Input) (interface{}, []APIError) {
+// Loads all NEW users into LDAP then updates all LDAP users, both new and pre-existing, with their current
+// eduPersonEntitilement data.  FERRY is the source of truth.
+func loadAndUpdateLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	// Only get those who are NOT in LDAP
-	rows, err := c.DBtx.Query(`select u.uname
-								   from users u
-		                           where u.status is true
-		                             and u.is_groupaccount is false
-		                             and u.is_sharedaccount is false
-		                             and u.uid not in (select e.uid
-							       from external_affiliation_attribute e
-							       where attribute = 'voPersonID')
-		                           order by u.uname`)
+	// Get Both those FERRY thinks are in LDAP and those that are
+	rows, err := c.DBtx.Query(`select u.uname, e.value
+							   from users u
+								 left outer join external_affiliation_attribute e using (uid)
+							   where u.status is true
+									and u.is_groupaccount is false
+									and u.is_sharedaccount is false
+		 							and e.attribute = 'voPersonID'
+							   order by u.uname`)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
 
-	type usertype []NullAttribute
-	var users usertype
+	type userdata struct {
+		uname      string
+		voPersonID string
+	}
+	users := make([]userdata, 0)
 
 	for rows.Next() {
-		u := NewNullAttribute(UserName)
-		rows.Scan(&u)
-		users = append(users, u)
+		var u, v string
+		rows.Scan(&u, &v)
+		x := userdata{
+			uname:      u,
+			voPersonID: v,
+		}
+		users = append(users, x)
 	}
 
 	con, err := LDAPgetConnection()
@@ -263,24 +269,56 @@ func addAllUsersToLdap(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
+	// Add all NEW users to LDAP
+	var voPersonIDs []string
 	for _, u := range users {
-		input := Input{UserName: u}
-		_, apiErr = addUserToLdapBase(c, input, con)
-		if len(apiErr) > 0 {
-			con.Close()
-			log.Error("ldapAPI: addUsersToLdapByAffiliation: error on uname: ", u.Data)
-			return nil, apiErr
+		if u.voPersonID == "" {
+			n := NewNullAttribute(UserName).Default(u.uname)
+			input := Input{UserName: n}
+			lData, apiErr := addUserToLdapBase(c, input, con)
+			if len(apiErr) > 0 {
+				con.Close()
+				log.Errorf("ldapAPI: addUsertoLdapBase: error on uname: %s", u.uname)
+				return nil, apiErr
+			}
+			voPersonIDs = append(voPersonIDs, lData.voPersonID)
+		} else {
+			voPersonIDs = append(voPersonIDs, u.voPersonID)
 		}
+	}
+	// Add or update the eduPersonEntitilments for ALL users.
+	apiErr = updateLdapForUserSet(c, voPersonIDs)
+	if len(apiErr) > 0 {
+		con.Close()
+		log.Errorf("ldapAPI: updateLdapForUserSet: error on uname: %s", apiErr[0].Error)
+		return nil, apiErr
 	}
 	con.Close()
 
 	return nil, nil
 }
 
-func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (interface{}, []APIError) {
+// Constructs a wlcggroup from the fqan and unitname
+func getWlcgGroup(fqan string, unitname string) string {
+	parts := strings.SplitAfter(fqan, "/Role=")
+	if len(parts) == 1 {
+		return ""
+	}
+	parts = strings.Split(parts[1], "/")
+	role := strings.ToLower(parts[0])
+	if role == "null" {
+		return ""
+	} else if role == "analysis" {
+		return wlcgGroups + unitname
+	}
+	return wlcgGroups + unitname + "/" + role
+}
+
+// Adds a user to LDAP but does NOT deal with eduPersonEntitilments.  see updateLdapForUserSet for that.
+func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (LDAPData, []APIError) {
 	var apiErr []APIError
 	var lData LDAPData
-	//FIXME? does this need to support more then just fermi?
+
 	site := "FNAL"
 	emailSuffix := "fnal.gov"
 	uname := NewNullAttribute(UserName)
@@ -294,7 +332,7 @@ func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (interface{}, []AP
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-		return nil, apiErr
+		return lData, apiErr
 	}
 
 	// See if FERRY thinks this person if already in LDAP.  IF so, we are done.
@@ -303,10 +341,10 @@ func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (interface{}, []AP
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-		return nil, apiErr
+		return lData, apiErr
 	}
 	if len(lData.voPersonID) > 0 {
-		return nil, nil
+		return lData, nil
 	}
 
 	seqno := 0
@@ -314,7 +352,7 @@ func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (interface{}, []AP
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-		return nil, apiErr
+		return lData, apiErr
 	}
 
 	lData.voPersonID = fmt.Sprintf("%s%09d", site, seqno)
@@ -324,32 +362,11 @@ func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (interface{}, []AP
 	lData.uid = uname.Data.(string)
 	lData.voPersonExternalID = lData.mail
 
-	// get the capability sets for the user and create the eduPersonEntitlement array.
-	rows, err := DBptr.Query(`select distinct(cs.name)
-								  from users u
-								    join grid_access as ga using (uid)
-								    join grid_fqan as gf using(fqanid)
-								    join capability_sets as cs using(setid)
-								  where u.uname = $1
-									and ga.is_banned = false`, uname.Data)
-	// Allow user to be added even if they have no grid_fqans at this point.
-	// This way, ferry-user-update can add all new users.
-	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c)).Error(err)
-		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-		return nil, apiErr
-	}
-	var setname string
-	for rows.Next() {
-		rows.Scan(&setname)
-		lData.eduPersonEntitlement = append(lData.eduPersonEntitlement, ldapCapabitySet+setname)
-	}
-
 	err = LDAPaddUser(lData, con)
 	if err != nil {
 		log.Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorText, "Unable to store user in LDAP"))
-		return nil, apiErr
+		return lData, apiErr
 	}
 
 	_, err = DBptr.Exec(`insert into external_affiliation_attribute (uid, attribute, value)
@@ -357,10 +374,10 @@ func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (interface{}, []AP
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-		return nil, apiErr
+		return lData, apiErr
 	}
 
-	return nil, nil
+	return lData, nil
 }
 
 func removeUserFromLdap(c APIContext, i Input) (interface{}, []APIError) {
@@ -575,7 +592,7 @@ func addCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 
 	rData.dn = fmt.Sprintf("uid=%s,%s", i[SetName].Data, ldapBaseSetDN)
 	rData.objectClass = []string{"account", "eduPerson", "voPerson"}
-	rData.voPersonExternalID = i[SetName].Data.(string)
+	rData.voPersonExternalID = i[SetName].Data.(string) + "@fnal.gov"
 	rData.uid = i[SetName].Data.(string)
 	patterns := strings.Split(i[Pattern].Data.(string), ",")
 	for _, pattern := range patterns {
@@ -648,7 +665,6 @@ func removeCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 		apiErr = append(apiErr, DefaultAPIError(ErrorText, fmt.Sprintf("Capability set is in use by %d fqan records.", setidCnt)))
 		return nil, apiErr
 	}
-
 	con, err := LDAPgetConnection()
 	if err != nil {
 		msg := fmt.Sprintf("LDAP, connection failed: %v", err)
@@ -832,15 +848,15 @@ func removeCapabilitySetFromFQAN(c APIContext, i Input) (interface{}, []APIError
 
 	setid := NewNullAttribute(SetID)
 	unitid := NewNullAttribute(UnitID)
-	var roleCnt int
+	var fullFQAN = NewNullAttribute(FQAN)
 
 	role := "%/role=" + i[Role].Data.(string) + "/%"
 
 	err := c.DBtx.QueryRow(`select (select setid from capability_sets where name=$1),
 								   (select unitid from affiliation_units where name=$2),
-								   (select count(fqan) from grid_fqan join affiliation_units using (unitid)
-								     where name=$2 and (lower(fqan) like lower($3)))`,
-		i[SetName], i[UnitName], role).Scan(&setid, &unitid, &roleCnt)
+								   (select fqan from grid_fqan join affiliation_units using (unitid)
+								     where name=$2 and (lower(fqan) like lower($3)) limit 1)`,
+		i[SetName], i[UnitName], role).Scan(&setid, &unitid, &fullFQAN)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -854,11 +870,12 @@ func removeCapabilitySetFromFQAN(c APIContext, i Input) (interface{}, []APIError
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, SetName))
 		return nil, apiErr
 	}
-	if roleCnt == 0 {
-		return nil, nil
+	if !fullFQAN.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, Role))
+		return nil, apiErr
 	}
 
-	// Before dropping the set from the DB we MUST remove the LDAP entry for those using it.  Hence this query an the
+	// Before dropping the set from the DB we MUST remove the LDAP entry from those using it.  Hence this query and the
 	// following block of code.  Do not touch the FQAN record until all user's have been updated.  Why?
 	// So, this can be re-run if there are LDAP issues.
 	rows, err := c.DBtx.Query(`select distinct e.value
@@ -868,11 +885,17 @@ func removeCapabilitySetFromFQAN(c APIContext, i Input) (interface{}, []APIError
 								 join grid_fqan gf using (fqanid)
 								 join capability_sets cs using (setid)
 							   where e.attribute = 'voPersonID'
-								 and cs.setid = $1 order by e.value`, &setid)
+								 and gf.fqanid in (select fqanid from grid_fqan join affiliation_units using (unitid)
+								                   where name=$1
+												     and lower(fqan) like lower($2) )
+							   order by e.value`, i[UnitName], role)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
+	}
+	if err == sql.ErrNoRows {
+		return nil, nil
 	}
 
 	con, lErr := LDAPgetConnection()
@@ -889,16 +912,22 @@ func removeCapabilitySetFromFQAN(c APIContext, i Input) (interface{}, []APIError
 	var voPersonID string
 
 	setsToDrop = append(setsToDrop, ldapCapabitySet+i[SetName].Data.(string))
+	wgroup := getWlcgGroup(fullFQAN.Data.(string), i[UnitName].Data.(string))
+	if wgroup != "" {
+		setsToDrop = append(setsToDrop, wgroup)
+	}
 
 	for rows.Next() {
 		rows.Scan(&voPersonID)
 
 		dn = fmt.Sprintf("voPersonID=%s,%s", voPersonID, ldapBaseDN)
+		log.Infof("dn: %s", dn)
 		lErr = LDAPmodifyEduPersonEntitlements(dn, setsToDrop, setsToAdd, con)
 		if lErr != nil {
 			con.Close()
 			log.Error(lErr)
 			apiErr = append(apiErr, DefaultAPIError(ErrorText, "Unable to modify eduPersonEntitlment"))
+			log.Errorf("LDAPmodifyEduPersonEntitlements failed on dn: %s", dn)
 			return nil, apiErr
 		}
 	}
@@ -916,7 +945,8 @@ func removeCapabilitySetFromFQAN(c APIContext, i Input) (interface{}, []APIError
 	return nil, apiErr
 }
 
-func updateLdapForSet(c APIContext, voPersonIDs []string) []APIError {
+// Given a set of users, by their voPersonID's, for each user update LDAP.  This method assumes the users are already in LDAP.
+func updateLdapForUserSet(c APIContext, voPersonIDs []string) []APIError {
 	var apiErr []APIError
 	var lData LDAPData
 	var dn string
@@ -934,25 +964,32 @@ func updateLdapForSet(c APIContext, voPersonIDs []string) []APIError {
 		// get the capability sets for the user as FERRY has them
 		// Then get the sets as LDAP has them,
 		// compare the two and pass the differences to the modify method.
-		rows, err := c.DBtx.Query(`select distinct(cs.name)
-							  from users u
-							    join external_affiliation_attribute e using (uid)
-							    join grid_access as ga using (uid)
-							    join grid_fqan as gf using(fqanid)
-							    join capability_sets as cs using(setid)
-							  where e.value = $1
-								and ga.is_banned = false
-							  order by cs.name`, voPersonID)
+		rows, err := c.DBtx.Query(` select distinct cs.name, gf.fqan, au.name
+									from users u
+										join external_affiliation_attribute e using (uid)
+										join grid_access as ga using (uid)
+										join grid_fqan as gf using(fqanid)
+										join capability_sets as cs using(setid)
+										join affiliation_units as au using(unitid)
+									where e.value = $1
+										and ga.is_banned = false
+									order by cs.name`, voPersonID)
 		if err != nil && err != sql.ErrNoRows {
 			log.WithFields(QueryFields(c)).Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 			return apiErr
 		}
 		var ferryCsets []string
-		var setname string
+		var setname, fqan, unitname string
 		for rows.Next() {
-			rows.Scan(&setname)
-			ferryCsets = append(ferryCsets, ldapCapabitySet+setname)
+			rows.Scan(&setname, &fqan, &unitname)
+			if !stringInSlice(ldapCapabitySet+setname, ferryCsets) {
+				ferryCsets = append(ferryCsets, ldapCapabitySet+setname)
+			}
+			wgroup := getWlcgGroup(fqan, unitname)
+			if wgroup != "" && !stringInSlice(wgroup, ferryCsets) {
+				ferryCsets = append(ferryCsets, wgroup)
+			}
 		}
 
 		lData, lErr = LDAPgetUserData(voPersonID, con)
@@ -1013,7 +1050,7 @@ func updateLdapForUser(c APIContext, i Input) (interface{}, []APIError) {
 	voPersonIDs := make([]string, 0)
 	voPersonIDs = append(voPersonIDs, voPersonID)
 
-	apiErr = updateLdapForSet(c, voPersonIDs)
+	apiErr = updateLdapForUserSet(c, voPersonIDs)
 
 	return nil, apiErr
 }
@@ -1064,7 +1101,7 @@ func updateLdapForAffiliation(c APIContext, i Input) (interface{}, []APIError) {
 		voPersonIDs = append(voPersonIDs, voPersonID)
 	}
 
-	apiErr = updateLdapForSet(c, voPersonIDs)
+	apiErr = updateLdapForUserSet(c, voPersonIDs)
 
 	return nil, apiErr
 }
@@ -1114,7 +1151,7 @@ func updateLdapForCapabilitySet(c APIContext, i Input) (interface{}, []APIError)
 		voPersonIDs = append(voPersonIDs, voPersonID)
 	}
 
-	apiErr = updateLdapForSet(c, voPersonIDs)
+	apiErr = updateLdapForUserSet(c, voPersonIDs)
 
 	return nil, apiErr
 }

@@ -47,7 +47,7 @@ func QueryFields(c APIContext) log.Fields {
 	fields["action"] = c.R.URL.Path[1:]
 	fields["query"] = c.R.URL
 	fields["auth_level"] = c.AuthLevel.String()
-	fields["duration"] = time.Since(c.StartTime).Nanoseconds() / 1E6
+	fields["duration"] = time.Since(c.StartTime).Nanoseconds() / 1e6
 
 	clientIP := strings.Split(c.R.RemoteAddr, ":")[0]
 	fields["client_ip"] = clientIP
@@ -355,9 +355,9 @@ func main() {
 	grouter.HandleFunc("/getSharedAccountForComputeResource", APIs["getSharedAccountForComputeResource"].Run)
 
 	// ldap API Calls
+	grouter.HandleFunc("/loadAndUpdateLdapWithFerry", APIs["loadAndUpdateLdapWithFerry"].Run)
 	grouter.HandleFunc("/getUserLdapInfo", APIs["getUserLdapInfo"].Run)
 	grouter.HandleFunc("/addUserToLdap", APIs["addUserToLdap"].Run)
-	grouter.HandleFunc("/addAllUsersToLdap", APIs["addAllUsersToLdap"].Run)
 	grouter.HandleFunc("/removeUserFromLdap", APIs["removeUserFromLdap"].Run)
 	grouter.HandleFunc("/getCapabilitySet", APIs["getCapabilitySet"].Run)
 	grouter.HandleFunc("/addCapabilitySet", APIs["addCapabilitySet"].Run)

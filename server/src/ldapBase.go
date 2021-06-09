@@ -19,6 +19,7 @@ var ldapPass string
 var ldapBaseDN string
 var ldapBaseSetDN string
 var ldapCapabitySet string
+var wlcgGroups string
 
 // For LDAP USER data
 type LDAPData struct {
@@ -54,6 +55,7 @@ func LDAPinitialize() error {
 	ldapBaseDN = ldapConfig["basedn"]
 	ldapBaseSetDN = ldapConfig["basesetdn"]
 	ldapCapabitySet = ldapConfig["capabilityset"]
+	wlcgGroups = ldapConfig["wlcggroups"]
 
 	if len(ldapURL) == 0 {
 		fields = append(fields, "url")
@@ -69,6 +71,9 @@ func LDAPinitialize() error {
 	}
 	if len(ldapBaseSetDN) == 0 {
 		fields = append(fields, "basesetdn")
+	}
+	if len(wlcgGroups) == 0 {
+		fields = append(fields, "wlcggroups")
 	}
 	if len(fields) > 0 {
 		err := errors.New("in the  ldap section, the config file is missing: " + strings.Join(fields, ","))
@@ -145,7 +150,6 @@ func LDAPaddUser(lData LDAPData, con *ldap.Conn) error {
 	addReq.Attribute("eduPersonPrincipalName", eduPersonPrincipalName)
 	addReq.Attribute("voPersonExternalID", voPersonExternalID)
 	addReq.Attribute("voPersonID", voPersonID)
-	addReq.Attribute("eduPersonEntitlement", lData.eduPersonEntitlement)
 	err := con.Add(addReq)
 
 	return err
@@ -208,13 +212,34 @@ func LDAPremoveScope(setName NullAttribute, pattern NullAttribute, con *ldap.Con
 
 func LDAPmodifyEduPersonEntitlements(dn string, setsToDrop []string, setsToAdd []string, con *ldap.Conn) error {
 	var err error
+	var adjSetsToDrop, adjSetsToAdd []string
+
+	// LDAP returns an error if it tries to insert a value that already exists or remove an attribute that does not exist.
+	// To avoid those errors, we will check for those issues and adjust the arrays accordingly.
+	// Errors, working to avoid: "modify/delete: eduPersonEntitlement: no such value"  AND "modify/delete: eduPersonEntitlement: no such attribute"
+	terms := strings.Split(dn, "voPersonID=")
+	vop := strings.Split(terms[0], ",")
+	lData, err := LDAPgetUserData(vop[0], con)
+	if err != nil {
+		return err
+	}
+	for _, pattern := range setsToDrop {
+		if stringInSlice(pattern, lData.eduPersonEntitlement) {
+			adjSetsToDrop = append(adjSetsToDrop, pattern)
+		}
+	}
+	for _, pattern := range setsToAdd {
+		if !stringInSlice(pattern, lData.eduPersonEntitlement) {
+			adjSetsToAdd = append(adjSetsToAdd, pattern)
+		}
+	}
 
 	modify := ldap.NewModifyRequest(dn, nil)
 
-	for _, cset := range setsToDrop {
+	for _, cset := range adjSetsToDrop {
 		modify.Delete("eduPersonEntitlement", []string{cset})
 	}
-	for _, cset := range setsToAdd {
+	for _, cset := range adjSetsToAdd {
 		modify.Add("eduPersonEntitlement", []string{cset})
 	}
 
