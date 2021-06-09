@@ -863,7 +863,7 @@ func setUserExperimentFQAN(c APIContext, i Input) (interface{}, []APIError) {
 			if len(apiErr) > 0 {
 				log.Warning(apiErr[0].Error)
 			}
-			msg := fmt.Sprintf("Shifter Alert!  LDAP update failed.  Run updateLdapForUser?username=%s when ldap is available.", i[UserName].Data.(string))
+			msg := fmt.Sprintf("LDAP update failed.  Run updateLdapForUser?username=%s when ldap is available.", i[UserName].Data.(string))
 			log.Warningf(msg)
 			ctx := c.R.Context()
 			err := SlackMessage(ctx, msg, FerryAlertsURL)

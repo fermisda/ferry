@@ -1,5 +1,7 @@
 package main
 
+// Package blatantly taken from  Sheryas - thanks bud.
+
 import (
 	"bytes"
 	"context"
@@ -52,6 +54,6 @@ func SlackMessage(ctx context.Context, message string, slackAlertsUrl string) er
 		}).Error(err)
 		return err
 	}
-	log.Info("Slack message sent")
+
 	return nil
 }
