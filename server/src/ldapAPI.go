@@ -204,6 +204,7 @@ func getUserLdapInfo(c APIContext, i Input) (interface{}, []APIError) {
 	out["mail"] = lData.mail
 	out["eduPersonPrincipalName"] = lData.eduPersonPrincipalName
 	out["eduPersonEntitlement"] = lData.eduPersonEntitlement
+	out["isMemberOf"] = lData.isMemberOf
 
 	return out, apiErr
 }
@@ -309,9 +310,9 @@ func getWlcgGroup(fqan string, unitname string) string {
 	if role == "null" {
 		return ""
 	} else if role == "analysis" {
-		return wlcgGroups + unitname
+		return "/" + unitname
 	}
-	return wlcgGroups + unitname + "/" + role
+	return "/" + unitname + "/" + role
 }
 
 // Adds a user to LDAP but does NOT deal with eduPersonEntitilments.  see updateLdapForUserSet for that.
@@ -907,14 +908,13 @@ func removeCapabilitySetFromFQAN(c APIContext, i Input) (interface{}, []APIError
 	}
 
 	var dn string
-	var setsToDrop []string
-	var setsToAdd []string
+	var setsToDrop, setsToAdd, groupsToDrop, groupsToAdd []string
 	var voPersonID string
 
 	setsToDrop = append(setsToDrop, ldapCapabitySet+i[SetName].Data.(string))
 	wgroup := getWlcgGroup(fullFQAN.Data.(string), i[UnitName].Data.(string))
 	if wgroup != "" {
-		setsToDrop = append(setsToDrop, wgroup)
+		groupsToDrop = append(groupsToDrop, wgroup)
 	}
 
 	for rows.Next() {
@@ -922,12 +922,12 @@ func removeCapabilitySetFromFQAN(c APIContext, i Input) (interface{}, []APIError
 
 		dn = fmt.Sprintf("voPersonID=%s,%s", voPersonID, ldapBaseDN)
 		log.Infof("dn: %s", dn)
-		lErr = LDAPmodifyEduPersonEntitlements(dn, setsToDrop, setsToAdd, con)
+		lErr = LDAPmodifyUserScoping(dn, setsToDrop, setsToAdd, groupsToDrop, groupsToAdd, con)
 		if lErr != nil {
 			con.Close()
 			log.Error(lErr)
 			apiErr = append(apiErr, DefaultAPIError(ErrorText, "Unable to modify eduPersonEntitlment"))
-			log.Errorf("LDAPmodifyEduPersonEntitlements failed on dn: %s", dn)
+			log.Errorf("LDAPmodifyUserScoping failed on dn: %s", dn)
 			return nil, apiErr
 		}
 	}
@@ -979,7 +979,7 @@ func updateLdapForUserSet(c APIContext, voPersonIDs []string) []APIError {
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 			return apiErr
 		}
-		var ferryCsets []string
+		var ferryCsets, ferryWgroups []string
 		var setname, fqan, unitname string
 		for rows.Next() {
 			rows.Scan(&setname, &fqan, &unitname)
@@ -987,8 +987,8 @@ func updateLdapForUserSet(c APIContext, voPersonIDs []string) []APIError {
 				ferryCsets = append(ferryCsets, ldapCapabitySet+setname)
 			}
 			wgroup := getWlcgGroup(fqan, unitname)
-			if wgroup != "" && !stringInSlice(wgroup, ferryCsets) {
-				ferryCsets = append(ferryCsets, wgroup)
+			if wgroup != "" && !stringInSlice(wgroup, ferryWgroups) {
+				ferryWgroups = append(ferryWgroups, wgroup)
 			}
 		}
 
@@ -1002,13 +1002,15 @@ func updateLdapForUserSet(c APIContext, voPersonIDs []string) []APIError {
 
 		setsToDrop := arrayCompare(lData.eduPersonEntitlement, ferryCsets)
 		setsToAdd := arrayCompare(ferryCsets, lData.eduPersonEntitlement)
+		groupsToDrop := arrayCompare(lData.isMemberOf, ferryWgroups)
+		groupsToAdd := arrayCompare(ferryWgroups, lData.isMemberOf)
 
 		dn = fmt.Sprintf("voPersonID=%s,%s", voPersonID, ldapBaseDN)
-		lErr = LDAPmodifyEduPersonEntitlements(dn, setsToDrop, setsToAdd, con)
+		lErr = LDAPmodifyUserScoping(dn, setsToDrop, setsToAdd, groupsToDrop, groupsToAdd, con)
 		if lErr != nil {
 			con.Close()
-			log.Error(lErr)
-			apiErr = append(apiErr, DefaultAPIError(ErrorText, "Unable to modify eduPersonEntitlment"))
+			log.Errorf("LDAPmodifyUserScoping - error on dn: %s  Error: %s", dn, lErr)
+			apiErr = append(apiErr, DefaultAPIError(ErrorText, "Unable to modify user eduPersonEntitlments or isMemberOf"))
 			return apiErr
 		}
 

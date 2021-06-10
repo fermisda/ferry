@@ -7,6 +7,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/go-ldap/ldap/v3"
@@ -19,7 +20,6 @@ var ldapPass string
 var ldapBaseDN string
 var ldapBaseSetDN string
 var ldapCapabitySet string
-var wlcgGroups string
 
 // For LDAP USER data
 type LDAPData struct {
@@ -34,6 +34,7 @@ type LDAPData struct {
 	mail                   string
 	eduPersonPrincipalName string
 	eduPersonEntitlement   []string
+	isMemberOf             []string
 }
 
 // For LDAP Compatability Set Data
@@ -55,7 +56,6 @@ func LDAPinitialize() error {
 	ldapBaseDN = ldapConfig["basedn"]
 	ldapBaseSetDN = ldapConfig["basesetdn"]
 	ldapCapabitySet = ldapConfig["capabilityset"]
-	wlcgGroups = ldapConfig["wlcggroups"]
 
 	if len(ldapURL) == 0 {
 		fields = append(fields, "url")
@@ -71,9 +71,6 @@ func LDAPinitialize() error {
 	}
 	if len(ldapBaseSetDN) == 0 {
 		fields = append(fields, "basesetdn")
-	}
-	if len(wlcgGroups) == 0 {
-		fields = append(fields, "wlcggroups")
 	}
 	if len(fields) > 0 {
 		err := errors.New("in the  ldap section, the config file is missing: " + strings.Join(fields, ","))
@@ -99,7 +96,8 @@ func LDAPgetConnection() (*ldap.Conn, error) {
 
 func LDAPgetUserData(voPersonID string, con *ldap.Conn) (LDAPData, error) {
 	var lData LDAPData
-	attributes := []string{"dn", "objectClass", "voPersonID", "voPersonExternalID", "uid", "sn", "cn", "givenName", "mail", "eduPersonPrincipalName", "eduPersonEntitlement"}
+	attributes := []string{"dn", "objectClass", "voPersonID", "voPersonExternalID", "uid", "sn", "cn", "givenName", "mail",
+		"eduPersonPrincipalName", "eduPersonEntitlement", "isMemberOf"}
 
 	filter := fmt.Sprintf("(voPersonID=%s)", ldap.EscapeFilter(voPersonID))
 	searchReq := ldap.NewSearchRequest("ou=people,o=Fermilab,o=CO,dc=cilogon,dc=org", ldap.ScopeWholeSubtree, 0, 0, 0, false, filter, attributes, []ldap.Control{})
@@ -121,6 +119,7 @@ func LDAPgetUserData(voPersonID string, con *ldap.Conn) (LDAPData, error) {
 		lData.mail = result.Entries[0].GetAttributeValue("mail")
 		lData.eduPersonPrincipalName = result.Entries[0].GetAttributeValue("eduPersonPrincipalName")
 		lData.eduPersonEntitlement = result.Entries[0].GetAttributeValues("eduPersonEntitlement")
+		lData.isMemberOf = result.Entries[0].GetAttributeValues("isMemberOf")
 	} else if len(result.Entries) > 1 {
 		err := errors.New(fmt.Sprintf(" Multiple ldap entries (%d) were found for voPersonID %s", len(result.Entries), voPersonID))
 		return lData, err
@@ -210,16 +209,18 @@ func LDAPremoveScope(setName NullAttribute, pattern NullAttribute, con *ldap.Con
 
 }
 
-func LDAPmodifyEduPersonEntitlements(dn string, setsToDrop []string, setsToAdd []string, con *ldap.Conn) error {
+func LDAPmodifyUserScoping(dn string, setsToDrop []string, setsToAdd []string, groupsToDrop []string, groupsToAdd []string,
+	con *ldap.Conn) error {
 	var err error
-	var adjSetsToDrop, adjSetsToAdd []string
+	var adjSetsToDrop, adjSetsToAdd, adjGroupsToDrop, adjGroupsToAdd []string
 
 	// LDAP returns an error if it tries to insert a value that already exists or remove an attribute that does not exist.
 	// To avoid those errors, we will check for those issues and adjust the arrays accordingly.
-	// Errors, working to avoid: "modify/delete: eduPersonEntitlement: no such value"  AND "modify/delete: eduPersonEntitlement: no such attribute"
-	terms := strings.Split(dn, "voPersonID=")
-	vop := strings.Split(terms[0], ",")
-	lData, err := LDAPgetUserData(vop[0], con)
+	// Errors, we are working to avoid: "modify/delete: eduPersonEntitlement: no such value"  AND "modify/delete: eduPersonEntitlement: no such attribute"
+	re := regexp.MustCompile(`=(.*?),`) // There is probably a way to get only what is between the equals and comma but I regex and don't know it well.
+	voPersonID := re.FindString(dn)
+	vop := voPersonID[1:(len(voPersonID) - 1)]
+	lData, err := LDAPgetUserData(vop, con)
 	if err != nil {
 		return err
 	}
@@ -233,6 +234,16 @@ func LDAPmodifyEduPersonEntitlements(dn string, setsToDrop []string, setsToAdd [
 			adjSetsToAdd = append(adjSetsToAdd, pattern)
 		}
 	}
+	for _, pattern := range groupsToDrop {
+		if stringInSlice(pattern, lData.isMemberOf) {
+			adjGroupsToDrop = append(adjGroupsToDrop, pattern)
+		}
+	}
+	for _, pattern := range groupsToAdd {
+		if !stringInSlice(pattern, lData.isMemberOf) {
+			adjGroupsToAdd = append(adjGroupsToAdd, pattern)
+		}
+	}
 
 	modify := ldap.NewModifyRequest(dn, nil)
 
@@ -241,6 +252,12 @@ func LDAPmodifyEduPersonEntitlements(dn string, setsToDrop []string, setsToAdd [
 	}
 	for _, cset := range adjSetsToAdd {
 		modify.Add("eduPersonEntitlement", []string{cset})
+	}
+	for _, cset := range adjGroupsToDrop {
+		modify.Delete("isMemberOf", []string{cset})
+	}
+	for _, cset := range adjGroupsToAdd {
+		modify.Add("isMemberOf", []string{cset})
 	}
 
 	if (len(setsToDrop) > 0) || (len(setsToAdd) > 0) {
