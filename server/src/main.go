@@ -356,9 +356,9 @@ func main() {
 	grouter.HandleFunc("/getSharedAccountForComputeResource", APIs["getSharedAccountForComputeResource"].Run)
 
 	// ldap API Calls
-	grouter.HandleFunc("/loadAndUpdateLdapWithFerry", APIs["loadAndUpdateLdapWithFerry"].Run)
+	grouter.HandleFunc("/syncLdapWithFerry", APIs["syncLdapWithFerry"].Run)
 	grouter.HandleFunc("/getUserLdapInfo", APIs["getUserLdapInfo"].Run)
-	grouter.HandleFunc("/addUserToLdap", APIs["addUserToLdap"].Run)
+	grouter.HandleFunc("/addOrUpdateUserInLdap", APIs["addOrUpdateUserInLdap"].Run)
 	grouter.HandleFunc("/removeUserFromLdap", APIs["removeUserFromLdap"].Run)
 	grouter.HandleFunc("/getCapabilitySet", APIs["getCapabilitySet"].Run)
 	grouter.HandleFunc("/addCapabilitySet", APIs["addCapabilitySet"].Run)
