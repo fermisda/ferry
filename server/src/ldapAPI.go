@@ -19,21 +19,21 @@ func IncludeLdapAPIs(c *APICollection) {
 	}
 	c.Add("getUserLdapInfo", &getUserLdapInfo)
 
-	addUserToLdap := BaseAPI{
+	addOrUpdateUserInLdap := BaseAPI{
 		InputModel{
 			Parameter{UserName, true},
 		},
-		addUserToLdap,
+		addOrUpdateUserInLdap,
 		RoleWrite,
 	}
-	c.Add("addUserToLdap", &addUserToLdap)
+	c.Add("addOrUpdateUserInLdap", &addOrUpdateUserInLdap)
 
-	loadAndUpdateLdapWithFerry := BaseAPI{
+	syncLdapWithFerry := BaseAPI{
 		InputModel{},
-		loadAndUpdateLdapWithFerry,
+		syncLdapWithFerry,
 		RoleWrite,
 	}
-	c.Add("loadAndUpdateLdapWithFerry", &loadAndUpdateLdapWithFerry)
+	c.Add("syncLdapWithFerry", &syncLdapWithFerry)
 
 	removeUserFromLdap := BaseAPI{
 		InputModel{
@@ -209,7 +209,8 @@ func getUserLdapInfo(c APIContext, i Input) (interface{}, []APIError) {
 	return out, apiErr
 }
 
-func addUserToLdap(c APIContext, i Input) (interface{}, []APIError) {
+// Adds a new user to ldap and updates ldap for an existing user's FQANs.
+func addOrUpdateUserInLdap(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
 	con, err := LDAPgetConnection()
@@ -221,14 +222,19 @@ func addUserToLdap(c APIContext, i Input) (interface{}, []APIError) {
 	}
 
 	_, apiErr = addUserToLdapBase(c, i, con)
+	if apiErr == nil {
+		users := []string{i[UserName].Data.(string)}
+		apiErr = updateLdapForUserSet(c, users)
+	}
 	con.Close()
 
 	return nil, apiErr
 }
 
 // Loads all NEW users into LDAP then updates all LDAP users, both new and pre-existing, with their current
-// eduPersonEntitilement data.  FERRY is the source of truth.
-func loadAndUpdateLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
+// eduPersonEntitilement data.  FERRY is the source of truth.  This method can be used to rsync all LDAP user data with FERRY.
+// One thing it does NOT do, yet, is to remove users from LDAP who should no longer be there.
+func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
 	// Get Both those FERRY thinks are in LDAP and those that are
@@ -315,7 +321,7 @@ func getWlcgGroup(fqan string, unitname string) string {
 	return "/" + unitname + "/" + role
 }
 
-// Adds a user to LDAP but does NOT deal with eduPersonEntitilments.  see updateLdapForUserSet for that.
+// Adds a user to LDAP but does NOT deal with eduPersonEntitilments or isMemberOf.  see updateLdapForUserSet for that.
 func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (LDAPData, []APIError) {
 	var apiErr []APIError
 	var lData LDAPData
