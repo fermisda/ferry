@@ -155,6 +155,11 @@ def main():
         if args.commit is True:
             conn.commit()
             logging.info("All Changes Comitted to the Database! ")
+            logging.info("\n\n")
+            logging.info("***********************************************************************************")
+            logging.info("****  You MUST manually run the following FERRY API.")
+            logging.info("****  https:/ferry.fnal.gov:8445/removeUserFromLdap?username=%s", uname)
+            logging.info("***********************************************************************************")
         else:
             conn.rollback()
             logging.info("Changes rolled back.  Requires --commit to keep changes.")
