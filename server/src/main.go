@@ -389,7 +389,7 @@ func main() {
 
 	FerryAlertsURL = srvConfig["ferryalertsurl"]
 	if len(FerryAlertsURL) == 0 {
-		log.Fatal("ferryalertsurl not defined in config file")
+		log.Warning("ferryalertsurl not defined in config file")
 	}
 
 	certslice := viper.GetStringSlice("certificates")

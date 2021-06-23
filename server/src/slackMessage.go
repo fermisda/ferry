@@ -15,6 +15,10 @@ import (
 )
 
 func SlackMessage(ctx context.Context, message string, slackAlertsUrl string) error {
+	if len(slackAlertsUrl) == 0 {
+		log.Warningf("ferryalertsurl not in config.  MSG: %s", message)
+		return nil
+	}
 	if e := ctx.Err(); e != nil {
 		log.Errorf("Error sending slack message: %s", e)
 		return e
@@ -23,6 +27,7 @@ func SlackMessage(ctx context.Context, message string, slackAlertsUrl string) er
 		log.Warn("Slack message is empty.  Will not attempt to send it")
 		return nil
 	}
+	message = fmt.Sprintf("Server: %s - %s", serverRole, message)
 	msg := []byte(fmt.Sprintf(`{"text": "%s"}`, strings.Replace(message, "\"", "\\\"", -1)))
 	req, err := http.NewRequest("POST", slackAlertsUrl, bytes.NewBuffer(msg))
 	if err != nil {
