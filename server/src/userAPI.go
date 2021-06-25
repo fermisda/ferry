@@ -858,12 +858,12 @@ func setUserExperimentFQAN(c APIContext, i Input) (interface{}, []APIError) {
 	}
 
 	if len(fqanids) > 0 {
-		_, apiErr := updateLdapForUser(c, i)
+		_, apiErr := addOrUpdateUserInLdap(c, i)
 		if apiErr != nil {
 			if len(apiErr) > 0 {
 				log.Warning(apiErr[0].Error)
 			}
-			msg := fmt.Sprintf("LDAP update failed.  Run updateLdapForUser?username=%s when ldap is available.", i[UserName].Data.(string))
+			msg := fmt.Sprintf("LDAP update failed.  Run addOrUpdateUserInLdap?username=%s when ldap is available.", i[UserName].Data.(string))
 			log.Warningf(msg)
 			ctx := c.R.Context()
 			err := SlackMessage(ctx, msg, FerryAlertsURL)
@@ -1611,6 +1611,34 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 
 	uid := i[UID]
 
+	uname := NewNullAttribute(UserName)
+
+	err := c.DBtx.QueryRow(`select uname from users where uid = $1`, i[UID]).Scan(&uname)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	input := Input{
+		UserName: uname,
+	}
+
+	_, apiErr = removeUserFromLdap(c, input)
+	// as dropUser is called from the cron ferry-user-update, messages are sent to #ferryalert so the cronjob is allowed to complete.
+	if apiErr != nil {
+		msg := fmt.Sprintf("LDAP update failed (server=%s, serUserInfo).  Run removeUserFromLdap?username=%s when ldap is available.", serverRole, uname.Data.(string))
+		log.Warningf(msg)
+		ctx := c.R.Context()
+		err := SlackMessage(ctx, msg, FerryAlertsURL)
+		if err != nil {
+			log.Warningf("Failure sending message to #ferryalerts.  msg: %s err: %s", msg, apiErr[0].Error)
+		}
+	}
+
 	// Process the user groups first
 	colList, apiErr := getTableColumns(c, "user_group")
 	if apiErr != nil {
@@ -1619,7 +1647,7 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	columns := strings.Join(colList, ",")
 	sql := fmt.Sprintf("with foo as (delete from user_group where uid=%d returning *, now() when_deleted) insert into user_group_deletions (%s, when_deleted) select * from foo",
 		uid.Data, columns)
-	_, err := c.DBtx.Exec(sql)
+	_, err = c.DBtx.Exec(sql)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		if strings.Contains(err.Error(), "violates foreign key constraint") {
@@ -1645,18 +1673,6 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		}
 		return nil, apiErr
-	}
-
-	_, apiErr = removeUserFromLdap(c, i)
-	// as dropUser is called from the cron ferry-user-update, messages are sent to #ferryalert so the cronjob is allowed to complete.
-	if apiErr != nil {
-		msg := fmt.Sprintf("LDAP update failed (server=%s, serUserInfo).  Run removeUserFromLdap?username=%s when ldap is available.", serverRole, i[UserName].Data.(string))
-		log.Warningf(msg)
-		ctx := c.R.Context()
-		err := SlackMessage(ctx, msg, FerryAlertsURL)
-		if err != nil {
-			log.Warningf("Failure sending message to #ferryalerts.  msg: %s err: %s", msg, apiErr[0].Error)
-		}
 	}
 
 	return nil, nil

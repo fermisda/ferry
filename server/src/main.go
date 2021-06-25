@@ -358,7 +358,6 @@ func main() {
 	// ldap API Calls
 	grouter.HandleFunc("/syncLdapWithFerry", APIs["syncLdapWithFerry"].Run)
 	grouter.HandleFunc("/getUserLdapInfo", APIs["getUserLdapInfo"].Run)
-	grouter.HandleFunc("/addOrUpdateUserInLdap", APIs["addOrUpdateUserInLdap"].Run)
 	grouter.HandleFunc("/removeUserFromLdap", APIs["removeUserFromLdap"].Run)
 	grouter.HandleFunc("/getCapabilitySet", APIs["getCapabilitySet"].Run)
 	grouter.HandleFunc("/addCapabilitySet", APIs["addCapabilitySet"].Run)
@@ -369,7 +368,8 @@ func main() {
 	grouter.HandleFunc("/removeCapabilitySetFromFQAN", APIs["removeCapabilitySetFromFQAN"].Run)
 	grouter.HandleFunc("/addCapabilitySetToFQAN", APIs["addCapabilitySetToFQAN"].Run)
 	grouter.HandleFunc("/removeCapabilitySetFromFQAN", APIs["removeCapabilitySetFromFQAN"].Run)
-	grouter.HandleFunc("/updateLdapForUser", APIs["updateLdapForUser"].Run)
+	// use addOrUpdateUserInLdap  grouter.HandleFunc("/updateLdapForUser", APIs["updateLdapForUser"].Run)
+	grouter.HandleFunc("/addOrUpdateUserInLdap", APIs["addOrUpdateUserInLdap"].Run)
 	grouter.HandleFunc("/updateLdapForAffiliation", APIs["updateLdapForAffiliation"].Run)
 	grouter.HandleFunc("/updateLdapForCapabilitySet", APIs["updateLdapForCapabilitySet"].Run)
 

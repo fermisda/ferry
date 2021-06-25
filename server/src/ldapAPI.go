@@ -119,14 +119,16 @@ func IncludeLdapAPIs(c *APICollection) {
 	}
 	c.Add("removeCapabilitySetFromFQAN", &removeCapabilitySetFromFQAN)
 
-	updateLdapForUser := BaseAPI{
-		InputModel{
-			Parameter{UserName, true},
-		},
-		updateLdapForUser,
-		RoleWrite,
-	}
-	c.Add("updateLdapForUser", &updateLdapForUser)
+	/*
+		updateLdapForUser := BaseAPI{
+			InputModel{
+				Parameter{UserName, true},
+			},
+			updateLdapForUser,
+			RoleWrite,
+		}
+		c.Add("updateLdapForUser", &updateLdapForUser)
+	*/
 
 	updateLdapForAffiliation := BaseAPI{
 		InputModel{
@@ -1026,6 +1028,8 @@ func updateLdapForUserSet(c APIContext, voPersonIDs []string) []APIError {
 	return apiErr
 }
 
+/*
+Replaced by addOrUpdateLdapForUser  Keeping while coding, just in case.  Delete here?  delete in main.go too.
 func updateLdapForUser(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1062,6 +1066,7 @@ func updateLdapForUser(c APIContext, i Input) (interface{}, []APIError) {
 
 	return nil, apiErr
 }
+*/
 
 func updateLdapForAffiliation(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
