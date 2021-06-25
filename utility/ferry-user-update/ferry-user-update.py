@@ -283,14 +283,14 @@ def fetch_userdb():
         if len(unameUid[uname]) == 1:
             unameUid[uname] = unameUid[uname][0]
         else:
-            logging.debug("duplicated uname: %s", uname)     # DEBUG
+            #logging.debug("duplicated uname: %s", uname)     # DEBUG
             for uid in unameUid[uname][:-1]:
                 # logging.debug("delete uid %s", uid)
                 users.__delitem__(uid)
                 for gid in groups.keys():
                     if uid in groups[gid].members:
                             groups[gid].members.remove(uid)
-            logging.debug("delete uid %s", ",".join(uid for uid in unameUid[uname][:-1]))
+            #logging.debug("delete uid %s", ",".join(uid for uid in unameUid[uname][:-1]))
             unameUid[uname] = unameUid[uname][-1]
             # unameToDelete.append(uname)
     # for uname in unameToDelete:
@@ -434,9 +434,11 @@ def fetch_ferry():
 def openURL(url, data = None, context = None):
     try:
         return (urllib.request.urlopen(url, data=data, context=context).read().decode())
-    except:
-        logging.error("Failed to access remote server: %s", url)
+    except urllib.error.URLError as e:
+        logging.error("Failed to access remote server: %s   error: %s", url, e.reason)
         return None
+    except Exception as e:
+        logging.error("Failed to access remove server: %s - general exception: %s", url, e)
 
 
 # Updates users with data from uid.lis and services-users.csv
