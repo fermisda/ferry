@@ -1400,7 +1400,7 @@ func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	if status != i[Status].Data.(bool) {
+	if i[Status].Valid && (status != i[Status].Data.(bool)) {
 		var m string
 		if i[Status].Data.(bool) == true {
 			_, apiErr = addOrUpdateUserInLdap(c, i)

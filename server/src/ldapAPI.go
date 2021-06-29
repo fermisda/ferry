@@ -324,7 +324,7 @@ func getWlcgGroup(fqan string, unitname string) string {
 }
 
 // Adds a user to LDAP but does NOT deal with eduPersonEntitilments or isMemberOf.  see updateLdapForUserSet for that.  Note, that
-// this method ensures the user list in the DB is in LDAP.
+// this method ensures the user listed in the DB is in LDAP.
 func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (LDAPData, []APIError) {
 	var apiErr []APIError
 	var lData LDAPData
