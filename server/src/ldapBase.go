@@ -253,14 +253,14 @@ func LDAPmodifyUserScoping(dn string, setsToDrop []string, setsToAdd []string, g
 	for _, cset := range adjSetsToAdd {
 		modify.Add("eduPersonEntitlement", []string{cset})
 	}
-	for _, cset := range adjGroupsToDrop {
-		modify.Delete("isMemberOf", []string{cset})
+	for _, gset := range adjGroupsToDrop {
+		modify.Delete("isMemberOf", []string{gset})
 	}
-	for _, cset := range adjGroupsToAdd {
-		modify.Add("isMemberOf", []string{cset})
+	for _, gset := range adjGroupsToAdd {
+		modify.Add("isMemberOf", []string{gset})
 	}
 
-	if (len(setsToDrop) > 0) || (len(setsToAdd) > 0) {
+	if (len(adjSetsToDrop) > 0) || (len(adjSetsToAdd) > 0) || (len(adjGroupsToDrop) > 0) || (len(adjGroupsToAdd) > 0) {
 		err = con.Modify(modify)
 	}
 	return err
