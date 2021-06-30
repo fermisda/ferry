@@ -692,8 +692,7 @@ if __name__ == "__main__":
     logging.basicConfig(**logArgs)
 
     ferryContext = ssl.SSLContext(protocol=ssl.PROTOCOL_TLSv1_2)
-    #ferryContext.verify_mode = ssl.CERT_REQUIRED
-    ferryContext.verify_mode = ssl.CERT_NONE
+    ferryContext.verify_mode = ssl.CERT_REQUIRED
     ferryContext.load_cert_chain(config.get("ferry", "cert"), config.get("ferry", "key"))
     ferryContext.load_verify_locations(capath=config.get("ferry", "ca"))
 
