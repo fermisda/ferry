@@ -368,7 +368,6 @@ func main() {
 	grouter.HandleFunc("/removeCapabilitySetFromFQAN", APIs["removeCapabilitySetFromFQAN"].Run)
 	grouter.HandleFunc("/addCapabilitySetToFQAN", APIs["addCapabilitySetToFQAN"].Run)
 	grouter.HandleFunc("/removeCapabilitySetFromFQAN", APIs["removeCapabilitySetFromFQAN"].Run)
-	// use addOrUpdateUserInLdap  grouter.HandleFunc("/updateLdapForUser", APIs["updateLdapForUser"].Run)
 	grouter.HandleFunc("/addOrUpdateUserInLdap", APIs["addOrUpdateUserInLdap"].Run)
 	grouter.HandleFunc("/updateLdapForAffiliation", APIs["updateLdapForAffiliation"].Run)
 	grouter.HandleFunc("/updateLdapForCapabilitySet", APIs["updateLdapForCapabilitySet"].Run)
