@@ -119,17 +119,6 @@ func IncludeLdapAPIs(c *APICollection) {
 	}
 	c.Add("removeCapabilitySetFromFQAN", &removeCapabilitySetFromFQAN)
 
-	/*
-		updateLdapForUser := BaseAPI{
-			InputModel{
-				Parameter{UserName, true},
-			},
-			updateLdapForUser,
-			RoleWrite,
-		}
-		c.Add("updateLdapForUser", &updateLdapForUser)
-	*/
-
 	updateLdapForAffiliation := BaseAPI{
 		InputModel{
 			Parameter{UnitName, true},
@@ -971,7 +960,6 @@ func removeCapabilitySetFromFQAN(c APIContext, i Input) (interface{}, []APIError
 // there.  It DOES add users missing from LDAP to it.
 func updateLdapForUserSet(c APIContext, voPersonIDs []string) []APIError {
 	var apiErr []APIError
-	var lData LDAPData
 	var dn string
 
 	con, lErr := LDAPgetConnection()
@@ -985,7 +973,7 @@ func updateLdapForUserSet(c APIContext, voPersonIDs []string) []APIError {
 	// Make sure they really are in LDAP. We don't have 2 phase commit between ldap and ferry, so we must test this.
 	// If they are not then add them.
 	for _, voPersonID := range voPersonIDs {
-		lData, lErr := LDAPgetUserData(lData.voPersonID, con)
+		lData, lErr := LDAPgetUserData(voPersonID, con)
 		if lErr != nil {
 			con.Close()
 			log.Error(lErr)
