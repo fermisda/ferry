@@ -1402,7 +1402,7 @@ func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 
 	if i[Status].Valid && (status != i[Status].Data.(bool)) {
 		var m string
-		if i[Status].Data.(bool) == true {
+		if i[Status].Data.(bool) {
 			_, apiErr = addOrUpdateUserInLdap(c, i)
 			m = "addOrUpdateUserInLdap"
 		} else {
@@ -1466,7 +1466,12 @@ func createUser(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	if i[Status].Data.(bool) == true {
+	if i[Status].Data.(bool) {
+		if err != nil {
+			log.WithFields(QueryFields(c)).Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+			return nil, apiErr
+		}
 		_, apiErr = addOrUpdateUserInLdap(c, i)
 		// as createUser is called from the cron ferry-user-update, messages are sent to #ferryalert so the cronjob is allowed to complete.
 		if apiErr != nil {
