@@ -334,8 +334,8 @@ func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (LDAPData, []APIEr
 		return lData, apiErr
 	}
 
-	err = DBptr.QueryRow(`select value from external_affiliation_attribute
-						      where uid = $1 and attribute = 'voPersonID'`, uid).Scan(&lData.voPersonID)
+	err = c.DBtx.QueryRow(`select value from external_affiliation_attribute
+						   where uid = $1 and attribute = 'voPersonID'`, uid).Scan(&lData.voPersonID)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -358,7 +358,7 @@ func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (LDAPData, []APIEr
 	// Create a voPersionID iff the DB did not find one for this user.
 	if len(lData.voPersonID) == 0 {
 		seqno := 0
-		err = DBptr.QueryRow(`select nextval('ldap_vopersonid_seq')`).Scan(&seqno)
+		err = c.DBtx.QueryRow(`select nextval('ldap_vopersonid_seq')`).Scan(&seqno)
 		if err != nil {
 			log.WithFields(QueryFields(c)).Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -380,7 +380,7 @@ func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (LDAPData, []APIEr
 		return lData, apiErr
 	}
 
-	_, err = DBptr.Exec(`insert into external_affiliation_attribute (uid, attribute, value)
+	_, err = c.DBtx.Exec(`insert into external_affiliation_attribute (uid, attribute, value)
 								values ($1, 'voPersonID', $2)
 								on conflict (uid, attribute) do nothing`, uid, lData.voPersonID)
 	if err != nil {
