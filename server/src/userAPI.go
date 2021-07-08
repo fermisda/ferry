@@ -1372,10 +1372,11 @@ func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 
 	uid := NewNullAttribute(UID)
 	expDate := NewNullAttribute(ExpirationDate)
-	var status bool
+	var origStatus bool
+	var origFullName string
 
-	queryerr := c.DBtx.tx.QueryRow(`select uid, expiration_date, status from users where uname = $1`,
-		i[UserName]).Scan(&uid, &expDate, &status)
+	queryerr := c.DBtx.tx.QueryRow(`select uid, expiration_date, status, full_name from users where uname = $1`,
+		i[UserName]).Scan(&uid, &expDate, &origStatus, &origFullName)
 	if queryerr == sql.ErrNoRows {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
 		return nil, apiErr
@@ -1400,7 +1401,19 @@ func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	if i[Status].Valid && (status != i[Status].Data.(bool)) {
+	if i[FullName].Valid && i[FullName].Data.(string) != origFullName {
+		input := Input{
+			UserName: i[UserName],
+			FullName: i[FullName],
+		}
+
+		_, apiErr := modifyUserLdapAttributes(c, input)
+		if apiErr != nil {
+			return nil, apiErr
+		}
+	}
+
+	if i[Status].Valid && (origStatus != i[Status].Data.(bool)) {
 		var m string
 		if i[Status].Data.(bool) {
 			_, apiErr = addOrUpdateUserInLdap(c, i)

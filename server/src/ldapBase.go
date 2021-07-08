@@ -265,3 +265,25 @@ func LDAPmodifyUserScoping(dn string, setsToDrop []string, setsToAdd []string, g
 	}
 	return err
 }
+
+func LdapModifyAttributes(dn string, m map[string]string, con *ldap.Conn) error {
+	var err error
+
+	modify := ldap.NewModifyRequest(dn, nil)
+
+	for key, value := range m {
+		if key == "givenName" {
+			givenName := []string{value}
+			name := strings.SplitN(value, " ", 2)
+			cn := []string{name[0]}
+			sn := []string{name[1]}
+			modify.Replace("givenName", givenName)
+			modify.Replace("cn", cn)
+			modify.Replace("sn", sn)
+		} else {
+			return fmt.Errorf("attribute %s is not supported", key)
+		}
+	}
+	err = con.Modify(modify)
+	return err
+}
