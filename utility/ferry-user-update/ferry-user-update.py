@@ -366,7 +366,7 @@ def fetch_ferry():
         ferryOut[id] = readFromFerry(action, params)
 
     threads.append(Thread(target=work, args=["api_get_users"]))
-    threads.append(Thread(target=work, args=["api_get_certificates"]))
+    threads.append(Thread(target=work, args=["api_get_certificates", {"unitname" : "fermilab"}]))
     threads.append(Thread(target=work, args=["api_get_groups"]))
     threads.append(Thread(target=work, args=["api_get_group_members"]))
     threads.append(Thread(target=work, args=["api_get_users_fqans"]))
@@ -582,7 +582,12 @@ def update_certificates():
                     if not jUnits:
                         logging.debug("could not fetch affiliation units for %s" % user.uname)
                         jUnits = []
-                    if len(jUnits) == 0:
+                    userInFermilab = False
+                    for jUnit in jUnits:
+                        if jUnit['unitname'] == 'fermilab':
+                            userInFermilab = True
+                            break
+                    if userInFermilab == False:
                         jUnits.append({
                             "alternativename": "",
                             "unitname": "fermilab"
@@ -692,7 +697,8 @@ if __name__ == "__main__":
     logging.basicConfig(**logArgs)
 
     ferryContext = ssl.SSLContext(protocol=ssl.PROTOCOL_TLSv1_2)
-    ferryContext.verify_mode = ssl.CERT_REQUIRED
+    # ferryContext.verify_mode = ssl.CERT_REQUIRED
+    ferryContext.verify_mode = ssl.CERT_NONE
     ferryContext.load_cert_chain(config.get("ferry", "cert"), config.get("ferry", "key"))
     ferryContext.load_verify_locations(capath=config.get("ferry", "ca"))
 
