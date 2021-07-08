@@ -137,6 +137,16 @@ func IncludeLdapAPIs(c *APICollection) {
 	}
 	c.Add("updateLdapForCapabilitySet", &updateLdapForCapabilitySet)
 
+	modifyUserLdapAttributes := BaseAPI{
+		InputModel{
+			Parameter{UserName, true},
+			Parameter{FullName, false},
+		},
+		modifyUserLdapAttributes,
+		RoleWrite,
+	}
+	c.Add("modifyUserLdapAttributes", &modifyUserLdapAttributes)
+
 }
 
 func getUserLdapInfo(c APIContext, i Input) (interface{}, []APIError) {
@@ -150,7 +160,7 @@ func getUserLdapInfo(c APIContext, i Input) (interface{}, []APIError) {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
-	} else if uid.Valid == false {
+	} else if !uid.Valid {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
 		return nil, apiErr
 	}
@@ -1162,6 +1172,52 @@ func updateLdapForCapabilitySet(c APIContext, i Input) (interface{}, []APIError)
 	}
 
 	apiErr = updateLdapForUserSet(c, voPersonIDs)
+
+	return nil, apiErr
+}
+
+// For modifying simple attributes, not groups, entitlements....
+func modifyUserLdapAttributes(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+	var voPersonID string
+
+	err := DBptr.QueryRow(`select value from external_affiliation_attribute join users using (uid)
+					      where uname = $1 and attribute = 'voPersonID'`, i[UserName]).Scan(&voPersonID)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	} else if err != nil {
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "user does not exist in ldap"))
+		return nil, apiErr
+	}
+
+	m := map[string]string{}
+
+	if i[FullName].Valid {
+		m["givenName"] = i[FullName].Data.(string)
+	} else {
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "an attribute to be changed was not provided"))
+		return nil, apiErr
+	}
+
+	con, err := LDAPgetConnection()
+	if err != nil {
+		msg := fmt.Sprintf("LDAP, connection failed: %v", err)
+		log.Error(msg)
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, msg))
+		return nil, apiErr
+	}
+	dn := fmt.Sprintf("voPersonID=%s,%s", voPersonID, ldapBaseDN)
+	err = LdapModifyAttributes(dn, m, con)
+	if err != nil {
+		con.Close()
+		log.Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "Unable to modify provided attribute(s)"))
+		log.Errorf("LdapModifyAttributes failed: %s", err)
+		return nil, apiErr
+	}
+	con.Close()
 
 	return nil, apiErr
 }

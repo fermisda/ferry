@@ -371,6 +371,7 @@ func main() {
 	grouter.HandleFunc("/addOrUpdateUserInLdap", APIs["addOrUpdateUserInLdap"].Run)
 	grouter.HandleFunc("/updateLdapForAffiliation", APIs["updateLdapForAffiliation"].Run)
 	grouter.HandleFunc("/updateLdapForCapabilitySet", APIs["updateLdapForCapabilitySet"].Run)
+	grouter.HandleFunc("/modifyUserLdapAttributes", APIs["modifyUserLdapAttributes"].Run)
 
 	srvConfig := viper.GetStringMapString("server")
 	Mainsrv = &http.Server{
