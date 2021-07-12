@@ -1188,8 +1188,7 @@ func modifyUserLdapAttributes(c APIContext, i Input) (interface{}, []APIError) {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	} else if err != nil {
-		apiErr = append(apiErr, DefaultAPIError(ErrorText, "user does not exist in ldap"))
-		return nil, apiErr
+		return nil, nil
 	}
 
 	m := map[string]string{}
