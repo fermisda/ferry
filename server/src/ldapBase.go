@@ -20,6 +20,7 @@ var ldapPass string
 var ldapBaseDN string
 var ldapBaseSetDN string
 var ldapCapabitySet string
+var requiredAccounts string
 
 // For LDAP USER data
 type LDAPData struct {
@@ -56,6 +57,7 @@ func LDAPinitialize() error {
 	ldapBaseDN = ldapConfig["basedn"]
 	ldapBaseSetDN = ldapConfig["basesetdn"]
 	ldapCapabitySet = ldapConfig["capabilityset"]
+	requiredAccounts = ldapConfig["requiredaccounts"]
 
 	if len(ldapURL) == 0 {
 		fields = append(fields, "url")
@@ -71,6 +73,9 @@ func LDAPinitialize() error {
 	}
 	if len(ldapBaseSetDN) == 0 {
 		fields = append(fields, "basesetdn")
+	}
+	if len(requiredAccounts) == 0 {
+		fields = append(fields, "requiredaccounts")
 	}
 	if len(fields) > 0 {
 		err := errors.New("in the  ldap section, the config file is missing: " + strings.Join(fields, ","))
@@ -121,11 +126,27 @@ func LDAPgetUserData(voPersonID string, con *ldap.Conn) (LDAPData, error) {
 		lData.eduPersonEntitlement = result.Entries[0].GetAttributeValues("eduPersonEntitlement")
 		lData.isMemberOf = result.Entries[0].GetAttributeValues("isMemberOf")
 	} else if len(result.Entries) > 1 {
-		err := errors.New(fmt.Sprintf(" Multiple ldap entries (%d) were found for voPersonID %s", len(result.Entries), voPersonID))
+		err := fmt.Errorf(" Multiple ldap entries (%d) were found for voPersonID %s", len(result.Entries), voPersonID)
 		return lData, err
 	}
 
 	return lData, nil
+}
+
+func LDAPgetAllVoPersonIDs(con *ldap.Conn) ([]string, error) {
+	var voPersonIDs []string
+
+	attributes := []string{"voPersonID"}
+	searchReq := ldap.NewSearchRequest("ou=people,o=Fermilab,o=CO,dc=cilogon,dc=org", ldap.ScopeWholeSubtree, 0, 0, 0, false, "(&(objectClass=organizationalPerson))", attributes, []ldap.Control{})
+	result, err := con.SearchWithPaging(searchReq, 15000)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, entry := range result.Entries {
+		voPersonIDs = append(voPersonIDs, entry.GetAttributeValues("voPersonID")[0])
+	}
+	return voPersonIDs, err
 }
 
 func LDAPaddUser(lData LDAPData, con *ldap.Conn) error {
@@ -154,9 +175,9 @@ func LDAPaddUser(lData LDAPData, con *ldap.Conn) error {
 	return err
 }
 
-func LDAPremoveUser(voPersonID NullAttribute, con *ldap.Conn) error {
+func LDAPremoveUser(voPersonID string, con *ldap.Conn) error {
 
-	DN := fmt.Sprintf("voPersonID=%s,%s", voPersonID.Data, ldapBaseDN)
+	DN := fmt.Sprintf("voPersonID=%s,%s", voPersonID, ldapBaseDN)
 	delReq := ldap.NewDelRequest(DN, []ldap.Control{})
 	err := con.Del(delReq)
 
@@ -210,9 +231,10 @@ func LDAPremoveScope(setName NullAttribute, pattern NullAttribute, con *ldap.Con
 }
 
 func LDAPmodifyUserScoping(dn string, setsToDrop []string, setsToAdd []string, groupsToDrop []string, groupsToAdd []string,
-	con *ldap.Conn) error {
+	con *ldap.Conn) (bool, error) {
 	var err error
 	var adjSetsToDrop, adjSetsToAdd, adjGroupsToDrop, adjGroupsToAdd []string
+	modified := false
 
 	// LDAP returns an error if it tries to insert a value that already exists or remove an attribute that does not exist.
 	// To avoid those errors, we will check for those issues and adjust the arrays accordingly.
@@ -222,7 +244,7 @@ func LDAPmodifyUserScoping(dn string, setsToDrop []string, setsToAdd []string, g
 	vop := voPersonID[1:(len(voPersonID) - 1)]
 	lData, err := LDAPgetUserData(vop, con)
 	if err != nil {
-		return err
+		return modified, err
 	}
 	for _, pattern := range setsToDrop {
 		if stringInSlice(pattern, lData.eduPersonEntitlement) {
@@ -262,8 +284,11 @@ func LDAPmodifyUserScoping(dn string, setsToDrop []string, setsToAdd []string, g
 
 	if (len(adjSetsToDrop) > 0) || (len(adjSetsToAdd) > 0) || (len(adjGroupsToDrop) > 0) || (len(adjGroupsToAdd) > 0) {
 		err = con.Modify(modify)
+		if err == nil {
+			modified = true
+		}
 	}
-	return err
+	return modified, err
 }
 
 func LdapModifyAttributes(dn string, m map[string]string, con *ldap.Conn) error {

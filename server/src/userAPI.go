@@ -2098,7 +2098,6 @@ func getUserGroupsForComputeResource(c APIContext, i Input) (interface{}, []APIE
 		Status:    "",
 	}
 
-	const Resources Attribute = "resources"
 	resource := jsonentry{
 		ResourceName: "",
 		ResourceType: "",
@@ -2112,7 +2111,7 @@ func getUserGroupsForComputeResource(c APIContext, i Input) (interface{}, []APIE
 	for rows.Next() {
 		row := NewMapNullAttribute(ResourceType, ResourceName, UnitName, UserName, GroupName, Primary, Status)
 		rows.Scan(row[ResourceType], row[ResourceName], row[UnitName], row[UserName], row[GroupName], row[Primary], row[Status])
-		if dejaVu == false {
+		if !dejaVu {
 			dejaVu = true
 			resource[UnitName] = row[UnitName].Data
 			resource[ResourceName] = row[ResourceName].Data
@@ -2138,7 +2137,7 @@ func getUserGroupsForComputeResource(c APIContext, i Input) (interface{}, []APIE
 		resource[Users] = append(resource[Users].([]jsonentry), user)
 	}
 	// Add the last entry
-	if dejaVu == true {
+	if dejaVu {
 		out = append(out, resource)
 	}
 
