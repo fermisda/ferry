@@ -1424,7 +1424,7 @@ func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 		}
 		// as setUserInfo is called from the cron ferry-user-update, messages are sent to #ferryalert so the cronjob is allowed to complete.
 		if apiErr != nil {
-			msg := fmt.Sprintf("LDAP update failed (server=%s, serUserInfo).  Run %s?username=%s when ldap is available.", serverRole, m, i[UserName].Data.(string))
+			msg := fmt.Sprintf("LDAP update failed.  Run %s?username=%s when ldap is available.", m, i[UserName].Data.(string))
 			log.Warningf(msg)
 			ctx := c.R.Context()
 			err := SlackMessage(ctx, msg, FerryAlertsURL)
@@ -1488,7 +1488,7 @@ func createUser(c APIContext, i Input) (interface{}, []APIError) {
 		_, apiErr = addOrUpdateUserInLdap(c, i)
 		// as createUser is called from the cron ferry-user-update, messages are sent to #ferryalert so the cronjob is allowed to complete.
 		if apiErr != nil {
-			msg := fmt.Sprintf("LDAP update failed (server=%s, createUser).  Run addOrUpdateUserInLdap?username=%s when ldap is available.", serverRole, i[UserName].Data.(string))
+			msg := fmt.Sprintf("LDAP update failed.  Run addOrUpdateUserInLdap?username=%s when ldap is available.", i[UserName].Data.(string))
 			log.Warningf(msg)
 			ctx := c.R.Context()
 			err := SlackMessage(ctx, msg, FerryAlertsURL)
@@ -1648,7 +1648,7 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	_, apiErr = removeUserFromLdap(c, input)
 	// as dropUser is called from the cron ferry-user-update, messages are sent to #ferryalert so the cronjob is allowed to complete.
 	if apiErr != nil {
-		msg := fmt.Sprintf("LDAP update failed (server=%s, serUserInfo).  Run removeUserFromLdap?username=%s when ldap is available.", serverRole, uname.Data.(string))
+		msg := fmt.Sprintf("removeUserFromLdap failed.  Run removeUserFromLdap?username=%s when ldap is available.", uname.Data.(string))
 		log.Warningf(msg)
 		ctx := c.R.Context()
 		err := SlackMessage(ctx, msg, FerryAlertsURL)
