@@ -156,7 +156,9 @@ def writeToFerry(action, params=None):
             logging.info("action: %s(%s)" % (action, params))
             return True
         for error in jOut["ferry_error"]:
-            logging.error("message: %s action: %s(%s)" % (error, action, params))
+            localhost = target.get('localhost','unknown')
+            server = target.get('server','unknown')
+            logging.error("message (%s/%s): %s action: %s(%s)" % (localhost, server, error, action, params))
             postToSlack(error, "action: %s(%s)" % (action, params))
             if error in target["skip_user_errors"]:
                 skipList.append(params["username"])
