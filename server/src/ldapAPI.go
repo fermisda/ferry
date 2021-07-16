@@ -58,8 +58,6 @@ func IncludeLdapAPIs(c *APICollection) {
 
 	addCapabilitySet := BaseAPI{
 		InputModel{
-			Parameter{UnitName, true},
-			Parameter{Role, true},
 			Parameter{SetName, true},
 			Parameter{Pattern, true},
 		},
@@ -68,14 +66,14 @@ func IncludeLdapAPIs(c *APICollection) {
 	}
 	c.Add("addCapabilitySet", &addCapabilitySet)
 
-	removeCapabilitySet := BaseAPI{
+	dropCapabilitySet := BaseAPI{
 		InputModel{
 			Parameter{SetName, true},
 		},
-		removeCapabilitySet,
+		dropCapabilitySet,
 		RoleWrite,
 	}
-	c.Add("removeCapabilitySet", &removeCapabilitySet)
+	c.Add("dropCapabilitySet", &dropCapabilitySet)
 
 	addScopeToCapabilitySet := BaseAPI{
 		InputModel{
@@ -232,7 +230,7 @@ func addOrUpdateUserInLdap(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, apiErr
 }
 
-// Syncronizes LDAP to FERRY where FERRY is the source of truth.
+// Syncronize LDAP to FERRY where FERRY is the source of truth.
 //   Removes all records in LDAP which have no corresponding record in FERRY (external_affiliation_attribute: voPersionID).
 //   Adds all FERRY users to LDAP which are missing.
 //   Verifies the capability sets and groups are correct for each user, per their FQANs, correcting those which are not correct.
@@ -653,9 +651,7 @@ func addCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	var roleCnt int
 	role := "%/role=" + i[Role].Data.(string) + "/%"
 
-	err := c.DBtx.QueryRow(`select (select unitid  from affiliation_units  where name=$1),
-								   (select setid from capability_sets where name=$2),
-								   (select count(fqan) from grid_fqan join affiliation_units using (unitid)
+	err := c.DBtx.QueryRow(`select (select setid from capability_sets where name=$2),
 								     where name=$1 and (lower(fqan) like lower($3)))`,
 		i[UnitName], i[SetName], role).Scan(&unitid, &setid, &roleCnt)
 	if err != nil && err != sql.ErrNoRows {
@@ -663,14 +659,8 @@ func addCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
-	if !unitid.Valid {
-		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
-	}
 	if setid.Valid {
 		apiErr = append(apiErr, DefaultAPIError(ErrorText, "Capability set name already exists."))
-	}
-	if roleCnt == 0 {
-		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, Role))
 	}
 	if len(apiErr) > 0 {
 		return nil, apiErr
@@ -681,9 +671,7 @@ func addCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	rData.voPersonExternalID = i[SetName].Data.(string) + "@fnal.gov"
 	rData.uid = i[SetName].Data.(string)
 	patterns := strings.Split(i[Pattern].Data.(string), ",")
-	for _, pattern := range patterns {
-		rData.eduPersonEntitlement = append(rData.eduPersonEntitlement, pattern)
-	}
+	rData.eduPersonEntitlement = append(rData.eduPersonEntitlement, patterns...)
 
 	con, err := LDAPgetConnection()
 	if err != nil {
@@ -719,18 +707,10 @@ func addCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 		}
 	}
 
-	_, err = c.DBtx.Exec(`update grid_fqan set setid = $1 where unitid=$2 and (lower(fqan) like lower($3))`,
-		setid, unitid, role)
-	if err != nil {
-		log.WithFields(QueryFields(c)).Error(err)
-		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-		return nil, apiErr
-	}
-
 	return nil, apiErr
 }
 
-func removeCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
+func dropCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
 	setid := NewNullAttribute(SetID)
@@ -915,6 +895,10 @@ func addCapabilitySetToFQAN(c APIContext, i Input) (interface{}, []APIError) {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, Role))
 		return nil, apiErr
 	}
+	if setid.Data.(int) != 0 {
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "FQAN has a capability set, you must first remove it"))
+		return nil, apiErr
+	}
 
 	_, err = c.DBtx.Exec(`update grid_fqan set setid = $1 where unitid=$2 and (lower(fqan) like lower($3))`,
 		setid, unitid, role)
@@ -1073,7 +1057,7 @@ func updateLdapForUserSet(c APIContext, voPersonIDs []string, con *ldap.Conn) []
 		lData, lErr := LDAPgetUserData(voPersonID, con)
 		if lErr != nil {
 			log.Error(lErr)
-			apiErr = append(apiErr, DefaultAPIError(ErrorText, "Unable to get user'sLDAP data."))
+			apiErr = append(apiErr, DefaultAPIError(ErrorText, "Unable to get user's LDAP data."))
 			return apiErr
 		}
 
@@ -1237,7 +1221,7 @@ func modifyUserLdapAttributes(c APIContext, i Input) (interface{}, []APIError) {
 	if i[FullName].Valid {
 		m["givenName"] = i[FullName].Data.(string)
 	} else {
-		apiErr = append(apiErr, DefaultAPIError(ErrorText, "an attribute to be changed was not provided"))
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "an attribute to be changed must be provided"))
 		return nil, apiErr
 	}
 
