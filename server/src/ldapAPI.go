@@ -56,15 +56,15 @@ func IncludeLdapAPIs(c *APICollection) {
 	}
 	c.Add("getCapabilitySet", &getCapabilitySet)
 
-	addCapabilitySet := BaseAPI{
+	createCapabilitySet := BaseAPI{
 		InputModel{
 			Parameter{SetName, true},
 			Parameter{Pattern, true},
 		},
-		addCapabilitySet,
+		createCapabilitySet,
 		RoleWrite,
 	}
-	c.Add("addCapabilitySet", &addCapabilitySet)
+	c.Add("createCapabilitySet", &createCapabilitySet)
 
 	dropCapabilitySet := BaseAPI{
 		InputModel{
@@ -642,7 +642,7 @@ func getCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
-func addCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
+func createCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 	var rData LDAPSetData
 
@@ -739,7 +739,7 @@ func dropCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	err = LDAPremoveCapabilitySet(i[SetName], con)
+	err = LDAPremoveCapabilitySet(i[SetName].Data.(string), con)
 	if err != nil {
 		con.Close()
 		log.Error(err)
@@ -796,7 +796,9 @@ func addScopeToCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	err = LDAPaddScope(i[SetName], i[Pattern], con)
+	patterns := strings.Split(i[Pattern].Data.(string), ",")
+
+	err = LDAPaddScope(i[SetName].Data.(string), patterns, con)
 	if err != nil {
 		con.Close()
 		log.Error(err)
@@ -805,11 +807,13 @@ func addScopeToCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	}
 	con.Close()
 
-	_, err = c.DBtx.Exec(`insert into scopes (setid, pattern) values($1, $2)`, setid, i[Pattern])
-	if err != nil {
-		log.WithFields(QueryFields(c)).Error(err)
-		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-		return nil, apiErr
+	for _, pattern := range patterns {
+		_, err = c.DBtx.Exec(`insert into scopes (setid, pattern) values($1, $2)`, setid, pattern)
+		if err != nil {
+			log.WithFields(QueryFields(c)).Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+			return nil, apiErr
+		}
 	}
 
 	return nil, apiErr
@@ -845,7 +849,9 @@ func removeScopeFromCapabilitySet(c APIContext, i Input) (interface{}, []APIErro
 		return nil, apiErr
 	}
 
-	err = LDAPremoveScope(i[SetName], i[Pattern], con)
+	patterns := strings.Split(i[Pattern].Data.(string), ",")
+
+	err = LDAPremoveScope(i[SetName].Data.(string), patterns, con)
 	if err != nil {
 		con.Close()
 		log.Error(err)
@@ -854,11 +860,13 @@ func removeScopeFromCapabilitySet(c APIContext, i Input) (interface{}, []APIErro
 	}
 	con.Close()
 
-	_, err = c.DBtx.Exec(`delete from scopes where setid=$1 and pattern=$2`, setid, i[Pattern])
-	if err != nil {
-		log.WithFields(QueryFields(c)).Error(err)
-		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-		return nil, apiErr
+	for _, pattern := range patterns {
+		_, err = c.DBtx.Exec(`delete from scopes where setid=$1 and pattern=$2`, setid, pattern)
+		if err != nil {
+			log.WithFields(QueryFields(c)).Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+			return nil, apiErr
+		}
 	}
 
 	return nil, apiErr

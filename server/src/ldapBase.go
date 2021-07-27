@@ -199,31 +199,31 @@ func LDAPaddCapabilitySet(rData LDAPSetData, con *ldap.Conn) error {
 	return err
 }
 
-func LDAPremoveCapabilitySet(voPersonExternalID NullAttribute, con *ldap.Conn) error {
+func LDAPremoveCapabilitySet(voPersonExternalID string, con *ldap.Conn) error {
 
-	DN := fmt.Sprintf("uid=%s,%s", voPersonExternalID.Data, ldapBaseSetDN)
+	DN := fmt.Sprintf("uid=%s,%s", voPersonExternalID, ldapBaseSetDN)
 	delReq := ldap.NewDelRequest(DN, []ldap.Control{})
 	err := con.Del(delReq)
 
 	return err
 }
 
-func LDAPaddScope(setName NullAttribute, pattern NullAttribute, con *ldap.Conn) error {
+func LDAPaddScope(setName string, patterns []string, con *ldap.Conn) error {
 
-	DN := fmt.Sprintf("uid=%s,%s", setName.Data, ldapBaseSetDN)
+	DN := fmt.Sprintf("uid=%s,%s", setName, ldapBaseSetDN)
 	modify := ldap.NewModifyRequest(DN, nil)
-	modify.Add("eduPersonEntitlement", []string{pattern.Data.(string)})
+	modify.Add("eduPersonEntitlement", patterns)
 	err := con.Modify(modify)
 
 	return err
 
 }
 
-func LDAPremoveScope(setName NullAttribute, pattern NullAttribute, con *ldap.Conn) error {
+func LDAPremoveScope(setName string, pattern []string, con *ldap.Conn) error {
 
-	DN := fmt.Sprintf("uid=%s,%s", setName.Data, ldapBaseSetDN)
+	DN := fmt.Sprintf("uid=%s,%s", setName, ldapBaseSetDN)
 	modify := ldap.NewModifyRequest(DN, nil)
-	modify.Delete("eduPersonEntitlement", []string{pattern.Data.(string)})
+	modify.Delete("eduPersonEntitlement", pattern)
 	err := con.Modify(modify)
 
 	return err

@@ -360,7 +360,7 @@ func main() {
 	grouter.HandleFunc("/getUserLdapInfo", APIs["getUserLdapInfo"].Run)
 	grouter.HandleFunc("/removeUserFromLdap", APIs["removeUserFromLdap"].Run)
 	grouter.HandleFunc("/getCapabilitySet", APIs["getCapabilitySet"].Run)
-	grouter.HandleFunc("/addCapabilitySet", APIs["addCapabilitySet"].Run)
+	grouter.HandleFunc("/createCapabilitySet", APIs["createCapabilitySet"].Run)
 	grouter.HandleFunc("/dropCapabilitySet", APIs["dropCapabilitySet"].Run)
 	grouter.HandleFunc("/addScopeToCapabilitySet", APIs["addScopeToCapabilitySet"].Run)
 	grouter.HandleFunc("/removeScopeFromCapabilitySet", APIs["removeScopeFromCapabilitySet"].Run)
