@@ -646,14 +646,9 @@ func createCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 	var rData LDAPSetData
 
-	unitid := NewNullAttribute(UnitID)
 	setid := NewNullAttribute(SetID)
-	var roleCnt int
-	role := "%/role=" + i[Role].Data.(string) + "/%"
 
-	err := c.DBtx.QueryRow(`select (select setid from capability_sets where name=$2),
-								     where name=$1 and (lower(fqan) like lower($3)))`,
-		i[UnitName], i[SetName], role).Scan(&unitid, &setid, &roleCnt)
+	err := c.DBtx.QueryRow(`select setid from capability_sets where name=$1`, i[SetName]).Scan(&setid)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
