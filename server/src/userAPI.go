@@ -2064,7 +2064,9 @@ func setUserGridAccess(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	return nil, nil
+	_, apiErr = addOrUpdateUserInLdap(c, i)
+
+	return nil, apiErr
 }
 
 func getUserGroupsForComputeResource(c APIContext, i Input) (interface{}, []APIError) {
