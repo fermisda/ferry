@@ -873,14 +873,18 @@ func addCapabilitySetToFQAN(c APIContext, i Input) (interface{}, []APIError) {
 	setid := NewNullAttribute(SetID)
 	unitid := NewNullAttribute(UnitID)
 	var roleCnt int
+	var fqansWithSetId int
 
 	role := "%/role=" + i[Role].Data.(string) + "/%"
 
 	err := c.DBtx.QueryRow(`select (select setid from capability_sets where name=$1),
 								   (select unitid from affiliation_units where name=$2),
 								   (select count(fqan) from grid_fqan join affiliation_units using (unitid)
-								     where name=$2 and (lower(fqan) like lower($3)))`,
-		i[SetName], i[UnitName], role).Scan(&setid, &unitid, &roleCnt)
+								    where name=$2 and (lower(fqan) like lower($3))),
+								   (select count(setid) from grid_fqan join affiliation_units using (unitid)
+								    where name=$2 and (lower(fqan) like lower($3))
+									   and setid is not null)`,
+		i[SetName], i[UnitName], role).Scan(&setid, &unitid, &roleCnt, &fqansWithSetId)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -898,8 +902,8 @@ func addCapabilitySetToFQAN(c APIContext, i Input) (interface{}, []APIError) {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, Role))
 		return nil, apiErr
 	}
-	if setid.Data.(int) != 0 {
-		apiErr = append(apiErr, DefaultAPIError(ErrorText, "FQAN has a capability set, you must first remove it"))
+	if fqansWithSetId != 0 {
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "FQAN already has a capability set, you must first remove it"))
 		return nil, apiErr
 	}
 
