@@ -565,13 +565,13 @@ func getCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	rows, err := c.DBtx.Query(`select cs.name, cs.last_updated, s.pattern, s.last_updated, au.name, gf.fqan
 							   from capability_sets cs
 	  						     join scopes s using (setid)
-						   	     join grid_fqan gf using (setid)
-	                             join affiliation_units au using (unitid)
-	                           where (au.unitid = $1 or $1 is null)
-	                             and (cs.setid = $2 or $2 is null)
+						   	     left join grid_fqan gf using (setid)
+	                             left join affiliation_units au using (unitid)
+	                           where (au.name = $1 or $1 is null)
+	                             and (cs.name = $2 or $2 is null)
 	                             and (s.pattern = $3 or $3 is null)
 	                             and ( (lower(fqan) like lower($4)) or $4 is null)
-	                           order by cs.name, au.name`, unitid, setid, i[Pattern], role)
+	                           order by cs.name, au.name`, i[UnitName], i[SetName], i[Pattern], role)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
