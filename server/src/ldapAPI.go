@@ -232,7 +232,7 @@ func addOrUpdateUserInLdap(c APIContext, i Input) (interface{}, []APIError) {
 
 // Syncronize LDAP to FERRY where FERRY is the source of truth.
 //   Removes all records in LDAP which have no corresponding record in FERRY (external_affiliation_attribute: voPersionID).
-//   Adds all FERRY users to LDAP which are missing.
+//   Adds all FERRY users to LDAP which are missing - have FQAN records with associated capability set, but are not in LDAP.
 //   Verifies the capability sets and groups are correct for each user, per their FQANs, correcting those which are not correct.
 // Due to the third step, this method may take quite a while.
 func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
