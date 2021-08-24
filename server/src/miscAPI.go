@@ -16,7 +16,6 @@ import (
 var (
 	release_ver = "unknown"
 	build_date  = "unknown"
-	server_ver  = "unknown"
 )
 
 // IncludeMiscAPIs includes all APIs described in this file in an APICollection
