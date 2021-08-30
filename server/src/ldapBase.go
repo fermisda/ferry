@@ -22,6 +22,8 @@ var ldapBaseSetDN string
 var ldapCapabitySet string
 var requiredAccounts string
 
+var ldapErrNoSuchObject = "LDAP Result Code 32 \"No Such Object\": "
+
 // For LDAP USER data
 type LDAPData struct {
 	dn                     string
