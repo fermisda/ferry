@@ -503,8 +503,8 @@ func removeUserFromLdap(c APIContext, i Input) (interface{}, []APIError) {
 	}
 
 	lerr := LDAPremoveUser(voPersonID, con)
-	if lerr != nil {
-		log.Error(err)
+	if lerr != nil && lerr.Error() != ldapErrNoSuchObject {
+		log.Error(lerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorText, "Unable to remove user from LDAP"))
 		con.Close()
 		return nil, apiErr

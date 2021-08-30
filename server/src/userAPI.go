@@ -1645,18 +1645,6 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 		UserName: uname,
 	}
 
-	_, apiErr = removeUserFromLdap(c, input)
-	// as dropUser is called from the cron ferry-user-update, messages are sent to #ferryalert so the cronjob is allowed to complete.
-	if apiErr != nil {
-		msg := fmt.Sprintf("removeUserFromLdap failed.  Run removeUserFromLdap?username=%s when ldap is available.", uname.Data.(string))
-		log.Warningf(msg)
-		ctx := c.R.Context()
-		err := SlackMessage(ctx, msg, FerryAlertsURL)
-		if err != nil {
-			log.Warningf("Failure sending message to #ferryalerts.  msg: %s err: %s", msg, apiErr[0].Error)
-		}
-	}
-
 	// Process the user groups first
 	colList, apiErr := getTableColumns(c, "user_group")
 	if apiErr != nil {
@@ -1675,7 +1663,13 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 		}
 		return nil, apiErr
 	}
-	// Now process the user record
+	// Must be done before deleting user as voPersonID has not yet been removed, if it exists.
+	_, apiErr = removeUserFromLdap(c, input)
+	if apiErr != nil {
+		msg := fmt.Sprintf("removeUserFromLdap failed for username=%s - allow dropUser to continue.  This will be corrected when syncLdapWithFerry is run on cron.", uname.Data.(string))
+		log.Warningf(msg)
+	}
+	// Now process the user record, removeUserFromLdap will have deleted any voPersonID.
 	colList, apiErr = getTableColumns(c, "users")
 	if apiErr != nil {
 		return nil, apiErr
