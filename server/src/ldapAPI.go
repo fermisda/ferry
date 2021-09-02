@@ -338,7 +338,17 @@ func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 	// Add all missing users to LDAP first.
 	var voPersonIDs []string
 	for _, u := range users {
-		if u.voPersonID == "" {
+		var reallyInLdap = false
+		if u.voPersonID != "" {
+			// DB says the user is in LDAP, but... Ensure the user really is in LDAP
+			for _, voPersonID := range ldapUsers {
+				if u.voPersonID == voPersonID {
+					reallyInLdap = true
+					break
+				}
+			}
+		}
+		if (u.voPersonID == "") || !reallyInLdap {
 			n := NewNullAttribute(UserName).Default(u.uname)
 			input := Input{UserName: n}
 			lData, apiErr := addUserToLdapBase(c, input, con)
