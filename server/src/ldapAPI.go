@@ -299,7 +299,7 @@ func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 			con.Close()
 			return nil, apiErr
 		}
-		log.Infof("Removed %s from LDAP", deleteVoPersonID)
+		log.Infof("Removed voPersonID: %s from LDAP (not registered for LDAP in FERRY).", deleteVoPersonID)
 	}
 
 	// Second, is to add in all the users that FERRY has registered as in LDAP but are missing.
@@ -357,7 +357,7 @@ func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 				log.Errorf("ldapAPI: addUsertoLdapBase: error on uname: %s", u.uname)
 				return nil, apiErr
 			}
-			log.Infof("Added %s - %s to LDAP", u.uname, u.voPersonID)
+			log.Infof("Added uname: %s - voPersonID: %s to LDAP (Missing from LDAP but registered for it in FERRY).", u.uname, u.voPersonID)
 			voPersonIDs = append(voPersonIDs, lData.voPersonID)
 		} else {
 			voPersonIDs = append(voPersonIDs, u.voPersonID)
@@ -1091,7 +1091,7 @@ func updateLdapForUserSet(c APIContext, voPersonIDs []string, con *ldap.Conn) []
 			return apiErr
 		}
 		if modified {
-			log.Infof("voPersonID %s was updated", voPersonID)
+			log.Infof("voPersonID: %s eduPersonEntitlments and/or isMemberOf was updated", voPersonID)
 		}
 
 	}
