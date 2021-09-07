@@ -534,6 +534,7 @@ func getUserFQANs(c APIContext, i Input) (interface{}, []APIError) {
 							  	join grid_fqan using(fqanid)
 							  	left join affiliation_units using(unitid)
 							   where
+							    is_banned = false and
 								uid = $1 and
 								(unitid = $2 or $2 is null) and
 							  	(ga.last_updated >= $3 or $3 is null)
