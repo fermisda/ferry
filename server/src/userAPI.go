@@ -534,6 +534,7 @@ func getUserFQANs(c APIContext, i Input) (interface{}, []APIError) {
 							  	join grid_fqan using(fqanid)
 							  	left join affiliation_units using(unitid)
 							   where
+							    is_banned = false and
 								uid = $1 and
 								(unitid = $2 or $2 is null) and
 							  	(ga.last_updated >= $3 or $3 is null)
@@ -854,6 +855,22 @@ func setUserExperimentFQAN(c APIContext, i Input) (interface{}, []APIError) {
 			log.WithFields(QueryFields(c)).Error(queryerr)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 			return nil, apiErr
+		}
+	}
+
+	if len(fqanids) > 0 {
+		_, apiErr := addOrUpdateUserInLdap(c, i)
+		if apiErr != nil {
+			if len(apiErr) > 0 {
+				log.Warning(apiErr[0].Error)
+			}
+			msg := fmt.Sprintf("LDAP update failed.  Run addOrUpdateUserInLdap?username=%s when ldap is available.", i[UserName].Data.(string))
+			log.Warningf(msg)
+			ctx := c.R.Context()
+			err := SlackMessage(ctx, msg, FerryAlertsURL)
+			if err != nil {
+				log.Warningf("Failure sending message to #ferryalerts.  err: %s", err)
+			}
 		}
 	}
 
@@ -1356,9 +1373,11 @@ func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 
 	uid := NewNullAttribute(UID)
 	expDate := NewNullAttribute(ExpirationDate)
+	var origStatus bool
+	var origFullName string
 
-	queryerr := c.DBtx.tx.QueryRow(`select uid, expiration_date from users where uname = $1`,
-		i[UserName]).Scan(&uid, &expDate)
+	queryerr := c.DBtx.tx.QueryRow(`select uid, expiration_date, status, full_name from users where uname = $1`,
+		i[UserName]).Scan(&uid, &expDate, &origStatus, &origFullName)
 	if queryerr == sql.ErrNoRows {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
 		return nil, apiErr
@@ -1381,6 +1400,39 @@ func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 		log.WithFields(QueryFields(c)).Error(queryerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
+	}
+
+	if i[FullName].Valid && i[FullName].Data.(string) != origFullName {
+		input := Input{
+			UserName: i[UserName],
+			FullName: i[FullName],
+		}
+
+		_, apiErr := modifyUserLdapAttributes(c, input)
+		if apiErr != nil {
+			return nil, apiErr
+		}
+	}
+
+	if i[Status].Valid && (origStatus != i[Status].Data.(bool)) {
+		var m string
+		if i[Status].Data.(bool) {
+			_, apiErr = addOrUpdateUserInLdap(c, i)
+			m = "addOrUpdateUserInLdap"
+		} else {
+			_, apiErr = removeUserFromLdap(c, i)
+			m = "removeUserFromLdap"
+		}
+		// as setUserInfo is called from the cron ferry-user-update, messages are sent to #ferryalert so the cronjob is allowed to complete.
+		if apiErr != nil {
+			msg := fmt.Sprintf("LDAP update failed.  Run %s?username=%s when ldap is available.", m, i[UserName].Data.(string))
+			log.Warningf(msg)
+			ctx := c.R.Context()
+			err := SlackMessage(ctx, msg, FerryAlertsURL)
+			if err != nil {
+				log.Warningf("Failure sending message to #ferryalerts.  msg: %s err: %s", msg, apiErr[0].Error)
+			}
+		}
 	}
 
 	return nil, nil
@@ -1426,6 +1478,25 @@ func createUser(c APIContext, i Input) (interface{}, []APIError) {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
+	}
+
+	if i[Status].Data.(bool) {
+		if err != nil {
+			log.WithFields(QueryFields(c)).Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+			return nil, apiErr
+		}
+		_, apiErr = addOrUpdateUserInLdap(c, i)
+		// as createUser is called from the cron ferry-user-update, messages are sent to #ferryalert so the cronjob is allowed to complete.
+		if apiErr != nil {
+			msg := fmt.Sprintf("LDAP update failed.  Run addOrUpdateUserInLdap?username=%s when ldap is available.", i[UserName].Data.(string))
+			log.Warningf(msg)
+			ctx := c.R.Context()
+			err := SlackMessage(ctx, msg, FerryAlertsURL)
+			if err != nil {
+				log.Warningf("Failure sending message to #ferryalerts.  msg: %s err: %s", msg, apiErr[0].Error)
+			}
+		}
 	}
 
 	return nil, nil
@@ -1559,6 +1630,22 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 
 	uid := i[UID]
 
+	uname := NewNullAttribute(UserName)
+
+	err := c.DBtx.QueryRow(`select uname from users where uid = $1`, i[UID]).Scan(&uname)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	input := Input{
+		UserName: uname,
+	}
+
 	// Process the user groups first
 	colList, apiErr := getTableColumns(c, "user_group")
 	if apiErr != nil {
@@ -1567,7 +1654,7 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	columns := strings.Join(colList, ",")
 	sql := fmt.Sprintf("with foo as (delete from user_group where uid=%d returning *, now() when_deleted) insert into user_group_deletions (%s, when_deleted) select * from foo",
 		uid.Data, columns)
-	_, err := c.DBtx.Exec(sql)
+	_, err = c.DBtx.Exec(sql)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		if strings.Contains(err.Error(), "violates foreign key constraint") {
@@ -1577,7 +1664,13 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 		}
 		return nil, apiErr
 	}
-	// Now process the user record
+	// Must be done before deleting user as voPersonID has not yet been removed, if it exists.
+	_, apiErr = removeUserFromLdap(c, input)
+	if apiErr != nil {
+		msg := fmt.Sprintf("removeUserFromLdap failed for username=%s - allow dropUser to continue.  This will be corrected when syncLdapWithFerry is run on cron.", uname.Data.(string))
+		log.Warningf(msg)
+	}
+	// Now process the user record, removeUserFromLdap will have deleted any voPersonID.
 	colList, apiErr = getTableColumns(c, "users")
 	if apiErr != nil {
 		return nil, apiErr
@@ -1966,7 +2059,9 @@ func setUserGridAccess(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	return nil, nil
+	_, apiErr = addOrUpdateUserInLdap(c, i)
+
+	return nil, apiErr
 }
 
 func getUserGroupsForComputeResource(c APIContext, i Input) (interface{}, []APIError) {
@@ -2000,7 +2095,6 @@ func getUserGroupsForComputeResource(c APIContext, i Input) (interface{}, []APIE
 		Status:    "",
 	}
 
-	const Resources Attribute = "resources"
 	resource := jsonentry{
 		ResourceName: "",
 		ResourceType: "",
@@ -2014,7 +2108,7 @@ func getUserGroupsForComputeResource(c APIContext, i Input) (interface{}, []APIE
 	for rows.Next() {
 		row := NewMapNullAttribute(ResourceType, ResourceName, UnitName, UserName, GroupName, Primary, Status)
 		rows.Scan(row[ResourceType], row[ResourceName], row[UnitName], row[UserName], row[GroupName], row[Primary], row[Status])
-		if dejaVu == false {
+		if !dejaVu {
 			dejaVu = true
 			resource[UnitName] = row[UnitName].Data
 			resource[ResourceName] = row[ResourceName].Data
@@ -2040,7 +2134,7 @@ func getUserGroupsForComputeResource(c APIContext, i Input) (interface{}, []APIE
 		resource[Users] = append(resource[Users].([]jsonentry), user)
 	}
 	// Add the last entry
-	if dejaVu == true {
+	if dejaVu {
 		out = append(out, resource)
 	}
 

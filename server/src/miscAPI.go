@@ -1234,6 +1234,7 @@ func ping(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 	const ReleaseVersion Attribute = "releaseversion"
 	const BuildDate Attribute = "builddate"
+	const Server Attribute = "server"
 
 	rows, err := DBptr.Query(`select now();`)
 	if err != nil {
@@ -1243,7 +1244,7 @@ func ping(c APIContext, i Input) (interface{}, []APIError) {
 	}
 	defer rows.Close()
 
-	return map[Attribute]interface{}{ReleaseVersion: release_ver, BuildDate: build_date}, nil
+	return map[Attribute]interface{}{ReleaseVersion: release_ver, BuildDate: build_date, Server: serverRole}, nil
 }
 
 func getVOUserMap(c APIContext, i Input) (interface{}, []APIError) {

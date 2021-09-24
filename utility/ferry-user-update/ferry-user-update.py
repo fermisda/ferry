@@ -283,14 +283,14 @@ def fetch_userdb():
         if len(unameUid[uname]) == 1:
             unameUid[uname] = unameUid[uname][0]
         else:
-            logging.debug("duplicated uname: %s", uname)     # DEBUG
+            #logging.debug("duplicated uname: %s", uname)     # DEBUG
             for uid in unameUid[uname][:-1]:
                 # logging.debug("delete uid %s", uid)
                 users.__delitem__(uid)
                 for gid in groups.keys():
                     if uid in groups[gid].members:
                             groups[gid].members.remove(uid)
-            logging.debug("delete uid %s", ",".join(uid for uid in unameUid[uname][:-1]))
+            #logging.debug("delete uid %s", ",".join(uid for uid in unameUid[uname][:-1]))
             unameUid[uname] = unameUid[uname][-1]
             # unameToDelete.append(uname)
     # for uname in unameToDelete:
@@ -366,7 +366,7 @@ def fetch_ferry():
         ferryOut[id] = readFromFerry(action, params)
 
     threads.append(Thread(target=work, args=["api_get_users"]))
-    threads.append(Thread(target=work, args=["api_get_certificates"]))
+    threads.append(Thread(target=work, args=["api_get_certificates", {"unitname" : "fermilab"}]))
     threads.append(Thread(target=work, args=["api_get_groups"]))
     threads.append(Thread(target=work, args=["api_get_group_members"]))
     threads.append(Thread(target=work, args=["api_get_users_fqans"]))
@@ -433,10 +433,12 @@ def fetch_ferry():
 # Checks to see if urls can be accessed successfully
 def openURL(url, data = None, context = None):
     try:
-        return (urllib.request.urlopen(url, data=data, context=context).read().decode("latin-1"))
-    except:
-        logging.error("Failed to access remote server: %s", url)
+        return (urllib.request.urlopen(url, data=data, context=context).read().decode())
+    except urllib.error.URLError as e:
+        logging.error("Failed to access remote server: %s   error: %s", url, e.reason)
         return None
+    except Exception as e:
+        logging.error("Failed to access remove server: %s - general exception: %s", url, e)
 
 
 # Updates users with data from uid.lis and services-users.csv
@@ -580,7 +582,12 @@ def update_certificates():
                     if not jUnits:
                         logging.debug("could not fetch affiliation units for %s" % user.uname)
                         jUnits = []
-                    if len(jUnits) == 0:
+                    userInFermilab = False
+                    for jUnit in jUnits:
+                        if jUnit['unitname'] == 'fermilab':
+                            userInFermilab = True
+                            break
+                    if userInFermilab == False:
                         jUnits.append({
                             "alternativename": "",
                             "unitname": "fermilab"
@@ -691,6 +698,7 @@ if __name__ == "__main__":
 
     ferryContext = ssl.SSLContext(protocol=ssl.PROTOCOL_TLSv1_2)
     ferryContext.verify_mode = ssl.CERT_REQUIRED
+    # ferryContext.verify_mode = ssl.CERT_NONE
     ferryContext.load_cert_chain(config.get("ferry", "cert"), config.get("ferry", "key"))
     ferryContext.load_verify_locations(capath=config.get("ferry", "ca"))
 

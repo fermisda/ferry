@@ -30,6 +30,8 @@ var DBtx Transaction
 var Mainsrv *http.Server
 var ValidCAs CAs
 var AccCache *cache.Cache
+var FerryAlertsURL string
+var serverRole string
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	var c APIContext
@@ -46,7 +48,7 @@ func QueryFields(c APIContext) log.Fields {
 	fields["action"] = c.R.URL.Path[1:]
 	fields["query"] = c.R.URL
 	fields["auth_level"] = c.AuthLevel.String()
-	fields["duration"] = time.Since(c.StartTime).Nanoseconds() / 1E6
+	fields["duration"] = time.Since(c.StartTime).Nanoseconds() / 1e6
 
 	clientIP := strings.Split(c.R.RemoteAddr, ":")[0]
 	fields["client_ip"] = clientIP
@@ -145,6 +147,11 @@ func main() {
 		}
 	}
 
+	ldapErr := LDAPinitialize()
+	if ldapErr != nil {
+		log.Fatal(ldapErr)
+	}
+
 	APIs := make(APICollection)
 	IncludeUserAPIs(&APIs)
 	IncludeGroupAPIs(&APIs)
@@ -152,6 +159,7 @@ func main() {
 	IncludeWrapperAPIs(&APIs)
 	IncludeUnitAPIs(&APIs)
 	IncludeResourceAPIs(&APIs)
+	IncludeLdapAPIs(&APIs)
 
 	log.Debug("Here we go...")
 
@@ -168,6 +176,7 @@ func main() {
 	if dbUser == nil {
 		dbUser = dbConfig["user"]
 	}
+	// Password can be obtained from the enviroment variable, config file or .pgpass
 	dbPass := viper.Get("db_pass")
 	if dbPass == nil {
 		dbPass = dbConfig["password"]
@@ -184,9 +193,13 @@ func main() {
 	if dbPort == nil {
 		dbPort = dbConfig["port"]
 	}
-	connString := fmt.Sprintf("user=%s password=%s host=%s port=%s dbname=%s connect_timeout=%s sslmode=%s sslrootcert=%s",
-		dbUser, dbPass, dbHost, dbPort, dbName,
+	// Allow the use of .pgpass by not requiring the password in the connection string
+	connString := fmt.Sprintf("user=%s host=%s port=%s dbname=%s connect_timeout=%s sslmode=%s sslrootcert=%s",
+		dbUser, dbHost, dbPort, dbName,
 		dbConfig["timeout"], dbConfig["sslmode"], dbConfig["certificate"])
+	if dbPass != "" {
+		connString = fmt.Sprintf("%s password=%s", connString, dbPass)
+	}
 	Mydb, err := sql.Open("postgres", connString)
 	if err != nil {
 		log.Error("there is an issue here")
@@ -342,13 +355,40 @@ func main() {
 	grouter.HandleFunc("/setSharedAccountComputeResourceApprover", APIs["setSharedAccountComputeResourceApprover"].Run)
 	grouter.HandleFunc("/getSharedAccountForComputeResource", APIs["getSharedAccountForComputeResource"].Run)
 
+	// ldap API Calls
+	grouter.HandleFunc("/syncLdapWithFerry", APIs["syncLdapWithFerry"].Run)
+	grouter.HandleFunc("/getUserLdapInfo", APIs["getUserLdapInfo"].Run)
+	grouter.HandleFunc("/removeUserFromLdap", APIs["removeUserFromLdap"].Run)
+	grouter.HandleFunc("/getCapabilitySet", APIs["getCapabilitySet"].Run)
+	grouter.HandleFunc("/createCapabilitySet", APIs["createCapabilitySet"].Run)
+	grouter.HandleFunc("/dropCapabilitySet", APIs["dropCapabilitySet"].Run)
+	grouter.HandleFunc("/addScopeToCapabilitySet", APIs["addScopeToCapabilitySet"].Run)
+	grouter.HandleFunc("/removeScopeFromCapabilitySet", APIs["removeScopeFromCapabilitySet"].Run)
+	grouter.HandleFunc("/addCapabilitySetToFQAN", APIs["addCapabilitySetToFQAN"].Run)
+	grouter.HandleFunc("/addCapabilitySetToFQAN", APIs["addCapabilitySetToFQAN"].Run)
+	grouter.HandleFunc("/removeCapabilitySetFromFQAN", APIs["removeCapabilitySetFromFQAN"].Run)
+	grouter.HandleFunc("/addOrUpdateUserInLdap", APIs["addOrUpdateUserInLdap"].Run)
+	grouter.HandleFunc("/updateLdapForAffiliation", APIs["updateLdapForAffiliation"].Run)
+	grouter.HandleFunc("/updateLdapForCapabilitySet", APIs["updateLdapForCapabilitySet"].Run)
+	grouter.HandleFunc("/modifyUserLdapAttributes", APIs["modifyUserLdapAttributes"].Run)
+
 	srvConfig := viper.GetStringMapString("server")
 	Mainsrv = &http.Server{
-		Addr:        fmt.Sprintf(":%s", srvConfig["port"]),
+		Addr:        fmt.Sprintf("%s", srvConfig["port"]),
 		ReadTimeout: 10 * time.Second,
 		Handler:     grouter,
 		ConnState:   gatekeeper,
 		ErrorLog:    golog.New(log.StandardLogger().WriterLevel(log.DebugLevel), "", 0),
+	}
+
+	serverRole = srvConfig["role"]
+	if len(serverRole) == 0 {
+		serverRole = "unknown"
+	}
+
+	FerryAlertsURL = srvConfig["ferryalertsurl"]
+	if len(FerryAlertsURL) == 0 {
+		log.Warning("ferryalertsurl not defined in config file")
 	}
 
 	certslice := viper.GetStringSlice("certificates")
@@ -389,7 +429,7 @@ func main() {
 	}
 
 	// We should probably make the cert and key paths variables in a config file at some point
-	log.WithFields(log.Fields{"port": Mainsrv.Addr[1:]}).Infof("Starting FERRY API")
+	log.WithFields(log.Fields{"port": Mainsrv.Addr[1:]}).Infof("Starting FERRY API Database: %s  ldap: %s", dbName, ldapURL)
 	serverror := Mainsrv.ListenAndServeTLS(srvConfig["cert"], srvConfig["key"])
 	if serverror != nil {
 		log.Fatal(serverror)
