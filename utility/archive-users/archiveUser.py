@@ -155,6 +155,7 @@ def main():
         if args.commit is True:
             conn.commit()
             logging.info("All Changes Comitted to the Database! ")
+            logging.info("\n\n")
         else:
             conn.rollback()
             logging.info("Changes rolled back.  Requires --commit to keep changes.")
