@@ -264,6 +264,8 @@ const (
 	PasswdMode       Attribute = "passwdmode"
 	Standalone       Attribute = "standalone"
 	RemoveGroup      Attribute = "removegroup"
+	TokenSubject     Attribute = "tokensubject"
+	VaultStorageKey  Attribute = "vaultstoragekey"
 )
 
 // Type returns the type of the Attribute
@@ -277,6 +279,8 @@ func (a Attribute) Type() AttributeType {
 		ResourceName:     TypeSstring,
 		AlternativeName:  TypeString,
 		SetName:          TypeString,
+		TokenSubject:     TypeString,
+		VaultStorageKey:  TypeString,
 		Definition:       TypeString,
 		Pattern:          TypeString,
 		GroupType:        TypeSstring,
