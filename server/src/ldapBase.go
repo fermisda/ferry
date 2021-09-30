@@ -42,11 +42,13 @@ type LDAPData struct {
 
 // For LDAP Compatability Set Data
 type LDAPSetData struct {
-	dn                   string
-	objectClass          []string
-	voPersonExternalID   string
-	eduPersonEntitlement []string
-	uid                  string
+	dn                     string
+	objectClass            []string
+	voPersonExternalID     string
+	eduPersonEntitlement   []string
+	uid                    string
+	eduPersonPrincipalName []string
+	voPersonApplicationUID []string
 }
 
 func LDAPinitialize() error {
@@ -186,6 +188,33 @@ func LDAPremoveUser(voPersonID string, con *ldap.Conn) error {
 	return err
 }
 
+func LDAPgetCapabilitySetData(dn string, con *ldap.Conn) (LDAPSetData, error) {
+	var rData LDAPSetData
+	attributes := []string{"dn", "objectClass", "voPersonExternalID", "eduPersonEntitlement", "uid", "eduPersonPrincipalName", "voPersonApplicationUID"}
+
+	searchReq := ldap.NewSearchRequest(dn, ldap.ScopeWholeSubtree, 0, 0, 0, false, "(objectclass=account)", attributes, []ldap.Control{})
+
+	result, err := con.Search(searchReq)
+	if err != nil {
+		return rData, err
+	}
+
+	if len(result.Entries) == 1 {
+		rData.dn = result.Entries[0].DN
+		rData.objectClass = result.Entries[0].GetAttributeValues("objectClass")
+		rData.voPersonExternalID = result.Entries[0].GetAttributeValue("voPersonExternalID")
+		rData.eduPersonEntitlement = result.Entries[0].GetAttributeValues("eduPersonPrincipalName")
+		rData.uid = result.Entries[0].GetAttributeValue("uid")
+		rData.eduPersonPrincipalName = result.Entries[0].GetAttributeValues("eduPersonPrincipalName")
+		rData.voPersonApplicationUID = result.Entries[0].GetAttributeValues("voPersonApplicationUID")
+	} else if len(result.Entries) > 1 {
+		err := fmt.Errorf(" Multiple ldap entries (%d) were found for dn %s", len(result.Entries), dn)
+		return rData, err
+	}
+
+	return rData, nil
+}
+
 func LDAPaddCapabilitySet(rData LDAPSetData, con *ldap.Conn) error {
 
 	voPersonExternalID := []string{rData.voPersonExternalID}
@@ -196,6 +225,12 @@ func LDAPaddCapabilitySet(rData LDAPSetData, con *ldap.Conn) error {
 	addReq.Attribute("voPersonExternalID", voPersonExternalID)
 	addReq.Attribute("eduPersonEntitlement", rData.eduPersonEntitlement)
 	addReq.Attribute("uid", uid)
+	if len(rData.eduPersonPrincipalName[0]) > 0 {
+		addReq.Attribute("eduPersonPrincipalName", rData.eduPersonPrincipalName)
+	}
+	if len(rData.voPersonApplicationUID[0]) > 0 {
+		addReq.Attribute("voPersonApplicationUID", rData.voPersonApplicationUID)
+	}
 	err := con.Add(addReq)
 
 	return err
@@ -313,4 +348,47 @@ func LdapModifyAttributes(dn string, m map[string]string, con *ldap.Conn) error 
 	}
 	err = con.Modify(modify)
 	return err
+}
+
+func LDAPmodifyCapabilitySetAttributes(rData LDAPSetData, eData LDAPSetData, con *ldap.Conn) error {
+	var err error
+	var doit = false
+
+	modify := ldap.NewModifyRequest(eData.dn, nil)
+
+	if len(rData.eduPersonPrincipalName) > 0 {
+		doit = true
+		if rData.eduPersonPrincipalName[0] == "none" {
+			if len(eData.eduPersonPrincipalName) > 0 {
+				modify.Delete("eduPersonPrincipalName", eData.eduPersonPrincipalName)
+			}
+		} else {
+			if len(eData.eduPersonPrincipalName) > 0 {
+				modify.Replace("eduPersonPrincipalName", rData.eduPersonPrincipalName)
+			} else {
+				modify.Add("eduPersonPrincipalName", rData.eduPersonPrincipalName)
+			}
+		}
+	}
+
+	if len(rData.voPersonApplicationUID) > 0 {
+		doit = true
+		if rData.voPersonApplicationUID[0] == "none" {
+			if len(eData.voPersonApplicationUID) > 0 {
+				modify.Delete("voPersonApplicationUID", eData.voPersonApplicationUID)
+			}
+		} else {
+			if len(eData.voPersonApplicationUID) > 0 {
+				modify.Replace("voPersonApplicationUID", rData.voPersonApplicationUID)
+			} else {
+				modify.Add("voPersonApplicationUID", rData.voPersonApplicationUID)
+			}
+		}
+	}
+
+	if doit {
+		err = con.Modify(modify)
+	}
+	return err
+
 }

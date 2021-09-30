@@ -60,11 +60,24 @@ func IncludeLdapAPIs(c *APICollection) {
 		InputModel{
 			Parameter{SetName, true},
 			Parameter{Pattern, true},
+			Parameter{TokenSubject, false},    // default = capabilitySetName@fnal.gov  in ldap: eduPersonPrincipalName
+			Parameter{VaultStorageKey, false}, // default = capabilitySetName  in ldap: voPersonApplicationUID
 		},
 		createCapabilitySet,
 		RoleWrite,
 	}
 	c.Add("createCapabilitySet", &createCapabilitySet)
+
+	setCapabilitySetAttributes := BaseAPI{
+		InputModel{
+			Parameter{SetName, true},
+			Parameter{TokenSubject, false},
+			Parameter{VaultStorageKey, false},
+		},
+		setCapabilitySetAttributes,
+		RoleWrite,
+	}
+	c.Add("setCapabilitySetAttributes", &setCapabilitySetAttributes)
 
 	dropCapabilitySet := BaseAPI{
 		InputModel{
@@ -671,6 +684,26 @@ func createCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
+	// TokenSubject default = capabilitySetName@fnal.gov  in ldap: eduPersonPrincipalName
+	// VaultStorageKey default = capabilitySetName  in ldap: voPersonApplicationUID
+	// If either is set to "none" then nothing is entered for that attribute.
+
+	if !i[TokenSubject].Valid {
+		rData.eduPersonPrincipalName = append(rData.eduPersonPrincipalName, i[SetName].Data.(string)+"@fnal.gov")
+	} else if i[TokenSubject].Data == "none" {
+		rData.eduPersonPrincipalName = append(rData.eduPersonPrincipalName, "")
+	} else {
+		rData.eduPersonPrincipalName = append(rData.eduPersonPrincipalName, i[TokenSubject].Data.(string))
+	}
+
+	if !i[VaultStorageKey].Valid {
+		rData.voPersonApplicationUID = append(rData.voPersonApplicationUID, i[SetName].Data.(string))
+	} else if i[VaultStorageKey].Data == "none" {
+		rData.voPersonApplicationUID = append(rData.voPersonApplicationUID, "")
+	} else {
+		rData.voPersonApplicationUID = append(rData.voPersonApplicationUID, i[VaultStorageKey].Data.(string))
+	}
+
 	rData.dn = fmt.Sprintf("uid=%s,%s", i[SetName].Data, ldapBaseSetDN)
 	rData.objectClass = []string{"account", "eduPerson", "voPerson"}
 	rData.voPersonExternalID = i[SetName].Data.(string) + "@fnal.gov"
@@ -695,8 +728,9 @@ func createCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	}
 	con.Close()
 
-	err = c.DBtx.QueryRow(`insert into capability_sets (name)
-							 values ($1) RETURNING setid`, i[SetName]).Scan(&setid)
+	err = c.DBtx.QueryRow(`insert into capability_sets (name, token_subject, vault_storage_key)
+							 values ($1, $2, $3) RETURNING setid`,
+		i[SetName], rData.eduPersonPrincipalName[0], rData.voPersonApplicationUID[0]).Scan(&setid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -710,6 +744,86 @@ func createCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 			return nil, apiErr
 		}
+	}
+
+	return nil, apiErr
+}
+
+func setCapabilitySetAttributes(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+	var rData LDAPSetData
+
+	// This method does not allow the CS name to be modified.   The moment you allow that, you have to deal with all
+	// the users whose LDAP records contain this set.   Better to create brand new set, replace the current one with it
+	// and delete the original.
+
+	setid := NewNullAttribute(SetID)
+	tokenSubject := ""
+	vaultStorageKey := ""
+
+	if !i[TokenSubject].Valid && !i[VaultStorageKey].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "At least one attribute must be provided"))
+		return nil, apiErr
+	}
+
+	err := c.DBtx.QueryRow(`select setid from capability_sets where name=$1`, i[SetName]).Scan(&setid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+	if !setid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, SetName))
+		return nil, apiErr
+	}
+
+	rData.dn = fmt.Sprintf("uid=%s,%s", i[SetName].Data, ldapBaseSetDN)
+
+	if i[TokenSubject].Valid {
+		rData.eduPersonPrincipalName = append(rData.eduPersonPrincipalName, i[TokenSubject].Data.(string))
+		if i[TokenSubject].Data != "none" {
+			tokenSubject = i[TokenSubject].Data.(string)
+		}
+	}
+
+	if i[VaultStorageKey].Valid {
+		rData.voPersonApplicationUID = append(rData.voPersonApplicationUID, i[VaultStorageKey].Data.(string))
+		if i[VaultStorageKey].Data != "none" {
+			vaultStorageKey = i[VaultStorageKey].Data.(string)
+		}
+	}
+
+	con, err := LDAPgetConnection()
+	if err != nil {
+		msg := fmt.Sprintf("LDAP, connection failed: %v", err)
+		log.Error(msg)
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, msg))
+		return nil, apiErr
+	}
+
+	eData, err := LDAPgetCapabilitySetData(rData.dn, con)
+	if err != nil {
+		msg := fmt.Sprintf("LDAP, upable to get capability set data: %v", err)
+		log.Error(msg)
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, msg))
+		return nil, apiErr
+	}
+
+	err = LDAPmodifyCapabilitySetAttributes(rData, eData, con)
+	if err != nil {
+		con.Close()
+		log.Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "Unable to modify capability set in LDAP"))
+		return nil, apiErr
+	}
+	con.Close()
+
+	_, err = c.DBtx.Exec(`update capability_sets set token_subject = $1, vault_storage_key = $2 where setid = $3`,
+		tokenSubject, vaultStorageKey, setid)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
 	}
 
 	return nil, apiErr
