@@ -16,7 +16,9 @@ import (
 
 var ldapURL string
 var ldapWriteDN string
+var ldapReadDN string
 var ldapPass string
+var ldapReadPass string
 var ldapBaseDN string
 var ldapBaseSetDN string
 var ldapCapabitySet string
@@ -57,7 +59,9 @@ func LDAPinitialize() error {
 	ldapConfig := viper.GetStringMapString("ldap")
 	ldapURL = ldapConfig["url"]
 	ldapWriteDN = ldapConfig["writedn"]
+	ldapReadDN = ldapConfig["readdn"]
 	ldapPass = ldapConfig["password"]
+	ldapReadPass = ldapConfig["readpassword"]
 	ldapBaseDN = ldapConfig["basedn"]
 	ldapBaseSetDN = ldapConfig["basesetdn"]
 	ldapCapabitySet = ldapConfig["capabilityset"]
@@ -69,8 +73,14 @@ func LDAPinitialize() error {
 	if len(ldapWriteDN) == 0 {
 		fields = append(fields, "writedn")
 	}
+	if len(ldapReadDN) == 0 {
+		fields = append(fields, "readdn")
+	}
 	if len(ldapPass) == 0 {
 		fields = append(fields, "password")
+	}
+	if len(ldapReadPass) == 0 {
+		fields = append(fields, "readpassword")
 	}
 	if len(ldapBaseDN) == 0 {
 		fields = append(fields, "basedn")
@@ -89,14 +99,18 @@ func LDAPinitialize() error {
 }
 
 // Caller MUST close connection when done.
-func LDAPgetConnection() (*ldap.Conn, error) {
+// readonly=true provides a connection to a DN which allows paging but is readyonly
+func LDAPgetConnection(readonly bool) (*ldap.Conn, error) {
 
 	l, err := ldap.DialURL(ldapURL)
 	if err != nil {
 		return nil, err
 	}
-	//defer l.Close()
-	err = l.Bind(ldapWriteDN, ldapPass)
+	if readonly {
+		err = l.Bind(ldapReadDN, ldapReadPass)
+	} else {
+		err = l.Bind(ldapWriteDN, ldapPass)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +123,7 @@ func LDAPgetUserData(voPersonID string, con *ldap.Conn) (LDAPData, error) {
 		"eduPersonPrincipalName", "eduPersonEntitlement", "isMemberOf"}
 
 	filter := fmt.Sprintf("(voPersonID=%s)", ldap.EscapeFilter(voPersonID))
-	searchReq := ldap.NewSearchRequest("ou=people,o=Fermilab,o=CO,dc=cilogon,dc=org", ldap.ScopeWholeSubtree, 0, 0, 0, false, filter, attributes, []ldap.Control{})
+	searchReq := ldap.NewSearchRequest(ldapBaseDN, ldap.ScopeWholeSubtree, 0, 0, 0, false, filter, attributes, []ldap.Control{})
 
 	result, err := con.Search(searchReq)
 	if err != nil {
@@ -141,8 +155,9 @@ func LDAPgetAllVoPersonIDs(con *ldap.Conn) ([]string, error) {
 	var voPersonIDs []string
 
 	attributes := []string{"voPersonID"}
-	searchReq := ldap.NewSearchRequest("ou=people,o=Fermilab,o=CO,dc=cilogon,dc=org", ldap.ScopeWholeSubtree, 0, 0, 0, false, "(&(objectClass=organizationalPerson))", attributes, []ldap.Control{})
-	result, err := con.SearchWithPaging(searchReq, 15000)
+	searchReq := ldap.NewSearchRequest(ldapBaseDN, ldap.ScopeWholeSubtree, 0, 0, 0, false,
+		"(&(objectClass=organizationalPerson))", attributes, []ldap.Control{ldap.NewControlPaging(1000)})
+	result, err := con.SearchWithPaging(searchReq, 1000)
 	if err != nil {
 		return nil, err
 	}

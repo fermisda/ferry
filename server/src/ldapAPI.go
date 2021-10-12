@@ -187,7 +187,7 @@ func getUserLdapInfo(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, nil
 	}
 
-	con, err := LDAPgetConnection()
+	con, err := LDAPgetConnection(false)
 	if err != nil {
 		msg := fmt.Sprintf("LDAP, connection failed: %v", err)
 		log.Error(msg)
@@ -225,7 +225,7 @@ func getUserLdapInfo(c APIContext, i Input) (interface{}, []APIError) {
 func addOrUpdateUserInLdap(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	con, err := LDAPgetConnection()
+	con, err := LDAPgetConnection(false)
 	if err != nil {
 		msg := fmt.Sprintf("LDAP, connection failed: %v", err)
 		log.Error(msg)
@@ -251,9 +251,9 @@ func addOrUpdateUserInLdap(c APIContext, i Input) (interface{}, []APIError) {
 func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	con, err := LDAPgetConnection()
+	con, err := LDAPgetConnection(true)
 	if err != nil {
-		msg := fmt.Sprintf("LDAP, connection failed: %v", err)
+		msg := fmt.Sprintf("LDAP, connection with paging failed: %v", err)
 		log.Error(msg)
 		apiErr = append(apiErr, DefaultAPIError(ErrorText, msg))
 		return nil, apiErr
@@ -266,6 +266,14 @@ func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 		con.Close()
 		log.Errorf("LDAPgetAllUsers failed: %s", err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorText, "Unable to get all users from ldap"))
+		return nil, apiErr
+	}
+	con.Close()
+	con, err = LDAPgetConnection(false)
+	if err != nil {
+		msg := fmt.Sprintf("LDAP, connection failed: %v", err)
+		log.Error(msg)
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, msg))
 		return nil, apiErr
 	}
 
@@ -305,14 +313,20 @@ func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 		if stringInSlice(deleteVoPersonID, requiredAccts) {
 			continue
 		}
+		llData, err := LDAPgetUserData(deleteVoPersonID, con)
+		if err != nil {
+			log.Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorText, fmt.Sprintf("Unable to get user's LDAP data. voPersonID: %s", deleteVoPersonID)))
+			return llData, apiErr
+		}
 		err = LDAPremoveUser(deleteVoPersonID, con)
 		if err != nil {
 			log.Error(err)
-			apiErr = append(apiErr, DefaultAPIError(ErrorText, fmt.Sprintf("Unable to remove user from LDAP: %s", deleteVoPersonID)))
+			apiErr = append(apiErr, DefaultAPIError(ErrorText, fmt.Sprintf("Unable to remove user from LDAP: %s - %s", llData.mail, deleteVoPersonID)))
 			con.Close()
 			return nil, apiErr
 		}
-		log.Infof("Removed voPersonID: %s from LDAP (not registered for LDAP in FERRY).", deleteVoPersonID)
+		log.Infof("Removed email: %s voPersonID: %s from LDAP (not registered for LDAP in FERRY).", llData.mail, deleteVoPersonID)
 	}
 
 	// Second, is to add in all the users that FERRY has registered as in LDAP but are missing.
@@ -517,7 +531,7 @@ func removeUserFromLdap(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	con, err := LDAPgetConnection()
+	con, err := LDAPgetConnection(false)
 	if err != nil {
 		msg := fmt.Sprintf("LDAP, connection failed: %v", err)
 		log.Error(msg)
@@ -711,7 +725,7 @@ func createCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	patterns := strings.Split(i[Pattern].Data.(string), ",")
 	rData.eduPersonEntitlement = append(rData.eduPersonEntitlement, patterns...)
 
-	con, err := LDAPgetConnection()
+	con, err := LDAPgetConnection(false)
 	if err != nil {
 		msg := fmt.Sprintf("LDAP, connection failed: %v", err)
 		log.Error(msg)
@@ -793,7 +807,7 @@ func setCapabilitySetAttributes(c APIContext, i Input) (interface{}, []APIError)
 		}
 	}
 
-	con, err := LDAPgetConnection()
+	con, err := LDAPgetConnection(false)
 	if err != nil {
 		msg := fmt.Sprintf("LDAP, connection failed: %v", err)
 		log.Error(msg)
@@ -850,7 +864,7 @@ func dropCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 		apiErr = append(apiErr, DefaultAPIError(ErrorText, fmt.Sprintf("Capability set is in use by %d fqan records.", setidCnt)))
 		return nil, apiErr
 	}
-	con, err := LDAPgetConnection()
+	con, err := LDAPgetConnection(false)
 	if err != nil {
 		msg := fmt.Sprintf("LDAP, connection failed: %v", err)
 		log.Error(msg)
@@ -907,7 +921,7 @@ func addScopeToCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	con, err := LDAPgetConnection()
+	con, err := LDAPgetConnection(false)
 	if err != nil {
 		msg := fmt.Sprintf("LDAP, connection failed: %v", err)
 		log.Error(msg)
@@ -960,7 +974,7 @@ func removeScopeFromCapabilitySet(c APIContext, i Input) (interface{}, []APIErro
 		return nil, nil
 	}
 
-	con, err := LDAPgetConnection()
+	con, err := LDAPgetConnection(false)
 	if err != nil {
 		msg := fmt.Sprintf("LDAP, connection failed: %v", err)
 		log.Error(msg)
@@ -1099,7 +1113,7 @@ func removeCapabilitySetFromFQAN(c APIContext, i Input) (interface{}, []APIError
 		return nil, nil
 	}
 
-	con, lErr := LDAPgetConnection()
+	con, lErr := LDAPgetConnection(false)
 	if lErr != nil {
 		msg := fmt.Sprintf("LDAP, connection failed: %v", lErr)
 		log.Error(msg)
@@ -1205,7 +1219,7 @@ func updateLdapForUserSet(c APIContext, voPersonIDs []string, con *ldap.Conn) []
 			return apiErr
 		}
 		if modified {
-			log.Infof("voPersonID: %s eduPersonEntitlments and/or isMemberOf was updated", voPersonID)
+			log.Infof("%s - voPersonID: %s eduPersonEntitlments and/or isMemberOf was updated", lData.mail, voPersonID)
 		}
 
 	}
@@ -1259,7 +1273,7 @@ func updateLdapForAffiliation(c APIContext, i Input) (interface{}, []APIError) {
 		voPersonIDs = append(voPersonIDs, voPersonID)
 	}
 
-	con, err := LDAPgetConnection()
+	con, err := LDAPgetConnection(false)
 	if err != nil {
 		msg := fmt.Sprintf("LDAP, connection failed: %v", err)
 		log.Error(msg)
@@ -1318,7 +1332,7 @@ func updateLdapForCapabilitySet(c APIContext, i Input) (interface{}, []APIError)
 		voPersonIDs = append(voPersonIDs, voPersonID)
 	}
 
-	con, err := LDAPgetConnection()
+	con, err := LDAPgetConnection(false)
 	if err != nil {
 		msg := fmt.Sprintf("LDAP, connection failed: %v", err)
 		log.Error(msg)
@@ -1356,7 +1370,7 @@ func modifyUserLdapAttributes(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	con, err := LDAPgetConnection()
+	con, err := LDAPgetConnection(false)
 	if err != nil {
 		msg := fmt.Sprintf("LDAP, connection failed: %v", err)
 		log.Error(msg)
