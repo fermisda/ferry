@@ -60,12 +60,19 @@ func LDAPinitialize() error {
 	ldapURL = ldapConfig["url"]
 	ldapWriteDN = ldapConfig["writedn"]
 	ldapReadDN = ldapConfig["readdn"]
-	ldapPass = ldapConfig["password"]
-	ldapReadPass = ldapConfig["readpassword"]
 	ldapBaseDN = ldapConfig["basedn"]
 	ldapBaseSetDN = ldapConfig["basesetdn"]
 	ldapCapabitySet = ldapConfig["capabilityset"]
 	requiredAccounts = ldapConfig["requiredaccounts"]
+
+	ldapPass = viper.Get("ldap_password").(string)
+	if len(ldapPass) == 0 {
+		ldapPass = ldapConfig["password"]
+	}
+	ldapReadPass = viper.Get("ldap_readpassword").(string)
+	if len(ldapReadPass) == 0 {
+		ldapReadPass = ldapConfig["readpassword"]
+	}
 
 	if len(ldapURL) == 0 {
 		fields = append(fields, "url")
