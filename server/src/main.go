@@ -170,27 +170,11 @@ func main() {
 	//		Once that is fixed we should set it to "verify-ca" or "verify-full" so that it actually checks that the cert that the DB machine presents is valid.
 	//		If you set it to "require" it skips the verification step.
 	dbConfig := viper.GetStringMapString("database")
-	dbUser := viper.Get("db_user")
-	if dbUser == nil {
-		dbUser = dbConfig["user"]
-	}
-	// Password can be obtained from the enviroment variable, config file or .pgpass
-	dbPass := viper.Get("db_pass")
-	if dbPass == nil {
-		dbPass = dbConfig["password"]
-	}
-	dbHost := viper.Get("db_host")
-	if dbHost == nil {
-		dbHost = dbConfig["host"]
-	}
-	dbName := viper.Get("db_name")
-	if dbName == nil {
-		dbName = dbConfig["name"]
-	}
-	dbPort := viper.Get("db_port")
-	if dbPort == nil {
-		dbPort = dbConfig["port"]
-	}
+	dbUser := dbConfig["user"]
+	dbPass := dbConfig["password"]
+	dbHost := dbConfig["host"]
+	dbName := dbConfig["name"]
+	dbPort := dbConfig["port"]
 	// Allow the use of .pgpass by not requiring the password in the connection string
 	connString := fmt.Sprintf("user=%s host=%s port=%s dbname=%s connect_timeout=%s sslmode=%s sslrootcert=%s",
 		dbUser, dbHost, dbPort, dbName,
