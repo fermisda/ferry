@@ -104,11 +104,9 @@ func main() {
 
 	//Setup configutation manager
 	viper.SetEnvPrefix("ferry")
-	viper.BindEnv("db_user")
-	viper.BindEnv("db_pass")
-	viper.BindEnv("db_host")
-	viper.BindEnv("db_port")
-	viper.BindEnv("db_name")
+	//password for DB is in PostgreSQL's .pgpass file
+	viper.BindEnv("ldap_password")
+	viper.BindEnv("ldap_readpassword")
 	viper.SetConfigName(configFile)
 	viper.AddConfigPath(configDir)
 	cfgErr := viper.ReadInConfig()
