@@ -259,7 +259,7 @@ func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	// First is to remove all LDAP users which FERRY does not have registered - except the required ones.
+	// First is to remove all LDAP users which FERRY does not have registered - except the required ones in the config file.
 
 	ldapUsers, err := LDAPgetAllVoPersonIDs(con)
 	if err != nil {
@@ -332,14 +332,14 @@ func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 	// Second, is to add in all the users that FERRY has registered as in LDAP but are missing.
 
 	// Get Both those FERRY thinks are in LDAP and those that are not but should be
-	rows, err = c.DBtx.Query(`select u.uname, e.value
-								   from users u
-									 left outer join external_affiliation_attribute e using (uid)
-								   where u.status is true
-										and u.is_groupaccount is false
-										and u.is_sharedaccount is false
-			 							and e.attribute = 'voPersonID'
-								   order by u.uname`)
+	rows, err = c.DBtx.Query(`select uname, e.attribute, e.value
+							  from users as u
+							  LEFT OUTER JOIN external_affiliation_attribute as e ON e.uid = u.uid
+							  where u.status is true
+								and u.is_groupaccount is false
+								and u.is_sharedaccount is false
+								and (e.attribute = 'voPersonID' or e.attribute is null)
+							  order by u.uid`)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -384,7 +384,7 @@ func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 				log.Errorf("ldapAPI: addUsertoLdapBase: error on uname: %s", u.uname)
 				return nil, apiErr
 			}
-			log.Infof("Added uname: %s - voPersonID: %s to LDAP (Missing from LDAP but registered for it in FERRY).", u.uname, u.voPersonID)
+			log.Infof("Added existing uname: %s with the new voPersonID: %s to LDAP.", u.uname, u.voPersonID)
 			voPersonIDs = append(voPersonIDs, lData.voPersonID)
 		} else {
 			voPersonIDs = append(voPersonIDs, u.voPersonID)
