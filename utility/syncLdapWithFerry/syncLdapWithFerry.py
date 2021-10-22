@@ -8,7 +8,7 @@ import ssl
 
 def syncLdapToFerry(hostname, ferryContext):
     url = hostname + "/" + "syncLdapWithFerry"
-    reply = openURL(url) # , context = ferryContext)
+    reply = openURL(url, context = ferryContext)
     result = json.loads(reply)
     return (result["ferry_status"], result["ferry_error"])
 
@@ -60,14 +60,17 @@ if __name__ == "__main__":
     slackUrl = target["url"]
 
     ferryContext = None
-    #ferryContext = ssl.SSLContext(protocol=ssl.PROTOCOL_TLSv1_2)
-    #ferryContext.verify_mode = ssl.CERT_REQUIRED
+    ferryContext = ssl.SSLContext(protocol=ssl.PROTOCOL_TLSv1_2)
+    ferryContext.verify_mode = ssl.CERT_REQUIRED
     #ferryContext.verify_mode = ssl.CERT_NONE
-    #ferryContext.load_cert_chain(config.get("ferry", "cert"), config.get("ferry", "key"))
-    #ferryContext.load_verify_locations(capath=config.get("ferry", "ca"))
+    ferryContext.load_cert_chain(config.get("ferry", "cert"), config.get("ferry", "key"))
+    ferryContext.load_verify_locations(capath=config.get("ferry", "ca"))
 
 
 
     status, error  = syncLdapToFerry(hostname, ferryContext)
     if status != "success":
         postToSlack(slackUrl, error)
+
+                   
+)
