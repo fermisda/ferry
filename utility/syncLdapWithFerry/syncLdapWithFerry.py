@@ -71,6 +71,3 @@ if __name__ == "__main__":
     status, error  = syncLdapToFerry(hostname, ferryContext)
     if status != "success":
         postToSlack(slackUrl, error)
-
-                   
-)
