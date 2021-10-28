@@ -861,16 +861,7 @@ func setUserExperimentFQAN(c APIContext, i Input) (interface{}, []APIError) {
 	if len(fqanids) > 0 {
 		_, apiErr := addOrUpdateUserInLdap(c, i)
 		if apiErr != nil {
-			if len(apiErr) > 0 {
-				log.Warning(apiErr[0].Error)
-			}
-			msg := fmt.Sprintf("LDAP update failed.  Run addOrUpdateUserInLdap?username=%s when ldap is available.", i[UserName].Data.(string))
-			log.Warningf(msg)
-			ctx := c.R.Context()
-			err := SlackMessage(ctx, msg, FerryAlertsURL)
-			if err != nil {
-				log.Warningf("Failure sending message to #ferryalerts.  err: %s", err)
-			}
+			log.Warningf(fmt.Sprintf("LDAP update failed, will be handled by sync script. user: %s", i[UserName].Data.(string)))
 		}
 	}
 
@@ -1415,23 +1406,13 @@ func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 	}
 
 	if i[Status].Valid && (origStatus != i[Status].Data.(bool)) {
-		var m string
 		if i[Status].Data.(bool) {
 			_, apiErr = addOrUpdateUserInLdap(c, i)
-			m = "addOrUpdateUserInLdap"
 		} else {
 			_, apiErr = removeUserFromLdap(c, i)
-			m = "removeUserFromLdap"
 		}
-		// as setUserInfo is called from the cron ferry-user-update, messages are sent to #ferryalert so the cronjob is allowed to complete.
 		if apiErr != nil {
-			msg := fmt.Sprintf("LDAP update failed.  Run %s?username=%s when ldap is available.", m, i[UserName].Data.(string))
-			log.Warningf(msg)
-			ctx := c.R.Context()
-			err := SlackMessage(ctx, msg, FerryAlertsURL)
-			if err != nil {
-				log.Warningf("Failure sending message to #ferryalerts.  msg: %s err: %s", msg, apiErr[0].Error)
-			}
+			log.Warningf(fmt.Sprintf("LDAP update failed, will be handled by sync script. user: %s", i[UserName].Data.(string)))
 		}
 	}
 
@@ -1487,15 +1468,8 @@ func createUser(c APIContext, i Input) (interface{}, []APIError) {
 			return nil, apiErr
 		}
 		_, apiErr = addOrUpdateUserInLdap(c, i)
-		// as createUser is called from the cron ferry-user-update, messages are sent to #ferryalert so the cronjob is allowed to complete.
 		if apiErr != nil {
-			msg := fmt.Sprintf("LDAP update failed.  Run addOrUpdateUserInLdap?username=%s when ldap is available.", i[UserName].Data.(string))
-			log.Warningf(msg)
-			ctx := c.R.Context()
-			err := SlackMessage(ctx, msg, FerryAlertsURL)
-			if err != nil {
-				log.Warningf("Failure sending message to #ferryalerts.  msg: %s err: %s", msg, apiErr[0].Error)
-			}
+			log.Warningf(fmt.Sprintf("LDAP update failed, will be handled by sync script. user: %s", i[UserName].Data.(string)))
 		}
 	}
 
