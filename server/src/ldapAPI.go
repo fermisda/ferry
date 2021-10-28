@@ -236,7 +236,7 @@ func addOrUpdateUserInLdap(c APIContext, i Input) (interface{}, []APIError) {
 	lData, apiErr := addUserToLdapBase(c, i, con)
 	if apiErr == nil {
 		vops := []string{lData.voPersonID}
-		apiErr = updateLdapForUserSet(c, vops, con)
+		_, apiErr = updateLdapForUserSet(c, vops, con)
 	}
 	con.Close()
 
@@ -250,6 +250,19 @@ func addOrUpdateUserInLdap(c APIContext, i Input) (interface{}, []APIError) {
 // Due to the third step, this method may take quite a while.
 func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
+
+	type jsonentry map[Attribute]interface{}
+	type jsonlist []interface{}
+
+	const Removed Attribute = "removedFromLdap"
+	const Added Attribute = "addedToLdap"
+	const Updated Attribute = "updatedLdapData"
+
+	entry := jsonentry{
+		Removed: make(jsonlist, 0),
+		Added:   make(jsonlist, 0),
+		Updated: make(jsonlist, 0),
+	}
 
 	con, err := LDAPgetConnection(true)
 	if err != nil {
@@ -317,16 +330,16 @@ func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 		if err != nil {
 			log.Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorText, fmt.Sprintf("Unable to get user's LDAP data. voPersonID: %s", deleteVoPersonID)))
-			return llData, apiErr
+			return entry, apiErr
 		}
 		err = LDAPremoveUser(deleteVoPersonID, con)
 		if err != nil {
 			log.Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorText, fmt.Sprintf("Unable to remove user from LDAP: %s - %s", llData.mail, deleteVoPersonID)))
 			con.Close()
-			return nil, apiErr
+			return entry, apiErr
 		}
-		log.Infof("Removed email: %s voPersonID: %s from LDAP (not registered for LDAP in FERRY).", llData.mail, deleteVoPersonID)
+		entry[Removed] = append(entry[Removed].(jsonlist), fmt.Sprintf("uname: %s voPersonID: %s.", llData.uid, deleteVoPersonID))
 	}
 
 	// Second, is to add in all the users that FERRY has registered as in LDAP but are missing.
@@ -343,7 +356,7 @@ func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-		return nil, apiErr
+		return entry, apiErr
 	}
 
 	type userdata struct {
@@ -382,9 +395,9 @@ func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 			if len(apiErr) > 0 {
 				con.Close()
 				log.Errorf("ldapAPI: addUsertoLdapBase: error on uname: %s", u.uname)
-				return nil, apiErr
+				return entry, apiErr
 			}
-			log.Infof("Added existing uname: %s with the new voPersonID: %s to LDAP.", u.uname, lData.voPersonID)
+			entry[Added] = append(entry[Added].(jsonlist), fmt.Sprintf("uname: %s voPersonID: %s", u.uname, lData.voPersonID))
 			voPersonIDs = append(voPersonIDs, lData.voPersonID)
 		} else {
 			voPersonIDs = append(voPersonIDs, u.voPersonID)
@@ -393,16 +406,19 @@ func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 
 	// Third, is to ensure the eduPersonEntitilements and groups for every user is correct and update those that are not correct.
 
-	apiErr = updateLdapForUserSet(c, voPersonIDs, con)
+	updated, apiErr := updateLdapForUserSet(c, voPersonIDs, con)
+	for _, u := range updated {
+		entry[Updated] = append(entry[Updated].(jsonlist), u)
+	}
 	if len(apiErr) > 0 {
 		con.Close()
 		log.Errorf("ldapAPI: updateLdapForUserSet: error on uname: %s", apiErr[0].Error)
-		return nil, apiErr
+		return entry, apiErr
 	}
 
 	con.Close()
 
-	return nil, nil
+	return entry, nil
 }
 
 // Constructs a wlcggroup from the fqan and unitname
@@ -1160,8 +1176,9 @@ func removeCapabilitySetFromFQAN(c APIContext, i Input) (interface{}, []APIError
 }
 
 // Given a set of user's voPersonIDs, for each user update LDAP.
-func updateLdapForUserSet(c APIContext, voPersonIDs []string, con *ldap.Conn) []APIError {
+func updateLdapForUserSet(c APIContext, voPersonIDs []string, con *ldap.Conn) ([]string, []APIError) {
 	var apiErr []APIError
+	var updated []string
 	var dn string
 
 	// Make sure they really are in LDAP. We don't have 2 phase commit between ldap and ferry, so we must test this.
@@ -1184,7 +1201,7 @@ func updateLdapForUserSet(c APIContext, voPersonIDs []string, con *ldap.Conn) []
 		if err != nil && err != sql.ErrNoRows {
 			log.WithFields(QueryFields(c)).Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-			return apiErr
+			return updated, apiErr
 		}
 		var ferryCsets, ferryWgroups []string
 		var setname, fqan, unitname string
@@ -1203,7 +1220,7 @@ func updateLdapForUserSet(c APIContext, voPersonIDs []string, con *ldap.Conn) []
 		if lErr != nil {
 			log.Error(lErr)
 			apiErr = append(apiErr, DefaultAPIError(ErrorText, "Unable to get user's LDAP data."))
-			return apiErr
+			return updated, apiErr
 		}
 
 		setsToDrop := arrayCompare(lData.eduPersonEntitlement, ferryCsets)
@@ -1216,15 +1233,15 @@ func updateLdapForUserSet(c APIContext, voPersonIDs []string, con *ldap.Conn) []
 		if lErr != nil {
 			log.Errorf("From LDAPmodifyUserScoping - error on dn: %s  Error: %s", dn, lErr)
 			apiErr = append(apiErr, DefaultAPIError(ErrorText, "Unable to modify user eduPersonEntitlments or isMemberOf"))
-			return apiErr
+			return updated, apiErr
 		}
 		if modified {
-			log.Infof("%s - voPersonID: %s eduPersonEntitlments and/or isMemberOf was updated", lData.mail, voPersonID)
+			updated = append(updated, fmt.Sprintf("uname: %s voPersonId: %s", lData.uid, lData.voPersonID))
 		}
 
 	}
 
-	return apiErr
+	return updated, apiErr
 }
 
 func updateLdapForAffiliation(c APIContext, i Input) (interface{}, []APIError) {
@@ -1281,7 +1298,7 @@ func updateLdapForAffiliation(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	apiErr = updateLdapForUserSet(c, voPersonIDs, con)
+	_, apiErr = updateLdapForUserSet(c, voPersonIDs, con)
 	con.Close()
 
 	return nil, apiErr
@@ -1340,7 +1357,7 @@ func updateLdapForCapabilitySet(c APIContext, i Input) (interface{}, []APIError)
 		return nil, apiErr
 	}
 
-	apiErr = updateLdapForUserSet(c, voPersonIDs, con)
+	_, apiErr = updateLdapForUserSet(c, voPersonIDs, con)
 	con.Close()
 
 	return nil, apiErr
