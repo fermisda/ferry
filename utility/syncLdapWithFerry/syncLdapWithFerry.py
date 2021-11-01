@@ -10,7 +10,7 @@ def syncLdapToFerry(hostname, ferryContext):
     url = hostname + "/" + "syncLdapWithFerry"
     reply = openURL(url, context = ferryContext)
     result = json.loads(reply)
-    return (result["ferry_status"], result["ferry_error"])
+    return result
 
 def postToSlack(url, messages):
     if not isinstance(messages, list):
@@ -67,7 +67,8 @@ if __name__ == "__main__":
     ferryContext.load_verify_locations(capath=config.get("ferry", "ca"))
 
 
+    result  = syncLdapToFerry(hostname, ferryContext)
+    if result["ferry_status"] != "success":
+        postToSlack(slackUrl, result["ferry_error"])
 
-    status, error  = syncLdapToFerry(hostname, ferryContext)
-    if status != "success":
-        postToSlack(slackUrl, error)
+    print(json.dumps(result, indent=4))
