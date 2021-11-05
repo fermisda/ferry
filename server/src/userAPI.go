@@ -1679,10 +1679,12 @@ func getUserAccessToComputeResources(c APIContext, i Input) (interface{}, []APIE
 		return nil, apiErr
 	}
 
-	rows, err := c.DBtx.Query(`select name, type, shell, home_dir from
+	rows, err := c.DBtx.Query(`select cr.name, cr.type, ca.shell, ca.home_dir, g.name from
 								compute_access as ca join
-								compute_resources using(compid)
-							   where uid = $1 and (ca.last_updated>=$2 or $2 is null)`,
+								compute_resources as cr using(compid) join
+								compute_access_group as cag using(compid,uid) join
+								groups as g using(groupid)
+							   where ca.uid = $1 and (ca.last_updated>=$2 or $2 is null)`,
 		uid, i[LastUpdated])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
@@ -1695,8 +1697,8 @@ func getUserAccessToComputeResources(c APIContext, i Input) (interface{}, []APIE
 	out := make([]jsonentry, 0)
 
 	for rows.Next() {
-		row := NewMapNullAttribute(ResourceName, ResourceType, Shell, HomeDir)
-		rows.Scan(row[ResourceName], row[ResourceType], row[Shell], row[HomeDir])
+		row := NewMapNullAttribute(ResourceName, ResourceType, Shell, HomeDir, GroupName)
+		rows.Scan(row[ResourceName], row[ResourceType], row[Shell], row[HomeDir], row[GroupName])
 
 		if row[ResourceName].Valid {
 			entry := jsonentry{
@@ -1704,6 +1706,7 @@ func getUserAccessToComputeResources(c APIContext, i Input) (interface{}, []APIE
 				ResourceType: row[ResourceType].Data,
 				Shell:        row[Shell].Data,
 				HomeDir:      row[HomeDir].Data,
+				GroupName:    row[GroupName].Data,
 			}
 			out = append(out, entry)
 		}
