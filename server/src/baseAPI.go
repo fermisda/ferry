@@ -214,115 +214,117 @@ type Attribute string
 
 // List of valid Attribute names
 const (
-	UserName         Attribute = "username"
-	GroupName        Attribute = "groupname"
-	AccountName      Attribute = "accountname"
-	UnitName         Attribute = "unitname"
-	FullName         Attribute = "fullname"
-	ResourceName     Attribute = "resourcename"
-	AlternativeName  Attribute = "alternativename"
-	SetName          Attribute = "setname"
-	Definition       Attribute = "definition"
-	Pattern          Attribute = "pattern"
-	GroupType        Attribute = "grouptype"
-	UnitType         Attribute = "unittype"
-	ResourceType     Attribute = "resourcetype"
-	DN               Attribute = "dn"
-	UserAttribute    Attribute = "attribute"
-	Value            Attribute = "value"
-	ExternalUsername Attribute = "externalusername"
-	QuotaUnit        Attribute = "quotaunit"
-	Path             Attribute = "path"
-	Shell            Attribute = "shell"
-	HomeDir          Attribute = "homedir"
-	FQAN             Attribute = "fqan"
-	VOMSURL          Attribute = "vomsurl"
-	Role             Attribute = "role"
-	CondorGroup      Attribute = "condorgroup"
-	VOName           Attribute = "voname"
-	UID              Attribute = "uid"
-	GID              Attribute = "gid"
-	GroupID          Attribute = "groupid"
-	DNID             Attribute = "dnid"
-	FQANID           Attribute = "fqanid"
-	UnitID           Attribute = "unitid"
-	SetID            Attribute = "setid"
-	ResourceID       Attribute = "compid"
-	Quota            Attribute = "quota"
-	Status           Attribute = "status"
-	Primary          Attribute = "primary"
-	Required         Attribute = "required"
-	Leader           Attribute = "leader"
-	GroupAccount     Attribute = "groupaccount"
-	SharedAccount    Attribute = "sharedaccount"
-	Experiment       Attribute = "experiment"
-	Suspend          Attribute = "suspend"
-	Surplus          Attribute = "surplus"
-	ExpirationDate   Attribute = "expirationdate"
-	LastUpdated      Attribute = "lastupdated"
-	Help             Attribute = "help"
-	PasswdMode       Attribute = "passwdmode"
-	Standalone       Attribute = "standalone"
-	RemoveGroup      Attribute = "removegroup"
-	TokenSubject     Attribute = "tokensubject"
-	VaultStorageKey  Attribute = "vaultstoragekey"
+	UserName          Attribute = "username"
+	GroupName         Attribute = "groupname"
+	AccountName       Attribute = "accountname"
+	UnitName          Attribute = "unitname"
+	FullName          Attribute = "fullname"
+	ResourceName      Attribute = "resourcename"
+	AlternativeName   Attribute = "alternativename"
+	SetName           Attribute = "setname"
+	Definition        Attribute = "definition"
+	Pattern           Attribute = "pattern"
+	GroupType         Attribute = "grouptype"
+	UnitType          Attribute = "unittype"
+	ResourceType      Attribute = "resourcetype"
+	DN                Attribute = "dn"
+	UserAttribute     Attribute = "attribute"
+	Value             Attribute = "value"
+	ExternalUsername  Attribute = "externalusername"
+	QuotaUnit         Attribute = "quotaunit"
+	Path              Attribute = "path"
+	Shell             Attribute = "shell"
+	HomeDir           Attribute = "homedir"
+	FQAN              Attribute = "fqan"
+	VOMSURL           Attribute = "vomsurl"
+	Role              Attribute = "role"
+	CondorGroup       Attribute = "condorgroup"
+	VOName            Attribute = "voname"
+	UID               Attribute = "uid"
+	GID               Attribute = "gid"
+	GroupID           Attribute = "groupid"
+	DNID              Attribute = "dnid"
+	FQANID            Attribute = "fqanid"
+	UnitID            Attribute = "unitid"
+	SetID             Attribute = "setid"
+	ResourceID        Attribute = "compid"
+	Quota             Attribute = "quota"
+	Status            Attribute = "status"
+	Primary           Attribute = "primary"
+	Required          Attribute = "required"
+	Leader            Attribute = "leader"
+	GroupAccount      Attribute = "groupaccount"
+	SharedAccount     Attribute = "sharedaccount"
+	Experiment        Attribute = "experiment"
+	Suspend           Attribute = "suspend"
+	Surplus           Attribute = "surplus"
+	ExpirationDate    Attribute = "expirationdate"
+	LastUpdated       Attribute = "lastupdated"
+	Help              Attribute = "help"
+	PasswdMode        Attribute = "passwdmode"
+	Standalone        Attribute = "standalone"
+	RemoveGroup       Attribute = "removegroup"
+	TokenSubject      Attribute = "tokensubject"
+	VaultStorageKey   Attribute = "vaultstoragekey"
+	ExternalAttribute Attribute = "externalattribute"
 )
 
 // Type returns the type of the Attribute
 func (a Attribute) Type() AttributeType {
 	AttributeType := map[Attribute]AttributeType{
-		UserName:         TypeString,
-		GroupName:        TypeString,
-		AccountName:      TypeString,
-		UnitName:         TypeString,
-		FullName:         TypeSstring,
-		ResourceName:     TypeSstring,
-		AlternativeName:  TypeString,
-		SetName:          TypeString,
-		TokenSubject:     TypeString,
-		VaultStorageKey:  TypeString,
-		Definition:       TypeString,
-		Pattern:          TypeString,
-		GroupType:        TypeSstring,
-		UnitType:         TypeString,
-		ResourceType:     TypeSstring,
-		DN:               TypeSstring,
-		UserAttribute:    TypeString,
-		Value:            TypeSstring,
-		ExternalUsername: TypeString,
-		QuotaUnit:        TypeString,
-		Path:             TypeSstring,
-		Shell:            TypeSstring,
-		HomeDir:          TypeSstring,
-		FQAN:             TypeSstring,
-		VOMSURL:          TypeString,
-		Role:             TypeSstring,
-		CondorGroup:      TypeString,
-		VOName:           TypeString,
-		UID:              TypeInt,
-		GID:              TypeInt,
-		GroupID:          TypeInt,
-		DNID:             TypeInt,
-		FQANID:           TypeInt,
-		UnitID:           TypeInt,
-		SetID:            TypeInt,
-		ResourceID:       TypeInt,
-		Quota:            TypeFloat,
-		Status:           TypeBool,
-		Primary:          TypeBool,
-		Required:         TypeBool,
-		Leader:           TypeBool,
-		GroupAccount:     TypeBool,
-		SharedAccount:    TypeBool,
-		Experiment:       TypeBool,
-		Suspend:          TypeBool,
-		Surplus:          TypeBool,
-		ExpirationDate:   TypeDate,
-		LastUpdated:      TypeDate,
-		Help:             TypeFlag,
-		PasswdMode:       TypeFlag,
-		Standalone:       TypeFlag,
-		RemoveGroup:      TypeFlag,
+		UserName:          TypeString,
+		GroupName:         TypeString,
+		AccountName:       TypeString,
+		UnitName:          TypeString,
+		FullName:          TypeSstring,
+		ResourceName:      TypeSstring,
+		AlternativeName:   TypeString,
+		SetName:           TypeString,
+		TokenSubject:      TypeString,
+		VaultStorageKey:   TypeString,
+		Definition:        TypeString,
+		Pattern:           TypeString,
+		GroupType:         TypeSstring,
+		UnitType:          TypeString,
+		ResourceType:      TypeSstring,
+		DN:                TypeSstring,
+		UserAttribute:     TypeString,
+		Value:             TypeSstring,
+		ExternalUsername:  TypeString,
+		QuotaUnit:         TypeString,
+		Path:              TypeSstring,
+		Shell:             TypeSstring,
+		HomeDir:           TypeSstring,
+		FQAN:              TypeSstring,
+		VOMSURL:           TypeString,
+		Role:              TypeSstring,
+		ExternalAttribute: TypeSstring,
+		CondorGroup:       TypeString,
+		VOName:            TypeString,
+		UID:               TypeInt,
+		GID:               TypeInt,
+		GroupID:           TypeInt,
+		DNID:              TypeInt,
+		FQANID:            TypeInt,
+		UnitID:            TypeInt,
+		SetID:             TypeInt,
+		ResourceID:        TypeInt,
+		Quota:             TypeFloat,
+		Status:            TypeBool,
+		Primary:           TypeBool,
+		Required:          TypeBool,
+		Leader:            TypeBool,
+		GroupAccount:      TypeBool,
+		SharedAccount:     TypeBool,
+		Experiment:        TypeBool,
+		Suspend:           TypeBool,
+		Surplus:           TypeBool,
+		ExpirationDate:    TypeDate,
+		LastUpdated:       TypeDate,
+		Help:              TypeFlag,
+		PasswdMode:        TypeFlag,
+		Standalone:        TypeFlag,
+		RemoveGroup:       TypeFlag,
 	}
 
 	return AttributeType[a]
