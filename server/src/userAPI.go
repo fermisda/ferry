@@ -90,6 +90,7 @@ func IncludeUserAPIs(c *APICollection) {
 		InputModel{
 			Parameter{UserName, false},
 			Parameter{LastUpdated, false},
+			Parameter{ExternalAttribute, false},
 		},
 		getUserExternalAffiliationAttributes,
 		RoleRead,
@@ -1196,7 +1197,8 @@ func getUserExternalAffiliationAttributes(c APIContext, i Input) (interface{}, [
 								external_affiliation_attribute as a
 								join users as u using(uid)
 							  where u.uid = coalesce($1, uid) and (a.last_updated >= $2 or $2 is null)
-							  order by uname`, uid, i[LastUpdated])
+							    and (a.attribute = $3 or $3 is null)
+							  order by uname`, uid, i[LastUpdated], i[ExternalAttribute])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
