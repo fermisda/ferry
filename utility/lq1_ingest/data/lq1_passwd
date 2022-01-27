@@ -1,0 +1,122 @@
+ask:x:1007:1540:Andreas Kronfeld:/home/ask:/bin/bash
+lepage:x:1126:1540:G. Lepage:/home/lepage:/bin/bash
+vanconant:x:11641:8963:Rick Van Conant:/home/vanconant:/bin/bash
+simone:x:2937:1540:Jim Simone:/home/simone:/bin/bash
+aik:x:3015:5023:Alex Kulyavtsev:/home/aik:/bin/bash
+smcatt:x:3296:1540:Simon Catterall:/home/smcatt:/bin/bash
+detar:x:4592:1540:Carleton Detar:/home/detar:/bin/bash
+kschu:x:7885:5023:Kenneth Schumacher:/home/kschu:/bin/bash
+amitoj:x:10086:5440:Amitoj Singh:/home/amitoj:/bin/bash
+jkuti:x:43211:1540:Julius Kuti:/home/jkuti:/sbin/nologin
+annah:x:43501:1540:Anna Hasenfratz:/home/annah:/bin/bash
+macridin:x:43654:8709:Alexandru Macridin:/home/macridin:/bin/bash
+witzel:x:43667:9540:Oliver Witzel:/home/witzel:/bin/bash
+hwlin:x:43682:1540:Huey-Wen Lin:/home/hwlin:/bin/bash
+asm58:x:44257:9352:Aaron Meyer:/home/asm58:/bin/bash
+astrel:x:47488:1752:Oleksii Strelchenko:/home/astrel:/bin/bash
+crebbi:x:49383:9540:Claudio Rebbi:/home/crebbi:/bin/bash
+wjay:x:51496:9540:William Jay:/home/wjay:/bin/bash
+chughes:x:52193:1540:Ciaran Hughes:/home/chughes:/bin/bash
+ylin:x:52919:9540:Yin Lin:/home/ylin:/bin/bash
+jeffderb:x:53187:5063:Jeffrey Derbyshire:/home/jeffderb:/sbin/nologin
+jliang:x:51752:9540:Jian Liang:/home/jliang:/sbin/nologin
+genwang:x:48476:9540:Gen Wang:/home/genwang:/bin/bash
+ybyang:x:46398:9540:Yi-bo Yang:/home/ybyang:/sbin/nologin
+weisun:x:55965:9540:Wei Sun:/home/weisun:/bin/bash
+byoon:x:51761:9540:Boram Yoon:/home/byoon:/bin/bash
+rajan:x:45471:1540:Rajan Gupta:/home/rajan:/bin/bash
+tanmoy:x:45648:1540:Tanmoy Bhattacharya:/home/tanmoy:/bin/bash
+yjang:x:52442:9540:Yong-Chull Jang:/home/yjang:/bin/bash
+swpark:x:52613:9540:Sungwoo Park:/home/swpark:/bin/bash
+tblum:x:45290:9540:Thomas Blum:/home/tblum:/bin/bash
+alexvaq:x:52313:9540:Alejandro Vaquero aviles-casco:/home/alexvaq:/bin/bash
+cli:x:54030:1752:Cheong yiu Li:/home/cli:/bin/bash
+axk:x:10214:1540:Aida El-khadra:/home/axk:/bin/bash
+bazavov:x:43581:9540:Oleksiy Bazavov:/home/bazavov:/bin/bash
+cb:x:11383:9540:Claude Bernard:/home/cb:/bin/bash
+doug:x:1121:8824:William Toussaint:/home/doug:/bin/bash
+egamiz:x:3598:9540:Maria elvira Gamiz sanchez:/home/egamiz:/bin/bash
+jlaiho:x:12099:1540:John Laiho:/home/jlaiho:/bin/bash
+pbm:x:1078:8878:Paul Mackenzie:/home/pbm:/bin/bash
+ruthv:x:11683:1540:Ruth Van de water:/home/ruthv:/bin/bash
+sg:x:9986:1540:Steven Gottlieb:/home/sg:/bin/tcsh
+zgelzer:x:48155:9540:Zechariah Gelzer:/home/zgelzer:/sbin/nologin
+johnmc:x:8797:9540:John Campbell:/home/johnmc:/bin/bash
+tneumann:x:52198:1540:Tobias Neumann:/home/tneumann:/bin/bash
+lima:x:2491:8713:Jose guilherme Lima:/home/lima:/bin/bash
+pcanal:x:6252:5111:Philippe Canal:/home/pcanal:/bin/bash
+pedrok:x:44788:8713:Kevin Pedro:/home/pedrok:/bin/bash
+syjun:x:2983:8713:Soon yung Jun:/home/syjun:/bin/bash
+wenzel:x:1915:9225:Hans-joachim Wenzel:/home/wenzel:/bin/bash
+yarba_j:x:5145:9937:Julia Yarba:/home/yarba_j:/bin/bash
+genser:x:1854:9030:Krzysztof Genser:/home/genser:/bin/bash
+hlamm:x:56169:1540:Henry Lamm:/home/hlamm:/bin/bash
+hughes:x:5002:5063:Richard Hughes:/home/hughes:/bin/bash
+alexan:x:11696:8706:Viorel Alexandru:/home/alexan:/bin/bash
+dszkola:x:52734:5023:Daniel Szkola:/home/dszkola:/bin/bash
+mwagman:x:56418:1535:Michael Wagman:/home/mwagman:/bin/bash
+pshana:x:51989:8784:Phiala Shanahan:/home/pshana:/bin/bash
+yongzhao:x:56459:9540:Yong Zhao:/home/yongzhao:/bin/bash
+grendon:x:56465:9540:Gumaro Rendon:/home/grendon:/bin/bash
+gtoga:x:56239:9540:Goksu Toga:/home/gtoga:/bin/bash
+nbutt:x:51087:9540:Nouman Butt:/home/nbutt:/bin/bash
+schaich:x:43674:8731:David Schaich:/home/schaich:/bin/bash
+cdavies:x:10213:8859:Christine Davies:/home/cdavies:/sbin/nologin
+jkoponen:x:44306:1540:Jonna Koponen:/home/jkoponen:/bin/bash
+atlytle:x:15881:9540:Andrew Lytle:/home/atlytle:/bin/bash
+holland:x:43633:9540:Kieran Holland:/home/holland:/bin/bash
+ricky:x:46260:9540:Chik him Wong:/home/ricky:/bin/bash
+slahert:x:55042:9540:Shaun Lahert:/home/slahert:/bin/bash
+tiradani:x:42832:8715:Anthony Tiradani:/home/tiradani:/bin/bash
+fkhan:x:49961:8715:Farrukh Khan:/home/fkhan:/bin/bash
+zfan:x:54517:9540:Zhouyou Fan:/home/zfan:/bin/bash
+zhang907:x:47056:8773:Rui Zhang:/home/zhang907:/bin/bash
+rdelgado:x:53836:8625:Rafel Delgado lopez:/home/rdelgado:/bin/bash
+jhweber:x:53837:8625:Johannes Weber:/home/jhweber:/bin/bash
+osg:x:12740:9652:Steven Timm:/home/osg:/sbin/nologin
+sammcd00:x:48361:8637:Samuel Mcdermott:/home/sammcd00:/bin/bash
+boyd:x:4395:9934:Joseph Boyd:/home/boyd:/bin/bash
+chulwoo:x:43427:1540:Chulwoo Jung:/home/chulwoo:/bin/bash
+cmb:x:43544:1540:Christopher Bouchard:/home/cmb:/bin/bash
+engel:x:43132:9540:Michael Engelhardt:/home/engel:/bin/bash
+syritsyn:x:43506:9919:Sergey Syritsyn:/home/syritsyn:/bin/bash
+mingyang:x:45591:1540:Mingyang Sun:/home/mingyang:/bin/zsh
+gongming:x:44338:9540:Ming Gong:/home/gongming:/sbin/nologin
+anyili:x:13552:1540:Anyi Li:/home/anyili:/bin/csh
+mlujan:x:46484:9540:Michael Lujan:/home/mlujan:/bin/bash
+smondal:x:49680:9172:Santanu Mondal:/home/smondal:/bin/bash
+giedt:x:13617:8651:Joel Giedt:/home/giedt:/sbin/nologin
+jshen:x:55071:9540:Jiayu Shen:/home/jshen:/bin/bash
+mtomii:x:57063:9540:Masaaki Tomii:/home/mtomii:/bin/bash
+osthoff:x:1003:1625:Carla Debarros:/home/osthoff:/sbin/nologin
+wsun:x:3279:9950:Werner Sun:/home/wsun:/sbin/nologin
+condor:x:4716:3302: Condor computing:/home/condor:/sbin/nologin
+esimm:x:43512:9645:Edward Simmonds:/home/esimm:/sbin/nologin
+dgr:x:7785:9540:David graham Richards:/home/dgr:/bin/bash
+kretzke:x:50216:9010:Kevin Retzke:/home/kretzke:/bin/bash
+mkhan2:x:57158:9540:Md tanjib atique Khan:/home/mkhan2:/bin/bash
+cpeterso:x:57257:8618:Curtis Peterson:/home/cpeterso:/bin/bash
+eneil:x:14851:8824:Ethan Neil:/home/eneil:/bin/bash
+bqs:x:45385:9540:Benjamin Svetitsky:/home/bqs:/bin/bash
+mlynch:x:57420:9540:Michael Lynch:/home/mlynch:/bin/bash
+mawhinne:x:43256:9346:Robert Mawhinney:/home/mawhinne:/bin/bash
+liangz:x:48537:9400:Liang Zhang:/home/liangz:/bin/bash
+ekowen:x:57763:9540:Evan Owen:/home/ekowen:/bin/bash
+gfleming:x:10778:1540:George Fleming:/home/gfleming:/bin/bash
+dstewart:x:57944:9540:Douglas Stewart:/home/dstewart:/bin/bash
+gcooper:x:6045:8838:Robert glenn Cooper:/home/gcooper:/bin/bash
+cbonnaud:x:45340:9914:Christophe Bonnaud:/home/cbonnaud:/bin/bash
+ssiadmin:x:50171:9465: Ecfssi:/home/ssiadmin:/sbin/nologin
+wdetmold:x:42913:8784:Wiiliam Detmold:/home/wdetmold:/bin/bash
+mblack:x:58106:9540:Matthew Black:/home/mblack:/bin/bash
+hjeong:x:58451:9540:Hwancheol Jeong:/home/hjeong:/bin/bash
+degrand:x:13393:8067:Thomas Degrand:/home/degrand:/bin/bash
+ewickend:x:58574:9540:Evan Wickenden:/home/ewickend:/bin/bash
+geant4:x:1080:1001:Steven Timm:/home/geant4:/sbin/nologin
+shamir:x:58490:9540:Yigal Shamir:/home/shamir:/usr/bin/tcsh
+sbhat:x:10610:9276:Shreyas Bhat:/home/sbhat:/bin/bash
+coimbra:x:52872:9276:Bruno Moreira coimbra:/home/coimbra:/bin/bash
+kuropat:x:3019:1706:Nikolay Kuropatkin:/home/kuropat:/bin/bash
+goodenou:x:44072:8951:Lisa Goodenough:/home/goodenou:/bin/bash
+vito:x:14191:8951:Vito Di benedetto:/home/vito:/bin/bash
+kherner:x:11469:9276:Kenneth Herner:/home/kherner:/bin/bash
