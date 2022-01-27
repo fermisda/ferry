@@ -1,0 +1,15 @@
+project:
+  cluster : lq1_cluster
+  group_type : LQ1Cluster
+  homedir_default : /home/nsf
+  shell_default : /bin/bash
+ferry:
+  cert_key : /tmp/x509up_u6956
+  cert_pem : /tmp/x509up_u6956 
+  ca_path : /etc/grid-security/certificates
+  ferry_url : https://ferrydev.fnal.gov:8445
+  test : yes 
+data:
+  passwd : ../data/lq1_passwd
+  group : ../data/lq1_group
+  projects : ../data/projects
