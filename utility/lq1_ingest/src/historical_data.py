@@ -130,6 +130,7 @@ def read_project_file(fname, users, groups):
 
 
 def add_user_to_cluster(url, cert,cluster, u, is_test):
+
     cmd = "%s/setUserAccessToComputeResource?groupname=%s&homedir=%s&primary=True&resourcename" \
                   "=%s&username=%s&shell=%s" % (url, u.gname, u.home, cluster, u.uname, u.shell)
     execute(cert, cmd, is_test)
@@ -295,6 +296,10 @@ def main():
             leader = "False"
             if u.uname == p.pi_name:
                 leader = "True"
+            # adding user to LQCD VO
+    	    cmd = "%s/addUserToExperiment?username=%s&unitname=lqcd" % (url,u.uname)
+    	    execute(cert, cmd, is_test)
+
             cmd = "%s/addUserToGroup?username=%s&groupname=%s&grouptype=%s&leader=%s" % (url, u.uname, pname,
                                                                                          group_type, leader)
             execute(cert, cmd, is_test)
