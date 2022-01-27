@@ -168,7 +168,7 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 		unitid).Scan(&compResource)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
-		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "A compute resouce with a type of 'Interactive' was not found for the affiliation."))
 		return nil, apiErr
 	}
 
@@ -184,7 +184,7 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 		unitid).Scan(&compGroup)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
-		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "No primary group exists for the affiliation."))
 		return nil, apiErr
 	}
 
@@ -447,6 +447,7 @@ func createExperiment(c APIContext, i Input) (interface{}, []APIError) {
 		GroupType: groupType,
 		UnitName:  i[UnitName],
 		Primary:   NewNullAttribute(Primary).Default(true),
+		Required:  NewNullAttribute(Required).Default(false),
 	}
 
 	_, apiErr = addGroupToUnit(c, input)
