@@ -843,8 +843,9 @@ func setUserExperimentFQAN(c APIContext, i Input) (interface{}, []APIError) {
 		fqanids = append(fqanids, fqanid)
 	}
 	rows.Close()
+	e := fmt.Sprintf("no FQANs found for this affiliation with a fqan like %s", fqan.Data.(string))
 	if len(fqanids) == 0 {
-		apiErr = append(apiErr, APIError{errors.New("no FQANs found for this query"), ErrorAPIRequirement})
+		apiErr = append(apiErr, APIError{errors.New(e), ErrorAPIRequirement})
 		return nil, apiErr
 	}
 
