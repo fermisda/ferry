@@ -29,6 +29,7 @@ func IncludeUnitAPIs(c *APICollection) {
 	getAffiliationUnitMembers := BaseAPI{
 		InputModel{
 			Parameter{UnitName, true},
+			Parameter{Status, false},
 			Parameter{LastUpdated, false},
 		},
 		getAffiliationUnitMembers,
@@ -276,8 +277,15 @@ func getAffiliationUnitMembers(c APIContext, i Input) (interface{}, []APIError) 
 		return nil, apiErr
 	}
 
-	rows, checkerr := c.DBtx.Query(`select DISTINCT ug.uid, users.uname from user_group as ug join affiliation_unit_group as aug on aug.groupid = ug.groupid join users on ug.uid = users.uid where aug.unitid=$1 and (ug.last_updated>=$2 or $2 is null) order by ug.uid`,
-		unitid, i[LastUpdated])
+	rows, checkerr := c.DBtx.Query(`select DISTINCT ug.uid, users.uname, users.status
+									from user_group as ug
+										join affiliation_unit_group as aug on aug.groupid = ug.groupid
+										join users on ug.uid = users.uid
+									where aug.unitid=$1
+										and (ug.last_updated>=$2 or $2 is null)
+										and (users.status=$3 or $3 is null)
+									order by ug.uid`,
+		unitid, i[LastUpdated], i[Status])
 	if checkerr != nil {
 		log.WithFields(QueryFields(c)).Error(checkerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -289,13 +297,14 @@ func getAffiliationUnitMembers(c APIContext, i Input) (interface{}, []APIError) 
 	out := make([]jsonentry, 0)
 
 	for rows.Next() {
-		row := NewMapNullAttribute(UID, UserName)
-		rows.Scan(row[UID], row[UserName])
+		row := NewMapNullAttribute(UID, UserName, Status)
+		rows.Scan(row[UID], row[UserName], row[Status])
 
 		if row[UID].Valid {
 			out = append(out, jsonentry{
 				UID:      row[UID].Data,
 				UserName: row[UserName].Data,
+				Status:   row[Status].Data,
 			})
 		}
 	}
