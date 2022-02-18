@@ -412,13 +412,13 @@ func getGroupFile(c APIContext, i Input) (interface{}, []APIError) {
 	}
 
 	rows, err := c.DBtx.Query(`select g.name, gid, uname, is_primary, cg.last_updated
-                                from compute_access_group cg
-								join compute_resources using (compid)
-								join groups g using(groupid)
-								join users using(uid)
-							   where (unitid = $1 or $1 is null) and (compid = $2 or $2 is null)
-									  and (g.type = 'UnixGroup') and (cg.last_updated>=$3 or $3 is null)
-							   order by name, uname`,
+	                                from compute_access_group cg
+									join compute_resources using (compid)
+									join groups g using(groupid)
+									join users using(uid)
+								   where (unitid = $1 or $1 is null) and (compid = $2 or $2 is null)
+										  and (g.type = 'UnixGroup') and (cg.last_updated>=$3 or $3 is null)
+								   order by name, uname`,
 		unitid, compid, i[LastUpdated])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
@@ -454,6 +454,7 @@ func getGroupFile(c APIContext, i Input) (interface{}, []APIError) {
 				entry[GroupName] = row[GroupName].Data
 				entry[GID] = row[GID].Data
 				prevGname = *row[GroupName]
+				prevUname.Data = " "
 			}
 			if !row[Primary].Data.(bool) && prevUname != *row[UserName] {
 				users = append(users, row[UserName].Data)
