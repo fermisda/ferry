@@ -37,6 +37,15 @@ func IncludeUnitAPIs(c *APICollection) {
 	}
 	c.Add("getAffiliationUnitMembers", &getAffiliationUnitMembers)
 
+	getAffiliationMembers := BaseAPI{
+		InputModel{
+			Parameter{UnitName, false},
+		},
+		getAffiliationMembers,
+		RoleRead,
+	}
+	c.Add("getAffiliationMembers", &getAffiliationMembers)
+
 	getGroupsInAffiliationUnit := BaseAPI{
 		InputModel{
 			Parameter{UnitName, false},
@@ -307,6 +316,76 @@ func getAffiliationUnitMembers(c APIContext, i Input) (interface{}, []APIError) 
 				Status:   row[Status].Data,
 			})
 		}
+	}
+	return out, nil
+}
+
+func getAffiliationMembers(c APIContext, i Input) (interface{}, []APIError) {
+	// -- getAffiliationUnitMembers is used by SNOW and it would take many months to get them
+	//    to accept a format change to the output, so getAffiliationMembers was created.
+	var apiErr []APIError
+
+	unitid := NewNullAttribute(UnitID)
+
+	checkerr := c.DBtx.QueryRow(`select unitid from affiliation_units where name=$1`, i[UnitName]).Scan(&unitid)
+	if checkerr != nil && checkerr != sql.ErrNoRows {
+		log.WithFields(QueryFields(c)).Error(checkerr)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+	if i[UnitName].Valid && !unitid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+		return nil, apiErr
+	}
+
+	rows, checkerr := c.DBtx.Query(`select au.name, u.uname, u.uid, eaa.value
+									from affiliation_units au
+										join affiliation_unit_group aug using (unitid)
+										join groups using (groupid)
+										join user_group using (groupid)
+										join users u using (uid)
+										join external_affiliation_attribute eaa using (uid)
+									where aug.is_primary = true
+										and eaa.attribute = 'voPersonID'
+										and u.status = true
+										and (au.unitid = $1 or $1 is null)
+									order by au.name, u.uname`, unitid)
+	if checkerr != nil {
+		log.WithFields(QueryFields(c)).Error(checkerr)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+	defer rows.Close()
+
+	const Users Attribute = "users"
+	type jsonentry map[Attribute]interface{}
+	out := make([]jsonentry, 0)
+	users := make([]jsonentry, 0)
+	curexp := ""
+	for rows.Next() {
+		row := NewMapNullAttribute(UnitName, UserName, UID, Value)
+		rows.Scan(row[UnitName], row[UserName], row[UID], row[Value])
+		if curexp == "" {
+			curexp = row[UnitName].Data.(string)
+		}
+		users = append(users, jsonentry{
+			UserName: row[UserName].Data,
+			UID:      row[UID].Data,
+			"uuid":   row[Value].Data,
+		})
+		if curexp != row[UnitName].Data.(string) {
+			out = append(out, jsonentry{
+				UnitName: curexp,
+				Users:    users,
+			})
+			curexp = row[UnitName].Data.(string)
+		}
+	}
+	if curexp != "" {
+		out = append(out, jsonentry{
+			UnitName: curexp,
+			Users:    users,
+		})
 	}
 	return out, nil
 }
