@@ -355,6 +355,7 @@ func getAffiliationMembers(c APIContext, i Input) (interface{}, []APIError) {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
+
 	defer rows.Close()
 
 	const Users Attribute = "users"
@@ -365,21 +366,24 @@ func getAffiliationMembers(c APIContext, i Input) (interface{}, []APIError) {
 	for rows.Next() {
 		row := NewMapNullAttribute(UnitName, UserName, UID, Value)
 		rows.Scan(row[UnitName], row[UserName], row[UID], row[Value])
+		if row[UnitName].Data.(string) == "uboone" {
+			log.Info("hello")
+		}
 		if curexp == "" {
 			curexp = row[UnitName].Data.(string)
+		} else if curexp != row[UnitName].Data.(string) {
+			out = append(out, jsonentry{
+				UnitName: curexp,
+				Users:    users,
+			})
+			curexp = row[UnitName].Data.(string)
+			users = make([]jsonentry, 0)
 		}
 		users = append(users, jsonentry{
 			UserName: row[UserName].Data,
 			UID:      row[UID].Data,
 			"uuid":   row[Value].Data,
 		})
-		if curexp != row[UnitName].Data.(string) {
-			out = append(out, jsonentry{
-				UnitName: curexp,
-				Users:    users,
-			})
-			curexp = row[UnitName].Data.(string)
-		}
 	}
 	if curexp != "" {
 		out = append(out, jsonentry{
