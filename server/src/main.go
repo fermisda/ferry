@@ -312,6 +312,7 @@ func main() {
 	grouter.HandleFunc("/removeAffiliationUnit", APIs["removeAffiliationUnit"].Run)
 	grouter.HandleFunc("/setAffiliationUnitInfo", APIs["setAffiliationUnitInfo"].Run)
 	grouter.HandleFunc("/getAffiliationUnitMembers", APIs["getAffiliationUnitMembers"].Run)
+	grouter.HandleFunc("/getAffiliationMembers", APIs["getAffiliationMembers"].Run)
 	grouter.HandleFunc("/getGroupsInAffiliationUnit", APIs["getGroupsInAffiliationUnit"].Run)
 	grouter.HandleFunc("/getGroupLeadersinAffiliationUnit", APIs["getGroupLeadersinAffiliationUnit"].Run)
 	grouter.HandleFunc("/getAffiliationUnitComputeResources", APIs["getAffiliationUnitComputeResources"].Run)
