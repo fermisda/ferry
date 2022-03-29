@@ -1425,6 +1425,11 @@ func createUser(c APIContext, i Input) (interface{}, []APIError) {
 	groupid := NewNullAttribute(GroupID)
 	expDate := i[ExpirationDate].Default("2038-01-01")
 
+	if strings.Contains(i[UserName].Data.(string), " ") {
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "Spaces are not allowed in uname."))
+		return nil, apiErr
+	}
+
 	err := c.DBtx.QueryRow(`select (select groupid from groups where name = $1 and type = 'UnixGroup')`, i[GroupName]).Scan(&groupid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)

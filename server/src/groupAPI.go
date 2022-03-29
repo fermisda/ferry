@@ -244,6 +244,11 @@ func createGroup(c APIContext, i Input) (interface{}, []APIError) {
 
 	var validType bool
 
+	if strings.Contains(i[GroupName].Data.(string), " ") {
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "Spaces are not allowed in a group's name."))
+		return nil, apiErr
+	}
+
 	err := c.DBtx.QueryRow(`select $1 = any (enum_range(null::groups_group_type)::text[])`, i[GroupType]).Scan(&validType)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
@@ -256,7 +261,7 @@ func createGroup(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	if i[GroupType].Data == "UnixGroup" && i[GID].Valid == false {
+	if i[GroupType].Data == "UnixGroup" && !i[GID].Valid {
 		apiErr = append(apiErr, DefaultAPIError(ErrorText, "GID is required for UnixGroup"))
 		return nil, apiErr
 	}
