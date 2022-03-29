@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/go-ldap/ldap/v3"
+	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -443,7 +444,6 @@ func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (LDAPData, []APIEr
 	var apiErr []APIError
 	var lData LDAPData
 
-	site := "FNAL"
 	emailSuffix := "fnal.gov"
 	uname := NewNullAttribute(UserName)
 	uid := NewNullAttribute(UID)
@@ -482,14 +482,7 @@ func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (LDAPData, []APIEr
 	}
 	// Create a voPersionID iff the DB did not find one for this user.
 	if len(lData.voPersonID) == 0 {
-		seqno := 0
-		err = c.DBtx.QueryRow(`select nextval('ldap_vopersonid_seq')`).Scan(&seqno)
-		if err != nil {
-			log.WithFields(QueryFields(c)).Error(err)
-			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-			return lData, apiErr
-		}
-		lData.voPersonID = fmt.Sprintf("%s%09d", site, seqno)
+		lData.voPersonID = uuid.New().String()
 	}
 
 	lData.dn = fmt.Sprintf("voPersonID=%s,%s", lData.voPersonID, ldapBaseDN)
