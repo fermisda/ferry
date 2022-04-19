@@ -481,7 +481,7 @@ func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (LDAPData, []APIEr
 	lData.mail = fmt.Sprintf("%s@%s", uname.Data, emailSuffix)
 	lData.eduPersonPrincipalName = lData.voPersonID
 	lData.uid = uname.Data.(string)
-	lData.voPersonExternalID = lData.voPersonID
+	lData.voPersonExternalID = lData.mail
 
 	err = LDAPaddUser(lData, con)
 	if err != nil {
