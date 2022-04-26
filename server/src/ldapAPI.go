@@ -53,7 +53,7 @@ func IncludeLdapAPIs(c *APICollection) {
 			Parameter{Role, false},
 		},
 		getCapabilitySet,
-		RoleWrite,
+		RoleRead,
 	}
 	c.Add("getCapabilitySet", &getCapabilitySet)
 
