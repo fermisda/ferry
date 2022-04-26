@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/go-ldap/ldap/v3"
@@ -49,7 +50,6 @@ func IncludeLdapAPIs(c *APICollection) {
 		InputModel{
 			Parameter{UnitName, false},
 			Parameter{SetName, false},
-			Parameter{Pattern, false},
 			Parameter{Role, false},
 		},
 		getCapabilitySet,
@@ -564,7 +564,6 @@ func getCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	setid := NewNullAttribute(SetID)
 	role := NewNullAttribute(Role)
 
-	var patternCnt int
 	var roleCnt int
 
 	if i[Role].Valid {
@@ -574,9 +573,8 @@ func getCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	err := c.DBtx.QueryRow(`select (select unitid  from affiliation_units  where name=$1),
 								   (select setid from capability_sets where name=$2),
 								   (select count(fqan) from grid_fqan join affiliation_units using (unitid)
-								     where name=$1 and (lower(fqan) like lower($3))),
-								   (select count(*) from scopes where pattern = $4 )`,
-		i[UnitName], i[SetName], role, i[Pattern]).Scan(&unitid, &setid, &roleCnt, &patternCnt)
+								     where name=$1 and (lower(fqan) like lower($3)))`,
+		i[UnitName], i[SetName], role).Scan(&unitid, &setid, &roleCnt)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -591,23 +589,21 @@ func getCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	if i[Role].Valid && roleCnt == 0 {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, Role))
 	}
-	if i[Pattern].Valid && patternCnt == 0 {
-		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, Pattern))
-	}
 	if len(apiErr) > 0 {
 		return nil, apiErr
 	}
 
-	rows, err := c.DBtx.Query(`select cs.name, cs.last_updated, s.pattern, s.last_updated, au.name, gf.fqan
+	rows, err := c.DBtx.Query(`select cs.name, s.pattern, au.name, gf.fqan, u.uname, g.name
 							   from capability_sets cs
 	  						     join scopes s using (setid)
 						   	     left join grid_fqan gf using (setid)
 	                             left join affiliation_units au using (unitid)
+								 left join groups g on mapped_group = g.groupid
+								 left join users u on mapped_user = u.uid
 	                           where (au.name = $1 or $1 is null)
 	                             and (cs.name = $2 or $2 is null)
-	                             and (s.pattern = $3 or $3 is null)
-	                             and ( (lower(fqan) like lower($4)) or $4 is null)
-	                           order by cs.name, au.name`, i[UnitName], i[SetName], i[Pattern], role)
+	                             and ( (lower(fqan) like lower($3)) or $3 is null)
+	                           order by cs.name, au.name`, i[UnitName], i[SetName], role)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -618,59 +614,78 @@ func getCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	type jsonlist []interface{}
 
 	const Patterns Attribute = "patterns"
-	const Units Attribute = "units"
+	const Roles Attribute = "roles"
+	const MappedUser Attribute = "mappeduser"
+	const MappedGroup Attribute = "mappedgroup"
 
 	entry := jsonentry{
-		SetName:     "",
-		LastUpdated: "",
-		Patterns:    make(jsonlist, 0),
-		Units:       make(jsonlist, 0),
+		SetName:  "",
+		Patterns: make(jsonlist, 0),
+		Roles:    make(jsonlist, 0),
+	}
+
+	roleEntry := jsonentry{
+		Role:        "",
+		FQAN:        "",
+		UnitName:    "",
+		MappedUser:  "",
+		MappedGroup: "",
 	}
 
 	out := make([]jsonentry, 0)
 
-	row := NewMapNullAttribute(SetName, LastUpdated)  // Set Stuff
-	prow := NewMapNullAttribute(Pattern, LastUpdated) // Pattern stuff
-	grow := NewMapNullAttribute(UnitName, FQAN)       // Grid stuff
+	row := NewMapNullAttribute(SetName, Pattern, UnitName, FQAN, UserName, GroupName)
 
-	// Has this item already been saved?
-	dejavu := make(map[string]string)  // Patterns
-	dejavu2 := make(map[string]string) // Units
+	var list []string
+	dejavu := NewNullAttribute(FQAN)
+	dejavu2 := NewNullAttribute(GroupName)
 
+	re := regexp.MustCompile(`Role=`)
 	for rows.Next() {
-		rows.Scan(row[SetName], row[LastUpdated], prow[Pattern], prow[LastUpdated], grow[UnitName], grow[FQAN])
+		rows.Scan(row[SetName], row[Pattern], row[UnitName], row[FQAN], row[UserName], row[GroupName])
 
 		if entry[SetName] == "" {
 			entry[SetName] = row[SetName].Data
-			entry[LastUpdated] = row[LastUpdated].Data
-		} else if entry[SetName] != row[SetName].Data {
-			newEntry := make(jsonentry)
-			newEntry[SetName] = entry[SetName]
-			newEntry[LastUpdated] = entry[LastUpdated]
-			newEntry[Patterns] = entry[Patterns]
-			newEntry[Units] = entry[Units]
-			out = append(out, newEntry)
-			entry[SetName] = row[SetName].Data
-			entry[Patterns] = make(jsonlist, 0)
-			entry[Units] = make(jsonlist, 0)
-			dejavu2 = make(map[string]string)
 		}
-		var pkey = prow[Pattern].Data.(string)
-		if _, ok := dejavu[pkey]; !ok {
-			newPentry := make(jsonentry)
-			newPentry[Pattern] = prow[Pattern].Data
-			newPentry[LastUpdated] = prow[LastUpdated].Data
-			entry[Patterns] = append(entry[Patterns].(jsonlist), newPentry)
-			dejavu[pkey] = "blah"
+		if entry[SetName] == row[SetName].Data {
+			if !stringInSlice(row[Pattern].Data.(string), list) {
+				entry[Patterns] = append(entry[Patterns].(jsonlist), row[Pattern].Data)
+				list = append(list, row[Pattern].Data.(string))
+			}
+		} else {
+			out = append(out, entry)
+			entry = jsonentry{
+				SetName:  row[SetName].Data,
+				Patterns: make(jsonlist, 0),
+				Roles:    make(jsonlist, 0),
+			}
+			list = nil
+			dejavu = NewNullAttribute(FQAN)
+			dejavu2 = NewNullAttribute(GroupName)
 		}
 
-		var gkey = grow[UnitName].Data.(string)
-		if _, ok := dejavu2[gkey]; !ok {
-			newUentry := make(jsonentry)
-			newUentry[UnitName] = grow[UnitName].Data
-			newUentry[FQAN] = grow[FQAN].Data
-			entry[Units] = append(entry[Units].(jsonlist), newUentry)
-			dejavu2[gkey] = "blah"
+		if (dejavu.Data != row[FQAN].Data) || (dejavu2.Data != row[GroupName].Data) {
+			dejavu = NewNullAttribute(FQAN).Default(row[FQAN].Data)
+			dejavu2 = NewNullAttribute(GroupName).Default(row[GroupName].Data)
+			roleEntry = jsonentry{
+				Role:        "",
+				FQAN:        "",
+				UnitName:    "",
+				MappedUser:  "",
+				MappedGroup: "",
+			}
+			a := re.FindStringIndex(row[FQAN].Data.(string))[1]
+			b := row[FQAN].Data.(string)[a:]
+			roleEntry[Role] = strings.Split(b, "/")[0]
+			roleEntry[FQAN] = row[FQAN].Data
+			roleEntry[UnitName] = row[UnitName].Data
+			if row[UserName].Valid {
+				roleEntry[MappedUser] = row[UserName].Data
+			}
+			if row[GroupName].Valid {
+				roleEntry[MappedGroup] = row[GroupName].Data
+			}
+			entry[Roles] = append(entry[Roles].(jsonlist), roleEntry)
 		}
 	}
 	out = append(out, entry)
