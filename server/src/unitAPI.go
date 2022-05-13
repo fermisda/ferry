@@ -338,15 +338,13 @@ func getAffiliationMembers(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	rows, checkerr := c.DBtx.Query(`select au.name, u.uname, u.uid, eaa.value
+	rows, checkerr := c.DBtx.Query(`select au.name, u.uname, u.uid, u.voPersonID
 									from affiliation_units au
 										join affiliation_unit_group aug using (unitid)
 										join groups using (groupid)
 										join user_group using (groupid)
 										join users u using (uid)
-										join external_affiliation_attribute eaa using (uid)
 									where aug.is_primary = true
-										and eaa.attribute = 'voPersonID'
 										and u.status = true
 										and (au.unitid = $1 or $1 is null)
 									order by au.name, u.uname`, unitid)
