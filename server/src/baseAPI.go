@@ -267,6 +267,7 @@ const (
 	TokenSubject      Attribute = "tokensubject"
 	VaultStorageKey   Attribute = "vaultstoragekey"
 	ExternalAttribute Attribute = "externalattribute"
+	VoPersonID        Attribute = "vopersonid"
 )
 
 // Type returns the type of the Attribute
@@ -301,6 +302,7 @@ func (a Attribute) Type() AttributeType {
 		ExternalAttribute: TypeSstring,
 		CondorGroup:       TypeString,
 		VOName:            TypeString,
+		VoPersonID:        TypeString,
 		UID:               TypeInt,
 		GID:               TypeInt,
 		GroupID:           TypeInt,
