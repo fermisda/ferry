@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -1607,8 +1608,6 @@ func deleteUser(c APIContext, i Input) (interface{}, []APIError) {
 func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	uid := i[UID]
-
 	uname := NewNullAttribute(UserName)
 
 	err := c.DBtx.QueryRow(`select uname from users where uid = $1`, i[UID]).Scan(&uname)
@@ -1621,50 +1620,150 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
+	// Must use the table columns in the json output to match what is
+	// in the user_archives table.
+	const jUserGroup Attribute = "user_group"
+	const jUsers Attribute = "users"
+
+	const jUID Attribute = "uid"
+	const jGroupID Attribute = "groupid"
+	const jLeader Attribute = "is_leader"
+	const jLastUpdated Attribute = "last_updated"
+
+	const jUserName Attribute = "uname"
+	const jStatus Attribute = "status"
+	const jExpirationDate Attribute = "expiration_date"
+	const jFullName Attribute = "full_name"
+	const jGroupAccount Attribute = "is_groupaccount"
+	const jSharedAccount Attribute = "is_sharedaccount"
+	const jVoPersonID Attribute = "vopersonid"
+
+	type jsonentry map[Attribute]interface{}
+	type jsonlist []interface{}
+
+	jtables := jsonentry{
+		jUserGroup: make(jsonlist, 0),
+		jUsers:     make(jsonlist, 0),
+	}
+
+	rowEntry := jsonentry{
+		jUID:         TypeInt,
+		jGroupID:     TypeInt,
+		jLeader:      TypeBool,
+		jLastUpdated: TypeDate,
+	}
+
+	rows, err := DBptr.Query(`select uid, groupid, is_leader, last_updated from user_group where uid = $1`, i[UID])
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	list := make(jsonlist, 0)
+	row := NewMapNullAttribute(jUID, jGroupID, jLeader, jLastUpdated)
+	for rows.Next() {
+		rows.Scan(row[jUID], row[jGroupID], row[jLeader], row[jLastUpdated])
+		rowEntry[jUID] = row[jUID].Data
+		rowEntry[jGroupID] = row[jGroupID].Data
+		rowEntry[jLeader] = row[jLeader].Data
+		rowEntry[jLastUpdated] = row[jLastUpdated].Data
+		list = append(list, rowEntry)
+		rowEntry = jsonentry{
+			jUID:         TypeInt,
+			jGroupID:     TypeInt,
+			jLeader:      TypeBool,
+			jLastUpdated: TypeDate,
+		}
+	}
+	jtables[jUserGroup] = list
+
+	uid := NewNullAttribute(UID)
+	status := NewNullAttribute(Status)
+	expDate := NewNullAttribute(Experiment)
+	lastUpdated := NewNullAttribute(LastUpdated)
+	fullName := NewNullAttribute(FullName)
+	isGroup := NewNullAttribute(GroupAccount)
+	isShared := NewNullAttribute(SharedAccount)
+	voPersonID := NewNullAttribute(VoPersonID)
+
+	err = c.DBtx.tx.QueryRow(`select uid, uname, status, expiration_date, last_updated, full_name, is_groupaccount, is_sharedaccount, voPersonID
+							  from users
+							  where uid = $1`, i[UID]).Scan(&uid, &uname, &status, &expDate, &lastUpdated, &fullName, &isGroup, &isShared, &voPersonID)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	r := jsonentry{
+		jUID:            TypeInt,
+		jUserName:       TypeString,
+		jStatus:         TypeBool,
+		jExpirationDate: TypeDate,
+		jLastUpdated:    TypeDate,
+		jFullName:       TypeString,
+		jGroupAccount:   TypeBool,
+		jSharedAccount:  TypeBool,
+		jVoPersonID:     TypeString,
+	}
+	r[jUID] = uid.Data
+	r[jUserName] = uname.Data
+	r[jStatus] = status.Data
+	r[jExpirationDate] = expDate.Data
+	r[jLastUpdated] = lastUpdated.Data
+	r[jFullName] = fullName.Data
+	r[jGroupAccount] = isGroup.Data
+	r[jSharedAccount] = isShared.Data
+	r[jVoPersonID] = voPersonID.Data
+
+	jtables[jUsers] = r
+
+	parsedOut, err := json.Marshal(jtables)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err.Error())
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, err))
+		return nil, apiErr
+	}
+
+	_, err = c.DBtx.Exec(`delete from user_group where uid=$1`, uid.Data)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		if strings.Contains(err.Error(), "violates foreign key constraint") {
+			apiErr = append(apiErr, APIError{errors.New("cannot drop as this user has associations which must be archived"), ErrorAPIRequirement})
+		} else {
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		}
+		return nil, apiErr
+	}
+
+	_, err = c.DBtx.Exec(`delete from users where uid=$1`, uid.Data)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		if strings.Contains(err.Error(), "violates foreign key constraint") {
+			apiErr = append(apiErr, APIError{errors.New("cannot drop as this user has associations which must be archived"), ErrorAPIRequirement})
+		} else {
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		}
+		return nil, apiErr
+	}
+
+	_, err = c.DBtx.Exec(`insert into user_archives (uid, uname, user_data, date_deleted) values ($1, $2, $3, now())`,
+		uid, uname, string(parsedOut))
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
 	input := Input{
 		UserName: uname,
 	}
 
-	// Process the user groups first
-	colList, apiErr := getTableColumns(c, "user_group")
-	if apiErr != nil {
-		return nil, apiErr
-	}
-	columns := strings.Join(colList, ",")
-	sql := fmt.Sprintf("with foo as (delete from user_group where uid=%d returning *, now() when_deleted) insert into user_group_deletions (%s, when_deleted) select * from foo",
-		uid.Data, columns)
-	_, err = c.DBtx.Exec(sql)
-	if err != nil {
-		log.WithFields(QueryFields(c)).Error(err)
-		if strings.Contains(err.Error(), "violates foreign key constraint") {
-			apiErr = append(apiErr, APIError{errors.New("all associations with this user must be removed before it can be deleted"), ErrorAPIRequirement})
-		} else {
-			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-		}
-		return nil, apiErr
-	}
-	// Must be done before deleting user as voPersonID has not yet been removed, if it exists.
 	_, apiErr = removeUserFromLdap(c, input)
 	if apiErr != nil {
 		msg := fmt.Sprintf("removeUserFromLdap failed for username=%s - allow dropUser to continue.  This will be corrected when syncLdapWithFerry is run on cron.", uname.Data.(string))
 		log.Warningf(msg)
-	}
-	// Now process the user record, removeUserFromLdap will have deleted any voPersonID.
-	colList, apiErr = getTableColumns(c, "users")
-	if apiErr != nil {
-		return nil, apiErr
-	}
-	columns = strings.Join(colList, ",")
-	sql = fmt.Sprintf(`with foo as (delete from users where uid=%d returning *, now() when_deleted) insert into user_deletions (%s, when_deleted) select * from foo`, uid.Data, columns)
-	_, err = c.DBtx.Exec(sql)
-	if err != nil {
-		log.WithFields(QueryFields(c)).Error(err)
-		if strings.Contains(err.Error(), "violates foreign key constraint") {
-			apiErr = append(apiErr, APIError{errors.New("all associations with this user must be removed before it can be deleted"), ErrorAPIRequirement})
-		} else {
-			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-		}
-		return nil, apiErr
 	}
 
 	return nil, nil
