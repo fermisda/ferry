@@ -2039,7 +2039,7 @@ func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 
 	status := i[Status].Default(false)
 
-	rows, err := DBptr.Query(`select uname, uid, full_name, status, expiration_date from users
+	rows, err := DBptr.Query(`select uname, uid, full_name, status, expiration_date, voPersonID from users
 							  where (status=$1 or not $1) and (last_updated>=$2 or $2 is null)
 							  order by uname`, status, i[LastUpdated])
 	if err != nil {
@@ -2053,8 +2053,8 @@ func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 	var out []jsonout
 
 	for rows.Next() {
-		row := NewMapNullAttribute(UserName, UID, FullName, Status, ExpirationDate)
-		rows.Scan(row[UserName], row[UID], row[FullName], row[Status], row[ExpirationDate])
+		row := NewMapNullAttribute(UserName, UID, FullName, Status, ExpirationDate, VoPersonID)
+		rows.Scan(row[UserName], row[UID], row[FullName], row[Status], row[ExpirationDate], row[VoPersonID])
 
 		var expirationDate interface{}
 		if row[ExpirationDate].Valid {
@@ -2067,6 +2067,7 @@ func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 			FullName:       row[FullName].Data,
 			Status:         row[Status].Data,
 			ExpirationDate: expirationDate,
+			VoPersonID:     row[VoPersonID],
 		})
 	}
 
