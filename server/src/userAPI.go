@@ -646,7 +646,7 @@ func getUserGroups(c APIContext, i Input) (interface{}, []APIError) {
 func getUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	rows, err := c.DBtx.Query(`select full_name, uid, status, is_groupaccount, expiration_date from users where uname=$1`, i[UserName])
+	rows, err := c.DBtx.Query(`select full_name, uid, status, is_groupaccount, expiration_date, voPersonID from users where uname=$1`, i[UserName])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -655,10 +655,10 @@ func getUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 	defer rows.Close()
 
 	out := make(map[Attribute]interface{})
-	row := NewMapNullAttribute(FullName, UID, Status, GroupAccount, ExpirationDate)
+	row := NewMapNullAttribute(FullName, UID, Status, GroupAccount, ExpirationDate, VoPersonID)
 
 	for rows.Next() {
-		rows.Scan(row[FullName], row[UID], row[Status], row[GroupAccount], row[ExpirationDate])
+		rows.Scan(row[FullName], row[UID], row[Status], row[GroupAccount], row[ExpirationDate], row[VoPersonID])
 		for _, column := range row {
 			out[column.Attribute] = column.Data
 		}
