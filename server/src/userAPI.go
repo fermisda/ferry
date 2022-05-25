@@ -2067,7 +2067,7 @@ func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 			FullName:       row[FullName].Data,
 			Status:         row[Status].Data,
 			ExpirationDate: expirationDate,
-			VoPersonID:     row[VoPersonID],
+			VoPersonID:     row[VoPersonID].Data,
 		})
 	}
 
