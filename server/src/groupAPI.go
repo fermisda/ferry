@@ -19,7 +19,7 @@ func IncludeGroupAPIs(c *APICollection) {
 	createGroup := BaseAPI{
 		InputModel{
 			Parameter{GroupName, true},
-			Parameter{GroupType, true},
+			Parameter{GroupType, false},
 			Parameter{GID, false},
 		},
 		createGroup,
