@@ -210,7 +210,22 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	// Add user to affiliation's  WilsonCluster group, if it exists
+	// Add user to wilson_cluster and wilson group
+	input = Input{
+		UserName:     i[UserName],
+		GroupName:    NewNullAttribute(GroupName).Default("wilson"),
+		ResourceName: NewNullAttribute(ResourceName).Default("wilson_cluster"),
+		Primary:      NewNullAttribute(Primary).Default(true),
+		Shell:        NewNullAttribute(Shell),
+		HomeDir:      NewNullAttribute(HomeDir),
+	}
+
+	_, apiErr = setUserAccessToComputeResource(c, input)
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	// Add user to affiliation's  WilsonCluster group and compute_resource, if the group exists
 	wcGroup := NewNullAttribute(GroupName)
 	err = c.DBtx.QueryRow(`select name
 						   from affiliation_unit_group
@@ -225,30 +240,17 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 		log.Warn(fmt.Sprintf("Affiliation: %s does not have a WilsonCluster group.", i[UnitName].Data))
 	} else {
 		input = Input{
-			UserName:  i[UserName],
-			GroupName: wcGroup,
-			GroupType: NewNullAttribute(GroupType).Default("WilsonCluster"),
-			Leader:    NewNullAttribute(Leader).Default(false),
+			UserName:     i[UserName],
+			GroupName:    wcGroup,
+			ResourceName: NewNullAttribute(ResourceName).Default("wilson_cluster"),
+			Primary:      NewNullAttribute(Primary).Default(false),
+			Shell:        NewNullAttribute(Shell),
+			HomeDir:      NewNullAttribute(HomeDir),
 		}
-		_, apiErr = addUserToGroup(c, input)
+		_, apiErr = setUserAccessToComputeResource(c, input)
 		if len(apiErr) > 0 {
 			return nil, apiErr
 		}
-	}
-
-	// Add user to wilson_cluster and wilson group
-	input = Input{
-		UserName:     i[UserName],
-		GroupName:    NewNullAttribute(GroupName).Default("wilson"),
-		ResourceName: NewNullAttribute(ResourceName).Default("wilson_cluster"),
-		Primary:      NewNullAttribute(Primary).Default(true),
-		Shell:        NewNullAttribute(Shell),
-		HomeDir:      NewNullAttribute(HomeDir),
-	}
-
-	_, apiErr = setUserAccessToComputeResource(c, input)
-	if len(apiErr) > 0 {
-		return nil, apiErr
 	}
 
 	// Add new experimenter to all required groups with compute resource
