@@ -225,12 +225,14 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	// Add user to affiliation's  WilsonCluster group and compute_resource, if the group exists
+	// Add the user to the wilsoncluster group. BUT  If there is a UnixGroup by that name then
+	// add the user to the compute resource, otherwise add them to the group.
 	wcGroup := NewNullAttribute(GroupName)
-	err = c.DBtx.QueryRow(`select name
+	uGroup := NewNullAttribute(GroupName)
+	err = c.DBtx.QueryRow(`(select name
 						   from affiliation_unit_group
 						     join groups using (groupid)
-						   where unitid = $1 and is_wilsoncluster = true`,
+						   where unitid = $1 and is_wilsoncluster = true)`,
 		unitid).Scan(&wcGroup)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
@@ -239,17 +241,40 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 	} else if err == sql.ErrNoRows {
 		log.Warn(fmt.Sprintf("Affiliation: %s does not have a WilsonCluster group.", i[UnitName].Data))
 	} else {
-		input = Input{
-			UserName:     i[UserName],
-			GroupName:    wcGroup,
-			ResourceName: NewNullAttribute(ResourceName).Default("wilson_cluster"),
-			Primary:      NewNullAttribute(Primary).Default(false),
-			Shell:        NewNullAttribute(Shell),
-			HomeDir:      NewNullAttribute(HomeDir),
-		}
-		_, apiErr = setUserAccessToComputeResource(c, input)
-		if len(apiErr) > 0 {
+
+		err = c.DBtx.QueryRow(`select name from groups where name = $1 and type = 'UnixGroup'`, wcGroup).Scan(&uGroup)
+		if err != nil && err != sql.ErrNoRows {
+			log.WithFields(QueryFields(c)).Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 			return nil, apiErr
+		}
+		if !uGroup.Valid {
+			// There is no UnixGroup by the name entered so just addUserToGroup.
+			input = Input{
+				UserName:  i[UserName],
+				GroupName: wcGroup,
+				GroupType: NewNullAttribute(GroupType).Default("WilsonCluster"),
+				Leader:    NewNullAttribute(Leader).Default(false),
+			}
+			_, apiErr = addUserToGroup(c, input)
+			if len(apiErr) > 0 {
+				return nil, apiErr
+			}
+
+		} else {
+			// There is a UnixGroup so add em to the compute resource.
+			input = Input{
+				UserName:     i[UserName],
+				GroupName:    wcGroup,
+				ResourceName: NewNullAttribute(ResourceName).Default("wilson_cluster"),
+				Primary:      NewNullAttribute(Primary).Default(false),
+				Shell:        NewNullAttribute(Shell),
+				HomeDir:      NewNullAttribute(HomeDir),
+			}
+			_, apiErr = setUserAccessToComputeResource(c, input)
+			if len(apiErr) > 0 {
+				return nil, apiErr
+			}
 		}
 	}
 
