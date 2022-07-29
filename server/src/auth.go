@@ -1,23 +1,27 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 
+	"github.com/lestrrat-go/jwx/jwt"
+
 	"github.com/patrickmn/go-cache"
+	scitokens "github.com/scitokens/scitokens-go"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
 
 var accCache *cache.Cache
+var enforcer scitokens.Enforcer
 
 type accessor struct {
 	accid   int
@@ -25,6 +29,22 @@ type accessor struct {
 	active  bool
 	write   bool
 	accType string
+	uname   string
+}
+
+func AuthInitialize() error {
+	if enforcer == nil {
+		ctx := context.Background()
+		if len(viper.GetStringSlice("issuers")) == 0 {
+			return errors.New("at least one 'issuers' must exist in the config file")
+		}
+		var err error
+		enforcer, err = scitokens.NewEnforcerDaemon(ctx, viper.GetStringSlice("issuers")...)
+		if err != nil {
+			return fmt.Errorf("auth.AuthInitilize NewEnforcerDeamon error: %s", err.Error())
+		}
+	}
+	return nil
 }
 
 func queryAccessors(key string) (accessor, bool) {
@@ -51,17 +71,29 @@ func queryAccessors(key string) (accessor, bool) {
 		log.Error(err)
 		found = false
 	}
-	// So we can know who is using FERRY
-	if found {
-		_, err = tx.ExecContext(ctx, `update accessors set last_used=NOW() where accid = $1`, acc.accid)
-		if err != nil {
-			log.Error("queryAccessors - update")
-			log.Error(err)
+
+	// Find out who the UUID belongs to.
+	if acc.accType == "jwt_role" {
+		err = tx.QueryRow(`select uname from users where voPersonId = $1`, acc.name).Scan(&acc.uname)
+		if err == sql.ErrNoRows {
+			log.Error(fmt.Sprintf("uuid was not found in users table: %s", acc.name))
+			found = false
+		} else if err != nil {
+			log.Error(fmt.Sprintf("queryAccessors - jwt_type: %s", err.Error()))
 			found = false
 		}
 	}
 
-	if found == true {
+	// Update, so we can know who is using FERRY
+	if found {
+		_, err = tx.ExecContext(ctx, `update accessors set last_used=NOW() where accid = $1`, acc.accid)
+		if err != nil {
+			log.Error(fmt.Sprintf("queryAccessors - update: %s", err.Error()))
+			found = false
+		}
+	}
+
+	if found {
 		err = tx.Commit()
 	} else {
 		err = tx.Rollback()
@@ -86,7 +118,7 @@ func getAccessor(key string, ip string) (accessor, bool) {
 		whereFound = "cache"
 	} else {
 		acc, found = queryAccessors(key)
-		if found == true {
+		if found {
 			// Store in cache by BOTH DN, if provided, and IP. Be aware that checkClientIP checks the IP,
 			// regardless if DN is used.   Not caching both will cause a DB hit on every API called via a DN.
 			//
@@ -102,26 +134,6 @@ func getAccessor(key string, ip string) (accessor, bool) {
 	return acc, found
 }
 
-// we probably need   list of authorized DNs too
-func createDNlist(filename string) ([]string, error) {
-	var DNlist []string
-	f, err := os.Open(filename)
-
-	if err != nil {
-		return DNlist, err
-	}
-	scanner := bufio.NewScanner(f)
-	defer f.Close()
-	for scanner.Scan() {
-		DNlist = append(DNlist, scanner.Text())
-	}
-
-	if err := scanner.Err(); err != nil {
-		fmt.Println("Error reading authorized DN file " + filename + ".")
-	}
-
-	return DNlist, err
-}
 func loadCerts(certs []string) (*x509.CertPool, error) {
 	pool := x509.NewCertPool()
 	for _, ca := range certs {
@@ -142,8 +154,8 @@ func loadCerts(certs []string) (*x509.CertPool, error) {
 	return pool, nil
 }
 
-//ParseDN parses a []pkix.AttributeTypeAndValue into a string.
-func ParseDN(names []pkix.AttributeTypeAndValue, sep string) string {
+//parseDN parses a []pkix.AttributeTypeAndValue into a string.
+func parseDN(names []pkix.AttributeTypeAndValue, sep string) string {
 	var oid = map[string]string{
 		"2.5.4.3":                    "CN",
 		"2.5.4.4":                    "SN",
@@ -173,49 +185,72 @@ func ParseDN(names []pkix.AttributeTypeAndValue, sep string) string {
 	return sep + strings.Join(subject, sep)
 }
 
-func authorize(c APIContext, r AccessRole) (AccessLevel, string) {
+// Authorize the client by JWT, DN or IP.  Returns the level of access, a message and the validated string.
+func authorize(c APIContext, r AccessRole) (AccessLevel, string, string) {
+
+	// See, if the API allows public access
+	if r == RolePublic {
+		return LevelPublic, "public role authorized", ""
+	}
 
 	ip := strings.Split(c.R.RemoteAddr, ":")[0]
 
-	// Try authorizing the Certs
-	for _, presCert := range c.R.TLS.PeerCertificates {
-		certDN := ParseDN(presCert.Subject.Names, "/")
-
-		acc, found := getAccessor(certDN, ip)
-		if found == false {
-			continue
-		} else if acc.accType == "dn_role" {
-			// authorize DN roles
-			if r == RoleRead || (r == RoleWrite && acc.write) {
-				return LevelDNRole, fmt.Sprintf("cert matches authorized role %s DN %s", r, certDN)
+	// Try authorizing using a json web token
+	_, err := jwt.ParseRequest(c.R)
+	if err == nil {
+		var uuid string
+		if token, err := enforcer.ValidateTokenRequest(c.R); err == nil {
+			uuid = token.Subject()
+		} else {
+			e := &scitokens.TokenValidationError{}
+			if !errors.As(err, &e) {
+				// some internal error while parsing/validating the token
+				log.Error(err)
+				return LevelDenied, fmt.Sprintf("Internal scitokens error: %s", err.Error()), ""
+			} else {
+				// token is not valid, err (and e.Err) will say why.
+				log.Info(err)
+				return LevelDenied, e.Error(), ""
 			}
-		} else if acc.accType == "dn_whitelist" {
-			// authorize Whitelisted DN s
-			return LevelDNWhitelist, fmt.Sprintf("cert matches whitelisted DN %s", certDN)
+		}
+		acc, found := getAccessor(uuid, ip)
+		if found {
+			// authorize JWT roles
+			if acc.accType == "jwt_role" {
+				if r == RoleRead || (r == RoleWrite && acc.write) {
+					return LevelDNRole, fmt.Sprintf("JWT matches authorized role %s UUID %s for %s", r, uuid, acc.uname), fmt.Sprintf("%s %s", acc.uname, uuid)
+				}
+			}
 		}
 	}
 
-	// Try authorizing the  IP address
+	// Try authorizing DN by the Certs
+	for _, presCert := range c.R.TLS.PeerCertificates {
+		certDN := parseDN(presCert.Subject.Names, "/")
+		acc, found := getAccessor(certDN, ip)
+		if found {
+			// authorize DN roles
+			if acc.accType == "dn_role" {
+				if r == RoleRead || (r == RoleWrite && acc.write) {
+					return LevelDNRole, fmt.Sprintf("cert matches authorized role %s DN %s", r, certDN), certDN
+				}
+			}
+		}
+	}
+
+	// Try authorizing by the  IP address
 	acc, found := getAccessor(ip, ip)
 	if found {
 		// authorize IP roles
 		if acc.accType == "ip_role" {
 			if r == RoleRead || (r == RoleWrite && acc.write) {
-				return LevelIPRole, fmt.Sprintf("ignoring DN of authorized IP %s with role %s", ip, r)
+				return LevelIPRole, fmt.Sprintf("ignoring DN of authorized IP %s with role %s", ip, r), ip
 			}
-			// authorize whitelisted IPs
-		} else if acc.accType == "ip_whitelist" {
-			return LevelIPWhitelist, fmt.Sprintf("ignoring DN of whitelisted IP %s", ip)
 		}
 	}
 
-	// See, if the API allows public access
-	if r == RolePublic {
-		return LevelPublic, fmt.Sprintf("public role authorized")
-	}
-
 	// Go away, we don't like you
-	return LevelDenied, "unable to authorize access"
+	return LevelDenied, "unable to authorize access", ""
 }
 
 func checkClientIP(client *tls.ClientHelloInfo) (*tls.Config, error) {
