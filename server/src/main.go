@@ -60,8 +60,8 @@ func QueryFields(c APIContext) log.Fields {
 		fields["hostname"] = Unknown
 	}
 
-	if len(c.R.TLS.PeerCertificates) > 0 {
-		fields["subject"] = ParseDN(c.R.TLS.PeerCertificates[0].Subject.Names, "/")
+	if len(c.Subject) > 0 {
+		fields["subject"] = c.Subject
 	}
 
 	if c.AuthRole != "" {
@@ -111,6 +111,7 @@ func main() {
 	viper.AddConfigPath(configDir)
 	cfgErr := viper.ReadInConfig()
 	if cfgErr != nil {
+		log.Error(cfgErr)
 		panic(fmt.Errorf("fatal error config file: %s ", cfgErr))
 	}
 	viper.WatchConfig()
@@ -146,6 +147,11 @@ func main() {
 	}
 
 	ldapErr := LDAPinitialize()
+	if ldapErr != nil {
+		log.Fatal(ldapErr)
+	}
+
+	ldapErr = AuthInitialize()
 	if ldapErr != nil {
 		log.Fatal(ldapErr)
 	}
@@ -401,7 +407,7 @@ func main() {
 		tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA}
 
 	Mainsrv.TLSConfig = &tls.Config{
-		ClientAuth:               tls.RequireAndVerifyClientCert,
+		ClientAuth:               tls.VerifyClientCertIfGiven,
 		ClientCAs:                Certpool,
 		GetConfigForClient:       checkClientIP,
 		Certificates:             nil,

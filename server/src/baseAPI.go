@@ -30,9 +30,10 @@ func (b BaseAPI) Run(w http.ResponseWriter, r *http.Request) {
 	var output Output
 	defer output.Parse(context, w)
 
-	authLevel, message := authorize(context, b.AccessRole)
+	authLevel, message, subject := authorize(context, b.AccessRole)
 	context.AuthRole = b.AccessRole
 	context.AuthLevel = authLevel
+	context.Subject = subject
 	if authLevel == LevelDenied {
 		w.WriteHeader(http.StatusUnauthorized)
 		output.Err = append(output.Err, fmt.Errorf("client not authorized"))
@@ -539,6 +540,7 @@ type APIContext struct {
 	AuthRole  AccessRole
 	DBtx      *Transaction
 	Ckey      int64
+	Subject   string
 }
 
 // APICollection aggregates a collection of APIs to be called from a function
@@ -590,6 +592,7 @@ const (
 	LevelPublic
 	LevelDNRole
 	LevelIPRole
+	LevelJWTRole
 	LevelDNWhitelist
 	LevelIPWhitelist
 )
