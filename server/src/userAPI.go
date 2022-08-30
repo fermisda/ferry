@@ -49,15 +49,6 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("createUser", &createUser)
 
-	getSuperUserList := BaseAPI{
-		InputModel{
-			Parameter{UnitName, true},
-		},
-		getSuperUserList,
-		RoleRead,
-	}
-	c.Add("getSuperUserList", &getSuperUserList)
-
 	deleteUser := BaseAPI{
 		InputModel{
 			Parameter{UserName, true},
@@ -557,44 +548,6 @@ func getUserFQANs(c APIContext, i Input) (interface{}, []APIError) {
 		if row[FQAN].Valid {
 			out = append(out, jsonfqan{UnitName: row[UnitName].Data, FQAN: row[FQAN].Data})
 		}
-	}
-
-	return out, nil
-}
-
-func getSuperUserList(c APIContext, i Input) (interface{}, []APIError) {
-	var apiErr []APIError
-
-	unitID := NewNullAttribute(UnitID)
-	err := c.DBtx.QueryRow(`select unitid from affiliation_units where name = $1`, i[UnitName]).Scan(&unitID)
-	if err == sql.ErrNoRows {
-		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
-		return nil, apiErr
-	} else if err != nil {
-		log.WithFields(QueryFields(c)).Error(err)
-		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-		return nil, apiErr
-	}
-
-	rows, err := c.DBtx.Query(`select distinct u.uname from
-								users as u
-								join grid_access as ga on u.uid=ga.uid
-								join grid_fqan as gf on ga.fqanid = gf.fqanid
-							   where ga.is_superuser=true and gf.unitid=$1
-							   order by u.uname`, unitID)
-	if err != nil {
-		log.WithFields(QueryFields(c)).Error(err)
-		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-		return nil, apiErr
-	}
-	defer rows.Close()
-
-	var out []interface{}
-
-	for rows.Next() {
-		row := NewNullAttribute(UserName)
-		rows.Scan(&row)
-		out = append(out, row.Data)
 	}
 
 	return out, nil
