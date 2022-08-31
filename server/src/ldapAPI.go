@@ -674,10 +674,12 @@ func getCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 				MappedUser:  "",
 				MappedGroup: "",
 			}
-			a := re.FindStringIndex(row[FQAN].Data.(string))[1]
-			b := row[FQAN].Data.(string)[a:]
-			roleEntry[Role] = strings.Split(b, "/")[0]
-			roleEntry[FQAN] = row[FQAN].Data
+			if len(row[FQAN].Data.(string)) > 0 {
+				a := re.FindStringIndex(row[FQAN].Data.(string))[1]
+				b := row[FQAN].Data.(string)[a:]
+				roleEntry[Role] = strings.Split(b, "/")[0]
+				roleEntry[FQAN] = row[FQAN].Data
+			}
 			roleEntry[UnitName] = row[UnitName].Data
 			if row[UserName].Valid {
 				roleEntry[MappedUser] = row[UserName].Data
