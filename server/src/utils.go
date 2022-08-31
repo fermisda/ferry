@@ -103,7 +103,7 @@ func convertValue(value interface{}, inunit string, outunit string) (float64, er
 	case "TIB":
 		infactor = 1099511627776 //1024^4
 	default:
-		myerror = errors.New("Invalid value for unit. valid values are (case-insensivite) b, kb, kib, mb, mib, gb, gib, tb, tib.")
+		myerror = errors.New("invalid value for unit. valid values are (case-insensivite) b, kb, kib, mb, mib, gb, gib, tb, tib")
 		return 0, myerror
 	}
 
@@ -128,7 +128,7 @@ func convertValue(value interface{}, inunit string, outunit string) (float64, er
 	case "TIB":
 		outfactor = 1099511627776 //1024^4
 	default:
-		myerror = errors.New("Invalid value for unit. valid values are (case-insensivite) b, kb, kib, mb, mib, gb, gib, tb, tib.")
+		myerror = errors.New("invalid value for unit. valid values are (case-insensivite) b, kb, kib, mb, mib, gb, gib, tb, tib")
 		return 0, myerror
 	}
 	outval = outval * infactor / outfactor

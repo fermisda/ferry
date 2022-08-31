@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/go-ldap/ldap/v3"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
 
@@ -109,22 +110,35 @@ func LDAPinitialize() error {
 	return nil
 }
 
+// Simply logs the error.  It exists o all ldap errors are outputted the same
+// to make it easier for greping.
+func ldapError(method string, ldapMethod string, e error) {
+	log.Errorf("LDAPERROR - Method: %s LDAPmethod: %s Error: %s", method, ldapMethod, e)
+}
+
 // Caller MUST close connection when done.
 // readonly=true provides a connection to a DN which allows paging but is readyonly
 func LDAPgetConnection(readonly bool) (*ldap.Conn, error) {
 
 	l, err := ldap.DialURL(ldapURL)
 	if err != nil {
+		ldapError("LDAPgetConnection", "DialURL", err)
 		return nil, err
 	}
 	if readonly {
 		err = l.Bind(ldapReadDN, ldapReadPass)
+		if err != nil {
+			ldapError("LDAPgetConnection", "Bind", err)
+			return nil, err
+		}
 	} else {
 		err = l.Bind(ldapWriteDN, ldapPass)
+		if err != nil {
+			ldapError("LDAPgetConnection", "Bind 2", err)
+			return nil, err
+		}
 	}
-	if err != nil {
-		return nil, err
-	}
+
 	return l, nil
 }
 
@@ -138,6 +152,7 @@ func LDAPgetUserData(voPersonID string, con *ldap.Conn) (LDAPData, error) {
 
 	result, err := con.Search(searchReq)
 	if err != nil {
+		ldapError("LDAPgetUserData", "Search", err)
 		return lData, err
 	}
 
@@ -170,6 +185,7 @@ func LDAPgetAllVoPersonIDs(con *ldap.Conn) ([]string, error) {
 		"(&(objectClass=organizationalPerson))", attributes, []ldap.Control{ldap.NewControlPaging(1000)})
 	result, err := con.SearchWithPaging(searchReq, 1000)
 	if err != nil {
+		ldapError("LDAPgetAllVoPersonIDs", "SearchWithPaging", err)
 		return nil, err
 	}
 
@@ -201,7 +217,9 @@ func LDAPaddUser(lData LDAPData, con *ldap.Conn) error {
 	addReq.Attribute("voPersonExternalID", voPersonExternalID)
 	addReq.Attribute("voPersonID", voPersonID)
 	err := con.Add(addReq)
-
+	if err != nil {
+		ldapError("LDAPaddUser", "Add", err)
+	}
 	return err
 }
 
@@ -210,6 +228,9 @@ func LDAPremoveUser(voPersonID string, con *ldap.Conn) error {
 	DN := fmt.Sprintf("voPersonID=%s,%s", voPersonID, ldapBaseDN)
 	delReq := ldap.NewDelRequest(DN, []ldap.Control{})
 	err := con.Del(delReq)
+	if err != nil {
+		ldapError("LDAPremoveUser", "Del", err)
+	}
 
 	return err
 }
@@ -222,6 +243,7 @@ func LDAPgetCapabilitySetData(dn string, con *ldap.Conn) (LDAPSetData, error) {
 
 	result, err := con.Search(searchReq)
 	if err != nil {
+		ldapError("LDAPgetCapabilitySetData", "Search", err)
 		return rData, err
 	}
 
@@ -258,6 +280,9 @@ func LDAPaddCapabilitySet(rData LDAPSetData, con *ldap.Conn) error {
 		addReq.Attribute("voPersonApplicationUID", rData.voPersonApplicationUID)
 	}
 	err := con.Add(addReq)
+	if err != nil {
+		ldapError("LDAPaddCapabilitySet", "Add", err)
+	}
 
 	return err
 }
@@ -267,6 +292,9 @@ func LDAPremoveCapabilitySet(voPersonExternalID string, con *ldap.Conn) error {
 	DN := fmt.Sprintf("uid=%s,%s", voPersonExternalID, ldapBaseSetDN)
 	delReq := ldap.NewDelRequest(DN, []ldap.Control{})
 	err := con.Del(delReq)
+	if err != nil {
+		ldapError("LDAPremoveCapabilitySet", "Del", err)
+	}
 
 	return err
 }
@@ -277,6 +305,9 @@ func LDAPaddScope(setName string, patterns []string, con *ldap.Conn) error {
 	modify := ldap.NewModifyRequest(DN, nil)
 	modify.Add("eduPersonEntitlement", patterns)
 	err := con.Modify(modify)
+	if err != nil {
+		ldapError("LDAPaddScope", "Modify", err)
+	}
 
 	return err
 
@@ -288,6 +319,9 @@ func LDAPremoveScope(setName string, pattern []string, con *ldap.Conn) error {
 	modify := ldap.NewModifyRequest(DN, nil)
 	modify.Delete("eduPersonEntitlement", pattern)
 	err := con.Modify(modify)
+	if err != nil {
+		ldapError("LDAPremoveScope", "Modify", err)
+	}
 
 	return err
 
@@ -349,6 +383,8 @@ func LDAPmodifyUserScoping(dn string, setsToDrop []string, setsToAdd []string, g
 		err = con.Modify(modify)
 		if err == nil {
 			modified = true
+		} else {
+			ldapError("LDAPmodifyUserScoping", "Modify", err)
 		}
 	}
 	return modified, err
@@ -373,6 +409,9 @@ func LdapModifyAttributes(dn string, m map[string]string, con *ldap.Conn) error 
 		}
 	}
 	err = con.Modify(modify)
+	if err != nil {
+		ldapError("LdapModifyAttributes", "Modify", err)
+	}
 	return err
 }
 
@@ -414,6 +453,9 @@ func LDAPmodifyCapabilitySetAttributes(rData LDAPSetData, eData LDAPSetData, con
 
 	if doit {
 		err = con.Modify(modify)
+		if err != nil {
+			ldapError("LDAPmodifyCapabilitySetAttributes", "Modify", err)
+		}
 	}
 	return err
 
