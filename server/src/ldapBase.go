@@ -8,7 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-ldap/ldap/v3"
 	log "github.com/sirupsen/logrus"
@@ -23,6 +25,7 @@ var ldapReadPass string
 var ldapBaseDN string
 var ldapBaseSetDN string
 var ldapCapabitySet string
+var ldapTimeout string
 var requiredAccounts string
 
 var ldapErrNoSuchObject = "LDAP Result Code 32 \"No Such Object\": "
@@ -64,6 +67,7 @@ func LDAPinitialize() error {
 	ldapBaseDN = ldapConfig["basedn"]
 	ldapBaseSetDN = ldapConfig["basesetdn"]
 	ldapCapabitySet = ldapConfig["capabilityset"]
+	ldapTimeout = ldapConfig["timeoutinseconds"]
 	requiredAccounts = ldapConfig["requiredaccounts"]
 
 	x := viper.Get("ldap_password")
@@ -99,6 +103,10 @@ func LDAPinitialize() error {
 	}
 	if len(ldapBaseSetDN) == 0 {
 		fields = append(fields, "basesetdn")
+	}
+	if len(ldapTimeout) > 0 {
+		t, _ := strconv.ParseInt(ldapTimeout, 10, 0)
+		ldap.DefaultTimeout = time.Duration(t) * time.Second
 	}
 	if len(requiredAccounts) == 0 {
 		fields = append(fields, "requiredaccounts")
