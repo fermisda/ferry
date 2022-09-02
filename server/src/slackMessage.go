@@ -1,6 +1,6 @@
 package main
 
-// Package blatantly taken from  Sheryas - thanks bud.
+// Package blatantly taken from  Sheryas, and modified for ferry  thanks bud.
 
 import (
 	"bytes"
@@ -14,11 +14,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func SlackMessage(ctx context.Context, message string, slackAlertsUrl string) error {
-	if len(slackAlertsUrl) == 0 {
-		log.Warningf("ferryalertsurl not in config.  MSG: %s", message)
-		return nil
-	}
+func SlackMessage(ctx context.Context, message string) error {
 	if e := ctx.Err(); e != nil {
 		log.Errorf("Error sending slack message: %s", e)
 		return e
@@ -29,7 +25,7 @@ func SlackMessage(ctx context.Context, message string, slackAlertsUrl string) er
 	}
 	message = fmt.Sprintf("Server: %s - %s", serverRole, message)
 	msg := []byte(fmt.Sprintf(`{"text": "%s"}`, strings.Replace(message, "\"", "\\\"", -1)))
-	req, err := http.NewRequest("POST", slackAlertsUrl, bytes.NewBuffer(msg))
+	req, err := http.NewRequest("POST", FerryAlertsURL, bytes.NewBuffer(msg))
 	if err != nil {
 		log.Errorf("Error sending slack message: %s", err)
 		return err
@@ -51,7 +47,7 @@ func SlackMessage(ctx context.Context, message string, slackAlertsUrl string) er
 	// Parse the response to make sure we're good
 	if resp.StatusCode != http.StatusOK {
 		body, _ := ioutil.ReadAll(resp.Body)
-		err := errors.New("Could not send slack message")
+		err := errors.New("could not send slack message")
 		log.WithFields(log.Fields{
 			"response status":  resp.Status,
 			"response headers": resp.Header,
