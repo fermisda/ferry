@@ -5,6 +5,7 @@ package main
 // https://github.com/go-ldap/ldap
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"regexp"
@@ -118,10 +119,10 @@ func LDAPinitialize() error {
 	return nil
 }
 
-// Simply logs the error.  It exists o all ldap errors are outputted the same
-// to make it easier for greping.
 func ldapError(method string, ldapMethod string, e error) {
-	log.Errorf("LDAPERROR - Method: %s LDAPmethod: %s Error: %s", method, ldapMethod, e)
+	msg := fmt.Sprintf("LDAPERROR in %s:%s --> %s", method, ldapMethod, e)
+	log.Errorf(msg)
+	_ = SlackMessage(context.TODO(), msg)
 }
 
 // Caller MUST close connection when done.
