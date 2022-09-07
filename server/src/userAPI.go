@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 
 	_ "github.com/lib/pq"
@@ -816,7 +815,7 @@ func setUserExperimentFQAN(c APIContext, i Input) (interface{}, []APIError) {
 	if len(fqanids) > 0 {
 		_, apiErr := addOrUpdateUserInLdap(c, i)
 		if apiErr != nil {
-			log.Warningf(fmt.Sprintf("LDAP update failed, will be handled by sync script. user: %s", i[UserName].Data.(string)))
+			log.Warningf("%s - %s", i[UserName].Data.(string), apiErr)
 		}
 	}
 
@@ -1354,7 +1353,7 @@ func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 		}
 		_, apiErr := modifyUserLdapAttributes(c, input)
 		if apiErr != nil {
-			log.Warningf(fmt.Sprintf("LDAP update failed, will be handled by sync script. user: %s", i[UserName].Data.(string)))
+			log.Warningf("%s - %s", i[UserName].Data.(string), apiErr)
 		}
 	}
 
@@ -1365,7 +1364,7 @@ func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 			_, apiErr = removeUserFromLdap(c, i)
 		}
 		if apiErr != nil {
-			log.Warningf(fmt.Sprintf("LDAP update failed, will be handled by sync script. user: %s", i[UserName].Data.(string)))
+			log.Warningf("%s - %s", i[UserName].Data.(string), apiErr)
 		}
 	}
 
@@ -1425,9 +1424,8 @@ func createUser(c APIContext, i Input) (interface{}, []APIError) {
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 			return nil, apiErr
 		}
-		_, apiErr = addOrUpdateUserInLdap(c, i)
 		if apiErr != nil {
-			log.Warningf(fmt.Sprintf("LDAP update failed, will be handled by sync script. user: %s", i[UserName].Data.(string)))
+			log.Warningf("%s - %s", i[UserName].Data.(string), apiErr)
 		}
 	}
 
@@ -1714,8 +1712,7 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 
 	_, apiErr = removeUserFromLdap(c, input)
 	if apiErr != nil {
-		msg := fmt.Sprintf("removeUserFromLdap failed for username=%s - allow dropUser to continue.  This will be corrected when syncLdapWithFerry is run on cron.", uname.Data.(string))
-		log.Warningf(msg)
+		log.Warningf("%s - %s", i[UserName].Data.(string), apiErr)
 	}
 
 	return nil, nil
