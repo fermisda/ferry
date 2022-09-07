@@ -1364,8 +1364,7 @@ func modifyUserLdapAttributes(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 	var voPersonID sql.NullString
 
-	err := DBptr.QueryRow(`select voPersonID from users )
-						   where uname = $1`, i[UserName]).Scan(&voPersonID)
+	err := DBptr.QueryRow(`select voPersonID from users where uname = $1`, i[UserName]).Scan(&voPersonID)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
