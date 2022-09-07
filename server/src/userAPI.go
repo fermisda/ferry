@@ -10,6 +10,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+
 // IncludeUserAPIs includes all APIs described in this file in an APICollection
 func IncludeUserAPIs(c *APICollection) {
 	getUserInfo := BaseAPI{
