@@ -816,7 +816,7 @@ func setUserExperimentFQAN(c APIContext, i Input) (interface{}, []APIError) {
 	if len(fqanids) > 0 {
 		_, apiErr := addOrUpdateUserInLdap(c, i)
 		if apiErr != nil {
-			log.Warningf("%s - %s", i[UserName].Data.(string), apiErr)
+			log.Warningf("LDAP %s - %s", i[UserName].Data.(string), apiErr)
 		}
 	}
 
@@ -1354,7 +1354,7 @@ func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 		}
 		_, apiErr := modifyUserLdapAttributes(c, input)
 		if apiErr != nil {
-			log.Warningf("%s - %s", i[UserName].Data.(string), apiErr)
+			log.Warningf("LDAP %s - %s", i[UserName].Data.(string), apiErr)
 		}
 	}
 
@@ -1365,7 +1365,7 @@ func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 			_, apiErr = removeUserFromLdap(c, i)
 		}
 		if apiErr != nil {
-			log.Warningf("%s - %s", i[UserName].Data.(string), apiErr)
+			log.Warningf("LDAP %s - %s", i[UserName].Data.(string), apiErr)
 		}
 	}
 
@@ -1426,7 +1426,7 @@ func createUser(c APIContext, i Input) (interface{}, []APIError) {
 			return nil, apiErr
 		}
 		if apiErr != nil {
-			log.Warningf("%s - %s", i[UserName].Data.(string), apiErr)
+			log.Warningf("LDAP %s - %s", i[UserName].Data.(string), apiErr)
 		}
 	}
 
@@ -1713,7 +1713,7 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 
 	_, apiErr = removeUserFromLdap(c, input)
 	if apiErr != nil {
-		log.Warningf("%s - %s", i[UserName].Data.(string), apiErr)
+		log.Warningf("LDAP %s - %s", i[UserName].Data.(string), apiErr)
 	}
 
 	return nil, nil
