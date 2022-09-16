@@ -1359,7 +1359,7 @@ func updateLdapForCapabilitySet(c APIContext, i Input) (interface{}, []APIError)
 	return nil, apiErr
 }
 
-// For modifying simple attributes, not groups, entitlements....
+// For modifying simple attributes, not groups, entitlements...
 func modifyUserLdapAttributes(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 	var voPersonID sql.NullString
