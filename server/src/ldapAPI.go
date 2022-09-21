@@ -496,6 +496,7 @@ func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (LDAPData, []APIEr
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return lData, apiErr
 	}
+	log.Infof("addUserToLdapBase - added to ldap, uid: %s set voPersonId to: %s", uid, lData.voPersonID)
 
 	return lData, nil
 }
@@ -546,6 +547,7 @@ func removeUserFromLdap(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 	con.Close()
+	log.Infof("removeUserFromLdap - removed from ldap, uname: %s voPersonId: %s", i[UserName].Data, voPersonID)
 
 	_, err = c.DBtx.Exec(`update users set voPersonID=null where uid = $1`, uid)
 	if err != nil {
