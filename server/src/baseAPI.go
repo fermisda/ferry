@@ -269,6 +269,7 @@ const (
 	VaultStorageKey   Attribute = "vaultstoragekey"
 	ExternalAttribute Attribute = "externalattribute"
 	VoPersonID        Attribute = "vopersonid"
+	InLDAP            Attribute = "inldap"
 )
 
 // Type returns the type of the Attribute
@@ -322,6 +323,7 @@ func (a Attribute) Type() AttributeType {
 		Experiment:        TypeBool,
 		Suspend:           TypeBool,
 		Surplus:           TypeBool,
+		InLDAP:            TypeBool,
 		ExpirationDate:    TypeDate,
 		LastUpdated:       TypeDate,
 		Help:              TypeFlag,
