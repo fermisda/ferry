@@ -598,7 +598,8 @@ func getUserGroups(c APIContext, i Input) (interface{}, []APIError) {
 func getUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	rows, err := c.DBtx.Query(`select full_name, uid, status, is_groupaccount, expiration_date, voPersonID from users where uname=$1`, i[UserName])
+	rows, err := c.DBtx.Query(`select full_name, uid, status, is_groupaccount, expiration_date, voPersonID, in_ldap
+							   from users where uname=$1`, i[UserName])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1164,7 +1165,7 @@ func getUserExternalAffiliationAttributes(c APIContext, i Input) (interface{}, [
 
 	for rows.Next() {
 		row := NewMapNullAttribute(UserName, UserAttribute, Value)
-		err = rows.Scan(row[UserName], row[UserAttribute], row[Value])
+		_ = rows.Scan(row[UserName], row[UserAttribute], row[Value])
 
 		if row[UserAttribute].Valid {
 			entry := make(jsonentry)
@@ -1319,10 +1320,10 @@ func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 
 	uid := NewNullAttribute(UID)
 	expDate := NewNullAttribute(ExpirationDate)
-	voPersonId := NewNullAttribute(VoPersonID)
+	inLdap := NewNullAttribute(InLDAP)
 
-	queryerr := c.DBtx.tx.QueryRow(`select uid, expiration_date, vopersonid from users where uname = $1`,
-		i[UserName]).Scan(&uid, &expDate, &voPersonId)
+	queryerr := c.DBtx.tx.QueryRow(`select uid, expiration_date, in_ldap from users where uname = $1`,
+		i[UserName]).Scan(&uid, &expDate, &inLdap)
 	if queryerr == sql.ErrNoRows {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
 		return nil, apiErr
@@ -1351,7 +1352,7 @@ func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 	// When this method is called by the update cronjob, the user may or may not already be in LDAP.
 	// That is because new users are not added to LDAP until they are added to at least one experiment.  The cron
 	// job does not add users to experiments.
-	if voPersonId.Valid {
+	if inLdap.Data.(bool) {
 		if i[FullName].Valid {
 			input := Input{
 				UserName: i[UserName],
@@ -1592,6 +1593,7 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	const jGroupAccount Attribute = "is_groupaccount"
 	const jSharedAccount Attribute = "is_sharedaccount"
 	const jVoPersonID Attribute = "vopersonid"
+	const jInLdap Attribute = "in_ldap"
 
 	type jsonentry map[Attribute]interface{}
 	type jsonlist []interface{}
@@ -1641,10 +1643,13 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	isGroup := NewNullAttribute(GroupAccount)
 	isShared := NewNullAttribute(SharedAccount)
 	voPersonID := NewNullAttribute(VoPersonID)
+	inLdap := NewNullAttribute(InLDAP)
 
-	err = c.DBtx.tx.QueryRow(`select uid, uname, status, expiration_date, last_updated, full_name, is_groupaccount, is_sharedaccount, voPersonID
+	err = c.DBtx.tx.QueryRow(`select uid, uname, status, expiration_date, last_updated, full_name, is_groupaccount,
+								is_sharedaccount, voPersonID, in_ldap
 							  from users
-							  where uid = $1`, i[UID]).Scan(&uid, &uname, &status, &expDate, &lastUpdated, &fullName, &isGroup, &isShared, &voPersonID)
+							  where uid = $1`, i[UID]).Scan(&uid, &uname, &status, &expDate, &lastUpdated, &fullName,
+		&isGroup, &isShared, &voPersonID, &inLdap)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1661,6 +1666,7 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 		jGroupAccount:   TypeBool,
 		jSharedAccount:  TypeBool,
 		jVoPersonID:     TypeString,
+		jInLdap:         TypeBool,
 	}
 	r[jUID] = uid.Data
 	r[jUserName] = uname.Data
@@ -1671,6 +1677,7 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	r[jGroupAccount] = isGroup.Data
 	r[jSharedAccount] = isShared.Data
 	r[jVoPersonID] = voPersonID.Data
+	r[jInLdap] = inLdap.Data
 
 	jtables[jUsers] = r
 
@@ -1993,7 +2000,7 @@ func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 
 	status := i[Status].Default(false)
 
-	rows, err := DBptr.Query(`select uname, uid, full_name, status, expiration_date, voPersonID from users
+	rows, err := DBptr.Query(`select uname, uid, full_name, status, expiration_date, voPersonID, in_ldap from users
 							  where (status=$1 or not $1) and (last_updated>=$2 or $2 is null)
 							  order by uname`, status, i[LastUpdated])
 	if err != nil {
