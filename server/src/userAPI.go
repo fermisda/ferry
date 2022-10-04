@@ -1319,10 +1319,9 @@ func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 
 	uid := NewNullAttribute(UID)
 	expDate := NewNullAttribute(ExpirationDate)
-	voPersonId := NewNullAttribute(VoPersonID)
 
-	queryerr := c.DBtx.tx.QueryRow(`select uid, expiration_date, vopersonid from users where uname = $1`,
-		i[UserName]).Scan(&uid, &expDate, &voPersonId)
+	queryerr := c.DBtx.tx.QueryRow(`select uid, expiration_date from users where uname = $1`,
+		i[UserName]).Scan(&uid, &expDate)
 	if queryerr == sql.ErrNoRows {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
 		return nil, apiErr
@@ -1347,32 +1346,30 @@ func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	// Test to see if user is in LDAP - because...
-	// When this method is called by the update cronjob, the user may or may not already be in LDAP.
-	// That is because new users are not added to LDAP until they are added to at least one experiment.  The cron
-	// job does not add users to experiments.
-	if voPersonId.Valid {
-		if i[FullName].Valid {
-			input := Input{
-				UserName: i[UserName],
-				FullName: i[FullName],
-			}
-			_, apiErr := modifyUserLdapAttributes(c, input)
-			if apiErr != nil {
-				return nil, apiErr
-			}
+	// Be sure user is in LDAP before running ldap edit commands.  Unlike a DB, LDAP error out if the
+	// record you want to modify is not there.
+	_, apiErr = getUserLdapInfo(c, i) // Returns an error if user is not in ldap
+	if (apiErr == nil) && i[FullName].Valid {
+		input := Input{
+			UserName: i[UserName],
+			FullName: i[FullName],
 		}
-		if i[Status].Valid {
-			if i[Status].Data.(bool) {
-				_, apiErr = addOrUpdateUserInLdap(c, i)
-			} else {
-				_, apiErr = removeUserFromLdap(c, i)
-			}
-			if apiErr != nil {
-				return nil, apiErr
-			}
+		_, apiErr2 := modifyUserLdapAttributes(c, input)
+		if apiErr2 != nil {
+			return nil, apiErr2
 		}
 	}
+	if i[Status].Valid {
+		if i[Status].Data.(bool) {
+			_, apiErr = addOrUpdateUserInLdap(c, i)
+		} else if apiErr == nil {
+			_, apiErr = removeUserFromLdap(c, i)
+		}
+		if apiErr != nil {
+			return nil, apiErr
+		}
+	}
+
 	return nil, nil
 }
 

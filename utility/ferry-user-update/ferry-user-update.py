@@ -181,7 +181,7 @@ def dateSwitcher(date):
     return "%s" % date.split("T")[0]
 
 # Downloads necessary files from UserDB to memory
-def fetch_userdb():
+def fetch_userdb(ferryUsers):
     # Parses dates to Ferry format
     files = {}
     totalChangeRatio = 0
@@ -325,13 +325,24 @@ def fetch_userdb():
         os.rename(files["services-users.csv"], files["services-users.csv"] + ".error")
         os.rename(files["services-users.csv"] + ".cache", files[f])
         exit(6)
-    if int(loadedUsers.group(1)) != len(servicesUsersLines):
+    ucnt = len(servicesUsersLines)
+    if int(loadedUsers.group(1)) != ucnt:
         logging.error("file services-users.csv is missing users loadedUsers.group(1): %s - len(servicesUsersLines): %s",
-                      loadedUsers.group(1), len(servicesUsersLines))
+                      loadedUsers.group(1), ucnt)
         postToSlack("Update Script Halted!", "File services-users.csv seem truncated - missing users")
         os.rename(files["services-users.csv"], files["services-users.csv"] + ".error")
         os.rename(files["services-users.csv"] + ".cache", files[f])
         exit(7)
+    # Test to be sure the file we were given actually has users in it.  Processing an intact but empty services file will
+    # cause everybody's status to be set to false - and drop their UUID from LDAP.  (Yes, it has happened.)
+    changeAmt = (ferryUsers * float(config.get("general", "cache_max_diff")))
+    if  changeAmt  > ucnt:
+        msg = "services-users.csv appears empty or short! Procceding would exceed max allowed changes. Changes: " + str(changeAmt)
+        logging.error(msg)
+        postToSlack("Update Script Halted!", msg)
+        os.rename(files["services-users.csv"], files["services-users.csv"] + ".error")
+        os.rename(files["services-users.csv"] + ".cache", files[f])
+        exit(16)
     for line in servicesUsersLines:
         uname, full_name, expiration_date = line
         full_name = full_name.strip("\"")
@@ -706,11 +717,11 @@ if __name__ == "__main__":
 
     logging.info("Starting Ferry User Update")
 
-    logging.info("Fetching UserDB files...")
-    userdbUsers, userdbGroups = fetch_userdb()
-
     logging.info("Fetching Ferry data...")
     ferryUsers, ferryGroups = fetch_ferry()
+
+    logging.info("Fetching UserDB files...")
+    userdbUsers, userdbGroups = fetch_userdb(len(ferryUsers))
 
     logging.info("Cleanup users...")
     cleanup_users()
