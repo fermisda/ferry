@@ -199,6 +199,10 @@ func getUserLdapInfo(c APIContext, i Input) (interface{}, []APIError) {
 	}
 	con.Close()
 
+	if len(lData.voPersonID) == 0 {
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "user is not in LDAP (2)"))
+		return nil, apiErr
+	}
 	out := make(map[Attribute]interface{})
 	out["dn"] = lData.dn
 	out["objectClass"] = lData.objectClass
@@ -451,17 +455,15 @@ func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (LDAPData, []APIEr
 		return lData, apiErr
 	}
 
-	inLdap := false
-	err = c.DBtx.QueryRow(`select in_ldap, voPersonID from users
-						   where uid = $1`, uid).Scan(&inLdap, &lData.voPersonID)
+	err = c.DBtx.QueryRow(`select voPersonID from users where uid = $1`, uid).Scan(&lData.voPersonID)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return lData, apiErr
 	}
-	// Ensure the user really is in LDAP (we don't have 2 phase commit - so we must test), if a record is in LDAP, we are done.  If not, then use the
-	// voPersonID from the DB and add them.  If no voPersonID exists for the use, then create one.
-	if inLdap && len(lData.voPersonID) > 0 {
+	// Ensure the user really is in LDAP (we don't have 2 phase commit - so we must test), if a record is in LDAP, we are done.
+	// If not, then use the voPersonID from the DB and add them.  If no voPersonID exists for the use, then create one.
+	if len(lData.voPersonID) > 0 {
 		llData, err := LDAPgetUserData(lData.voPersonID, con)
 		if err != nil {
 			log.Error(err)
@@ -473,9 +475,15 @@ func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (LDAPData, []APIEr
 			return llData, nil
 		}
 	}
-	// Create a voPersionID iff the DB did not find one for this user.  -- reuse exiting voPersonID.
+	// Create a voPersionID iff the DB did not find one for this user.  Always reuse an existing voPersonID.
 	if len(lData.voPersonID) == 0 {
 		lData.voPersonID = uuid.New().String()
+		_, err = c.DBtx.Exec(`update users set vopersonid=$1, where uid=$2`, lData.voPersonID, uid)
+		if err != nil {
+			log.WithFields(QueryFields(c)).Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+			return lData, apiErr
+		}
 	}
 
 	lData.dn = fmt.Sprintf("voPersonID=%s,%s", lData.voPersonID, ldapBaseDN)
@@ -491,18 +499,15 @@ func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (LDAPData, []APIEr
 		return lData, apiErr
 	}
 
-	_, err = c.DBtx.Exec(`update users set vopersonid=$1, in_ldap=true where uid=$2`, lData.voPersonID, uid)
-	if err != nil {
-		log.WithFields(QueryFields(c)).Error(err)
-		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-		return lData, apiErr
-	}
 	log.Infof("addUserToLdapBase - added to ldap, uid: %s set voPersonId to: %s", uid, lData.voPersonID)
 
 	return lData, nil
 }
 
 func removeUserFromLdap(c APIContext, i Input) (interface{}, []APIError) {
+	//********
+	// NEVER remove the voPersonID FROM the DB.  If we need to restore the user, we want the original.
+	//********
 	var apiErr []APIError
 
 	uid := NewNullAttribute(UID)
@@ -549,14 +554,6 @@ func removeUserFromLdap(c APIContext, i Input) (interface{}, []APIError) {
 	}
 	con.Close()
 	log.Infof("removeUserFromLdap - removed from ldap, uname: %s voPersonId: %s", i[UserName].Data, voPersonID)
-
-	// Never set voPersonID back to null. Leave it so it can be reused if the person comes back, or if LDAP is wiped.
-	_, err = c.DBtx.Exec(`update users set in_ldap=false where uid = $1`, uid)
-	if err != nil {
-		log.WithFields(QueryFields(c)).Error(err)
-		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-		return nil, apiErr
-	}
 
 	return nil, apiErr
 }
