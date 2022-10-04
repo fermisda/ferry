@@ -364,9 +364,6 @@ func getAffiliationMembers(c APIContext, i Input) (interface{}, []APIError) {
 	for rows.Next() {
 		row := NewMapNullAttribute(UnitName, UserName, UID, Value)
 		rows.Scan(row[UnitName], row[UserName], row[UID], row[Value])
-		if row[UnitName].Data.(string) == "uboone" {
-			log.Info("hello")
-		}
 		if curexp == "" {
 			curexp = row[UnitName].Data.(string)
 		} else if curexp != row[UnitName].Data.(string) {
