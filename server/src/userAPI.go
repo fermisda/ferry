@@ -598,8 +598,7 @@ func getUserGroups(c APIContext, i Input) (interface{}, []APIError) {
 func getUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	rows, err := c.DBtx.Query(`select full_name, uid, status, is_groupaccount, expiration_date, voPersonID, in_ldap
-							   from users where uname=$1`, i[UserName])
+	rows, err := c.DBtx.Query(`select full_name, uid, status, is_groupaccount, expiration_date, voPersonID from users where uname=$1`, i[UserName])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1165,7 +1164,7 @@ func getUserExternalAffiliationAttributes(c APIContext, i Input) (interface{}, [
 
 	for rows.Next() {
 		row := NewMapNullAttribute(UserName, UserAttribute, Value)
-		_ = rows.Scan(row[UserName], row[UserAttribute], row[Value])
+		err = rows.Scan(row[UserName], row[UserAttribute], row[Value])
 
 		if row[UserAttribute].Valid {
 			entry := make(jsonentry)
@@ -1320,10 +1319,9 @@ func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 
 	uid := NewNullAttribute(UID)
 	expDate := NewNullAttribute(ExpirationDate)
-	inLdap := NewNullAttribute(InLDAP)
 
-	queryerr := c.DBtx.tx.QueryRow(`select uid, expiration_date, in_ldap from users where uname = $1`,
-		i[UserName]).Scan(&uid, &expDate, &inLdap)
+	queryerr := c.DBtx.tx.QueryRow(`select uid, expiration_date from users where uname = $1`,
+		i[UserName]).Scan(&uid, &expDate)
 	if queryerr == sql.ErrNoRows {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
 		return nil, apiErr
@@ -1348,32 +1346,30 @@ func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	// Test to see if user is in LDAP - because...
-	// When this method is called by the update cronjob, the user may or may not already be in LDAP.
-	// That is because new users are not added to LDAP until they are added to at least one experiment.  The cron
-	// job does not add users to experiments.
-	if inLdap.Data.(bool) {
-		if i[FullName].Valid {
-			input := Input{
-				UserName: i[UserName],
-				FullName: i[FullName],
-			}
-			_, apiErr := modifyUserLdapAttributes(c, input)
-			if apiErr != nil {
-				return nil, apiErr
-			}
+	// Be sure user is in LDAP before running ldap edit commands.  Unlike a DB, LDAP error out if the
+	// record you want to modify is not there.
+	_, apiErr = getUserLdapInfo(c, i) // Returns an error if user is not in ldap
+	if (apiErr == nil) && i[FullName].Valid {
+		input := Input{
+			UserName: i[UserName],
+			FullName: i[FullName],
 		}
-		if i[Status].Valid {
-			if i[Status].Data.(bool) {
-				_, apiErr = addOrUpdateUserInLdap(c, i)
-			} else {
-				_, apiErr = removeUserFromLdap(c, i)
-			}
-			if apiErr != nil {
-				return nil, apiErr
-			}
+		_, apiErr2 := modifyUserLdapAttributes(c, input)
+		if apiErr2 != nil {
+			return nil, apiErr2
 		}
 	}
+	if i[Status].Valid {
+		if i[Status].Data.(bool) {
+			_, apiErr = addOrUpdateUserInLdap(c, i)
+		} else if apiErr == nil {
+			_, apiErr = removeUserFromLdap(c, i)
+		}
+		if apiErr != nil {
+			return nil, apiErr
+		}
+	}
+
 	return nil, nil
 }
 
@@ -1593,7 +1589,6 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	const jGroupAccount Attribute = "is_groupaccount"
 	const jSharedAccount Attribute = "is_sharedaccount"
 	const jVoPersonID Attribute = "vopersonid"
-	const jInLdap Attribute = "in_ldap"
 
 	type jsonentry map[Attribute]interface{}
 	type jsonlist []interface{}
@@ -1643,13 +1638,10 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	isGroup := NewNullAttribute(GroupAccount)
 	isShared := NewNullAttribute(SharedAccount)
 	voPersonID := NewNullAttribute(VoPersonID)
-	inLdap := NewNullAttribute(InLDAP)
 
-	err = c.DBtx.tx.QueryRow(`select uid, uname, status, expiration_date, last_updated, full_name, is_groupaccount,
-								is_sharedaccount, voPersonID, in_ldap
+	err = c.DBtx.tx.QueryRow(`select uid, uname, status, expiration_date, last_updated, full_name, is_groupaccount, is_sharedaccount, voPersonID
 							  from users
-							  where uid = $1`, i[UID]).Scan(&uid, &uname, &status, &expDate, &lastUpdated, &fullName,
-		&isGroup, &isShared, &voPersonID, &inLdap)
+							  where uid = $1`, i[UID]).Scan(&uid, &uname, &status, &expDate, &lastUpdated, &fullName, &isGroup, &isShared, &voPersonID)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1666,7 +1658,6 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 		jGroupAccount:   TypeBool,
 		jSharedAccount:  TypeBool,
 		jVoPersonID:     TypeString,
-		jInLdap:         TypeBool,
 	}
 	r[jUID] = uid.Data
 	r[jUserName] = uname.Data
@@ -1677,7 +1668,6 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	r[jGroupAccount] = isGroup.Data
 	r[jSharedAccount] = isShared.Data
 	r[jVoPersonID] = voPersonID.Data
-	r[jInLdap] = inLdap.Data
 
 	jtables[jUsers] = r
 
@@ -1718,14 +1708,13 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	if len(uname.Data.(string)) > 0 {
-		input := Input{
-			UserName: uname,
-		}
-		_, apiErr = removeUserFromLdap(c, input)
-		if apiErr != nil {
-			log.Warningf("LDAP %s - %s", uname.Data.(string), apiErr[0].Error.Error())
-		}
+	input := Input{
+		UserName: uname,
+	}
+
+	_, apiErr = removeUserFromLdap(c, input)
+	if apiErr != nil {
+		log.Warningf("LDAP %s - %s", i[UserName].Data.(string), apiErr)
 	}
 
 	return nil, nil
@@ -2001,7 +1990,7 @@ func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 
 	status := i[Status].Default(false)
 
-	rows, err := DBptr.Query(`select uname, uid, full_name, status, expiration_date, voPersonID, in_ldap from users
+	rows, err := DBptr.Query(`select uname, uid, full_name, status, expiration_date, voPersonID from users
 							  where (status=$1 or not $1) and (last_updated>=$2 or $2 is null)
 							  order by uname`, status, i[LastUpdated])
 	if err != nil {
