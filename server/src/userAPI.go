@@ -1712,11 +1712,13 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 		UserName: uname,
 	}
 
-	_, apiErr = removeUserFromLdap(c, input)
-	if apiErr != nil {
-		log.Warningf("LDAP %s - %s", i[UserName].Data.(string), apiErr)
+	_, apiErr = getUserLdapInfo(c, i) // Returns an error if user is not in ldap
+	if apiErr == nil {
+		_, apiErr = removeUserFromLdap(c, input)
+		if apiErr != nil {
+			log.Warningf("LDAP %s - %s", i[UserName].Data.(string), apiErr)
+		}
 	}
-
 	return nil, nil
 }
 
