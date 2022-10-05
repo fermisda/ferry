@@ -455,12 +455,16 @@ func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (LDAPData, []APIEr
 		return lData, apiErr
 	}
 
-	err = c.DBtx.QueryRow(`select voPersonID from users where uid = $1`, uid).Scan(&lData.voPersonID)
+	var vop sql.NullString
+	err = c.DBtx.QueryRow(`select voPersonID from users where uid = $1`, uid).Scan(&vop)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return lData, apiErr
+	} else if vop.Valid {
+		lData.voPersonID = vop.String
 	}
+
 	// Ensure the user really is in LDAP (we don't have 2 phase commit - so we must test), if a record is in LDAP, we are done.
 	// If not, then use the voPersonID from the DB and add them.  If no voPersonID exists for the use, then create one.
 	if len(lData.voPersonID) > 0 {
@@ -478,7 +482,7 @@ func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (LDAPData, []APIEr
 	// Create a voPersionID iff the DB did not find one for this user.  Always reuse an existing voPersonID.
 	if len(lData.voPersonID) == 0 {
 		lData.voPersonID = uuid.New().String()
-		_, err = c.DBtx.Exec(`update users set vopersonid=$1, where uid=$2`, lData.voPersonID, uid)
+		_, err = c.DBtx.Exec(`update users set vopersonid=$1 where uid=$2`, lData.voPersonID, uid)
 		if err != nil {
 			log.WithFields(QueryFields(c)).Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
