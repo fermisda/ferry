@@ -14,6 +14,7 @@ import (
 
 	"github.com/lestrrat-go/jwx/jwt"
 
+	"github.com/google/uuid"
 	"github.com/patrickmn/go-cache"
 	scitokens "github.com/scitokens/scitokens-go"
 	log "github.com/sirupsen/logrus"
@@ -57,7 +58,7 @@ func queryAccessors(key string) (accessor, bool) {
 
 	tx, err := DBptr.BeginTx(ctx, nil)
 	if err != nil {
-		log.Error("quer2yAccessors - begin transaction")
+		log.Error(fmt.Sprintf("queryAccessors - transaction failed: %s", err.Error()))
 		log.Error(err)
 		return acc, false
 	}
@@ -67,20 +68,26 @@ func queryAccessors(key string) (accessor, bool) {
 	if err == sql.ErrNoRows {
 		found = false
 	} else if err != nil {
-		log.Error("queryAccessors - select")
+		log.Error(fmt.Sprintf("queryAccessors - query failed: %s", err.Error()))
 		log.Error(err)
 		found = false
 	}
 
 	// Find out who the UUID belongs to.
 	if acc.accType == "jwt_role" {
-		err = tx.QueryRow(`select uname from users where voPersonId = $1`, acc.name).Scan(&acc.uname)
-		if err == sql.ErrNoRows {
-			log.Error(fmt.Sprintf("uuid was not found in users table: %s", acc.name))
-			found = false
-		} else if err != nil {
-			log.Error(fmt.Sprintf("queryAccessors - jwt_type: %s", err.Error()))
-			found = false
+		// Test if this is a UUID.  If not, it is still valid as it is in the accessors table.  But, they are coming in as a
+		// *pro account (novapro for example) where the subject is XXXpro@fnal.gov not a UUID.  Those are not in the users table,
+		// but are in LDAP through the capability set of that name.
+		_, err = uuid.Parse(acc.name)
+		if err == nil {
+			err = tx.QueryRow(`select uname from users where voPersonId = $1`, acc.name).Scan(&acc.uname)
+			if err == sql.ErrNoRows {
+				log.Error(fmt.Sprintf("queryAccessors - uuid does not reference a valid user.  uuid: %s", acc.name))
+				found = false
+			} else if err != nil {
+				log.Error(fmt.Sprintf("queryAccessors - query failed (2): %s", err.Error()))
+				found = false
+			}
 		}
 	}
 
