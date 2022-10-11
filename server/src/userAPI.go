@@ -1399,8 +1399,8 @@ func createUser(c APIContext, i Input) (interface{}, []APIError) {
 
 	newUUID := uuid.New().String()
 	_, err = c.DBtx.Exec(`insert into users (uname, uid, full_name, status, expiration_date, vopersonid, last_updated)
-						  values ($1, $2, $3, $4, $5, NOW())`,
-		i[UserName], i[UID], i[FullName], i[Status], newUUID, expDate)
+						  values ($1, $2, $3, $4, $5, $6, NOW())`,
+		i[UserName], i[UID], i[FullName], i[Status], expDate, newUUID)
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key value violates unique constraint \"pk_users\"") {
 			apiErr = append(apiErr, DefaultAPIError(ErrorDuplicateData, UID))
