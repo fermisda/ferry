@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
 )
@@ -1396,9 +1397,10 @@ func createUser(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	_, err = c.DBtx.Exec(`insert into users (uname, uid, full_name, status, expiration_date, last_updated)
+	newUUID := uuid.New().String()
+	_, err = c.DBtx.Exec(`insert into users (uname, uid, full_name, status, expiration_date, vopersonid, last_updated)
 						  values ($1, $2, $3, $4, $5, NOW())`,
-		i[UserName], i[UID], i[FullName], i[Status], expDate)
+		i[UserName], i[UID], i[FullName], i[Status], newUUID, expDate)
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key value violates unique constraint \"pk_users\"") {
 			apiErr = append(apiErr, DefaultAPIError(ErrorDuplicateData, UID))
