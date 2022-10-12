@@ -816,7 +816,7 @@ func setUserExperimentFQAN(c APIContext, i Input) (interface{}, []APIError) {
 	if len(fqanids) > 0 {
 		_, apiErr := addOrUpdateUserInLdap(c, i)
 		if apiErr != nil {
-			log.Warningf("LDAP %s - %s", i[UserName].Data.(string), apiErr)
+			log.Warningf("LDAP %s - %s", i[UserName].Data.(string), apiErr[0].Error.Error())
 		}
 	}
 
@@ -1422,17 +1422,6 @@ func createUser(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	if i[Status].Data.(bool) {
-		if err != nil {
-			log.WithFields(QueryFields(c)).Error(err)
-			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-			return nil, apiErr
-		}
-		if apiErr != nil {
-			log.Warningf("LDAP %s - %s", i[UserName].Data.(string), apiErr)
-		}
-	}
-
 	return nil, nil
 }
 
@@ -1718,7 +1707,7 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	if apiErr == nil {
 		_, apiErr = removeUserFromLdap(c, input)
 		if apiErr != nil {
-			log.Warningf("LDAP %s - %s", i[UserName].Data.(string), apiErr)
+			log.Warningf("LDAP %s - %s", i[UserName].Data.(string), apiErr[0].Error.Error())
 		}
 	}
 	return nil, nil
