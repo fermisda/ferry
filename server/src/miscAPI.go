@@ -241,6 +241,7 @@ func IncludeMiscAPIs(c *APICollection) {
 
 	getPasswdFile := BaseAPI{
 		InputModel{
+			Parameter{Status, false},
 			Parameter{UnitName, false},
 			Parameter{ResourceName, false},
 			Parameter{LastUpdated, false},
@@ -309,7 +310,8 @@ func getPasswdFile(c APIContext, i Input) (interface{}, []APIError) {
 							   and (ca.last_updated>=$3 or u.last_updated>=$3
 								or au.last_updated>=$3 or cr.last_updated>=$3
 								or g.last_updated>=$3 or $3 is null)
-							   order by au.name, cr.name`, unitid, compid, i[LastUpdated])
+							   and (u.status = $4 or $4 is null)
+							   order by au.name, cr.name`, unitid, compid, i[LastUpdated], i[Status])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
