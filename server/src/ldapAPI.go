@@ -503,7 +503,7 @@ func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (LDAPData, []APIEr
 		return lData, apiErr
 	}
 
-	log.Infof("addUserToLdapBase - added to ldap, uid: %s set voPersonId to: %s", uid, lData.voPersonID)
+	log.Infof("addUserToLdapBase - added to ldap, uid: %s set voPersonId to: %s", uid.Data, lData.voPersonID)
 
 	return lData, nil
 }
