@@ -1323,7 +1323,7 @@ func updateLdapForCapabilitySet(c APIContext, i Input) (interface{}, []APIError)
 	}
 
 	rows, err := c.DBtx.Query(`select distinct u.voPersonID
-							   from users u using
+							   from users u
 								 join grid_access ga using (uid)
 								 join grid_fqan gf using (fqanid)
 								 join capability_sets cs using (setid)
