@@ -258,6 +258,7 @@ const (
 	SharedAccount     Attribute = "sharedaccount"
 	Experiment        Attribute = "experiment"
 	Suspend           Attribute = "suspend"
+	Banned            Attribute = "banned"
 	Surplus           Attribute = "surplus"
 	ExpirationDate    Attribute = "expirationdate"
 	LastUpdated       Attribute = "lastupdated"
@@ -322,6 +323,7 @@ func (a Attribute) Type() AttributeType {
 		SharedAccount:     TypeBool,
 		Experiment:        TypeBool,
 		Suspend:           TypeBool,
+		Banned:            TypeBool,
 		Surplus:           TypeBool,
 		InLDAP:            TypeBool,
 		ExpirationDate:    TypeDate,
@@ -508,9 +510,9 @@ const (
 	ErrorInvalidData
 	ErrorDuplicateData
 	ErrorAPIRequirement
+	ErrorText
 	HTTP500
 	ErrorDbQuery
-	ErrorText
 )
 
 // DefaultMessage for BaseAPI errors

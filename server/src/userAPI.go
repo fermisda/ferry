@@ -13,6 +13,16 @@ import (
 
 // IncludeUserAPIs includes all APIs described in this file in an APICollection
 func IncludeUserAPIs(c *APICollection) {
+	banUser := BaseAPI{
+		InputModel{
+			Parameter{UserName, true},
+			Parameter{Banned, true},
+		},
+		banUser,
+		RoleWrite,
+	}
+	c.Add("banUser", &banUser)
+
 	getUserInfo := BaseAPI{
 		InputModel{
 			Parameter{UserName, true},
@@ -362,6 +372,48 @@ func IncludeUserAPIs(c *APICollection) {
 
 }
 
+func banUser(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+
+	uid := NewNullAttribute(UID)
+	isBanned := NewNullAttribute(Banned)
+
+	err := c.DBtx.QueryRow(`select uid, is_banned from users where uname=$1`,
+		i[UserName]).Scan(&uid, &isBanned)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	} else if !uid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
+		return nil, apiErr
+	} else if isBanned.Data.(bool) == i[Banned].Data.(bool) {
+		return nil, nil
+	}
+
+	if i[Banned].Data.(bool) {
+		_, err = c.DBtx.Exec(`update users set is_banned = true, status=false where uid = $1`, uid.Data)
+		if err != nil {
+			log.WithFields(QueryFields(c)).Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+			return nil, apiErr
+		}
+		_, apiErr = removeUserFromLdap(c, i)
+		if apiErr != nil {
+			return nil, apiErr
+		}
+	} else {
+		// Just because a ban is lifted, you don't set status back to true.  Let them call setUserInfo for that.
+		_, err = c.DBtx.Exec(`update users set is_banned = false where uid = $1`, uid.Data)
+		if err != nil {
+			log.WithFields(QueryFields(c)).Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+			return nil, apiErr
+		}
+	}
+	return nil, nil
+}
+
 func getUserCertificateDNs(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -599,7 +651,8 @@ func getUserGroups(c APIContext, i Input) (interface{}, []APIError) {
 func getUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	rows, err := c.DBtx.Query(`select full_name, uid, status, is_groupaccount, expiration_date, voPersonID from users where uname=$1`, i[UserName])
+	rows, err := c.DBtx.Query(`select full_name, uid, status, is_groupaccount, expiration_date, voPersonID, is_banned
+							   from users where uname=$1`, i[UserName])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -608,10 +661,10 @@ func getUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 	defer rows.Close()
 
 	out := make(map[Attribute]interface{})
-	row := NewMapNullAttribute(FullName, UID, Status, GroupAccount, ExpirationDate, VoPersonID)
+	row := NewMapNullAttribute(FullName, UID, Status, GroupAccount, ExpirationDate, VoPersonID, Banned)
 
 	for rows.Next() {
-		rows.Scan(row[FullName], row[UID], row[Status], row[GroupAccount], row[ExpirationDate], row[VoPersonID])
+		rows.Scan(row[FullName], row[UID], row[Status], row[GroupAccount], row[ExpirationDate], row[VoPersonID], row[Banned])
 		for _, column := range row {
 			out[column.Attribute] = column.Data
 		}
@@ -1320,15 +1373,20 @@ func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 
 	uid := NewNullAttribute(UID)
 	expDate := NewNullAttribute(ExpirationDate)
+	isBanned := NewNullAttribute(Banned)
 
-	queryerr := c.DBtx.tx.QueryRow(`select uid, expiration_date from users where uname = $1`,
-		i[UserName]).Scan(&uid, &expDate)
+	queryerr := c.DBtx.tx.QueryRow(`select uid, expiration_date, is_banned from users where uname = $1`,
+		i[UserName]).Scan(&uid, &expDate, &isBanned)
 	if queryerr == sql.ErrNoRows {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
 		return nil, apiErr
 	} else if queryerr != nil {
 		log.WithFields(QueryFields(c)).Error(queryerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	} else if i[Status].Valid && i[Status].Data.(bool) && isBanned.Data.(bool) {
+		// Never allow status to be set to true if the user has been banned!
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, "user is banned"))
 		return nil, apiErr
 	}
 
@@ -1347,10 +1405,7 @@ func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	// Be sure user is in LDAP before running ldap edit commands.  Unlike a DB, LDAP error out if the
-	// record you want to modify is not there.
-	_, apiErr = getUserLdapInfo(c, i) // Returns an error if user is not in ldap
-	if (apiErr == nil) && i[FullName].Valid {
+	if i[FullName].Valid {
 		input := Input{
 			UserName: i[UserName],
 			FullName: i[FullName],
@@ -1983,7 +2038,7 @@ func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 
 	status := i[Status].Default(false)
 
-	rows, err := DBptr.Query(`select uname, uid, full_name, status, expiration_date, voPersonID from users
+	rows, err := DBptr.Query(`select uname, uid, full_name, status, expiration_date, voPersonID, is_banned from users
 							  where (status=$1 or not $1) and (last_updated>=$2 or $2 is null)
 							  order by uname`, status, i[LastUpdated])
 	if err != nil {
@@ -1997,8 +2052,8 @@ func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 	var out []jsonout
 
 	for rows.Next() {
-		row := NewMapNullAttribute(UserName, UID, FullName, Status, ExpirationDate, VoPersonID)
-		rows.Scan(row[UserName], row[UID], row[FullName], row[Status], row[ExpirationDate], row[VoPersonID])
+		row := NewMapNullAttribute(UserName, UID, FullName, Status, ExpirationDate, VoPersonID, Banned)
+		rows.Scan(row[UserName], row[UID], row[FullName], row[Status], row[ExpirationDate], row[VoPersonID], row[Banned])
 
 		var expirationDate interface{}
 		if row[ExpirationDate].Valid {
@@ -2012,6 +2067,7 @@ func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 			Status:         row[Status].Data,
 			ExpirationDate: expirationDate,
 			VoPersonID:     row[VoPersonID].Data,
+			Banned:         row[Banned].Data,
 		})
 	}
 
@@ -2021,13 +2077,13 @@ func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 func getAllUsersFQANs(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	rows, err := DBptr.Query(`select uname, fqan, name, is_banned from grid_access as ga
+	rows, err := DBptr.Query(`select uname, fqan, name, ga.is_banned from grid_access as ga
 							  join grid_fqan as gf using(fqanid)
 							  join users as u using(uid)
 							  join affiliation_units as au using(unitid)
 							  where (ga.last_updated>=$2 or gf.last_updated>=$2 or
 									  u.last_updated>=$2 or au.last_updated>=$2 or $2 is null)
-									and (is_banned = $1 or $1 is null)  order by uname`,
+									and (ga.is_banned = $1 or $1 is null)  order by uname`,
 		i[Suspend], i[LastUpdated])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
