@@ -230,6 +230,7 @@ func main() {
 	grouter.HandleFunc("/", handler)
 
 	//user API calls
+	grouter.HandleFunc("/banUser", APIs["banUser"].Run)
 	grouter.HandleFunc("/getUserCertificateDNs", APIs["getUserCertificateDNs"].Run)
 	grouter.HandleFunc("/getUserFQANs", APIs["getUserFQANs"].Run)
 	grouter.HandleFunc("/getUserGroups", APIs["getUserGroups"].Run)
