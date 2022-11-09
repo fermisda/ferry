@@ -15,16 +15,18 @@ from collections import defaultdict
 from threading import Thread
 
 class User:
-    def __init__(self, uid, uname, full_name = None, status = False, expiration_date = ""):
+    def __init__(self, uid, uname, full_name = None, status = False, expiration_date = "", banned= False):
         self.uid = uid
         self.uname = uname
         self.full_name = full_name
         self.status = status
         self.expiration_date = expiration_date
         self.gid = ""
+        self.banned = banned
         self.certificates = []
         self.fqans = []
         self.compute_access = {}
+
 
     def __str__(self):
         self.string = "User object:\n\
@@ -376,26 +378,33 @@ def fetch_ferry():
             id = action
         ferryOut[id] = readFromFerry(action, params)
 
-    threads.append(Thread(target=work, args=["api_get_users"]))
-    threads.append(Thread(target=work, args=["api_get_certificates", {"unitname" : "fermilab"}]))
-    threads.append(Thread(target=work, args=["api_get_groups"]))
-    threads.append(Thread(target=work, args=["api_get_group_members"]))
-    threads.append(Thread(target=work, args=["api_get_users_fqans"]))
+    if opts.single_thread:
+        work("api_get_users")
+        work("api_get_certificates", {"unitname" : "fermilab"})
+        work("api_get_groups")
+        work("api_get_group_members")
+        work("api_get_users_fqans")
+    else:
+        threads.append(Thread(target=work, args=["api_get_users"]))
+        threads.append(Thread(target=work, args=["api_get_certificates", {"unitname" : "fermilab"}]))
+        threads.append(Thread(target=work, args=["api_get_groups"]))
+        threads.append(Thread(target=work, args=["api_get_group_members"]))
+        threads.append(Thread(target=work, args=["api_get_users_fqans"]))
 
-    for accessString in source["compute_resources"].split(";"):
-        resource = accessString.split(":")[0]
-        threads.append(Thread(target=work, args=["api_get_passwd_file", {"resourcename": resource}, resource]))
+        for accessString in source["compute_resources"].split(";"):
+            resource = accessString.split(":")[0]
+            threads.append(Thread(target=work, args=["api_get_passwd_file", {"resourcename": resource}, resource]))
 
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
 
     logging.debug("reading ferry users")
     if not ferryOut["api_get_users"]:
             exit(9)
     for jUser in ferryOut["api_get_users"]:
-        users[str(jUser["uid"])] = User(str(jUser["uid"]), jUser["username"], jUser["fullname"], jUser["status"], dateSwitcher(jUser["expirationdate"]))
+        users[str(jUser["uid"])] = User(str(jUser["uid"]), jUser["username"], jUser["fullname"], jUser["status"], dateSwitcher(jUser["expirationdate"]), jUser["banned"])
         unameUid[jUser["username"]] = str(jUser["uid"])
 
     logging.debug("reading ferry certificates")
@@ -432,7 +441,7 @@ def fetch_ferry():
         logging.debug("reading ferry users access to %s" % resource)
         jPasswd = ferryOut[resource]
         if not jPasswd:
-            logging.debug("Resorce %s not found." % resource)
+            logging.debug("Resource %s not found." % resource)
             continue
         jPasswd = list(jPasswd.values())[0] # get first affiliation unit
         jPasswd = jPasswd["resources"][resource]
@@ -503,7 +512,9 @@ def update_users():
                 if "status" in diff:
                     params["status"] = str(user.status)
                     auxUser.status = user.status
-                if writeToFerry("api_set_user_info", params):
+                # Never change anything if the user has been banned as it will fail and you will ping #ferryalerts
+                # every 30 min until the user is set to inactive in services-users.csv.
+                if ferryUsers[user.uid].banned != True and writeToFerry("api_set_user_info", params):
                     ferryUsers[user.uid] = auxUser
                 changes = True
     if not changes:
@@ -666,6 +677,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = "Script to update Ferry with data from UserDB")
     parser.add_argument("-c", "--config", metavar = "PATH", action = "store", help = "path to configuration file")
     parser.add_argument("-d", "--dry-run", action = "store_true", help = "runs the script without touching the database")
+    parser.add_argument("-i", "--ip-address", action = "store_true", help = "Validate by IP Address, not cert.")
+    parser.add_argument("-s", "--single-thread", action = "store_true", help=" Run FERRY data requests in single threaded mode (helps when using a debugger).")
     opts = parser.parse_args()
 
     try:
@@ -708,10 +721,11 @@ if __name__ == "__main__":
     logging.basicConfig(**logArgs)
 
     ferryContext = ssl.SSLContext(protocol=ssl.PROTOCOL_TLSv1_2)
-    ferryContext.verify_mode = ssl.CERT_REQUIRED
-    # ferryContext.verify_mode = ssl.CERT_NONE
-    ferryContext.load_cert_chain(config.get("ferry", "cert"), config.get("ferry", "key"))
-    ferryContext.load_verify_locations(capath=config.get("ferry", "ca"))
+    if not opts.ip_address:
+        # Skip these ferryContext lines out if you want to verify by IP address.
+        ferryContext.verify_mode = ssl.CERT_REQUIRED
+        ferryContext.load_cert_chain(config.get("ferry", "cert"), config.get("ferry", "key"))
+        ferryContext.load_verify_locations(capath=config.get("ferry", "ca"))
 
     skipList = []
 
