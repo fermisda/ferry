@@ -63,6 +63,7 @@ func queryAccessors(key string) (accessor, bool) {
 		return acc, false
 	}
 
+	log.Debugf("queryAccessors - key: %s", key)
 	err = tx.QueryRow(`select accid, name, active, write, type from accessors where name = $1 and active = true`,
 		key).Scan(&acc.accid, &acc.name, &acc.active, &acc.write, &acc.accType)
 	if err == sql.ErrNoRows {
@@ -138,6 +139,8 @@ func getAccessor(key string, ip string) (accessor, bool) {
 		}
 	}
 	log.Debug(fmt.Sprintf("getAccessor key %s -- found in: %s", key, whereFound))
+	log.Debugf("whereFound: %s accid: %d name: %s active: %t write: %t accType: %s uname: %s", whereFound, acc.accid, acc.name, acc.active,
+		acc.write, acc.accType, acc.uname)
 	return acc, found
 }
 
@@ -220,6 +223,7 @@ func authorize(c APIContext, r AccessRole) (AccessLevel, string, string) {
 				return LevelDenied, e.Error(), ""
 			}
 		}
+		log.Debugf("authorize - calling getAccessor by uuid: %s ip: %s", uuid, ip)
 		acc, found := getAccessor(uuid, ip)
 		if found {
 			// authorize JWT roles
@@ -234,6 +238,7 @@ func authorize(c APIContext, r AccessRole) (AccessLevel, string, string) {
 	// Try authorizing DN by the Certs
 	for _, presCert := range c.R.TLS.PeerCertificates {
 		certDN := parseDN(presCert.Subject.Names, "/")
+		log.Debugf("authorize - calling getAccessor by certDn: %s ip: %s", certDN, ip)
 		acc, found := getAccessor(certDN, ip)
 		if found {
 			// authorize DN roles
@@ -246,6 +251,7 @@ func authorize(c APIContext, r AccessRole) (AccessLevel, string, string) {
 	}
 
 	// Try authorizing by the  IP address
+	log.Debugf("authorize - calling getAccessor by ip: %s ip: %s", ip, ip)
 	acc, found := getAccessor(ip, ip)
 	if found {
 		// authorize IP roles
@@ -263,6 +269,7 @@ func authorize(c APIContext, r AccessRole) (AccessLevel, string, string) {
 func checkClientIP(client *tls.ClientHelloInfo) (*tls.Config, error) {
 	ip := client.Conn.RemoteAddr().String()
 	ip = strings.Split(ip, ":")[0]
+	log.Debugf("checkClientIP - calling getAccessor uuid: %s ip: %s", ip, ip)
 	_, found := getAccessor(ip, ip)
 
 	if found {

@@ -237,7 +237,8 @@ func LDAPremoveUser(voPersonID string, con *ldap.Conn) error {
 	DN := fmt.Sprintf("voPersonID=%s,%s", voPersonID, ldapBaseDN)
 	delReq := ldap.NewDelRequest(DN, []ldap.Control{})
 	err := con.Del(delReq)
-	if err != nil {
+	// If the user was not in LDAP, don't put out an error.
+	if err != nil && !ldap.IsErrorWithCode(err, ldap.LDAPResultNoSuchObject) {
 		ldapError("LDAPremoveUser", "Del", err)
 	}
 
@@ -418,7 +419,9 @@ func LdapModifyAttributes(dn string, m map[string]string, con *ldap.Conn) error 
 		}
 	}
 	err = con.Modify(modify)
-	if err != nil {
+	if ldap.IsErrorWithCode(err, ldap.LDAPResultNoSuchObject) {
+		return nil
+	} else if err != nil {
 		ldapError("LdapModifyAttributes", "Modify", err)
 	}
 	return err
