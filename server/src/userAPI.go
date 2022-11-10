@@ -579,7 +579,7 @@ func getUserFQANs(c APIContext, i Input) (interface{}, []APIError) {
 							  	join grid_fqan using(fqanid)
 							  	left join affiliation_units using(unitid)
 							   where
-							    is_banned = false and
+							    is_suspended = false and
 								uid = $1 and
 								(unitid = $2 or $2 is null) and
 							  	(ga.last_updated >= $3 or $3 is null)
@@ -856,7 +856,7 @@ func setUserExperimentFQAN(c APIContext, i Input) (interface{}, []APIError) {
 	}
 
 	for _, fqanid := range fqanids {
-		_, queryerr = c.DBtx.Exec(`insert into grid_access (uid, fqanid, is_superuser, is_banned, last_updated)
+		_, queryerr = c.DBtx.Exec(`insert into grid_access (uid, fqanid, is_superuser, is_suspended, last_updated)
 								   values($1, $2, false, false, NOW())
 								   on conflict (uid, fqanid) do nothing`, uid, fqanid)
 		if queryerr != nil {
@@ -2077,13 +2077,13 @@ func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 func getAllUsersFQANs(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	rows, err := DBptr.Query(`select uname, fqan, name, ga.is_banned from grid_access as ga
+	rows, err := DBptr.Query(`select uname, fqan, name, ga.is_suspended from grid_access as ga
 							  join grid_fqan as gf using(fqanid)
 							  join users as u using(uid)
 							  join affiliation_units as au using(unitid)
 							  where (ga.last_updated>=$2 or gf.last_updated>=$2 or
 									  u.last_updated>=$2 or au.last_updated>=$2 or $2 is null)
-									and (ga.is_banned = $1 or $1 is null)  order by uname`,
+									and (ga.is_suspended = $1 or $1 is null)  order by uname`,
 		i[Suspend], i[LastUpdated])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
@@ -2132,7 +2132,7 @@ func setUserGridAccess(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	_, err := c.DBtx.Exec(`update grid_access set is_banned = $1, last_updated = NOW()
+	_, err := c.DBtx.Exec(`update grid_access set is_suspended = $1, last_updated = NOW()
 						   where uid = $2 and fqanid in (select fqanid from grid_fqan where unitid = $3)`,
 		i[Suspend], uid, unitid)
 	if err != nil {

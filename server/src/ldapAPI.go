@@ -1199,7 +1199,7 @@ func updateLdapForUserSet(c APIContext, voPersonIDs []string, con *ldap.Conn) ([
 										join capability_sets as cs using(setid)
 										join affiliation_units as au using(unitid)
 									where u.vopersonid = $1
-										and ga.is_banned = false
+										and ga.is_suspended = false
 									order by cs.name`, voPersonID)
 		if err != nil && err != sql.ErrNoRows {
 			log.WithFields(QueryFields(c)).Error(err)
@@ -1327,7 +1327,7 @@ func updateLdapForCapabilitySet(c APIContext, i Input) (interface{}, []APIError)
 								 join grid_access ga using (uid)
 								 join grid_fqan gf using (fqanid)
 								 join capability_sets cs using (setid)
-							   where ga.is_banned = false
+							   where ga.is_suspended = false
 								 and u.status = true
 								 and cs.setid = $1
 							   order by u.voPersonID`, &setid)
