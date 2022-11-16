@@ -1375,11 +1375,11 @@ func modifyUserLdapAttributes(c APIContext, i Input) (interface{}, []APIError) {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	} else if err != nil {
-		apiErr = append(apiErr, DefaultAPIError(ErrorText, "The user does not exist in FERRY."))
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "the user does not exist in FERRY"))
 		return nil, apiErr
 	} else if len(voPersonID.String) == 0 {
-		apiErr = append(apiErr, DefaultAPIError(ErrorText, "The user in not in LDAP."))
-		return nil, apiErr
+		// User not in LDAP, we are out-o-here!
+		return nil, nil
 	}
 
 	m := map[string]string{}
