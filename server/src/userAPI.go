@@ -1410,19 +1410,20 @@ func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 			UserName: i[UserName],
 			FullName: i[FullName],
 		}
+		// syncLdapWithFerry DOES NOT modify user attributes, so, this must succeed.
+		// TODO sync... should be updated, we should not fail for this.
 		_, apiErr2 := modifyUserLdapAttributes(c, input)
 		if apiErr2 != nil {
 			return nil, apiErr2
 		}
 	}
 	if i[Status].Valid {
+		// syncLdapWithFerry will add/remove the user if ldap fails. It runs nightly on batch.
+		// So, no need to generate an error if ldap failed.
 		if i[Status].Data.(bool) {
-			_, apiErr = addOrUpdateUserInLdap(c, i)
+			_, _ = addOrUpdateUserInLdap(c, i)
 		} else if apiErr == nil {
-			_, apiErr = removeUserFromLdap(c, i)
-		}
-		if apiErr != nil {
-			return nil, apiErr
+			_, _ = removeUserFromLdap(c, i)
 		}
 	}
 
