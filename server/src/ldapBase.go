@@ -5,7 +5,6 @@ package main
 // https://github.com/go-ldap/ldap
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"regexp"
@@ -122,7 +121,7 @@ func LDAPinitialize() error {
 func ldapError(method string, ldapMethod string, e error) {
 	msg := fmt.Sprintf("LDAPERROR in %s:%s --> %s", method, ldapMethod, e)
 	log.Errorf(msg)
-	_ = SlackMessage(context.TODO(), msg)
+	// _ = SlackMessage(context.TODO(), msg)
 }
 
 // Caller MUST close connection when done.
