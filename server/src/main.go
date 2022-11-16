@@ -393,10 +393,8 @@ func main() {
 	}
 
 	// Support only a specific set of ciphers.
-	// Use the constants defined in the tls package. Be careful here: THE ORDER MATTERS!
-	// It seems that all http2-approved ciphers have to be first. For now just
-	// list the ones we want to use in reverse order of their true hex value.
-	// Question: should 128-bit ECDHE suite be allowed? at least one site says no. That would be tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 and 	tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA. Then again another site says to prefer CGM suite over other regardless of size.
+	// Use the constants defined in the tls package.
+	// As of go 1.17 order no longer matters.
 	Ciphers := []uint16{
 		tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
 		tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
@@ -405,7 +403,9 @@ func main() {
 		tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
 		tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
 		tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
-		tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA}
+		tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+		tls.TLS_AES_128_GCM_SHA256,
+		tls.TLS_AES_256_GCM_SHA384}
 
 	Mainsrv.TLSConfig = &tls.Config{
 		ClientAuth:               tls.VerifyClientCertIfGiven,
