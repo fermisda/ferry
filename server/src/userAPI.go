@@ -648,33 +648,36 @@ func getUserGroups(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// getUserInfo godoc
+// @Summary      Return attributes for a user.
+// @Description  For a specific user, returns the entity attributes.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        username       query     string  true  "user for whom the attributes are to be returned"
+// @Success      200  {object}  main.userAttributes
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /getUserInfo [get]
 func getUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	rows, err := c.DBtx.Query(`select full_name, uid, status, is_groupaccount, expiration_date, voPersonID, is_banned
-							   from users where uname=$1`, i[UserName])
-	if err != nil {
+	var row userAttributes
+
+	err := c.DBtx.QueryRow(`select full_name, uid, status, is_groupaccount, expiration_date, voPersonID, is_banned from users
+							where uname=$1`, i[UserName]).Scan(&row.FullName, &row.UID, &row.Status, &row.GroupAccount,
+		&row.ExpirationDate, &row.VoPersonID, &row.Banned)
+
+	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
-	}
-	defer rows.Close()
-
-	out := make(map[Attribute]interface{})
-	row := NewMapNullAttribute(FullName, UID, Status, GroupAccount, ExpirationDate, VoPersonID, Banned)
-
-	for rows.Next() {
-		rows.Scan(row[FullName], row[UID], row[Status], row[GroupAccount], row[ExpirationDate], row[VoPersonID], row[Banned])
-		for _, column := range row {
-			out[column.Attribute] = column.Data
-		}
-	}
-	if len(out) == 0 {
+	} else if err != nil {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
 		return nil, apiErr
 	}
 
-	return out, nil
+	return row, nil
 }
 
 func addUserToGroup(c APIContext, i Input) (interface{}, []APIError) {
@@ -2034,6 +2037,18 @@ func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIEr
 	return nil, nil
 }
 
+// getAllUsers godoc
+// @Summary      List all user accounts
+// @Description  Returns all user accounts
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        status         query     boolean false  "return only those with the specified status"  Format(true/false)
+// @Param        lastupdated    query     string  false  "return those updated since"  Format(date)
+// @Success      200  {object}  main.allUserAttributes
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /getAllUsers [get]
 func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -2049,27 +2064,12 @@ func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 	}
 	defer rows.Close()
 
-	type jsonout map[Attribute]interface{}
-	var out []jsonout
+	var out []allUserAttributes
+	var row allUserAttributes
 
 	for rows.Next() {
-		row := NewMapNullAttribute(UserName, UID, FullName, Status, ExpirationDate, VoPersonID, Banned)
-		rows.Scan(row[UserName], row[UID], row[FullName], row[Status], row[ExpirationDate], row[VoPersonID], row[Banned])
-
-		var expirationDate interface{}
-		if row[ExpirationDate].Valid {
-			expirationDate = row[ExpirationDate].Data
-		}
-
-		out = append(out, jsonout{
-			UserName:       row[UserName].Data,
-			UID:            row[UID].Data,
-			FullName:       row[FullName].Data,
-			Status:         row[Status].Data,
-			ExpirationDate: expirationDate,
-			VoPersonID:     row[VoPersonID].Data,
-			Banned:         row[Banned].Data,
-		})
+		rows.Scan(&row.UserName, &row.UID, &row.FullName, &row.Status, &row.ExpirationDate, &row.VoPersonID, &row.Banned)
+		out = append(out, row)
 	}
 
 	return out, nil

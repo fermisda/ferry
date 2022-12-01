@@ -562,6 +562,18 @@ func removeUserFromLdap(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, apiErr
 }
 
+// getCapabilitySet godoc
+// @Summary      Return capability set definitions with related roles and affiliations.
+// @Description  Returns the definition of or more capability sets, as it is stored in FERRY, with the associated affiliations and FQANs.
+// @Tags         LDAP
+// @Accept       html
+// @Produce      json
+// @Param        setname  query     string  false  "capability set to return"
+// @Param        role     query     string  false  "role for which all capability sets are to be returned"
+// @Param        unitname query     string  false  "affiliation for which all related capability sets are to be returned"
+// @Success      200  {object}  main.ldapCapabilitySet
+// @Failure      400  {object}  jsonOutput
+// @Router /getCapabilitySet [get]
 func getCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
