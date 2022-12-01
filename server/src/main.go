@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/go-openapi/runtime/middleware"
 
 	"crypto/tls"
 	"net/http"
@@ -94,6 +95,11 @@ func gatekeeper(c net.Conn, s http.ConnState) {
 	}
 }
 
+// @title FERRY API
+// @version 2.2.3
+
+// @description FERRY API Documentation.
+// @description (For all APIs, you can also use ferry.fnal.gov:8445/api?help)
 func main() {
 	//Read command-line arguments
 	var configDir string
@@ -229,6 +235,21 @@ func main() {
 	grouter := mux.NewRouter()
 	grouter.HandleFunc("/", handler)
 
+	srvConfig := viper.GetStringMapString("server")
+	srvDocDir := srvConfig["docdir"]
+	srvDocPath := srvConfig["docpath"]
+	if (len(srvDocDir) == 0) && (len(srvDocPath) == 0) {
+		log.Info("skipping swagger documentation, set server.docdir and server.docpath in the config file")
+	} else {
+		// Setup swagger documentation
+		fs := http.FileServer((http.Dir(srvDocDir)))
+		grouter.PathPrefix(srvDocPath + "/").Handler(http.StripPrefix(srvDocPath+"/", fs))
+		opts := middleware.SwaggerUIOpts{SpecURL: srvDocPath + "/swagger.json"}
+		sh := middleware.SwaggerUI(opts, nil)
+		grouter.Handle(srvDocPath, sh)
+		log.Info("swagger Documentation was not setup configured.")
+	}
+
 	//user API calls
 	grouter.HandleFunc("/banUser", APIs["banUser"].Run)
 	grouter.HandleFunc("/getUserCertificateDNs", APIs["getUserCertificateDNs"].Run)
@@ -362,7 +383,6 @@ func main() {
 	grouter.HandleFunc("/updateLdapForCapabilitySet", APIs["updateLdapForCapabilitySet"].Run)
 	grouter.HandleFunc("/modifyUserLdapAttributes", APIs["modifyUserLdapAttributes"].Run)
 
-	srvConfig := viper.GetStringMapString("server")
 	Mainsrv = &http.Server{
 		Addr:        fmt.Sprintf("%s", srvConfig["port"]),
 		ReadTimeout: 10 * time.Second,
