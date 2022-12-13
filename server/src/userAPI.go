@@ -59,15 +59,6 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("createUser", &createUser)
 
-	deleteUser := BaseAPI{
-		InputModel{
-			Parameter{UserName, true},
-		},
-		deleteUser,
-		RoleWrite,
-	}
-	c.Add("deleteUser", &deleteUser)
-
 	dropUser := BaseAPI{
 		InputModel{
 			Parameter{UID, true},
@@ -372,6 +363,20 @@ func IncludeUserAPIs(c *APICollection) {
 
 }
 
+// banUser       godoc
+// @Summary      Stops a user from access via FERRY.
+// @Description  Fully bans the user from ALL FERRY use!!  Upon execution, the user will be immediately removed
+// @Description  from LDAP and their status will be set to inactive.  The account will be locked so that no method, except this one,
+// @Description  can remove the ban.  Removing the ban allows the user's status to be changed.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        username       query     string  true  "user to be banned"
+// @Param        banned         query     boolean true  "true to ban the user"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /banned [put]
 func banUser(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -414,6 +419,19 @@ func banUser(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// getUserCertificateDNs       godoc
+// @Summary      Returns DNs registered for users.
+// @Description  Returns all the certificate DNs registered for users. If the optional unitname variable
+// @Description  is set, it only returns a list of certificate DNs registered with the specified experiment name.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        unitname       query     string  false  "limit DNs to specified affiliation"
+// @Param        username       query     string  false  "specific user to return DNs for"
+// @Success      200  {object}  main.userCertificates
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /getUserCertificateDNs [get]
 func getUserCertificateDNs(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -487,6 +505,19 @@ func getUserCertificateDNs(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// getAllUsersCertificateDNs       godoc
+// @Summary      Returns DNs registered for all users.
+// @Description  Returns all the certificate DNs registered for all users.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        lastupdated    query     string  false  "return those updated since"  Format(date)
+// @Param        status         query     string  false  "return DNs for inactive users, default active"
+// @Param        username       query     string  false  "return DNs for specific affiliations"
+// @Success      200  {object}  main.userCertificates
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /getAllUsersCertificateDNs [get]
 func getAllUsersCertificateDNs(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -549,6 +580,19 @@ func getAllUsersCertificateDNs(c APIContext, i Input) (interface{}, []APIError) 
 	return out, nil
 }
 
+// getUserFQANs       godoc
+// @Summary      Returns the FQANs a user is assigned.
+// @Description  Given a username, returns all the FQANs a user is assigned to broken down by experiment names.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        lastupdated    query     string  false  "limit results to records  updated since"  Format(date)
+// @Param        unitname       query     string  false  "limit results to FQANs for a specific affiliation"
+// @Param        username       query     string  false  "limit results to the user"
+// @Success      200  {object}  main.userFQANS
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /getUserFQANs [get]
 func getUserFQANs(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -605,6 +649,18 @@ func getUserFQANs(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// getUserGroups godoc
+// @Summary      Returns the gid and group names of all the groups the user is member of.
+// @Description  Returns the gid and group names of all the groups the user is member of.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        lastupdated    query     string  false  "limit results to records  updated since"  Format(date)
+// @Param        username       query     string  false  "limit results to the user"
+// @Success      200  {object}  main.userGroups
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /getUserGroups [get]
 func getUserGroups(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -655,9 +711,9 @@ func getUserGroups(c APIContext, i Input) (interface{}, []APIError) {
 // @Accept       html
 // @Produce      json
 // @Param        username       query     string  true  "user for whom the attributes are to be returned"
-// @Success      200  {object}  main.userAttributes
-// @Failure      400  {object}  main.jsonOutput
-// @Failure      401  {object}  main.jsonOutput
+// @Success      200  {object}  userAttributes
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
 // @Router /getUserInfo [get]
 func getUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
@@ -680,6 +736,20 @@ func getUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 	return row, nil
 }
 
+// addUserToGroup godoc
+// @Summary      This is not the method you are looking for.
+// @Description  This is probably NOT what you want to run.  This is mostly an internal usage API.  You most likely want
+// @Description  setUserAccessToComputeResource which can be run multiple times to add the user to a specific group and cluster.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        group          query     string  true  "the group to add the user too"
+// @Param        grouptype      query     string  true  "the specific type of group"
+// @Param        username       query     string  true  "user to add to the group"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /addUserToGroup [post]
 func addUserToGroup(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -733,6 +803,19 @@ func addUserToGroup(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// removeUserFromGroup godoc
+// @Summary      Remove this group membership from the user.
+// @Description  Remove this group membership from the user.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        group          query     string  true  "the group to remove the user from"
+// @Param        grouptype      query     string  true  "the specific type of group"
+// @Param        username       query     string  true  "user to remove from membership in the group"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /removeUserFromGroup [put]
 func removeUserFromGroup(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -786,6 +869,19 @@ func removeUserFromGroup(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// setUserExperimentFQAN godoc
+// @Summary      Assign a user to a specific experiment FQAN.
+// @Description  Assign a user to a specific experiment FQAN.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        fqan           query     string  true  "fqan to assign user too"
+// @Param        unitname       query     string  true  "affiliation to limit assignment too"
+// @Param        username       query     string  true  "user to be assigned to fqan/affiliation"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /setUserExperimentFQAN [post]
 func setUserExperimentFQAN(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -879,6 +975,21 @@ func setUserExperimentFQAN(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// setUserShellAndHomeDir godoc
+// @Summary      This method sets the user shell and home directory for a specific compute resource.
+// @Description  Some users have preferences over the types of shell they use. This method sets the user shell and home directory
+// @Description  for a specific compute resource. Users who have not specified any preferences, will get the default value.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        homedir        query     string  true  "home directory to set as default"
+// @Param        resourcename   query     string  true  "compute resource the default will apply to"
+// @Param        shell          query     string  true  "shell to set as default"
+// @Param        username       query     string  true  "user whose defaults are being set"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /setUserShellAndHomeDir [put]
 func setUserShellAndHomeDir(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -932,6 +1043,20 @@ func setUserShellAndHomeDir(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// setUserShell godoc
+// @Summary      This method sets the user shell for all resources in an affiliation unit.
+// @Description  Some users have preferences over the types of shell they use. This method sets the user shell for all resources
+// @Description  in an affiliation unit. Users who have not specified any preferences, will get the default value.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        shell          query     string  true  "shell to set as default"
+// @Param        unitname       query     string  true  "affiliation whose resources will have this shell as default"
+// @Param        username       query     string  true  "user whose defaults are being set"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /setUserShell [put]
 func setUserShell(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -988,6 +1113,19 @@ func setUserShell(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// getUserShellAndHomeDir godoc
+// @Summary      Return the users prefrences for shell and home dir.
+// @Description  Some users have preferences over the types of shell they use. This method returns those preferences.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        fqan           query     string  true  "fqan to assign user too"
+// @Param        unitname       query     string  true  "affiliation to limit assignment too"
+// @Param        username       query     string  true  "user to be assigned to fqan/affiliation"
+// @Success      200  {object}  main.userShellAndHomeDir
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /getUserShellAndHomeDir [get]
 func getUserShellAndHomeDir(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1053,6 +1191,19 @@ func getUserShellAndHomeDir(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// getUserStorageQuota godoc
+// @Summary      Returns the user's storage quota.
+// @Description  Returns the storage quota for a resource applied to a user, if any.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        resourcename   query     string  true  "resource for which the quota is to be given"
+// @Param        unitname       query     string  true  "affiliation the quota is for"
+// @Param        username       query     string  true  "user whose quota is to be given"
+// @Success      200  {object}  main.userStorageQuota
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /getUserStorageQuota [get]
 func getUserStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1112,6 +1263,20 @@ func getUserStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// setUserExternalAffiliationAttribute godoc
+// @Summary      Sets an external affiliation attribute and value for a user.
+// @Description  It sets an external affiliation attribute and value for a user. Normally, the  attribute name is most likely the cern_username
+// @Description  and affiliation value is the actual uname at CERN.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        attribute      query     string  true  "attribute, 'key' to be set"
+// @Param        username       query     string  true  "user to be assigned the attribute"
+// @Param        value          query     string  true  "value provided for the attribute"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /setUserExternalAffiliationAttribute [post]
 func setUserExternalAffiliationAttribute(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1151,6 +1316,19 @@ func setUserExternalAffiliationAttribute(c APIContext, i Input) (interface{}, []
 
 	return nil, nil
 }
+
+// removeUserExternalAffiliationAttribute godoc
+// @Summary      Removes an external affiliation attribute and value from a user.
+// @Description  Removes an external affiliation attribute and value from a user.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        attribute      query     string  true  "attribute to be removed"
+// @Param        username       query     string  true  "user whose attribute is to be removed"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /removeUserExternalAffiliationAttribute [put]
 func removeUserExternalAffiliationAttribute(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1186,6 +1364,19 @@ func removeUserExternalAffiliationAttribute(c APIContext, i Input) (interface{},
 
 	return nil, nil
 }
+
+// getUserExternalAffiliationAttributes godoc
+// @Summary      Returns the external affiliation attributes assigned to a user.
+// @Description  Returns the external affiliation attributes assigned to a user.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        attribute      query     string  true  "attribute to be removed"
+// @Param        username       query     string  true  "user whose attribute is to be removed"
+// @Success      200  {object}  main.userExternalAttributes
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /getUserExternalAffiliationAttributes [get]
 func getUserExternalAffiliationAttributes(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1234,6 +1425,19 @@ func getUserExternalAffiliationAttributes(c APIContext, i Input) (interface{}, [
 	return out, nil
 }
 
+// addCertificateDNToUser godoc
+// @Summary      Adds a DN certificate for the user.
+// @Description  Adds a DN certificate for the user, if it does not already exist.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        dn             query     string  true "dn to assign to user"
+// @Param        unitname       query     string  true "affiliation to associatate with the dn"
+// @Param        username       query     string  true "user to whom the dn belongs"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /addCertificateDNToUser [post]
 func addCertificateDNToUser(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1295,6 +1499,18 @@ func addCertificateDNToUser(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// removeUserCertificateDN godoc
+// @Summary      Removes a DN certificate from the user.
+// @Description  Removes a DN certificate from, the user, if it exists.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        dn             query     string  true "dn remove from the user"
+// @Param        username       query     string  true "user to whom the dn belongs"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /removeUserCertificateDN [put]
 func removeUserCertificateDN(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1365,6 +1581,22 @@ func removeUserCertificateDN(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// setUserInfo godoc
+// @Summary      Updates a set of attributes belonging to a user.
+// @Description  Updates a set of attributes belonging to a user.
+// @Description  NOTE: A Banned user's status cannot be set to true -- see the API banUser.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        expirationdate query     string  false  "date the user's account expires" Format(date)
+// @Param        fullname       query     string  false  "proper name of the user"
+// @Param        groupaccount   query     boolean false  "true is this is a group account - default is false"
+// @Param        status         query     string  false  "false to deactivate the account - default is true"
+// @Param        username       query     string  true   "user whose attributes are to be set"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /setUserInfo [put]
 func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1433,6 +1665,22 @@ func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// createUser godoc
+// @Summary      Adds a new user to FERRY.
+// @Description  Adds a new user to FERRY.  Note: FERRY's cronjob which talks to userDB and services, normally handles this.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        expirationdate query     string  false  "date the user's account expires" Format(date)
+// @Param        fullname       query     string  true   "proper name of the user"
+// @Param        groupaccount   query     boolean true   "true is this is a group account - default is false"
+// @Param        status         query     string  true   "false to deactivate the account - default is true"
+// @Param        uid            query     int     true   "the uid for of this new user"
+// @Param        username       query     string  true   "user's account name"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /createUser [post]
 func createUser(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1484,6 +1732,18 @@ func createUser(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// getMemberAffiliations godoc
+// @Summary      Returns the affiliations the user is a member of.
+// @Description  Returns the affiliations the user is a member of.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        experiment     query     string  true  "limit results to a specific affiliation"
+// @Param        username       query     string  true  "user to list whose membership will be listed"
+// @Success      200  {object}  main.userMemberAffiliations
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /getMemberAffiliations [get]
 func getMemberAffiliations(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1536,6 +1796,17 @@ func getMemberAffiliations(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// getUserUname godoc
+// @Summary      Returns the username associated with a UID
+// @Description  Returns the username associated with a UID.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        uid       query     int  true  "uid for which the username will be returned"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /getUserUname [get]
 func getUserUname(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1556,6 +1827,17 @@ func getUserUname(c APIContext, i Input) (interface{}, []APIError) {
 	return uname.Data, nil
 }
 
+// getUserUID godoc
+// @Summary      Returns the UID associated with a username.
+// @Description  Returns the UID associated with a username.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        username       query     string  true  "user whose UID will be returned"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /getUserUID [get]
 func getUserUID(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1576,37 +1858,19 @@ func getUserUID(c APIContext, i Input) (interface{}, []APIError) {
 	return uid.Data, nil
 }
 
-func deleteUser(c APIContext, i Input) (interface{}, []APIError) {
-	var apiErr []APIError
-
-	uid := NewNullAttribute(UID)
-
-	err := c.DBtx.QueryRow(`select uid from users where uname = $1`, i[UserName]).Scan(&uid)
-	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c)).Error(err)
-		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-		return nil, apiErr
-	}
-
-	if !uid.Valid {
-		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
-		return nil, apiErr
-	}
-
-	_, err = c.DBtx.Exec(`delete from users where uid = $1`, uid)
-	if err != nil {
-		log.WithFields(QueryFields(c)).Error(err)
-		if strings.Contains(err.Error(), "violates foreign key constraint") {
-			apiErr = append(apiErr, APIError{errors.New("all associations with this user must be removed before it can be deleted"), ErrorAPIRequirement})
-		} else {
-			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-		}
-		return nil, apiErr
-	}
-
-	return nil, nil
-}
-
+// dropUser godoc
+// @Summary      Deletes (actually it archives) user from the database.
+// @Description  Intended for internal cronjob use only.  Moves some  user data to the archive table.  Purposely fails if user is in any table
+// @Description  except user and user_group.   If you need to have someone removed from all tables, ask the FERRY adimistrator
+// @Description  to run the archiveUser.py script.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        username       query     string  true  "user to be deleted"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /dropUser [put]
 func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1772,6 +2036,18 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// getUserAccessToComputeResources godoc
+// @Summary      Return a list of all the compute and storage resources the user has access to.
+// @Description  Return a list of all the compute and storage resources the user has access to.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        lastupdated    query     string  false  "limit results to records  updated since"  Format(date)
+// @Param        username       query     string  true  "user to be assigned to fqan/affiliation"
+// @Success      200  {object}  main.userComputeResources
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /getUserAccessToComputeResources [get]
 func getUserAccessToComputeResources(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1825,6 +2101,20 @@ func getUserAccessToComputeResources(c APIContext, i Input) (interface{}, []APIE
 	return out, nil
 }
 
+// getStorageQuotas godoc
+// @Summary      Returns the storage quota allocated for a user on a resource.
+// @Description  Returns the storage quota allocated for a user on a resource.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        groupname      query     string  false  "group to limit results to"
+// @Param        lastupdated    query     string  false  "limit results to records  updated since"  Format(date)
+// @Param        resourcename   query     string  false  "limit results to a specific resource"
+// @Param        username       query     string  false  "limit results to a specific user"
+// @Success      200  {object}  main.userStorageQuotas
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /getStorageQuotas [get]
 func getStorageQuotas(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1917,6 +2207,22 @@ func getStorageQuotas(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// setUserAccessToComputeResource godoc
+// @Summary      Allows the user to have interactive access with a resource.
+// @Description  Given a username and a resource, it allows the user to have interactive access to the resource.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        groupname      query     string  true   "group through which access is provided"
+// @Param        homedir        query     string  false  "home directory to use, if different from the default"
+// @Param        primary        query     boolean false  "if true this group is primary for the resource -- the user's primary group records do NOT appear in the passwd file"
+// @Param        resourcename   query     string  true   "compute resource to which the user is being given access"
+// @Param        shell          query     string  false  "shell to use, if different from the default"
+// @Param        username       query     string  true   "user being given access to the resource"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /setUserAccessToComputeResource [put]
 func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -2045,9 +2351,9 @@ func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIEr
 // @Produce      json
 // @Param        status         query     boolean false  "return only those with the specified status"  Format(true/false)
 // @Param        lastupdated    query     string  false  "return those updated since"  Format(date)
-// @Success      200  {object}  main.allUserAttributes
-// @Failure      400  {object}  main.jsonOutput
-// @Failure      401  {object}  main.jsonOutput
+// @Success      200  {object}  allUsersAttributes
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
 // @Router /getAllUsers [get]
 func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
@@ -2064,8 +2370,8 @@ func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 	}
 	defer rows.Close()
 
-	var out []allUserAttributes
-	var row allUserAttributes
+	var out []allUsersAttributes
+	var row allUsersAttributes
 
 	for rows.Next() {
 		rows.Scan(&row.UserName, &row.UID, &row.FullName, &row.Status, &row.ExpirationDate, &row.VoPersonID, &row.Banned)
@@ -2075,6 +2381,18 @@ func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// getAllUsersFQANs godoc
+// @Summary      Returns all FQANs for all users
+// @Description  Returns all FQANs for all users.  By default includes suspended FQANS - marked as such.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        lastupdated     query     string  false  "limit results to records  updated since"  Format(date)
+// @Param        suspended       query     boolean  false  "limit to suspended or not suspended"
+// @Success      200  {object}  main.userAllUserFQANs
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /getAllUsersFQANs [get]
 func getAllUsersFQANs(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -2109,6 +2427,20 @@ func getAllUsersFQANs(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// setUserGridAccess godoc
+// @Summary      Restricts the user the privileges associated with an experiment's FQANs.
+// @Description  Allows the application of the "Naughty Policy" by restricting the user's privileges associated with an
+// @Description  experiment's FQANs until it is restored by this same method.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        suspend        query     boolean true  "true to restrict the user from using the FQAN, false to remove the restriction"
+// @Param        unitname       query     string  true  "affiliation to limit the user's FQAN access on"
+// @Param        username       query     string  true  "user whose FQAN is to be limited"
+// @Success      200  {object}  jsonOutput
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /setUserGridAccess [put]
 func setUserGridAccess(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -2147,6 +2479,19 @@ func setUserGridAccess(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, apiErr
 }
 
+// getUserGroupsForComputeResource godoc
+// @Summary      Returns attributes of compute resources and associated users.
+// @Description  Returns attributes of compute resources and associated users.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        resourcetype   query     string  false  "type of the compute resource to restrict results to"
+// @Param        status         query     boolean false  "status of the users to restrict results to, default all"
+// @Param        unitname       query     string  false  "affiliation to limit results to"
+// @Success      200  {object}  userGroupComputeResourcesMap
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /getUserGroupsForComputeResource [get]
 func getUserGroupsForComputeResource(c APIContext, i Input) (interface{}, []APIError) {
 
 	var apiErr []APIError
@@ -2224,6 +2569,19 @@ func getUserGroupsForComputeResource(c APIContext, i Input) (interface{}, []APIE
 	return out, nil
 }
 
+// removeUserFromComputeResource godoc
+// @Summary      Removes the user from the specified compute resource.
+// @Description  Removes the user from the specified compute resource.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        resourcename   query     string  true  "compute resource to remove user from"
+// @Param        resourcetype   query     string  type  "type of the compute resource to remove user from"
+// @Param        username       query     string  true  "user to be disassociated from the resource"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /removeUserFromComputeResource [put]
 func removeUserFromComputeResource(c APIContext, i Input) (interface{}, []APIError) {
 
 	var apiErr []APIError
