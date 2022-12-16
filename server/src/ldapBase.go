@@ -5,6 +5,7 @@ package main
 // https://github.com/go-ldap/ldap
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"regexp"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/go-ldap/ldap/v3"
+	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
@@ -29,33 +31,6 @@ var ldapTimeout string
 var requiredAccounts string
 
 var ldapErrNoSuchObject = "LDAP Result Code 32 \"No Such Object\": "
-
-// For LDAP USER data
-type LDAPData struct {
-	dn                     string
-	objectClass            []string
-	voPersonID             string
-	voPersonExternalID     string
-	uid                    string
-	sn                     string
-	cn                     string
-	givenName              string
-	mail                   string
-	eduPersonPrincipalName string
-	eduPersonEntitlement   []string
-	isMemberOf             []string
-}
-
-// For LDAP Compatability Set Data
-type LDAPSetData struct {
-	dn                     string
-	objectClass            []string
-	voPersonExternalID     string
-	eduPersonEntitlement   []string
-	uid                    string
-	eduPersonPrincipalName []string
-	voPersonApplicationUID []string
-}
 
 func LDAPinitialize() error {
 	var fields []string
@@ -150,8 +125,8 @@ func LDAPgetConnection(readonly bool) (*ldap.Conn, error) {
 	return l, nil
 }
 
-func LDAPgetUserData(voPersonID string, con *ldap.Conn) (LDAPData, error) {
-	var lData LDAPData
+func LDAPgetUserData(voPersonID string, con *ldap.Conn) (LDAPUserData, error) {
+	var lData LDAPUserData
 	attributes := []string{"dn", "objectClass", "voPersonID", "voPersonExternalID", "uid", "sn", "cn", "givenName", "mail",
 		"eduPersonPrincipalName", "eduPersonEntitlement", "isMemberOf"}
 
@@ -165,18 +140,18 @@ func LDAPgetUserData(voPersonID string, con *ldap.Conn) (LDAPData, error) {
 	}
 
 	if len(result.Entries) == 1 {
-		lData.dn = result.Entries[0].DN
-		lData.objectClass = result.Entries[0].GetAttributeValues("objectClass")
-		lData.voPersonID = result.Entries[0].GetAttributeValue("voPersonID")
-		lData.voPersonExternalID = result.Entries[0].GetAttributeValue("voPersonExternalID")
-		lData.uid = result.Entries[0].GetAttributeValue("uid")
-		lData.sn = result.Entries[0].GetAttributeValue("sn")
-		lData.cn = result.Entries[0].GetAttributeValue("cn")
-		lData.givenName = result.Entries[0].GetAttributeValue("givenName")
-		lData.mail = result.Entries[0].GetAttributeValue("mail")
-		lData.eduPersonPrincipalName = result.Entries[0].GetAttributeValue("eduPersonPrincipalName")
-		lData.eduPersonEntitlement = result.Entries[0].GetAttributeValues("eduPersonEntitlement")
-		lData.isMemberOf = result.Entries[0].GetAttributeValues("isMemberOf")
+		lData.Dn = result.Entries[0].DN
+		lData.ObjectClass = result.Entries[0].GetAttributeValues("objectClass")
+		lData.VoPersonID = result.Entries[0].GetAttributeValue("voPersonID")
+		lData.VoPersonExternalID = result.Entries[0].GetAttributeValue("voPersonExternalID")
+		lData.Uid = result.Entries[0].GetAttributeValue("uid")
+		lData.Sn = result.Entries[0].GetAttributeValue("sn")
+		lData.Cn = result.Entries[0].GetAttributeValue("cn")
+		lData.GivenName = result.Entries[0].GetAttributeValue("givenName")
+		lData.Mail = result.Entries[0].GetAttributeValue("mail")
+		lData.EduPersonPrincipalName = result.Entries[0].GetAttributeValue("eduPersonPrincipalName")
+		lData.EduPersonEntitlement = result.Entries[0].GetAttributeValues("eduPersonEntitlement")
+		lData.IsMemberOf = result.Entries[0].GetAttributeValues("isMemberOf")
 	} else if len(result.Entries) > 1 {
 		err := fmt.Errorf(" Multiple ldap entries (%d) were found for voPersonID %s", len(result.Entries), voPersonID)
 		return lData, err
@@ -203,19 +178,19 @@ func LDAPgetAllVoPersonIDs(con *ldap.Conn) ([]string, error) {
 	return voPersonIDs, err
 }
 
-func LDAPaddUser(lData LDAPData, con *ldap.Conn) error {
+func LDAPaddUser(lData LDAPUserData, con *ldap.Conn) error {
 
-	givenName := []string{lData.givenName}
-	uid := []string{lData.uid}
-	sn := []string{lData.sn}
-	cn := []string{lData.cn}
-	mail := []string{lData.mail}
-	eduPersonPrincipalName := []string{lData.eduPersonPrincipalName}
-	voPersonExternalID := []string{lData.voPersonExternalID}
-	voPersonID := []string{lData.voPersonID}
+	givenName := []string{lData.GivenName}
+	uid := []string{lData.Uid}
+	sn := []string{lData.Sn}
+	cn := []string{lData.Cn}
+	mail := []string{lData.Mail}
+	eduPersonPrincipalName := []string{lData.EduPersonPrincipalName}
+	voPersonExternalID := []string{lData.VoPersonExternalID}
+	voPersonID := []string{lData.VoPersonID}
 
-	addReq := ldap.NewAddRequest(lData.dn, []ldap.Control{})
-	addReq.Attribute("objectClass", lData.objectClass)
+	addReq := ldap.NewAddRequest(lData.Dn, []ldap.Control{})
+	addReq.Attribute("objectClass", lData.ObjectClass)
 	addReq.Attribute("givenName", givenName)
 	addReq.Attribute("uid", uid)
 	addReq.Attribute("sn", sn)
@@ -244,8 +219,8 @@ func LDAPremoveUser(voPersonID string, con *ldap.Conn) error {
 	return err
 }
 
-func LDAPgetCapabilitySetData(dn string, con *ldap.Conn) (LDAPSetData, error) {
-	var rData LDAPSetData
+func LDAPgetCapabilitySetData(dn string, con *ldap.Conn) (LDAPCapabilitySetData, error) {
+	var rData LDAPCapabilitySetData
 	attributes := []string{"dn", "objectClass", "voPersonExternalID", "eduPersonEntitlement", "uid", "eduPersonPrincipalName", "voPersonApplicationUID"}
 
 	searchReq := ldap.NewSearchRequest(dn, ldap.ScopeWholeSubtree, 0, 0, 0, false, "(objectclass=account)", attributes, []ldap.Control{})
@@ -272,7 +247,7 @@ func LDAPgetCapabilitySetData(dn string, con *ldap.Conn) (LDAPSetData, error) {
 	return rData, nil
 }
 
-func LDAPaddCapabilitySet(rData LDAPSetData, con *ldap.Conn) error {
+func LDAPaddCapabilitySet(rData LDAPCapabilitySetData, con *ldap.Conn) error {
 
 	voPersonExternalID := []string{rData.voPersonExternalID}
 	uid := []string{rData.uid}
@@ -353,22 +328,22 @@ func LDAPmodifyUserScoping(dn string, setsToDrop []string, setsToAdd []string, g
 		return modified, err
 	}
 	for _, pattern := range setsToDrop {
-		if stringInSlice(pattern, lData.eduPersonEntitlement) {
+		if stringInSlice(pattern, lData.EduPersonEntitlement) {
 			adjSetsToDrop = append(adjSetsToDrop, pattern)
 		}
 	}
 	for _, pattern := range setsToAdd {
-		if !stringInSlice(pattern, lData.eduPersonEntitlement) {
+		if !stringInSlice(pattern, lData.EduPersonEntitlement) {
 			adjSetsToAdd = append(adjSetsToAdd, pattern)
 		}
 	}
 	for _, pattern := range groupsToDrop {
-		if stringInSlice(pattern, lData.isMemberOf) {
+		if stringInSlice(pattern, lData.IsMemberOf) {
 			adjGroupsToDrop = append(adjGroupsToDrop, pattern)
 		}
 	}
 	for _, pattern := range groupsToAdd {
-		if !stringInSlice(pattern, lData.isMemberOf) {
+		if !stringInSlice(pattern, lData.IsMemberOf) {
 			adjGroupsToAdd = append(adjGroupsToAdd, pattern)
 		}
 	}
@@ -426,7 +401,7 @@ func LdapModifyAttributes(dn string, m map[string]string, con *ldap.Conn) error 
 	return err
 }
 
-func LDAPmodifyCapabilitySetAttributes(rData LDAPSetData, eData LDAPSetData, con *ldap.Conn) error {
+func LDAPmodifyCapabilitySetAttributes(rData LDAPCapabilitySetData, eData LDAPCapabilitySetData, con *ldap.Conn) error {
 	var err error
 	var doit = false
 
@@ -470,4 +445,94 @@ func LDAPmodifyCapabilitySetAttributes(rData LDAPSetData, eData LDAPSetData, con
 	}
 	return err
 
+}
+
+// Constructs a wlcggroup from the fqan and unitname.
+func getWlcgGroup(fqan string, unitname string) string {
+	parts := strings.SplitAfter(fqan, "/Role=")
+	if len(parts) == 1 {
+		return ""
+	}
+	parts = strings.Split(parts[1], "/")
+	role := strings.ToLower(parts[0])
+	if role == "null" {
+		return ""
+	} else if role == "analysis" {
+		return "/" + unitname
+	}
+	return "/" + unitname + "/" + role
+}
+
+// Adds a user to LDAP but does NOT deal with eduPersonEntitilments or isMemberOf.  see updateLdapForUserSet for that.
+// This method ensures a user, who listed in the DB, is also in LDAP.  It not the user is added to LDAP.
+func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (LDAPUserData, []APIError) {
+	var apiErr []APIError
+	var lData LDAPUserData
+
+	emailSuffix := "fnal.gov"
+	uname := NewNullAttribute(UserName)
+	uid := NewNullAttribute(UID)
+	lData.ObjectClass = []string{"person", "organizationalPerson", "inetOrgPerson", "eduMember", "eduPerson", "voPerson"}
+
+	err := c.DBtx.QueryRow(`select uid, uname, full_name,
+								   split_part(full_name, ' ', 2),
+								   split_part(full_name, ' ', 1)  from users where uname=$1`,
+		i[UserName]).Scan(&uid, &uname, &lData.GivenName, &lData.Sn, &lData.Cn)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return lData, apiErr
+	}
+
+	var vop sql.NullString
+	err = c.DBtx.QueryRow(`select voPersonID from users where uid = $1`, uid).Scan(&vop)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return lData, apiErr
+	} else if vop.Valid {
+		lData.VoPersonID = vop.String
+	}
+
+	// Ensure the user really is in LDAP (we don't have 2 phase commit - so we must test), if a record is in LDAP, we are done.
+	// If not, then use the voPersonID from the DB and add them.  If no voPersonID exists for the use, then create one.
+	if len(lData.VoPersonID) > 0 {
+		llData, err := LDAPgetUserData(lData.VoPersonID, con)
+		if err != nil {
+			log.Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorText, "Unable to get user's LDAP data."))
+			return llData, apiErr
+		}
+		if llData.Dn != "" {
+			// User is in both DB and LDAP, we're outta here!
+			return llData, nil
+		}
+	}
+	// Create a voPersionID iff the DB did not find one for this user.  Always reuse an existing voPersonID.
+	if len(lData.VoPersonID) == 0 {
+		lData.VoPersonID = uuid.New().String()
+		_, err = c.DBtx.Exec(`update users set vopersonid=$1 where uid=$2`, lData.VoPersonID, uid)
+		if err != nil {
+			log.WithFields(QueryFields(c)).Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+			return lData, apiErr
+		}
+	}
+
+	lData.Dn = fmt.Sprintf("voPersonID=%s,%s", lData.VoPersonID, ldapBaseDN)
+	lData.Mail = fmt.Sprintf("%s@%s", uname.Data, emailSuffix)
+	lData.EduPersonPrincipalName = lData.VoPersonID
+	lData.Uid = uname.Data.(string)
+	lData.VoPersonExternalID = lData.Mail
+
+	err = LDAPaddUser(lData, con)
+	if err != nil {
+		log.Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "Unable to store user in LDAP"))
+		return lData, apiErr
+	}
+
+	log.Infof("addUserToLdapBase - added to ldap, uid: %s set voPersonId to: %s", uid.Data, lData.VoPersonID)
+
+	return lData, nil
 }

@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/go-ldap/ldap/v3"
-	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -161,9 +160,20 @@ func IncludeLdapAPIs(c *APICollection) {
 
 }
 
+// getUserLdapInfo godoc
+// @Summary      Returns the user's LDAP data, directly from LDAP, not FERRY's DB.
+// @Description  Returns the user's LDAP data, directly from LDAP, not FERRY's DB.
+// @Tags         LDAP
+// @Accept       html
+// @Produce      json
+// @Param        username       query     string  true  "user to return LDAP data for"
+// @Success      200  {object}  LDAPUserData
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /getUserLdapInfo [get]
 func getUserLdapInfo(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
-	var lData LDAPData
+	var lData LDAPUserData
 	var vopid sql.NullString
 
 	uid := NewNullAttribute(UID)
@@ -180,7 +190,7 @@ func getUserLdapInfo(c APIContext, i Input) (interface{}, []APIError) {
 		apiErr = append(apiErr, DefaultAPIError(ErrorText, "user is not in LDAP"))
 		return nil, apiErr
 	}
-	lData.voPersonID = vopid.String
+	lData.VoPersonID = vopid.String
 
 	con, err := LDAPgetConnection(false)
 	if err != nil {
@@ -190,7 +200,7 @@ func getUserLdapInfo(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	lData, err = LDAPgetUserData(lData.voPersonID, con)
+	lData, err = LDAPgetUserData(lData.VoPersonID, con)
 	if err != nil {
 		con.Close()
 		log.Error(fmt.Sprintf("From LDAPgetUserData: %s", err))
@@ -199,28 +209,26 @@ func getUserLdapInfo(c APIContext, i Input) (interface{}, []APIError) {
 	}
 	con.Close()
 
-	if len(lData.voPersonID) == 0 {
+	if len(lData.VoPersonID) == 0 {
 		apiErr = append(apiErr, DefaultAPIError(ErrorText, "user is not in LDAP (2)"))
 		return nil, apiErr
 	}
-	out := make(map[Attribute]interface{})
-	out["dn"] = lData.dn
-	out["objectClass"] = lData.objectClass
-	out["voPersonID"] = lData.voPersonID
-	out["voPersonExternalID"] = lData.voPersonExternalID
-	out["uid"] = lData.uid
-	out["sn"] = lData.sn
-	out["cn"] = lData.cn
-	out["givenName"] = lData.givenName
-	out["mail"] = lData.mail
-	out["eduPersonPrincipalName"] = lData.eduPersonPrincipalName
-	out["eduPersonEntitlement"] = lData.eduPersonEntitlement
-	out["isMemberOf"] = lData.isMemberOf
 
-	return out, apiErr
+	return lData, apiErr
 }
 
-// Adds a new user to ldap and updates ldap for an existing user's FQANs.
+// setUserExperimentFQAN godoc
+// @Summary      Adds a non-existant user to LDAP and updates LDAP for an existing user.
+// @Description  Adds a user to LDAP iff that user does not already exist in LDAP. For both the new user and an existing user,
+// @Description  updates LDAP so the eduPersonEntitlements and isMemberOf records match FERRY's active FQANs for the user.
+// @Tags         LDAP
+// @Accept       html
+// @Produce      json
+// @Param        username       query     string  true  "user whose LDAP data is to be updated"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /setUserExperimentFQAN [put]
 func addOrUpdateUserInLdap(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -234,7 +242,7 @@ func addOrUpdateUserInLdap(c APIContext, i Input) (interface{}, []APIError) {
 
 	lData, apiErr := addUserToLdapBase(c, i, con)
 	if apiErr == nil {
-		vops := []string{lData.voPersonID}
+		vops := []string{lData.VoPersonID}
 		_, apiErr = updateLdapForUserSet(c, vops, con)
 	}
 	con.Close()
@@ -242,11 +250,20 @@ func addOrUpdateUserInLdap(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, apiErr
 }
 
-// Syncronize LDAP to FERRY where FERRY is the source of truth.
-//   Removes all records in LDAP which have no corresponding record in FERRY (identified by users.voPersionID is null).
-//   Adds all FERRY users to LDAP which are missing - have FQAN records with associated capability set, but are not in LDAP.
-//   Verifies the capability sets and groups are correct for each user, per their FQANs, correcting those which are not correct.
-// Due to the third step, this method may take quite a while.
+// syncLdapWithFerry godoc
+// @Summary      Internal use only! Synchronize all USER LDAP data to FERRY with FERRY as the source of truth.
+// @Description  Internal use only! Synchronize all USER LDAP data to FERRY with FERRY as the source of truth.
+// @Description  Does NOT synchronize capability sets and scopes.
+// @Description  1. Removes all records in LDAP which have no corresponding record in FERRY, or are not active users in FERRY.
+// @Description  2. Adds all active FERRY users to LDAP which are missing from LDAP.
+// @Description  3. Verifies the capability sets in LDAP are set properly for each user, per their FQANs, correcting LDAP as needed.
+// @Tags         LDAP
+// @Accept       html
+// @Produce      json
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /syncLdapWithFerry [put]
 func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -255,7 +272,7 @@ func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 
 	const Removed Attribute = "removedFromLdap"
 	const Added Attribute = "addedToLdap"
-	const Updated Attribute = "updatedLdapData"
+	const Updated Attribute = "updatedLDAPUserData"
 
 	entry := jsonentry{
 		Removed: make(jsonlist, 0),
@@ -334,11 +351,11 @@ func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 		err = LDAPremoveUser(deleteVoPersonID, con)
 		if err != nil {
 			log.Error(err)
-			apiErr = append(apiErr, DefaultAPIError(ErrorText, fmt.Sprintf("Unable to remove user from LDAP: %s - %s", llData.mail, deleteVoPersonID)))
+			apiErr = append(apiErr, DefaultAPIError(ErrorText, fmt.Sprintf("Unable to remove user from LDAP: %s - %s", llData.Mail, deleteVoPersonID)))
 			con.Close()
 			return entry, apiErr
 		}
-		entry[Removed] = append(entry[Removed].(jsonlist), fmt.Sprintf("uname: %s voPersonID: %s.", llData.uid, deleteVoPersonID))
+		entry[Removed] = append(entry[Removed].(jsonlist), fmt.Sprintf("uname: %s voPersonID: %s.", llData.Uid, deleteVoPersonID))
 	}
 
 	// Second, is to add in all the users that FERRY has registered as in LDAP but are missing.
@@ -394,8 +411,8 @@ func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 				log.Errorf("ldapAPI: addUsertoLdapBase: error on uname: %s", u.uname)
 				return entry, apiErr
 			}
-			entry[Added] = append(entry[Added].(jsonlist), fmt.Sprintf("uname: %s voPersonID: %s", u.uname, lData.voPersonID))
-			voPersonIDs = append(voPersonIDs, lData.voPersonID)
+			entry[Added] = append(entry[Added].(jsonlist), fmt.Sprintf("uname: %s voPersonID: %s", u.uname, lData.VoPersonID))
+			voPersonIDs = append(voPersonIDs, lData.VoPersonID)
 		} else {
 			voPersonIDs = append(voPersonIDs, u.voPersonID)
 		}
@@ -418,96 +435,20 @@ func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 	return entry, nil
 }
 
-// Constructs a wlcggroup from the fqan and unitname
-func getWlcgGroup(fqan string, unitname string) string {
-	parts := strings.SplitAfter(fqan, "/Role=")
-	if len(parts) == 1 {
-		return ""
-	}
-	parts = strings.Split(parts[1], "/")
-	role := strings.ToLower(parts[0])
-	if role == "null" {
-		return ""
-	} else if role == "analysis" {
-		return "/" + unitname
-	}
-	return "/" + unitname + "/" + role
-}
-
-// Adds a user to LDAP but does NOT deal with eduPersonEntitilments or isMemberOf.  see updateLdapForUserSet for that.
-// This method ensures a user, who listed in the DB, is also in LDAP.  It not the user is added to LDAP.
-func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (LDAPData, []APIError) {
-	var apiErr []APIError
-	var lData LDAPData
-
-	emailSuffix := "fnal.gov"
-	uname := NewNullAttribute(UserName)
-	uid := NewNullAttribute(UID)
-	lData.objectClass = []string{"person", "organizationalPerson", "inetOrgPerson", "eduMember", "eduPerson", "voPerson"}
-
-	err := c.DBtx.QueryRow(`select uid, uname, full_name,
-								   split_part(full_name, ' ', 2),
-								   split_part(full_name, ' ', 1)  from users where uname=$1`,
-		i[UserName]).Scan(&uid, &uname, &lData.givenName, &lData.sn, &lData.cn)
-	if err != nil {
-		log.WithFields(QueryFields(c)).Error(err)
-		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-		return lData, apiErr
-	}
-
-	var vop sql.NullString
-	err = c.DBtx.QueryRow(`select voPersonID from users where uid = $1`, uid).Scan(&vop)
-	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c)).Error(err)
-		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-		return lData, apiErr
-	} else if vop.Valid {
-		lData.voPersonID = vop.String
-	}
-
-	// Ensure the user really is in LDAP (we don't have 2 phase commit - so we must test), if a record is in LDAP, we are done.
-	// If not, then use the voPersonID from the DB and add them.  If no voPersonID exists for the use, then create one.
-	if len(lData.voPersonID) > 0 {
-		llData, err := LDAPgetUserData(lData.voPersonID, con)
-		if err != nil {
-			log.Error(err)
-			apiErr = append(apiErr, DefaultAPIError(ErrorText, "Unable to get user's LDAP data."))
-			return llData, apiErr
-		}
-		if llData.dn != "" {
-			// User is in both DB and LDAP, we're outta here!
-			return llData, nil
-		}
-	}
-	// Create a voPersionID iff the DB did not find one for this user.  Always reuse an existing voPersonID.
-	if len(lData.voPersonID) == 0 {
-		lData.voPersonID = uuid.New().String()
-		_, err = c.DBtx.Exec(`update users set vopersonid=$1 where uid=$2`, lData.voPersonID, uid)
-		if err != nil {
-			log.WithFields(QueryFields(c)).Error(err)
-			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-			return lData, apiErr
-		}
-	}
-
-	lData.dn = fmt.Sprintf("voPersonID=%s,%s", lData.voPersonID, ldapBaseDN)
-	lData.mail = fmt.Sprintf("%s@%s", uname.Data, emailSuffix)
-	lData.eduPersonPrincipalName = lData.voPersonID
-	lData.uid = uname.Data.(string)
-	lData.voPersonExternalID = lData.mail
-
-	err = LDAPaddUser(lData, con)
-	if err != nil {
-		log.Error(err)
-		apiErr = append(apiErr, DefaultAPIError(ErrorText, "Unable to store user in LDAP"))
-		return lData, apiErr
-	}
-
-	log.Infof("addUserToLdapBase - added to ldap, uid: %s set voPersonId to: %s", uid.Data, lData.voPersonID)
-
-	return lData, nil
-}
-
+// removeUserFromLdap godoc
+// @Summary      Removes a user from LDAP.
+// @Description  Removes a user from LDAP, providing the user has a voPersonID stored in FERRY. If not, the LDAP record will
+// @Description  need to be removed with direct LDAP commands or by running syncLdapWithFerry. -- Use getUserLdapInfo to verify
+// @Description  the voPersonID exists.  Be aware, syncLdapWithFerry (runs nightly in cron) will restore the LDAP records if
+// @Description  the user is active.
+// @Tags         LDAP
+// @Accept       html
+// @Produce      json
+// @Param        username       query     string  true  "user to be assigned to fqan/affiliation"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /setUserExperimentFQAN [put]
 func removeUserFromLdap(c APIContext, i Input) (interface{}, []APIError) {
 	//********
 	// NEVER remove the voPersonID FROM the DB.  If we need to restore the user, we want the original.
@@ -571,7 +512,7 @@ func removeUserFromLdap(c APIContext, i Input) (interface{}, []APIError) {
 // @Param        setname  query     string  false  "capability set to return"
 // @Param        role     query     string  false  "role for which all capability sets are to be returned"
 // @Param        unitname query     string  false  "affiliation for which all related capability sets are to be returned"
-// @Success      200  {object}  main.ldapCapabilitySet
+// @Success      200  {object}  ldapCapabilitySet
 // @Failure      400  {object}  jsonOutput
 // @Router /getCapabilitySet [get]
 func getCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
@@ -712,9 +653,23 @@ func getCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// createCapabilitySet godoc
+// @Summary      Creates a capability set in FERRY's DB and LDAP.
+// @Description  Creates a capability set in FERRY's DB and LDAP.  To associate it with an FQAN see addCapabilitySetToFQAN.
+// @Tags         LDAP
+// @Accept       html
+// @Produce      json
+// @Param        pattern          query     string  true  "comma seperated list of scopes to include in set example: compute.create"
+// @Param        setname          query     string  true  "name of the capability set"
+// @Param        tokensubject     query     string  false  "default=capabilitySetName@fnal.gov set to “none” if no tokenSubject should be set"
+// @Param        vaultstoragekey  query     string  false  "default = capabilitySetName set to “none” if no vaultstoragekey should be set"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /createCapabilitySet [post]
 func createCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
-	var rData LDAPSetData
+	var rData LDAPCapabilitySetData
 
 	setid := NewNullAttribute(SetID)
 
@@ -796,9 +751,23 @@ func createCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, apiErr
 }
 
+// setCapabilitySetAttributes godoc
+// @Summary      Alters attributes of a capability set in both FERRY’s DB and LDAP.
+// @Description  Alters attributes of a capability set in both FERRY’s DB and LDAP.  Due to the LDAP/FERRY associations, you cannot
+// @Description  change the name of a CS.  Create a new one and delete the existing one.
+// @Tags         LDAP
+// @Accept       html
+// @Produce      json
+// @Param        setname         query     string  true  "name of the set to change attributes of"
+// @Param        tokensubject    query     string  true  "tokensubject to change the tokensubject too"
+// @Param        vaultstoragekey query     string  true  "vaultstroagekey to change the vaultstoragekey too"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /setCapabilitySetAttributes [put]
 func setCapabilitySetAttributes(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
-	var rData LDAPSetData
+	var rData LDAPCapabilitySetData
 
 	// This method does not allow the CS name to be modified.   The moment you allow that, you have to deal with all
 	// the users whose LDAP records contain this set.   Better to create brand new set, replace the current one with it
@@ -876,6 +845,18 @@ func setCapabilitySetAttributes(c APIContext, i Input) (interface{}, []APIError)
 	return nil, apiErr
 }
 
+// dropCapabilitySet godoc
+// @Summary      Deletes a cabillity set from both FERRY’s database and LDAP.
+// @Description  Deletes a cabillity set from both FERRY’s database and LDAP. FERRY will not delete a capability set that is in
+// @Description  use. (See removeCapabilitySetFromFQAN.)
+// @Tags         LDAP
+// @Accept       html
+// @Produce      json
+// @Param        setname        query    string  true  "name of the capability set to delete"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /dropCapabilitySet [post]
 func dropCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -931,6 +912,18 @@ func dropCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, apiErr
 }
 
+// addScopeToCapabilitySet godoc
+// @Summary      Adds a new scope to a capability set.
+// @Description  Adds a new scope to a capability set.
+// @Tags         LDAP
+// @Accept       html
+// @Produce      json
+// @Param        pattern           query     string  true  "scope to add the the capability set"
+// @Param        setname           query     string  true  "name of set to add the pattern"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /addScopeToCapabilitySet [post]
 func addScopeToCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -985,6 +978,18 @@ func addScopeToCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, apiErr
 }
 
+// removeScopeFromCapabilitySet godoc
+// @Summary      Removes, deletes, a scope record from its capability set both in FERRY’s DB and in LDAP.
+// @Description  Removes, deletes, a scope record from its capability set both in FERRY’s DB and in LDAP.
+// @Tags         LDAP
+// @Accept       html
+// @Produce      json
+// @Param        pattern        query     string  true  "scope to remove from the capability set"
+// @Param        setname        query     string  true  "name of the capability set to modify"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /removeScopeFromCapabilitySet [put]
 func removeScopeFromCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1038,6 +1043,20 @@ func removeScopeFromCapabilitySet(c APIContext, i Input) (interface{}, []APIErro
 	return nil, apiErr
 }
 
+// addCapabilitySetToFQAN godoc
+// @Summary      Associates a capability set with a FQAN.
+// @Description  Associates a capability set with a FQAN.  A FQAN can have one and only one associated capability sets. This method
+// @Description  will override any prior setting. LDAP records for all users of the FQAN are immediately updated. That update could take a while.
+// @Tags         LDAP
+// @Accept       html
+// @Produce      json
+// @Param        role           query     string  true  "role (part of the fqan) to associate the capability set to"
+// @Param        setname        query     string  true  "name of the capability set to create an assoication with"
+// @Param        unitname       query     string  true  "affiliation the role belongs to"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /addCapabilitySetToFQAN [put]
 func addCapabilitySetToFQAN(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1091,6 +1110,19 @@ func addCapabilitySetToFQAN(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, apiErr
 }
 
+// removeCapabilitySetFromFQAN godoc
+// @Summary      Removes, disassociates, a capability from a FQAN.
+// @Description  Removes, disassociates, a capability from a FQAN.  Immediately updates LDAP for all users of the FQAN.
+// @Tags         LDAP
+// @Accept       html
+// @Produce      json
+// @Param        fqan           query     string  true  "fqan to assign user too"
+// @Param        unitname       query     string  true  "affiliation to limit assignment too"
+// @Param        username       query     string  true  "user to be assigned to fqan/affiliation"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /removeCapabilitySetFromFQAN [put]
 func removeCapabilitySetFromFQAN(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1191,7 +1223,7 @@ func removeCapabilitySetFromFQAN(c APIContext, i Input) (interface{}, []APIError
 	return nil, apiErr
 }
 
-// Given a set of user's voPersonIDs, for each user update LDAP.
+// Internal method.  Given a set of user's voPersonIDs, for each user update LDAP.
 func updateLdapForUserSet(c APIContext, voPersonIDs []string, con *ldap.Conn) ([]string, []APIError) {
 	var apiErr []APIError
 	var updated []string
@@ -1238,10 +1270,10 @@ func updateLdapForUserSet(c APIContext, voPersonIDs []string, con *ldap.Conn) ([
 			return updated, apiErr
 		}
 
-		setsToDrop := arrayCompare(lData.eduPersonEntitlement, ferryCsets)
-		setsToAdd := arrayCompare(ferryCsets, lData.eduPersonEntitlement)
-		groupsToDrop := arrayCompare(lData.isMemberOf, ferryWgroups)
-		groupsToAdd := arrayCompare(ferryWgroups, lData.isMemberOf)
+		setsToDrop := arrayCompare(lData.EduPersonEntitlement, ferryCsets)
+		setsToAdd := arrayCompare(ferryCsets, lData.EduPersonEntitlement)
+		groupsToDrop := arrayCompare(lData.IsMemberOf, ferryWgroups)
+		groupsToAdd := arrayCompare(ferryWgroups, lData.IsMemberOf)
 
 		dn = fmt.Sprintf("voPersonID=%s,%s", voPersonID, ldapBaseDN)
 		modified, lErr := LDAPmodifyUserScoping(dn, setsToDrop, setsToAdd, groupsToDrop, groupsToAdd, con)
@@ -1251,7 +1283,7 @@ func updateLdapForUserSet(c APIContext, voPersonIDs []string, con *ldap.Conn) ([
 			return updated, apiErr
 		}
 		if modified {
-			updated = append(updated, fmt.Sprintf("uname: %s voPersonId: %s", lData.uid, lData.voPersonID))
+			updated = append(updated, fmt.Sprintf("uname: %s voPersonId: %s", lData.Uid, lData.VoPersonID))
 		}
 
 	}
@@ -1259,6 +1291,19 @@ func updateLdapForUserSet(c APIContext, voPersonIDs []string, con *ldap.Conn) ([
 	return updated, apiErr
 }
 
+// updateLdapForAffiliation godoc
+// @Summary      Verifies and where necessary updates the LDAP records of every member in the affiliation to conform to what is in FERRY’s database.
+// @Description  Verifies and where necessary updates the LDAP records of every member in the affiliation to conform to what is
+// @Description  in FERRY’s database.  Be aware, affiliation simply provides the list of people.   However all their LDAP records will be
+// @Description  updated, include those in other affiliations.
+// @Tags         LDAP
+// @Accept       html
+// @Produce      json
+// @Param        unitname       query     string  true  "affiliation whose member's ldap records are to be updated."
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /updateLdapForAffiliation [put]
 func updateLdapForAffiliation(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1318,6 +1363,19 @@ func updateLdapForAffiliation(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, apiErr
 }
 
+// updateLdapForCapabilitySet godoc
+// @Summary      Verifies and where necessary updates the LDAP records of every user who has the FQAN associaited with the capability set.
+// @Description  Verifies and where necessary updates the LDAP records of every user who has the FQAN associaited with the capability set
+// @Description  to what is in in FERRY’s database.  Be aware, the setname simply provides the list of people.   However all their LDAP
+// @Description  records will be updated, include those in other capability sets.
+// @Tags         LDAP
+// @Accept       html
+// @Produce      json
+// @Param        setname        query     string  true  "setname to use for obtaining the list of members to update""
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /updateLdapForCapabilitySet [put]
 func updateLdapForCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1376,7 +1434,7 @@ func updateLdapForCapabilitySet(c APIContext, i Input) (interface{}, []APIError)
 	return nil, apiErr
 }
 
-// For modifying simple attributes, not groups, entitlements...
+// Yes, this is an API but not adding it to swagger for user documentation.
 func modifyUserLdapAttributes(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 	var voPersonID sql.NullString
