@@ -236,10 +236,10 @@ func main() {
 	grouter.HandleFunc("/", handler)
 
 	srvConfig := viper.GetStringMapString("server")
-	srvDocDir := srvConfig["docdir"]
-	srvDocPath := srvConfig["docpath"]
+	srvDocDir := srvConfig["docdir"]   // path to dir where the swagger.json file is
+	srvDocPath := srvConfig["docpath"] // path for the URL "/docs" to associate with the swagger.json file
 	if (len(srvDocDir) == 0) && (len(srvDocPath) == 0) {
-		log.Info("skipping swagger documentation, set server.docdir and server.docpath in the config file")
+		log.Info("skipping swagger documentation, for it, set server.docdir and server.docpath in the config file")
 	} else {
 		// Setup swagger documentation
 		fs := http.FileServer((http.Dir(srvDocDir)))
@@ -247,7 +247,7 @@ func main() {
 		opts := middleware.SwaggerUIOpts{SpecURL: srvDocPath + "/swagger.json"}
 		sh := middleware.SwaggerUI(opts, nil)
 		grouter.Handle(srvDocPath, sh)
-		log.Info("swagger Documentation was not setup configured.")
+		log.Info("swagger documentation has been configured")
 	}
 
 	//user API calls
