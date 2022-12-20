@@ -217,7 +217,7 @@ func getUserLdapInfo(c APIContext, i Input) (interface{}, []APIError) {
 	return lData, apiErr
 }
 
-// setUserExperimentFQAN godoc
+// addOrUpdateUserInLdap godoc
 // @Summary      Adds a non-existant user to LDAP and updates LDAP for an existing user.
 // @Description  Adds a user to LDAP iff that user does not already exist in LDAP. For both the new user and an existing user,
 // @Description  updates LDAP so the eduPersonEntitlements and isMemberOf records match FERRY's active FQANs for the user.
@@ -228,7 +228,7 @@ func getUserLdapInfo(c APIContext, i Input) (interface{}, []APIError) {
 // @Success      200  {object}  main.jsonOutput
 // @Failure      400  {object}  main.jsonOutput
 // @Failure      401  {object}  main.jsonOutput
-// @Router /setUserExperimentFQAN [put]
+// @Router /addOrUpdateUserInLdap [put]
 func addOrUpdateUserInLdap(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -251,8 +251,8 @@ func addOrUpdateUserInLdap(c APIContext, i Input) (interface{}, []APIError) {
 }
 
 // syncLdapWithFerry godoc
-// @Summary      Internal use only! Synchronize all USER LDAP data to FERRY with FERRY as the source of truth.
-// @Description  Internal use only! Synchronize all USER LDAP data to FERRY with FERRY as the source of truth.
+// @Summary      Synchronize all USER LDAP data to FERRY with FERRY as the source of truth.
+// @Description  Synchronize all USER LDAP data to FERRY with FERRY as the source of truth.
 // @Description  Does NOT synchronize capability sets and scopes.
 // @Description  1. Removes all records in LDAP which have no corresponding record in FERRY, or are not active users in FERRY.
 // @Description  2. Adds all active FERRY users to LDAP which are missing from LDAP.
@@ -448,7 +448,7 @@ func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 // @Success      200  {object}  main.jsonOutput
 // @Failure      400  {object}  main.jsonOutput
 // @Failure      401  {object}  main.jsonOutput
-// @Router /setUserExperimentFQAN [put]
+// @Router /removeUserFromLdap [put]
 func removeUserFromLdap(c APIContext, i Input) (interface{}, []APIError) {
 	//********
 	// NEVER remove the voPersonID FROM the DB.  If we need to restore the user, we want the original.
