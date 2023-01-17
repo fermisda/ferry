@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/go-openapi/runtime/middleware"
 
 	"crypto/tls"
 	"net/http"
@@ -94,6 +95,11 @@ func gatekeeper(c net.Conn, s http.ConnState) {
 	}
 }
 
+// @title FERRY API
+// @version 2.2.3
+
+// @description FERRY API Documentation.
+// @description (For all APIs, you can also use ferry.fnal.gov:8445/api?help)
 func main() {
 	//Read command-line arguments
 	var configDir string
@@ -229,6 +235,21 @@ func main() {
 	grouter := mux.NewRouter()
 	grouter.HandleFunc("/", handler)
 
+	srvConfig := viper.GetStringMapString("server")
+	srvDocDir := srvConfig["docdir"]   // path to dir where the swagger.json file is
+	srvDocPath := srvConfig["docpath"] // path for the URL "/docs" to associate with the swagger.json file
+	if (len(srvDocDir) == 0) && (len(srvDocPath) == 0) {
+		log.Info("skipping swagger documentation, for it, set server.docdir and server.docpath in the config file")
+	} else {
+		// Setup swagger documentation
+		fs := http.FileServer((http.Dir(srvDocDir)))
+		grouter.PathPrefix(srvDocPath + "/").Handler(http.StripPrefix(srvDocPath+"/", fs))
+		opts := middleware.SwaggerUIOpts{SpecURL: srvDocPath + "/swagger.json"}
+		sh := middleware.SwaggerUI(opts, nil)
+		grouter.Handle(srvDocPath, sh)
+		log.Info("swagger documentation has been configured")
+	}
+
 	//user API calls
 	grouter.HandleFunc("/banUser", APIs["banUser"].Run)
 	grouter.HandleFunc("/getUserCertificateDNs", APIs["getUserCertificateDNs"].Run)
@@ -251,7 +272,6 @@ func main() {
 	grouter.HandleFunc("/setUserExternalAffiliationAttribute", APIs["setUserExternalAffiliationAttribute"].Run)
 	grouter.HandleFunc("/removeUserExternalAffiliationAttribute", APIs["removeUserExternalAffiliationAttribute"].Run)
 	grouter.HandleFunc("/createUser", APIs["createUser"].Run)
-	grouter.HandleFunc("/deleteUser", APIs["deleteUser"].Run)
 	grouter.HandleFunc("/dropUser", APIs["dropUser"].Run)
 	grouter.HandleFunc("/getUserUname", APIs["getUserUname"].Run)
 	grouter.HandleFunc("/getUserUID", APIs["getUserUID"].Run)
@@ -299,7 +319,6 @@ func main() {
 	grouter.HandleFunc("/getMappedGidFile", APIs["getMappedGidFile"].Run)
 	grouter.HandleFunc("/getStorageAuthzDBFile", APIs["getStorageAuthzDBFile"].Run)
 	grouter.HandleFunc("/getAffiliationMembersRoles", APIs["getAffiliationMembersRoles"].Run)
-	grouter.HandleFunc("/getStorageAccessLists", APIs["getStorageAccessLists"].Run)
 	grouter.HandleFunc("/createComputeResource", APIs["createComputeResource"].Run)
 	grouter.HandleFunc("/setComputeResourceInfo", APIs["setComputeResourceInfo"].Run)
 	grouter.HandleFunc("/createStorageResource", APIs["createStorageResource"].Run)
@@ -362,7 +381,6 @@ func main() {
 	grouter.HandleFunc("/updateLdapForCapabilitySet", APIs["updateLdapForCapabilitySet"].Run)
 	grouter.HandleFunc("/modifyUserLdapAttributes", APIs["modifyUserLdapAttributes"].Run)
 
-	srvConfig := viper.GetStringMapString("server")
 	Mainsrv = &http.Server{
 		Addr:        fmt.Sprintf("%s", srvConfig["port"]),
 		ReadTimeout: 10 * time.Second,
@@ -393,10 +411,8 @@ func main() {
 	}
 
 	// Support only a specific set of ciphers.
-	// Use the constants defined in the tls package. Be careful here: THE ORDER MATTERS!
-	// It seems that all http2-approved ciphers have to be first. For now just
-	// list the ones we want to use in reverse order of their true hex value.
-	// Question: should 128-bit ECDHE suite be allowed? at least one site says no. That would be tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 and 	tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA. Then again another site says to prefer CGM suite over other regardless of size.
+	// Use the constants defined in the tls package.
+	// As of go 1.17 order no longer matters.
 	Ciphers := []uint16{
 		tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
 		tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
@@ -405,7 +421,9 @@ func main() {
 		tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
 		tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
 		tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
-		tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA}
+		tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+		tls.TLS_AES_128_GCM_SHA256,
+		tls.TLS_AES_256_GCM_SHA384}
 
 	Mainsrv.TLSConfig = &tls.Config{
 		ClientAuth:               tls.VerifyClientCertIfGiven,

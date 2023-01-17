@@ -239,6 +239,19 @@ func IncludeGroupAPIs(c *APICollection) {
 	c.Add("removeUserAccessFromResource", &removeUserAccessFromResource)
 }
 
+// createGroup godoc
+// @Summary      Given a gid and other group details, add this group to the FERRY database.
+// @Description  Given a gid and other group details, add this group to the FERRY database.
+// @Tags         Groups
+// @Accept       html
+// @Produce      json
+// @Param        gid             query     int     true  "gid of this group"
+// @Param        groupname       query     string  true  "name of the group"
+// @Param        grouptype       query     string  true  "one of ApplicationGroup BatchSuperusers PhysicsGroup WilsonCluster UnixGroup"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /createGroup [post]
 func createGroup(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -283,6 +296,21 @@ func createGroup(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// addGroupToUnit godoc
+// @Summary      Adds an existing group to the affiliation unit.
+// @Description  Adds an existing group to the affiliation unit. The group becomes a part of the affiliation unit.
+// @Tags         Groups
+// @Accept       html
+// @Produce      json
+// @Param        groupname      query     string  true  "name of the group to add to the affiliation"
+// @Param        grouptype      query     string  true  "type of the group to be added to the affiliation"
+// @Param        primary        query     bool    false "true if this is the primary group for the affiliation - default(false)"
+// @Param        required       query     bool    false "true if all new affiliation member's must also be added this this group - not needed if group is primary""
+// @Param        unitname       query     string  false "affiliation to associate the group with"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /addGroupToUnit [post]
 func addGroupToUnit(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -340,6 +368,21 @@ func addGroupToUnit(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// setGroupRequired godoc
+// @Summary      Sets or unsets the group to be required for a specific affiliation's members.
+// @Description  Sets or unsets the group to be required for a specific affiliation's members. If true, all new members, added
+// @Description  to an experiment, will be added to the group.
+// @Tags         Groups
+// @Accept       html
+// @Produce      json
+// @Param        groupname      query     string  true  "name of the group being set/unset as required"
+// @Param        grouptype      query     string  true  "type of the group to be set/upset as required"
+// @Param        required       query     bool    false "true if all affiliation members must be added to the group"
+// @Param        unitname       query     string  false "affiliation the group is associated with"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /setGroupRequired [put]
 func setGroupRequired(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -399,6 +442,19 @@ func setGroupRequired(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// removeGroupFromUnit godoc
+// @Summary      Disassociates the group from an affiliation.
+// @Description  Disassociates the group from an affiliation.
+// @Tags         Groups
+// @Accept       html
+// @Produce      json
+// @Param        groupname      query     string  true  "name of the group to be disassociated"
+// @Param        grouptype      query     string  true  "type of the group to be disassociated"
+// @Param        unitname       query     string  false "affiliation the group is associated with"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /removeGroupFromUnit [put]
 func removeGroupFromUnit(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -460,6 +516,18 @@ func removeGroupFromUnit(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// setPrimaryStatusGroup godoc
+// @Summary      Makes a group the primary group for the specified affiliation unit.
+// @Description  Makes a group the primary group for the specified affiliation unit.
+// @Tags         Groups
+// @Accept       html
+// @Produce      json
+// @Param        groupname      query     string  true  "name of group to set as primary"
+// @Param        unitname       query     string  true  "affiliation of the group to set as primary"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /setPrimaryStatusGroup [put]
 func setPrimaryStatusGroup(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -519,6 +587,19 @@ func setPrimaryStatusGroup(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// getGroupMembers godoc
+// @Summary      Returns all the members of the specified group.
+// @Description  Returns all the members of the specified group.
+// @Tags         Groups
+// @Accept       html
+// @Produce      json
+// @Param        groupname      query     string  true  "fqan to assign user too"
+// @Param        grouptype      query     string  true  "affiliation to limit assignment too"
+// @Param        leaders        query     bool    true  "user to be assigned to fqan/affiliation"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /getGroupMembers [put]
 func getGroupMembers(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -587,6 +668,19 @@ func getGroupMembers(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// IsUserMemberOfGroup godoc
+// @Summary      Returns if the user belongs to the specified group.
+// @Description  Returns if the user belongs to the specified group.
+// @Tags         Groups
+// @Accept       html
+// @Produce      json
+// @Param        groupname      query     string  true  "name of group to check for association with user"
+// @Param        grouptype      query     string  true  "type of group to check for association with user"
+// @Param        username       query     string  true  "name of user to verify for the group association"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /IsUserMemberOfGroup [get]
 func isUserMemberOfGroup(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -640,6 +734,19 @@ func isUserMemberOfGroup(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// IsUserLeaderOfGroup godoc
+// @Summary      Returns if the user is the leader of the group.
+// @Description  Returns if the user is the leader of the group.
+// @Tags         Groups
+// @Accept       html
+// @Produce      json
+// @Param        groupname      query     string  true  "name of group to"
+// @Param        grouptype      query     string  true  "type of group"
+// @Param        username       query     string  true  "name of user to return leader status of"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /IsUserLeaderOfGroup [get]
 func isUserLeaderOfGroup(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -692,6 +799,20 @@ func isUserLeaderOfGroup(c APIContext, i Input) (interface{}, []APIError) {
 	return leader.Data, nil
 }
 
+// setGroupLeader godoc
+// @Summary      Sets user as leader of the group.
+// @Description  Sets this user as a group leader. If the user is not part of the group, the user will be added at the same time. A
+// @Description  group can have multiple group leaders.
+// @Tags         Groups
+// @Accept       html
+// @Produce      json
+// @Param        groupname      query     string  true  "name of group"
+// @Param        grouptype      query     string  true  "type of group"
+// @Param        username       query     string  true  "name of user to make a leader"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /setGroupLeader [put]
 func setGroupLeader(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -743,6 +864,19 @@ func setGroupLeader(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// setGroupLeader godoc
+// @Summary      Removes the group leadership privilege from a user.
+// @Description  Removes the group leadership privilege from a user.  The user's association with the group is not altered.
+// @Tags         Groups
+// @Accept       html
+// @Produce      json
+// @Param        groupname      query     string  true  "name of group"
+// @Param        grouptype      query     string  true  "type of group"
+// @Param        username       query     string  true  "name of user to remove leadership privilege from"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /setGroupLeader [put]
 func removeGroupLeader(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -793,6 +927,20 @@ func removeGroupLeader(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// getGroupUnits godoc
+// @Summary      Returns all the affiliation units the group belongs to.
+// @Description  Returns all the affiliation units the group belongs to.
+// @Tags         Groups
+// @Accept       html
+// @Produce      json
+// @Param        experiment     query     bool    false  "return only the affiliation units the group belongs to"
+// @Param        groupname      query     string  true   "name of group"
+// @Param        grouptype      query     string  false  "type of group"
+// @Param        lastupdated    query     string  false  "limit results to records  updated since"  Format(date)
+// @Success      200  {object}  groupsUnitsMap
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /getGroupUnits [get]
 func getGroupUnits(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -861,6 +1009,19 @@ func getGroupUnits(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// getBatchPriorities godoc
+// @Summary      Returns the batch priorities stored for a group.
+// @Description  Returns the batch priorities stored for a group.
+// @Tags         Groups
+// @Accept       html
+// @Produce      json
+// @Param        lastupdated    query     string  false  "limit results to records  updated since"  Format(date)
+// @Param        resourcename   query     string  false  "compute resource to return priorities for"
+// @Param        unitname       query     string  false  "affiliation to return priorities for"
+// @Success      200  {object}  groupBatchPrioritiesMap
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /getBatchPriorities [get]
 func getBatchPriorities(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -918,6 +1079,18 @@ func getBatchPriorities(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// getCondorQuotas godoc
+// @Summary      Returns all the condor quotas stored for a group
+// @Description  Returns all the condor quotas stored for a group or groups
+// @Tags         Groups
+// @Accept       html
+// @Produce      json
+// @Param        resourcename   query     string  false  "compute resource to return quotas for"
+// @Param        unitname       query     string  false  "affiliation to return quotas for"
+// @Success      200  {object}  groupCondorQuotasMap
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /getCondorQuotas [get]
 func getCondorQuotas(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -993,6 +1166,21 @@ func getCondorQuotas(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// setCondorQuota godoc
+// @Summary      Set the condor quota for a given group over a compute resource.
+// @Description  Set the condor quota for a given group over a compute resource.
+// @Tags         Groups
+// @Accept       html
+// @Produce      json
+// @Param        condorgroup    query     string  true  "name of the condor group to set a quota on"
+// @Param        expirationdate query     string  false "date the quota expires " Format(Date)
+// @Param        quota          query     string  true  "quota limit to set"
+// @Param        resourcename   query     string  true  "name of compute resource to set a quota on"
+// @Param        surplus        query     string  false "percentage quota may be exceeded by for a limited time"
+// @Success      200  {object}  jsonOutput
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /setCondorQuota [post]
 func setCondorQuota(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1070,6 +1258,18 @@ func setCondorQuota(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// removeCondorQuota godoc
+// @Summary      Remove the corresponding condor quota of a group/resource.
+// @Description  Remove the corresponding condor quota of a group/resource.
+// @Tags         Groups
+// @Accept       html
+// @Produce      json
+// @Param        condorgroup       query     string  true  "name of the condor group to remove the quota from"
+// @Param        resourcename      query     string  true  "compute resource to remove the quota from"
+// @Success      200  {object}  jsonOutput
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /removeCondorQuota [put]
 func removeCondorQuota(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1097,6 +1297,21 @@ func removeCondorQuota(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// getGroupStorageQuota godoc
+// @Summary      Returns the storage quota stored for this group within the storage resource.
+// @Description  Returns the storage quota stored for this group within the storage resource.
+// @Tags         Groups
+// @Accept       html
+// @Produce      json
+// @Param        groupname      query     string  true  "name of group to return quotas of"
+// @Param        lastupdated    query     string  false "limit results to records  updated since"  Format(date)
+// @Param        quotaunit      query     string  false "One of B, MB, MiB, GB, GiB, TB, TiB"
+// @Param        resourcename   query     string  true  "compute resource to return quotas on"
+// @Param        unitname       query     string  true  "affiliation to return quotas for"
+// @Success      200  {object}  groupStorageQuota
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /getGroupStorageQuota [put]
 func getGroupStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1171,6 +1386,22 @@ func getGroupStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// removeUserAccessFromResource godoc
+// @Summary      Removes the user’s interactive access from a group on a resource.
+// @Description  Removes the user’s interactive access from a group on a resource.  If the group is a primary group for the
+// @Description  resources and user doesn’t belong to any other group on this resource, the user will no longer show up in the
+// @Description  password file for the resource. If the group is not primary group then the user will not be listed in resource
+// @Description  group file for this group.
+// @Tags         Groups
+// @Accept       html
+// @Produce      json
+// @Param        groupname      query     string  true  "group to remove users access from"
+// @Param        username       query     string  true  "user whose access is to be removed"
+// @Param        resourcename   query     string  true  "resource the access will be removed from"
+// @Success      200  {object}  jsonOutput
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /removeUserAccessFromResource [put]
 func removeUserAccessFromResource(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1240,6 +1471,18 @@ func removeUserAccessFromResource(c APIContext, i Input) (interface{}, []APIErro
 	return nil, nil
 }
 
+// getAllGroups godoc
+// @Summary      Returns all groups in the FERRY database.
+// @Description  Returns all groups in the FERRY database.
+// @Tags         Groups
+// @Accept       html
+// @Produce      json
+// @Param        grouptype      query    string   false  "type of groups to list"
+// @Param        lastupdated    query    string  false  "limit results to records  updated since"  Format(date)
+// @Success      200  {object}  groupAllGroupsMap
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /getAllGroups [get]
 func getAllGroups(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1293,6 +1536,17 @@ func getAllGroups(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// getAllGroupsMembers godoc
+// @Summary      Assign a user to a specific experiment FQAN.
+// @Description  Assign a user to a specific experiment FQAN.
+// @Tags         Groups
+// @Accept       html
+// @Produce      json
+// @Param        lastupdated    query     string  false  "limit results to records  updated since"  Format(date)
+// @Success      200  {object}  groupAllGroupsMembersMap
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /getAllGroupsMembers [get]
 func getAllGroupsMembers(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1355,6 +1609,20 @@ func getAllGroupsMembers(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// getGroupAccessToResource godoc
+// @Summary      Return the groups with access to a unitname/resource.
+// @Description  Return the groups with access to a unitname/resource.  This method is initially written to return a list of lpc physics groups.
+// @Description  However, it can be used to list other group types as well.
+// @Tags         Groups
+// @Accept       html
+// @Produce      json
+// @Param        lastupdated    query     string  false  "limit results to records  updated since"  Format(epoch)
+// @Param        resourcename   query     string  true  "limit results to the named resource"
+// @Param        unitname       query     string  true   "limit results to a specific affiliation"
+// @Success      200  {object}  jsonOutput
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /getGroupAccessToResource [get]
 func getGroupAccessToResource(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
