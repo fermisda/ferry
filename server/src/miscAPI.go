@@ -148,15 +148,6 @@ func IncludeMiscAPIs(c *APICollection) {
 	}
 	c.Add("getAffiliationMembersRoles", &getAffiliationMembersRoles)
 
-	getStorageAccessLists := BaseAPI{
-		InputModel{
-			Parameter{ResourceName, false},
-		},
-		getStorageAccessLists,
-		RoleRead,
-	}
-	c.Add("getStorageAccessLists", &getStorageAccessLists)
-
 	createComputeResource := BaseAPI{
 		InputModel{
 			Parameter{ResourceName, true},
@@ -273,6 +264,20 @@ func IncludeMiscAPIs(c *APICollection) {
 	c.Add("cleanCondorQuotas", &cleanCondorQuotas)
 }
 
+// getPasswdFile godoc
+// @Summary      Returns the contents for a passwd file with all the members of an affiliation unit.
+// @Description  Returns the contents for a passwd file with all the members of an affiliation unit.
+// @Tags         Misc
+// @Accept       html
+// @Produce      json
+// @Param        lastupdated    query     string  false  "limit results to records  updated since"  Format(date)
+// @Param        resourcename   query     string  false  "compute resource to return passwd file data for"
+// @Param        status         query     boolean false  "return only those with the specified status, default all"  Format(true/false)
+// @Param        unitname       query     string  false  "affiliation to return passwd file data for""
+// @Success      200  {object}  miscUserPasswdGrps
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /getPasswdFile [get]
 func getPasswdFile(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -389,6 +394,19 @@ func getPasswdFile(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// getGroupFile godoc
+// @Summary      Returns the contents for a group file for a compute resource assigned to an affiliation unit.
+// @Description  Returns the contents for a group file for a compute resource assigned to an affiliation unit.
+// @Tags         Misc
+// @Accept       html
+// @Produce      json
+// @Param        lastupdated    query     string  false  "limit results to records  updated since"  Format(date)
+// @Param        resourcename   query     string  false  "compute resource to return group file data for"
+// @Param        unitname       query     string  false  "affiliation to return group file data for""
+// @Success      200  {object}  miscGroupFile
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /getGroupFile [get]
 func getGroupFile(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -478,6 +496,20 @@ func getGroupFile(c APIContext, i Input) (interface{}, []APIError) {
 
 	return out, nil
 }
+
+// getGridMapFile godoc
+// @Summary      Returns the contents for a gridmap file for a specific experiment and/or a group.
+// @Description  Returns the contents for a gridmap file for a specific experiment and/or a group.
+// @Tags         Misc
+// @Accept       html
+// @Produce      json
+// @Param        lastupdated    query     string  false  "limit results to records  updated since"  Format(date)
+// @Param        resourcename   query     string  false  "compute resource to return gridmap file data for"
+// @Param        unitname       query     string  false  "affiliation to return gridmap file data for""
+// @Success      200  {object}  miscGridMapFile
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /getGridMapFile [get]
 func getGridMapFile(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -534,6 +566,19 @@ func getGridMapFile(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// getGridMapFileByVO godoc
+// @Summary      Returns the contents for a gridmap file for a specific experiment and/or a group.
+// @Description  Returns the contents for a gridmap file for a specific experiment and/or a group.
+// @Tags         Misc
+// @Accept       html
+// @Produce      json
+// @Param        lastupdated    query     string  false  "limit results to records  updated since"  Format(date)
+// @Param        resourcename   query     string  false  "compute resource to return gridmap file data for"
+// @Param        unitname       query     string  false  "affiliation to return gridmap file data for""
+// @Success      200  {object}  miscGridMapFileByVO
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /getGridMapFileByVO [get]
 func getGridMapFileByVO(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -582,6 +627,18 @@ func getGridMapFileByVO(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// getVORoleMapFile godoc
+// @Summary      Returns the contents for a grid-vorolemap file for a specific experiment and/or a group.
+// @Description  Returns the contents for a grid-vorolemap file for a specific experiment and/or a group.
+// @Tags         Misc
+// @Accept       html
+// @Produce      json
+// @Param        lastupdated    query     string  false  "limit results to records  updated since"  Format(date)
+// @Param        resourcename   query     string  false  "compute resource to return gridmap file data for"
+// @Success      200  {object}  miscVORoleMapFile
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /getVORoleMapFile [get]
 func getVORoleMapFile(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -630,6 +687,17 @@ func getVORoleMapFile(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// getGroupGID godoc
+// @Summary      Returns the groupid (intername FERRY identifier).
+// @Description  Returns the groupid (intername FERRY identifier).
+// @Tags         Misc
+// @Accept       html
+// @Produce      json
+// @Param        groupname   query     string  true  "name of the group"
+// @Success      200  {object}  miscGroupGID
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /getGroupGID [get]
 func getGroupGID(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -657,6 +725,17 @@ func getGroupGID(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// getGroupName godoc
+// @Summary      Returns the groupname.
+// @Description  Returns the groupname.
+// @Tags         Misc
+// @Accept       html
+// @Produce      json
+// @Param        gid   query     int  true  "GID of the group"
+// @Success      200  {object}  miscGroupName
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /getGroupName [get]
 func getGroupName(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -680,6 +759,17 @@ func getGroupName(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// lookupCertificateDN godoc
+// @Summary      Returns the uid and the username who is assigned to a certificate DN.
+// @Description  Returns the uid and the username who is assigned to a certificate DN.
+// @Tags         Misc
+// @Accept       html
+// @Produce      json
+// @Param        dn   query     string  true  "certificate DN to look up"
+// @Success      200  {object}  miscDNowner
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /lookupCertificateDN [get]
 func lookupCertificateDN(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -718,6 +808,18 @@ func lookupCertificateDN(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// getMappedGidFile godoc
+// @Summary      Returns the contents of a file that lists all the fqans and the usernames and gids these fqans are mapped into.
+// @Description  Returns the contents of a file that lists all the fqans and the usernames and gids these fqans are mapped into.
+// @Description  This method is primarily needed by storage access. It defines which gid a role should be mapped into for file
+// @Description  access. The mapped username and groupname are kept in Ferry for each fqan.
+// @Tags         Misc
+// @Accept       html
+// @Produce      json
+// @Success      200  {object}  miscMappedGidFile
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /getMappedGidFile [get]
 func getMappedGidFile(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -759,6 +861,18 @@ func getMappedGidFile(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// getStorageAuthzDBFile godoc
+// @Summary      Returns the list of authorized users for the dCache server.
+// @Description  Returns the list of authorized users for the dCache server.  There are two different JSON outputs provided based
+// @Description  on the the parameter passwdmode.  (Now how do you show that in swagger?)
+// @Tags         Misc
+// @Accept       html
+// @Produce      json
+// @Param        lastupdated    query     string  false  "limit results to records  updated since"  Format(date)
+// @Param        passwdmode     query     string  false  "Changes the JSON struct output.  Why?  I have no idea."
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /getStorageAuthzDBFile [get]
 func getStorageAuthzDBFile(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -862,6 +976,18 @@ func getStorageAuthzDBFile(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// getAffiliationMembersRoles godoc
+// @Summary      Returns  the list of authorized users for POMS service.
+// @Description  Returns  the list of authorized users for POMS service.
+// @Tags         Misc
+// @Accept       html
+// @Produce      json
+// @Param        role           query     string  false  "restrict results to production, analysis or ..."
+// @Param        unitname       query     string  false  "affiliation to restrict authorization list to"
+// @Success      200  {object}  miscAffMembRoles
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /getAffiliationMembersRoles [get]
 func getAffiliationMembersRoles(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -913,50 +1039,21 @@ func getAffiliationMembersRoles(c APIContext, i Input) (interface{}, []APIError)
 	return out, nil
 }
 
-func getStorageAccessLists(c APIContext, i Input) (interface{}, []APIError) {
-	var apiErr []APIError
-
-	resource := i[ResourceName].Default("%")
-
-	rows, err := DBptr.Query(`select server, volume, access_level, host from nas_storage where server like $1;`, resource)
-	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c)).Error(err)
-		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-		return nil, apiErr
-	}
-	defer rows.Close()
-
-	const Host Attribute = "host"
-	const AccessLevel Attribute = "accesslevel"
-	type jsonhost map[Attribute]interface{}
-
-	out := make(map[string][]map[string][]jsonhost)
-	entry := make(map[string][]jsonhost)
-
-	prevServer := ""
-	for rows.Next() {
-		var tmpServer, tmpVolume, tmpAccess, tmpHost sql.NullString
-		rows.Scan(&tmpServer, &tmpVolume, &tmpAccess, &tmpHost)
-
-		if tmpVolume.Valid {
-			if prevServer != "" && prevServer != tmpServer.String {
-				out[prevServer] = append(out[prevServer], entry)
-				entry = make(map[string][]jsonhost)
-			}
-			entry[tmpVolume.String] = append(entry[tmpVolume.String], jsonhost{
-				Host:        tmpHost.String,
-				AccessLevel: tmpAccess.String,
-			})
-		}
-		prevServer = tmpServer.String
-	}
-	if prevServer != "" {
-		out[prevServer] = append(out[prevServer], entry)
-	}
-
-	return out, nil
-}
-
+// createComputeResource godoc
+// @Summary      Creates a compute resource in Ferry's database.
+// @Description  Creates a compute resource in Ferry's database.
+// @Tags         Misc
+// @Accept       html
+// @Produce      json
+// @Param        homedir        query     string  true  "home directory associated with the resource"
+// @Param        resourcename   query     string  true  "compute resource to return passwd file data for"
+// @Param        resourcetype   query     string  true  "interactive or batch"
+// @Param        shell          query     string  false "default shell for the resource"
+// @Param        unitname       query     string  false "affiliation to relate resource to, if any"
+// @Success      200  {object}  jsonOutput
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /createComputeResource [put]
 func createComputeResource(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -998,6 +1095,21 @@ func createComputeResource(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// setComputeResourceInfo godoc
+// @Summary      Modifies the settings for a specific compute resource.
+// @Description  Modifies the settings for a specific compute resource.
+// @Tags         Misc
+// @Accept       html
+// @Produce      json
+// @Param        homedir        query     string  false  "home directory associated with the resource"
+// @Param        resourcename   query     string  false  "compute resource to return passwd file data for"
+// @Param        resourcetype   query     string  false  "interactive or batch"
+// @Param        shell          query     string  false "default shell for the resource"
+// @Param        unitname       query     string  false "affiliation to relate resource to, if any"
+// @Success      200  {object}  jsonOutput
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /setComputeResourceInfo [post]
 func setComputeResourceInfo(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1044,6 +1156,21 @@ func setComputeResourceInfo(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// createStorageResource godoc
+// @Summary      Creates a storage resourse in Ferry's database.
+// @Description  Creates a storage resourse in Ferry's database.
+// @Tags         Misc
+// @Accept       html
+// @Produce      json
+// @Param        path           query     string  false  "the default path for the resource"
+// @Param        quota          query     string  false  "the default quota for the resource"
+// @Param        quotaunit      query     string  false  "the unit quota is given in ... B,KB,KIB,MB,MIB,GB,GIB,TB,TIB"
+// @Param        resourcename   query     string  true   "the name of the resource"
+// @Param        resourcetype   query     string  true   "nfs or eos"
+// @Success      200  {object}  jsonOutput
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /createStorageResource [put]
 func createStorageResource(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1090,6 +1217,17 @@ func createStorageResource(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// getStorageResourceInfo godoc
+// @Summary      Returns the contents for a group file for a compute resource assigned to an affiliation unit.
+// @Description  Returns the contents for a group file for a compute resource assigned to an affiliation unit.
+// @Tags         Misc
+// @Accept       html
+// @Produce      json
+// @Param        resourcename   query     string  false  "resource to return information for"
+// @Success      200  {object}  miscStorageResourceInfo
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /getStorageResourceInfo [get]
 func getStorageResourceInfo(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1137,6 +1275,21 @@ func getStorageResourceInfo(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// setStorageResourceInfo godoc
+// @Summary      Modify the settings for a storage resource in the database.
+// @Description  Modify the settings for a storage resource in the database.
+// @Tags         Misc
+// @Accept       html
+// @Produce      json
+// @Param        path           query     string  false  "the default path for the resource"
+// @Param        quota          query     string  false  "the default quota for the resource"
+// @Param        quotaunit      query     string  false  "the unit quota is given in ... B,KB,KIB,MB,MIB,GB,GIB,TB,TIB"
+// @Param        resourcename   query     string  true   "the name of the resource to be modified"
+// @Param        resourcetype   query     string  true   "nfs or eos"
+// @Success      200  {object}  jsonOutput
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /setStorageResourceInfo [post]
 func setStorageResourceInfo(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1185,6 +1338,18 @@ func setStorageResourceInfo(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// getAllComputeResources godoc
+// @Summary      Returns compute resouce settings and affiliations.
+// @Description  Returns compute resouce settings and affiliations.
+// @Tags         Misc
+// @Accept       html
+// @Produce      json
+// @Param        lastupdated    query     string  false  "limit results to records  updated since"  Format(date)
+// @Param        resourcetype   query     string  false  "limit results to a specific type of resource"
+// @Success      200  {object}  miscComputeResources
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /getAllComputeResources [get]
 func getAllComputeResources(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1233,6 +1398,16 @@ func getAllComputeResources(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// ping godoc
+// @Summary      Dive! Dive! Dive!
+// @Description  Run Silent, Run Deep.
+// @Tags         Misc
+// @Accept       html
+// @Produce      json
+// @Success      200  {object}  jsonOutput
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /ping [get]
 func ping(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 	const ReleaseVersion Attribute = "releaseversion"
@@ -1250,6 +1425,19 @@ func ping(c APIContext, i Input) (interface{}, []APIError) {
 	return map[Attribute]interface{}{ReleaseVersion: release_ver, BuildDate: build_date, Server: serverRole}, nil
 }
 
+// getVOUserMap godoc
+// @Summary      Returns the contents for a grid-vorolemap file.
+// @Description  Returns the contents for a grid-vorolemap file.
+// @Tags         Misc
+// @Accept       html
+// @Produce      json
+// @Param        fqan       query     string  false  "restrict returned data to a specific fqan"
+// @Param        unitname   query     string  false  "restrict returned data to a specific affiliatiion"
+// @Param        username   query     string  false  "restruct returned data to a specific user"
+// @Success      200  {object}  miscVOUserMap
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /getVOUserMap [get]
 func getVOUserMap(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1324,6 +1512,16 @@ func getVOUserMap(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// cleanStorageQuotas godoc
+// @Summary      Cleans expired temporary quotas and bump their permanent counterparts last updated date.
+// @Description  Cleans expired temporary quotas and bump their permanent counterparts last updated date.
+// @Tags         Misc
+// @Accept       html
+// @Produce      json
+// @Success      200  {object}  jsonOutput
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /cleanStorageQuotas [post]
 func cleanStorageQuotas(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1358,6 +1556,16 @@ func cleanStorageQuotas(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// cleanCondorQuotas godoc
+// @Summary      Cleans expired temporary quotas and bump their permanent counterparts last updated date.
+// @Description  Cleans expired temporary quotas and bump their permanent counterparts last updated date.
+// @Tags         Misc
+// @Accept       html
+// @Produce      json
+// @Success      200  {object}  jsonOutput
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /cleanCondorQuotas [post]
 func cleanCondorQuotas(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1391,6 +1599,25 @@ func cleanCondorQuotas(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// setStorageQuota godoc
+// @Summary      Sets the storage quota assigned for a user or group when “groupaccount” is true.
+// @Description  Sets the storage quota assigned for a user or group when “groupaccount” is true.
+// @Tags         Misc
+// @Accept       html
+// @Produce      json
+// @Param        expirationdate query     string  false  "date quota expires"  Format(date)
+// @Param        groupaccount   query     bool    false  "set to true if this is a user account"
+// @Param        groupname      query     string  false  "** required for group accounts"
+// @Param        path           query     string  false  "** required for user accounts"
+// @Param        quota          query     int     true   "quota limit -- value adjusted by quotaunit"
+// @Param        quotaunit      query     string  true   "allowed quotaunit values are B,KB,KIB,MB,MIB,GB,GIB,TB,TIB"
+// @Param        resourcename   query     string  true   "resource to apply quota on"
+// @Param        unitname       query     string  true   "affiliation to apply quota on"
+// @Param        username       query     string  false  "** required for user accounts"
+// @Success      200  {object}  jsonOutput
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /setStorageQuota [put]
 func setStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 	var vStorageid, vDataid, vUnitid sql.NullInt64

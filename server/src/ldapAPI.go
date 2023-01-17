@@ -1116,9 +1116,9 @@ func addCapabilitySetToFQAN(c APIContext, i Input) (interface{}, []APIError) {
 // @Tags         LDAP
 // @Accept       html
 // @Produce      json
-// @Param        fqan           query     string  true  "fqan to assign user too"
-// @Param        unitname       query     string  true  "affiliation to limit assignment too"
-// @Param        username       query     string  true  "user to be assigned to fqan/affiliation"
+// @Param        role           query     string  true  "role to remove capability set from"
+// @Param        setname        query     string  true   "name of the capability set to be removed"
+// @Param        unitname       query     string  true  "affiliation associated with the role"
 // @Success      200  {object}  main.jsonOutput
 // @Failure      400  {object}  main.jsonOutput
 // @Failure      401  {object}  main.jsonOutput
@@ -1159,15 +1159,14 @@ func removeCapabilitySetFromFQAN(c APIContext, i Input) (interface{}, []APIError
 	// following block of code.  Do not touch the FQAN record until all user's have been updated.  Why?
 	// So, this can be re-run if there are LDAP issues.
 	rows, err := c.DBtx.Query(`select distinct u.vopersonid
-							   from users u using
+							   from users u
 								 join grid_access ga using (uid)
 								 join grid_fqan gf using (fqanid)
 								 join capability_sets cs using (setid)
 							   where u.vopersonid is not null
 								 and gf.fqanid in (select fqanid from grid_fqan join affiliation_units using (unitid)
 								                   where name=$1
-												     and lower(fqan) like lower($2) )
-							   order by e.value`, i[UnitName], role)
+												     and lower(fqan) like lower($2) )`, i[UnitName], role)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))

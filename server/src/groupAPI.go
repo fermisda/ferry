@@ -1261,6 +1261,7 @@ func setCondorQuota(c APIContext, i Input) (interface{}, []APIError) {
 // removeCondorQuota godoc
 // @Summary      Remove the corresponding condor quota of a group/resource.
 // @Description  Remove the corresponding condor quota of a group/resource.
+// @Tags         Groups
 // @Accept       html
 // @Produce      json
 // @Param        condorgroup       query     string  true  "name of the condor group to remove the quota from"
