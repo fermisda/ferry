@@ -140,6 +140,20 @@ func IncludeUnitAPIs(c *APICollection) {
 	c.Add("getAllAffiliationUnits", &getAllAffiliationUnits)
 }
 
+// createAffiliationUnit godoc
+// @Summary      Create this unit in the database.
+// @Description  Create this unit in the database.
+// @Tags         Affiliation/Experiment
+// @Accept       html
+// @Produce      json
+// @Param        alternitivename query     string  false  "alternitive name for affiliation, if any"
+// @Param        unitname        query     string  true   "name of the affiliation"
+// @Param        unittype        query     string  false  "type of affiliation"
+// @Param        vomsurl         query     string  false  "voms URL, if any"
+// @Success      200  {object}  jsonOutput
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /createAffiliationUnit [post]
 func createAffiliationUnit(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 	unitid := NewNullAttribute(UnitID)
@@ -181,6 +195,17 @@ func createAffiliationUnit(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// removeAffiliationUnit godoc
+// @Summary      Remove an affiliation from the database.
+// @Description  Remove an affiliation from the database.
+// @Tags         Affiliation/Experiment
+// @Accept       html
+// @Produce      json
+// @Param        unitname       query     string  false  "affiliation to remove from FERRY"
+// @Success      200  {object}  jsonOutput
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /removeAffiliationUnit [put]
 func removeAffiliationUnit(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -218,6 +243,20 @@ func removeAffiliationUnit(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// setAffiliationUnitInfo godoc
+// @Summary      Modify the affiliation unit info in the database.
+// @Description  Modify the affiliation unit info in the database.
+// @Tags         Affiliation/Experiment
+// @Accept       html
+// @Produce      json
+// @Param        alternitivename query     string  false  "alternitive name for affiliation, if any"
+// @Param        unitname        query     string  true   "name of the affiliation to change the attributes on"
+// @Param        unittype        query     string  false  "type of affiliation"
+// @Param        vomsurl         query     string  false  "voms URL, if any"
+// @Success      200  {object}  jsonOutput
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /setAffiliationUnitInfo [put]
 func setAffiliationUnitInfo(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -270,6 +309,19 @@ func setAffiliationUnitInfo(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// getAffiliationUnitMembers godoc
+// @Summary      Returns all the users that are members of the affiliation unit. (SNOW Method)
+// @Description  Returns all the users that are members of the affiliation unit.  If you are not SNOW you most likely want getAffiliationMembers.
+// @Tags         Affiliation/Experiment
+// @Accept       html
+// @Produce      json
+// @Param        lastupdated    query     string  false  "limit results to records  updated since"  Format(date)
+// @Param        status         query     bool    false  "limit the results to active (true) or inactive (false) members"
+// @Param        unitname       query     string  true   "affiliation to return group the members of"
+// @Success      200  {object}  unitAffUnitMembers
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /getAffiliationUnitMembers [get]
 func getAffiliationUnitMembers(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -320,6 +372,17 @@ func getAffiliationUnitMembers(c APIContext, i Input) (interface{}, []APIError) 
 	return out, nil
 }
 
+// getAffiliationMembers godoc
+// @Summary      Returns all the users that are members of the affiliation unit.
+// @Description  Returns all the users that are members of the affiliation unit.  --For SNOW use getAffiliationUnitMembers.
+// @Tags         Affiliation/Experiment
+// @Accept       html
+// @Produce      json
+// @Param        unitname       query     string  true   "affiliation to return group the members of"
+// @Success      200  {object}  unitAffMemberList
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /getAffiliationMembers [get]
 func getAffiliationMembers(c APIContext, i Input) (interface{}, []APIError) {
 	// -- getAffiliationUnitMembers is used by SNOW and it would take many months to get them
 	//    to accept a format change to the output, so getAffiliationMembers was created.
@@ -389,6 +452,20 @@ func getAffiliationMembers(c APIContext, i Input) (interface{}, []APIError) {
 	return out, nil
 }
 
+// getGroupsInAffiliationUnit godoc
+// @Summary      Returns all the groups that belong to the unit including unix and virtual groups.
+// @Description  Returns all the groups that belong to the unit including unix and virtual groups.  Note that Virtual groups do
+// @Description  not have a gid assigned.
+// @Tags         Affiliation/Experiment
+// @Accept       html
+// @Produce      json
+// @Param        grouptype      query     string  false  "type of group to restrict data to"
+// @Param        lastupdated    query     string  false  "limit results to records  updated since"  Format(date)
+// @Param        unitname       query     string  false  "affiliation to return group data for"
+// @Success      200  {object}  unitAffGroups
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /getGroupsInAffiliationUnit [get]
 func getGroupsInAffiliationUnit(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -445,6 +522,17 @@ func getGroupsInAffiliationUnit(c APIContext, i Input) (interface{}, []APIError)
 	return out, nil
 }
 
+// getGroupLeadersinAffiliationUnit godoc
+// @Summary      Returns all the groups within the unit and the leaders of each group.
+// @Description  Returns all the groups within the unit and the leaders of each group.
+// @Tags         Affiliation/Experiment
+// @Accept       html
+// @Produce      json
+// @Param        unitname       query     string  false  "affiliation to return leader data for"
+// @Success      200  {object}  unitAffGroupLeaders
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /getGroupLeadersinAffiliationUnit [get]
 func getGroupLeadersinAffiliationUnit(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -513,6 +601,18 @@ func getGroupLeadersinAffiliationUnit(c APIContext, i Input) (interface{}, []API
 	return out, nil
 }
 
+// getAffiliationUnitComputeResources godoc
+// @Summary      Returns all the compute resources that belongs to the affiliation unit or experiments.
+// @Description  Returns all the compute resources that belongs to the affiliation unit or experiments.
+// @Tags         Affiliation/Experiment
+// @Accept       html
+// @Produce      json
+// @Param        lastupdated    query     string  false  "limit results to records  updated since"  Format(date)
+// @Param        unitname       query     string  false  "affiliation whose compute are to be returned"
+// @Success      200  {object}  unitAffComputeResources
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /getAffiliationUnitComputeResources [get]
 func getAffiliationUnitComputeResources(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -555,6 +655,20 @@ func getAffiliationUnitComputeResources(c APIContext, i Input) (interface{}, []A
 	return out, nil
 }
 
+// createFQAN godoc
+// @Summary      Create a new FQAN in FERRY.
+// @Description  Create a new FQAN in FERRY.
+// @Tags         Affiliation/Experiment
+// @Accept       html
+// @Produce      json
+// @Param        fqan           query     string  true  "definition of the FQAN"
+// @Param        groupname      query     string  true  "group the fqan is mapped to"
+// @Param        unitname       query     string  false "experiment the fqan is for"
+// @Param        username       query     string  false "user the fqan is mapped to, if any"
+// @Success      200  {object}  jsonOutput
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /createFQAN [put]
 func createFQAN(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -643,6 +757,17 @@ func createFQAN(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// removeFQAN godoc
+// @Summary      Removes an FQAN from FERRY.
+// @Description  Removes an FQAN from FERRY.  The FQAN to be removed cannot have any users attached to it.
+// @Tags         Affiliation/Experiment
+// @Accept       html
+// @Produce      json
+// @Param        fqan           query     string  true "definition of the FQAN to be removed"
+// @Success      200  {object}  jsonOutput
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /removeFQAN [get]
 func removeFQAN(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -664,7 +789,7 @@ func removeFQAN(c APIContext, i Input) (interface{}, []APIError) {
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		if strings.Contains(err.Error(), "violates foreign key constraint") {
-			apiErr = append(apiErr, APIError{errors.New("all user associations with this fqan shall be removed before it can be deleted"), ErrorAPIRequirement})
+			apiErr = append(apiErr, APIError{errors.New("all user associations with this fqan must be removed before it can be deleted"), ErrorAPIRequirement})
 		} else {
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		}
@@ -674,6 +799,19 @@ func removeFQAN(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// setFQANMappings godoc
+// @Summary      Set the attributes of an FQAN.
+// @Description  Set the attributes on an FQAN.
+// @Tags         Affiliation/Experiment
+// @Accept       html
+// @Produce      json
+// @Param        fqan           query     string  true  "definition of the FQAN"
+// @Param        groupname      query     string  true  "group the fqan is to be mapped to"
+// @Param        username       query     string  false "user the fqan is to be mapped to, if any"
+// @Success      200  {object}  jsonOutput
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /setFQANMappings [put]
 func setFQANMappings(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -727,6 +865,18 @@ func setFQANMappings(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// getAllAffiliationUnits godoc
+// @Summary      Return all affiliation units stored in FERRY database.
+// @Description  Return all affiliation units stored in FERRY database.
+// @Tags         Affiliation/Experiment
+// @Accept       html
+// @Produce      json
+// @Param        lastupdated    query     string  false  "limit results to records  updated since"  Format(date)
+// @Param        voname         query     string  false  "limit results to voms vo"
+// @Success      200  {object}  unitAffUnits
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /getAllAffiliationUnits [get]
 func getAllAffiliationUnits(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
