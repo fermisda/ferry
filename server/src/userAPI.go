@@ -1799,7 +1799,7 @@ func getMemberAffiliations(c APIContext, i Input) (interface{}, []APIError) {
 // getUserUname godoc
 // @Summary      Returns the username associated with a UID
 // @Description  Returns the username associated with a UID.
-// @Tags         Users
+// @Tags         Basic Queries
 // @Accept       html
 // @Produce      json
 // @Param        uid       query     int  true  "uid for which the username will be returned"
@@ -1830,7 +1830,7 @@ func getUserUname(c APIContext, i Input) (interface{}, []APIError) {
 // getUserUID godoc
 // @Summary      Returns the UID associated with a username.
 // @Description  Returns the UID associated with a username.
-// @Tags         Users
+// @Tags         Basic Queries
 // @Accept       html
 // @Produce      json
 // @Param        username       query     string  true  "user whose UID will be returned"
@@ -2482,7 +2482,7 @@ func setUserGridAccess(c APIContext, i Input) (interface{}, []APIError) {
 // getUserGroupsForComputeResource godoc
 // @Summary      Returns attributes of compute resources and associated users.
 // @Description  Returns attributes of compute resources and associated users.
-// @Tags         Users
+// @Tags         Compute and Storage Resources
 // @Accept       html
 // @Produce      json
 // @Param        resourcetype   query     string  false  "type of the compute resource to restrict results to"
