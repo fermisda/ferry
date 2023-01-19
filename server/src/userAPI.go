@@ -2370,14 +2370,25 @@ func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 	}
 	defer rows.Close()
 
-	var out []allUsersAttributes
-	var row allUsersAttributes
-
+	type jsonout map[Attribute]interface{}
+	var out []jsonout
 	for rows.Next() {
-		rows.Scan(&row.UserName, &row.UID, &row.FullName, &row.Status, &row.ExpirationDate, &row.VoPersonID, &row.Banned)
-		out = append(out, row)
+		row := NewMapNullAttribute(UserName, UID, FullName, Status, ExpirationDate, VoPersonID, Banned)
+		rows.Scan(row[UserName], row[UID], row[FullName], row[Status], row[ExpirationDate], row[VoPersonID], row[Banned])
+		var expirationDate interface{}
+		if row[ExpirationDate].Valid {
+			expirationDate = row[ExpirationDate].Data
+		}
+		out = append(out, jsonout{
+			UserName:       row[UserName].Data,
+			UID:            row[UID].Data,
+			FullName:       row[FullName].Data,
+			Status:         row[Status].Data,
+			ExpirationDate: expirationDate,
+			VoPersonID:     row[VoPersonID].Data,
+			Banned:         row[Banned].Data,
+		})
 	}
-
 	return out, nil
 }
 
