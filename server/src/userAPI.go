@@ -2360,7 +2360,7 @@ func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 
 	status := i[Status].Default(false)
 
-	rows, err := DBptr.Query(`select uname, uid, full_name, status, expiration_date, voPersonID, is_banned from users
+	rows, err := DBptr.Query(`select uname, uid, full_name, status, cast(expiration_date as text), voPersonID, is_banned from users
 							  where (status=$1 or not $1) and (last_updated>=$2 or $2 is null)
 							  order by uname`, status, i[LastUpdated])
 	if err != nil {
