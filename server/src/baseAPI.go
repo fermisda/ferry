@@ -287,7 +287,7 @@ func (a Attribute) Type() AttributeType {
 		TokenSubject:      TypeString,
 		VaultStorageKey:   TypeString,
 		Definition:        TypeString,
-		Pattern:           TypeString,
+		Pattern:           TypeSstring,
 		GroupType:         TypeSstring,
 		UnitType:          TypeString,
 		ResourceType:      TypeSstring,
