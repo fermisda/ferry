@@ -717,23 +717,27 @@ func getUserGroups(c APIContext, i Input) (interface{}, []APIError) {
 // @Router /getUserInfo [get]
 func getUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
-
-	var row userAttributes
-
-	err := c.DBtx.QueryRow(`select full_name, uid, status, is_groupaccount, expiration_date, voPersonID, is_banned from users
-							where uname=$1`, i[UserName]).Scan(&row.FullName, &row.UID, &row.Status, &row.GroupAccount,
-		&row.ExpirationDate, &row.VoPersonID, &row.Banned)
-
-	if err != nil && err != sql.ErrNoRows {
+	rows, err := c.DBtx.Query(`select full_name, uid, status, is_groupaccount, expiration_date, voPersonID, is_banned
+													   from users where uname=$1`, i[UserName])
+	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
-	} else if err != nil {
+	}
+	defer rows.Close()
+	out := make(map[Attribute]interface{})
+	row := NewMapNullAttribute(FullName, UID, Status, GroupAccount, ExpirationDate, VoPersonID, Banned)
+	for rows.Next() {
+		rows.Scan(row[FullName], row[UID], row[Status], row[GroupAccount], row[ExpirationDate], row[VoPersonID], row[Banned])
+		for _, column := range row {
+			out[column.Attribute] = column.Data
+		}
+	}
+	if len(out) == 0 {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
 		return nil, apiErr
 	}
-
-	return row, nil
+	return out, nil
 }
 
 // addUserToGroup godoc
