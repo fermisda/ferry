@@ -97,10 +97,9 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 
 	dnTemplate := "/DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=%s/CN=UID:%s"
 	fullName := NewNullAttribute(FullName)
-	status := NewNullAttribute(Status)
 	unitid := NewNullAttribute(UnitID)
 
-	err := c.DBtx.QueryRow("select full_name, status from users where uname = $1", i[UserName]).Scan(&fullName, &status)
+	err := c.DBtx.QueryRow("select full_name from users where uname = $1", i[UserName]).Scan(&fullName)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -114,18 +113,13 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	if !status.Valid {
+	if !fullName.Valid {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
 	}
 	if !unitid.Valid {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
 	}
 	if len(apiErr) > 0 {
-		return nil, apiErr
-	}
-
-	if !status.Data.(bool) {
-		apiErr = append(apiErr, APIError{errors.New("user status is not valid"), ErrorAPIRequirement})
 		return nil, apiErr
 	}
 
