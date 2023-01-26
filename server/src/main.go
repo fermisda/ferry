@@ -96,7 +96,7 @@ func gatekeeper(c net.Conn, s http.ConnState) {
 }
 
 // @title FERRY API
-// @version 2.2.3
+// @version 2.2.4
 
 // @description FERRY API Documentation.
 // @description (For all APIs, you can also use ferry.fnal.gov:8445/api?help)

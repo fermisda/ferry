@@ -656,13 +656,14 @@ func getCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 // createCapabilitySet godoc
 // @Summary      Creates a capability set in FERRY's DB and LDAP.
 // @Description  Creates a capability set in FERRY's DB and LDAP.  To associate it with an FQAN see addCapabilitySetToFQAN.
+// @Description  Note: if either tokensubject or vaultstorageky is none, the other must also be none.
 // @Tags         LDAP
 // @Accept       html
 // @Produce      json
 // @Param        pattern          query     string  true  "comma seperated list of scopes to include in set example: compute.create"
 // @Param        setname          query     string  true  "name of the capability set"
-// @Param        tokensubject     query     string  false  "default=capabilitySetName@fnal.gov set to “none” if no tokenSubject should be set"
-// @Param        vaultstoragekey  query     string  false  "default = capabilitySetName set to “none” if no vaultstoragekey should be set"
+// @Param        tokensubject     query     string  false  "default = capabilitySetName@fnal.gov set tokensubject=none to make the JWT use requester's uuid for the subject"
+// @Param        vaultstoragekey  query     string  false  "default = capabilitySetName set to “none” if no ldap vaultstoragekey should be set"
 // @Success      200  {object}  main.jsonOutput
 // @Failure      400  {object}  main.jsonOutput
 // @Failure      401  {object}  main.jsonOutput
@@ -689,6 +690,7 @@ func createCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	// TokenSubject default = capabilitySetName@fnal.gov  in ldap: eduPersonPrincipalName
 	// VaultStorageKey default = capabilitySetName  in ldap: voPersonApplicationUID
 	// If either is set to "none" then nothing is entered for that attribute.
+	//    For TokenSubject this means LDAP will use the REQUESTER's  eduPersonPrincipalName
 
 	if !i[TokenSubject].Valid {
 		rData.eduPersonPrincipalName = append(rData.eduPersonPrincipalName, i[SetName].Data.(string)+"@fnal.gov")
@@ -696,6 +698,13 @@ func createCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 		rData.eduPersonPrincipalName = append(rData.eduPersonPrincipalName, "")
 	} else {
 		rData.eduPersonPrincipalName = append(rData.eduPersonPrincipalName, i[TokenSubject].Data.(string))
+	}
+
+	if i[TokenSubject].Data == "none" || i[VaultStorageKey].Data == "none" {
+		if i[TokenSubject].Data != i[VaultStorageKey].Data {
+			apiErr = append(apiErr, DefaultAPIError(ErrorText, "Both or neither TokenSubject and VaultStorageKey must be none, only one is set"))
+			return nil, apiErr
+		}
 	}
 
 	if !i[VaultStorageKey].Valid {
