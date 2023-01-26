@@ -92,6 +92,18 @@ func testWrapper(c APIContext, i Input) (interface{}, []APIError) {
 	return "this is a test wrapper", apiErr
 }
 
+// addUserToExperiment godoc
+// @Summary      Adds a user to an experiment.
+// @Description  Adds a user to an experiment.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        unitname       query     string  true  "name of the experiment to add the user to"
+// @Param        username       query     string  true  "user name of the user to add to experiment"
+// @Success      200  {object}  jsonOutput
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /addUserToExperiment [post]
 func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -349,6 +361,19 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// setLPCStorageAccess godoc
+// @Summary      Sets the storage access for the LPC members.
+// @Description  Sets the storage access for the LPC members. User should provide the certificate DN (usually CERN certificate) and cern user name.
+// @Tags         Snow Wrapper
+// @Accept       html
+// @Produce      json
+// @Param        dn                 query     string  true  "user's dn, usually a CERN certificate"
+// @Param        externalusername   query     string  true  "CERN username"
+// @Param        username           query     string  true  "FNAL username"
+// @Success      200  {object}  jsonOutput
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /setLPCStorageAccess [post]
 func setLPCStorageAccess(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -424,6 +449,22 @@ func setLPCStorageAccess(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// createExperiment godoc
+// @Summary      Creates a new experiment in FERRY.
+// @Description  Creates a new experiment in FERRY.
+// @Tags         Snow Wrapper
+// @Accept       html
+// @Produce      json
+// @Param        groupname      query     string  false  "primary group name, default: groupname={unitname}"
+// @Param        homedir        query     string  false  "home directory, default: /nashome"
+// @Param        standalone     query     string  false  "***need a definition of this parameter"
+// @Param        unitname       query     string  true   "name of the affiliation"
+// @Param        username       query     string  false  "production role name, default username={unitname}pro"
+// @Param        vomsurl        query     string  false  "voms url, default provided which is based on standalone"
+// @Success      200  {object}  jsonOutput
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /createExperiment [post]
 func createExperiment(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -551,6 +592,18 @@ func createExperiment(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// addLPCConvener godoc
+// @Summary      Adds a user as an lpc group's leader"
+// @Description  Adds a user as an lpc group's leader"
+// @Tags         Snow Wrapper
+// @Accept       html
+// @Produce      json
+// @Param        groupname    query     string  true  "lpc group name, must start with lpc"
+// @Param        username     query     string  true  "user name of the group's leader"
+// @Success      200  {object}  jsonOutput
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /addLPCConvener [post]
 func addLPCConvener(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -587,6 +640,19 @@ func addLPCConvener(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// removeLPCConvener godoc
+// @Summary      Removes a user from being an lpc group's leader"
+// @Description  Removes a user from being an group's leader"
+// @Tags         Snow Wrapper
+// @Accept       html
+// @Produce      json
+// @Param        groupname    query     string  true  "lpc group name, must start with lpc"
+// @Param        removegroup  query     string  false "if exists, removes user access from resource"
+// @Param        username     query     string  true  "user name to be removed from being a group leader"
+// @Success      200  {object}  jsonOutput
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /removeLPCConvener [put]
 func removeLPCConvener(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -622,6 +688,19 @@ func removeLPCConvener(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// addLPCCollaborationGroup godoc
+// @Summary      Adds group to the cms affiliation unit.
+// @Description  Adds group to the cms affiliation unit.
+// @Tags         Snow Wrapper
+// @Accept       html
+// @Produce      json
+// @Param        groupname    query     string  true  "lpc group name, must start with lpc"
+// @Param        quota        query     float64 true  "quota limit"
+// @Param        quotaunit    query     string  false  "default: B, allowed quotaunit values are B,KB,KIB,MB,MIB,GB,GIB,TB,TIB"
+// @Success      200  {object}  jsonOutput
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /addLPCCollaborationGroup [post]
 func addLPCCollaborationGroup(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
