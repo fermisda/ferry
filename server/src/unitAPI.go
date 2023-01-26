@@ -373,8 +373,8 @@ func getAffiliationUnitMembers(c APIContext, i Input) (interface{}, []APIError) 
 }
 
 // getAffiliationMembers godoc
-// @Summary      Returns all the users that are members of the affiliation unit.
-// @Description  Returns all the users that are members of the affiliation unit.  --For SNOW use getAffiliationUnitMembers.
+// @Summary      Returns all the active users that are members of the affiliation unit.
+// @Description  Returns all the active users that are members of the affiliation unit.  --For SNOW use getAffiliationUnitMembers.
 // @Tags         Affiliation/Experiment
 // @Accept       html
 // @Produce      json
