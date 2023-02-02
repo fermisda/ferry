@@ -312,7 +312,7 @@ func setAffiliationUnitInfo(c APIContext, i Input) (interface{}, []APIError) {
 // getAffiliationUnitMembers godoc
 // @Summary      Returns all the users that are members of the affiliation unit. (SNOW Method)
 // @Description  Returns all the users that are members of the affiliation unit.  If you are not SNOW you most likely want getAffiliationMembers.
-// @Tags         Affiliation/Experiment
+// @Tags         Snow Wrapper
 // @Accept       html
 // @Produce      json
 // @Param        lastupdated    query     string  false  "limit results to records  updated since"  Format(date)
