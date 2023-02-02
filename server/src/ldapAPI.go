@@ -719,8 +719,10 @@ func createCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 	rData.objectClass = []string{"account", "eduPerson", "voPerson"}
 	rData.voPersonExternalID = i[SetName].Data.(string) + "@fnal.gov"
 	rData.uid = i[SetName].Data.(string)
-	patterns := strings.Split(i[Pattern].Data.(string), ",")
-	rData.eduPersonEntitlement = append(rData.eduPersonEntitlement, patterns...)
+	for _, pattern := range strings.Split(i[Pattern].Data.(string), ",") {
+		// Strip spaces.  Leading spaces will cause the LDAP lib to insert odd stuff.
+		rData.eduPersonEntitlement = append(rData.eduPersonEntitlement, strings.TrimSpace(pattern))
+	}
 
 	con, err := LDAPgetConnection(false)
 	if err != nil {
@@ -964,13 +966,17 @@ func addScopeToCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	patterns := strings.Split(i[Pattern].Data.(string), ",")
+	var patterns []string
+	for _, pattern := range strings.Split(i[Pattern].Data.(string), ",") {
+		// Strip spaces.  Leading spaces will cause the LDAP lib to insert odd stuff.
+		patterns = append(patterns, strings.TrimSpace(pattern))
+	}
 
 	err = LDAPaddScope(i[SetName].Data.(string), patterns, con)
 	if err != nil {
 		con.Close()
 		log.Error(err)
-		apiErr = append(apiErr, DefaultAPIError(ErrorText, "Unable to remove scope from LDAP"))
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "Unable to add scope to LDAP"))
 		return nil, apiErr
 	}
 	con.Close()
