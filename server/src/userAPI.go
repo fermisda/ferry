@@ -367,7 +367,7 @@ func IncludeUserAPIs(c *APICollection) {
 // @Summary      Stops a user from access via FERRY.
 // @Description  Fully bans the user from ALL FERRY use!!  Upon execution, the user will be immediately removed
 // @Description  from LDAP and their status will be set to inactive.  The account will be locked so that no method, except this one,
-// @Description  can remove the ban.  Removing the ban allows the user's status to be changed.
+// @Description  can remove the ban.  The ban must be removed for the user's status to be changed.
 // @Tags         Users
 // @Accept       html
 // @Produce      json
