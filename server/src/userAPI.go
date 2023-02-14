@@ -376,7 +376,7 @@ func IncludeUserAPIs(c *APICollection) {
 // @Success      200  {object}  main.jsonOutput
 // @Failure      400  {object}  main.jsonOutput
 // @Failure      401  {object}  main.jsonOutput
-// @Router /banned [put]
+// @Router /banUser [put]
 func banUser(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
