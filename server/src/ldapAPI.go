@@ -618,6 +618,8 @@ func getCapabilitySet(c APIContext, i Input) (interface{}, []APIError) {
 				Roles:    make(jsonlist, 0),
 			}
 			list = nil
+			entry[Patterns] = append(entry[Patterns].(jsonlist), row[Pattern].Data)
+			list = append(list, row[Pattern].Data.(string))
 			dejavu = NewNullAttribute(FQAN)
 			dejavu2 = NewNullAttribute(GroupName)
 		}
