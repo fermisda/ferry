@@ -160,6 +160,18 @@ func IncludeUserAPIs(c *APICollection) {
 	}
 	c.Add("setUserExperimentFQAN", &setUserExperimentFQAN)
 
+	removeUserExperimentFQAN := BaseAPI{
+		InputModel{
+			Parameter{UserName, true},
+			Parameter{UnitName, true},
+			Parameter{FQAN, false},
+			Parameter{Role, false},
+		},
+		removeUserExperimentFQAN,
+		RoleWrite,
+	}
+	c.Add("removeUserExperimentFQAN", &removeUserExperimentFQAN)
+
 	getUserFQANs := BaseAPI{
 		InputModel{
 			Parameter{UserName, true},
@@ -875,11 +887,12 @@ func removeUserFromGroup(c APIContext, i Input) (interface{}, []APIError) {
 
 // setUserExperimentFQAN godoc
 // @Summary      Assign a user to a specific experiment FQAN.
-// @Description  Assign a user to a specific experiment FQAN.
+// @Description  Assign a user to a specific experiment FQAN.  You must provide role or fqan.
 // @Tags         Users
 // @Accept       html
 // @Produce      json
-// @Param        fqan           query     string  true  "fqan to assign user too"
+// @Param        fqan           query     string  false  "fqan to assign user to"
+// @Param        role           query     string  false  "role to assign user to"
 // @Param        unitname       query     string  true  "affiliation to limit assignment too"
 // @Param        username       query     string  true  "user to be assigned to fqan/affiliation"
 // @Success      200  {object}  main.jsonOutput
@@ -962,6 +975,96 @@ func setUserExperimentFQAN(c APIContext, i Input) (interface{}, []APIError) {
 		_, queryerr = c.DBtx.Exec(`insert into grid_access (uid, fqanid, is_superuser, is_suspended, last_updated)
 								   values($1, $2, false, false, NOW())
 								   on conflict (uid, fqanid) do nothing`, uid, fqanid)
+		if queryerr != nil {
+			log.WithFields(QueryFields(c)).Error(queryerr)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+			return nil, apiErr
+		}
+	}
+
+	if len(fqanids) > 0 {
+		_, apiErr := addOrUpdateUserInLdap(c, i)
+		if apiErr != nil {
+			log.Warningf("LDAP %s - %s", i[UserName].Data.(string), apiErr[0].Error.Error())
+		}
+	}
+
+	return nil, nil
+}
+
+// removeUserExperimentFQAN godoc
+// @Summary      Remove a user from a specific experiment's FQAN.
+// @Description  Remove a user from a specific experiment's FQAN.  You must provide either a fqan or role.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        fqan           query     string  false  "fqan to remove from user"
+// @Param        role           query     string  false  "role to remove user from"
+// @Param        unitname       query     string  true   "affiliation to limit assignment too"
+// @Param        username       query     string  true   "user to be assigned to fqan/affiliation"
+// @Success      200  {object}  main.jsonOutput
+// @Failure      400  {object}  main.jsonOutput
+// @Failure      401  {object}  main.jsonOutput
+// @Router /removeUserExperimentFQAN [post]
+func removeUserExperimentFQAN(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+
+	fqan := NewNullAttribute(FQAN)
+	if i[FQAN].Valid {
+		fqan = i[FQAN]
+	} else {
+		if i[Role].Valid {
+			fqan.Scan("%Role=" + strings.TrimSpace(i[Role].Data.(string)) + "%")
+		} else if i[Role].AbsoluteNull {
+			fqan.Scan("%Role=NULL%")
+		} else {
+			apiErr = append(apiErr, APIError{errors.New("no role or fqan specified"), ErrorAPIRequirement})
+			return nil, apiErr
+		}
+	}
+
+	uid := NewNullAttribute(UID)
+	unitid := NewNullAttribute(UnitID)
+	queryerr := c.DBtx.QueryRow(`select (select uid from users where uname=$1),
+									    (select unitid from affiliation_units where name=$2)`,
+		i[UserName], i[UnitName]).Scan(&uid, &unitid)
+	if queryerr != nil {
+		log.WithFields(QueryFields(c)).Error(queryerr)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !uid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
+	}
+	if !unitid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	rows, queryerr := c.DBtx.Query(`select fqanid from grid_fqan where unitid = $1 and fqan like $2`, unitid, fqan)
+	if queryerr != nil {
+		log.WithFields(QueryFields(c)).Error(queryerr)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	var fqanids []int
+	for rows.Next() {
+		var fqanid int
+		rows.Scan(&fqanid)
+		fqanids = append(fqanids, fqanid)
+	}
+	rows.Close()
+	if len(fqanids) == 0 {
+		apiErr = append(apiErr, APIError{errors.New("no specfied FQANs found for the affiliation"), ErrorAPIRequirement})
+		return nil, apiErr
+	}
+
+	for _, fqanid := range fqanids {
+		_, queryerr = c.DBtx.Exec(`delete from grid_access where fqanid = $1 and uid = $2`, fqanid, uid)
 		if queryerr != nil {
 			log.WithFields(QueryFields(c)).Error(queryerr)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))

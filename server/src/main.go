@@ -41,7 +41,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "This is a placeholder for paths like %s!", r.URL.Path[1:])
 }
 
-//QueryFields builds fields for a logger from an http request
+// QueryFields builds fields for a logger from an http request
 func QueryFields(c APIContext) log.Fields {
 	const Unknown = "unknown"
 	fields := make(log.Fields)
@@ -259,6 +259,7 @@ func main() {
 	grouter.HandleFunc("/addUserToGroup", APIs["addUserToGroup"].Run)
 	grouter.HandleFunc("/removeUserFromGroup", APIs["removeUserFromGroup"].Run)
 	grouter.HandleFunc("/setUserExperimentFQAN", APIs["setUserExperimentFQAN"].Run)
+	grouter.HandleFunc("/removeUserExperimentFQAN", APIs["removeUserExperimentFQAN"].Run)
 	grouter.HandleFunc("/setUserShellAndHomeDir", APIs["setUserShellAndHomeDir"].Run)
 	grouter.HandleFunc("/getUserShellAndHomeDir", APIs["getUserShellAndHomeDir"].Run)
 	grouter.HandleFunc("/setUserShell", APIs["setUserShell"].Run)
