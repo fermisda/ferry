@@ -25,7 +25,9 @@ func IncludeUserAPIs(c *APICollection) {
 
 	getUserInfo := BaseAPI{
 		InputModel{
-			Parameter{UserName, true},
+			Parameter{UserName, false},
+			Parameter{UID, false},
+			Parameter{VoPersonID, false},
 		},
 		getUserInfo,
 		RoleRead,
@@ -365,7 +367,8 @@ func IncludeUserAPIs(c *APICollection) {
 	removeUserFromComputeResource := BaseAPI{
 		InputModel{
 			Parameter{UserName, true},
-			Parameter{ResourceType, true},
+			Parameter{GroupName, true},
+			Parameter{GroupType, true},
 			Parameter{ResourceName, true},
 		},
 		removeUserFromComputeResource,
@@ -718,19 +721,28 @@ func getUserGroups(c APIContext, i Input) (interface{}, []APIError) {
 
 // getUserInfo godoc
 // @Summary      Return attributes for a user.
-// @Description  For a specific user, returns the entity attributes.
+// @Description  For a specific user, returns the entity attributes. You must supply ONE of username or uid or vopersonid.
 // @Tags         Users
 // @Accept       html
 // @Produce      json
-// @Param        username       query     string  true  "user for whom the attributes are to be returned"
+// @Param        username       query     string  false  "user for whom the attributes are to be returned"
+// @Param        uid            query     int     false  "uid for whom the attributes are to be returned"
+// @Param        vopersonid     query     string  false  "UUID for whom the attributes are to be returned"
 // @Success      200  {object}  userAttributes
 // @Failure      400  {object}  jsonOutput
 // @Failure      401  {object}  jsonOutput
 // @Router /getUserInfo [get]
 func getUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
+	if !i[UserName].Valid && !i[UID].Valid && !i[VoPersonID].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "username or uid or vopersonid must be supplied"))
+		return nil, apiErr
+	}
 	rows, err := c.DBtx.Query(`select full_name, uid, status, is_groupaccount, expiration_date, voPersonID, is_banned
-													   from users where uname=$1`, i[UserName])
+							   from users
+							   where (uname=$1 or $1 is null)
+							     and (uid=$2 or $2 is null)
+								 and (vopersonid=$3 or $3 is null)`, i[UserName], i[UID], i[VoPersonID])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -2467,8 +2479,10 @@ func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 
 	status := i[Status].Default(false)
 
-	rows, err := DBptr.Query(`select uname, uid, full_name, status, cast(expiration_date as text), voPersonID, is_banned from users
-							  where (status=$1 or not $1) and (last_updated>=$2 or $2 is null)
+	rows, err := DBptr.Query(`select uname, uid, full_name, status, cast(expiration_date as text), voPersonID, is_banned
+							  from users
+							  where (status=$1 or not $1)
+							    and (last_updated>=$2 or $2 is null)
 							  order by uname`, status, i[LastUpdated])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
@@ -2694,8 +2708,9 @@ func getUserGroupsForComputeResource(c APIContext, i Input) (interface{}, []APIE
 // @Accept       html
 // @Produce      json
 // @Param        resourcename   query     string  true  "compute resource to remove user from"
-// @Param        resourcetype   query     string  type  "type of the compute resource to remove user from"
+// @Param        resourcetype   query     string  true  "type of the compute resource to remove user from"
 // @Param        username       query     string  true  "user to be disassociated from the resource"
+// @Param        groupname      query     string  true  "group for which the user is to be disassociated from the resource"
 // @Success      200  {object}  main.jsonOutput
 // @Failure      400  {object}  main.jsonOutput
 // @Failure      401  {object}  main.jsonOutput
@@ -2705,11 +2720,13 @@ func removeUserFromComputeResource(c APIContext, i Input) (interface{}, []APIErr
 	var apiErr []APIError
 	var uid = NewNullAttribute(UID)
 	var compid = NewNullAttribute(ResourceID)
+	var groupid = NewNullAttribute(GroupID)
 
 	err := c.DBtx.QueryRow(`select
 							(select uid from users where uname = $1),
-							(select compid from compute_resources where name = $2 and type = $3)`,
-		i[UserName], i[ResourceName], i[ResourceType]).Scan(&uid, &compid)
+							(select compid from compute_resources where name = $2),
+							(select groupid from groups where name = $3 and type = $4)`,
+		i[UserName], i[ResourceName], i[GroupName], i[GroupType]).Scan(&uid, &compid, &groupid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -2721,21 +2738,37 @@ func removeUserFromComputeResource(c APIContext, i Input) (interface{}, []APIErr
 	if !compid.Valid {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, ResourceName))
 	}
+	if !groupid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
+	}
 	if len(apiErr) > 0 {
 		return nil, apiErr
 	}
 
-	_, err = c.DBtx.Exec(`delete from compute_access_group where compid=$1 and uid=$2`, compid, uid)
+	_, err = c.DBtx.Exec(`delete from compute_access_group where compid=$1 and uid=$2 and groupid=$3`, compid, uid, groupid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
-	_, err = c.DBtx.Exec(`delete from compute_access where compid=$1 and uid=$2`, compid, uid)
+
+	var recCnt int
+	err = c.DBtx.QueryRow(`select count(*) from compute_access_group where compid=$1 and uid=$2`,
+		compid, uid).Scan(&recCnt)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
+	}
+
+	// Delete iff the user is not assigned to this resource through any other groups
+	if recCnt == 0 {
+		_, err = c.DBtx.Exec(`delete from compute_access where compid=$1 and uid=$2`, compid, uid)
+		if err != nil {
+			log.WithFields(QueryFields(c)).Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+			return nil, apiErr
+		}
 	}
 
 	return nil, nil

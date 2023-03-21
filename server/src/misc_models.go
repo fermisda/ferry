@@ -30,7 +30,7 @@ type miscGridMapFile []struct {
 
 //type miscGridMapFile []miscGridMap
 
-//type miscGridMapFileByVO map[string]miscGridMap // Uses getGridMapFile's struct
+// type miscGridMapFileByVO map[string]miscGridMap // Uses getGridMapFile's struct
 type miscGridMapFileByVO map[string]struct {
 	DN       string `json:"dn"`
 	UserName string `json:"username"`
@@ -63,9 +63,11 @@ type miscMappedGidFile []struct {
 }
 
 type miscAffMembRoles map[string][]struct {
-	FQAN     string `json:"fqan"`
-	FullName string `json:"fullname"`
-	UserName string `json:"username"`
+	FQAN       string `json:"fqan"`
+	FullName   string `json:"fullname"`
+	UserName   string `json:"username"`
+	VoPersonID string `json:"UUID"`
+	UID        int    `json:"UID"`
 }
 
 type miscStorageResourceInfo []struct {

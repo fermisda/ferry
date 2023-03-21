@@ -1006,7 +1006,7 @@ func getAffiliationMembersRoles(c APIContext, i Input) (interface{}, []APIError)
 		return nil, apiErr
 	}
 
-	rows, err := DBptr.Query(`select name, fqan, uname, full_name
+	rows, err := DBptr.Query(`select name, fqan, uname, full_name, vopersonid, uid
 								from grid_access
 								join grid_fqan using(fqanid)
 								join users using(uid)
@@ -1024,14 +1024,16 @@ func getAffiliationMembersRoles(c APIContext, i Input) (interface{}, []APIError)
 	out := make(map[string][]jsonentry)
 
 	for rows.Next() {
-		row := NewMapNullAttribute(UnitName, FQAN, UserName, FullName)
-		rows.Scan(row[UnitName], row[FQAN], row[UserName], row[FullName])
+		row := NewMapNullAttribute(UnitName, FQAN, UserName, FullName, VoPersonID, UID)
+		rows.Scan(row[UnitName], row[FQAN], row[UserName], row[FullName], row[VoPersonID], row[UID])
 
 		if row[FQAN].Valid {
 			out[row[UnitName].Data.(string)] = append(out[row[UnitName].Data.(string)], jsonentry{
 				FQAN:     row[FQAN].Data,
 				UserName: row[UserName].Data,
 				FullName: row[FullName].Data,
+				"uuid":   row[VoPersonID].Data,
+				UID:      row[UID].Data,
 			})
 		}
 	}
