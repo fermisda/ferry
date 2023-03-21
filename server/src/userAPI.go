@@ -2708,9 +2708,9 @@ func getUserGroupsForComputeResource(c APIContext, i Input) (interface{}, []APIE
 // @Accept       html
 // @Produce      json
 // @Param        resourcename   query     string  true  "compute resource to remove user from"
-// @Param        resourcetype   query     string  true  "type of the compute resource to remove user from"
 // @Param        username       query     string  true  "user to be disassociated from the resource"
 // @Param        groupname      query     string  true  "group for which the user is to be disassociated from the resource"
+// @Param        grouptype      query     string  true  "type of group used to disassocaite the user from the resource"
 // @Success      200  {object}  main.jsonOutput
 // @Failure      400  {object}  main.jsonOutput
 // @Failure      401  {object}  main.jsonOutput
