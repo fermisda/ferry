@@ -368,8 +368,8 @@ func IncludeUserAPIs(c *APICollection) {
 		InputModel{
 			Parameter{UserName, true},
 			Parameter{GroupName, true},
-			Parameter{GroupType, true},
 			Parameter{ResourceName, true},
+			Parameter{ResourceType, true},
 		},
 		removeUserFromComputeResource,
 		RoleWrite,
@@ -2708,9 +2708,9 @@ func getUserGroupsForComputeResource(c APIContext, i Input) (interface{}, []APIE
 // @Accept       html
 // @Produce      json
 // @Param        resourcename   query     string  true  "compute resource to remove user from"
+// @Param        resourcetype   query     string  true  "type of resource to disassocaite the user from"
 // @Param        username       query     string  true  "user to be disassociated from the resource"
 // @Param        groupname      query     string  true  "group for which the user is to be disassociated from the resource"
-// @Param        grouptype      query     string  true  "type of group used to disassocaite the user from the resource"
 // @Success      200  {object}  main.jsonOutput
 // @Failure      400  {object}  main.jsonOutput
 // @Failure      401  {object}  main.jsonOutput
@@ -2724,9 +2724,9 @@ func removeUserFromComputeResource(c APIContext, i Input) (interface{}, []APIErr
 
 	err := c.DBtx.QueryRow(`select
 							(select uid from users where uname = $1),
-							(select compid from compute_resources where name = $2),
-							(select groupid from groups where name = $3 and type = $4)`,
-		i[UserName], i[ResourceName], i[GroupName], i[GroupType]).Scan(&uid, &compid, &groupid)
+							(select compid from compute_resources where name = $2 and type = $3),
+							(select groupid from groups where name = $4 and type = 'UnixGroup')`,
+		i[UserName], i[ResourceName], i[ResourceType], i[GroupName]).Scan(&uid, &compid, &groupid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
