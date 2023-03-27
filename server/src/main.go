@@ -98,6 +98,9 @@ func gatekeeper(c net.Conn, s http.ConnState) {
 // @title FERRY API
 // @version FERRY_VERSION
 
+// FERRYVER=`git describe --tags`;sed -i "s/FERRY_VERSION/${FERRYVER}/" swagger.json
+// The above command is used in from buildFerry to put set the correct version (ferrydev.fnal.gov:/dbiapp/bin)
+
 // @description FERRY API Documentation.
 // @description (For all APIs, you can also use ferry.fnal.gov:8445/api?help)
 func main() {
