@@ -599,7 +599,7 @@ func setPrimaryStatusGroup(c APIContext, i Input) (interface{}, []APIError) {
 // @Success      200  {object}  main.jsonOutput
 // @Failure      400  {object}  main.jsonOutput
 // @Failure      401  {object}  main.jsonOutput
-// @Router /getGroupMembers [put]
+// @Router /getGroupMembers [get]
 func getGroupMembers(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
