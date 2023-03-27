@@ -767,7 +767,7 @@ func createFQAN(c APIContext, i Input) (interface{}, []APIError) {
 // @Success      200  {object}  jsonOutput
 // @Failure      400  {object}  jsonOutput
 // @Failure      401  {object}  jsonOutput
-// @Router /removeFQAN [get]
+// @Router /removeFQAN [put]
 func removeFQAN(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
