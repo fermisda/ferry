@@ -595,7 +595,7 @@ func setPrimaryStatusGroup(c APIContext, i Input) (interface{}, []APIError) {
 // @Produce      json
 // @Param        groupname      query     string  true  "fqan to assign user too"
 // @Param        grouptype      query     string  true  "affiliation to limit assignment too"
-// @Param        leader         query     bool    true  "user to be assigned to fqan/affiliation"
+// @Param        leader         query     bool    false "display leader flag - default false"
 // @Success      200  {object}  main.jsonOutput
 // @Failure      400  {object}  main.jsonOutput
 // @Failure      401  {object}  main.jsonOutput
@@ -1306,7 +1306,7 @@ func removeCondorQuota(c APIContext, i Input) (interface{}, []APIError) {
 // @Param        groupname      query     string  true  "name of group to return quotas of"
 // @Param        lastupdated    query     string  false "limit results to records  updated since"  Format(date)
 // @Param        quotaunit      query     string  false "One of B, MB, MiB, GB, GiB, TB, TiB"
-// @Param        resourcename   query     string  true  "compute resource to return quotas on"
+// @Param        resourcename   query     string  true  "storage resource to return quotas for"
 // @Param        unitname       query     string  true  "affiliation to return quotas for"
 // @Success      200  {object}  groupStorageQuota
 // @Failure      400  {object}  jsonOutput
