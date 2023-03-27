@@ -771,7 +771,7 @@ func getUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 // @Tags         Users
 // @Accept       html
 // @Produce      json
-// @Param        group          query     string  true  "the group to add the user too"
+// @Param        groupname      query     string  true  "the group to add the user too"
 // @Param        grouptype      query     string  true  "the specific type of group"
 // @Param        username       query     string  true  "user to add to the group"
 // @Success      200  {object}  main.jsonOutput
@@ -1238,9 +1238,9 @@ func setUserShell(c APIContext, i Input) (interface{}, []APIError) {
 // @Tags         Users
 // @Accept       html
 // @Produce      json
-// @Param        fqan           query     string  true  "fqan to assign user too"
-// @Param        unitname       query     string  true  "affiliation to limit assignment too"
-// @Param        username       query     string  true  "user to be assigned to fqan/affiliation"
+// @Param        lastupdated    query     string  false  "limit results to records  updated since"  Format(date)
+// @Param        resourcename   query     string  true   "compute resource to aquire data for"
+// @Param        username       query     string  true   "limits results to a specific user"
 // @Success      200  {object}  main.userShellAndHomeDir
 // @Failure      400  {object}  main.jsonOutput
 // @Failure      401  {object}  main.jsonOutput
@@ -2329,12 +2329,13 @@ func getStorageQuotas(c APIContext, i Input) (interface{}, []APIError) {
 // setUserAccessToComputeResource godoc
 // @Summary      Allows the user to have interactive access with a resource.
 // @Description  Given a username and a resource, it allows the user to have interactive access to the resource.
+// @Description  *** Be sure you understand the comments on the parameter 'primary'.
 // @Tags         Users
 // @Accept       html
 // @Produce      json
 // @Param        groupname      query     string  true   "group through which access is provided"
 // @Param        homedir        query     string  false  "home directory to use, if different from the default"
-// @Param        primary        query     boolean false  "if true this group is primary for the resource -- the user's primary group records do NOT appear in the passwd file"
+// @Param        primary        query     boolean false  "if true this group is primary for the resource -- ONLY the user's records marked as primary appear in the passwd file - getPasswdFile.  ONLY records NOT marked as primary appear in the group file - getGroupFile."
 // @Param        resourcename   query     string  true   "compute resource to which the user is being given access"
 // @Param        shell          query     string  false  "shell to use, if different from the default"
 // @Param        username       query     string  true   "user being given access to the resource"

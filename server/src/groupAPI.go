@@ -595,7 +595,7 @@ func setPrimaryStatusGroup(c APIContext, i Input) (interface{}, []APIError) {
 // @Produce      json
 // @Param        groupname      query     string  true  "fqan to assign user too"
 // @Param        grouptype      query     string  true  "affiliation to limit assignment too"
-// @Param        leaders        query     bool    true  "user to be assigned to fqan/affiliation"
+// @Param        leader         query     bool    true  "user to be assigned to fqan/affiliation"
 // @Success      200  {object}  main.jsonOutput
 // @Failure      400  {object}  main.jsonOutput
 // @Failure      401  {object}  main.jsonOutput
@@ -1311,7 +1311,7 @@ func removeCondorQuota(c APIContext, i Input) (interface{}, []APIError) {
 // @Success      200  {object}  groupStorageQuota
 // @Failure      400  {object}  jsonOutput
 // @Failure      401  {object}  jsonOutput
-// @Router /getGroupStorageQuota [put]
+// @Router /getGroupStorageQuota [get]
 func getGroupStorageQuota(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -1537,8 +1537,8 @@ func getAllGroups(c APIContext, i Input) (interface{}, []APIError) {
 }
 
 // getAllGroupsMembers godoc
-// @Summary      Assign a user to a specific experiment FQAN.
-// @Description  Assign a user to a specific experiment FQAN.
+// @Summary      Returns the membership of all groups.
+// @Description  Returns the membership of all groups.
 // @Tags         Groups
 // @Accept       html
 // @Produce      json
