@@ -771,7 +771,7 @@ func getUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 // @Tags         Users
 // @Accept       html
 // @Produce      json
-// @Param        group          query     string  true  "the group to add the user too"
+// @Param        groupname      query     string  true  "the group to add the user too"
 // @Param        grouptype      query     string  true  "the specific type of group"
 // @Param        username       query     string  true  "user to add to the group"
 // @Success      200  {object}  main.jsonOutput
@@ -1238,9 +1238,9 @@ func setUserShell(c APIContext, i Input) (interface{}, []APIError) {
 // @Tags         Users
 // @Accept       html
 // @Produce      json
-// @Param        fqan           query     string  true  "fqan to assign user too"
-// @Param        unitname       query     string  true  "affiliation to limit assignment too"
-// @Param        username       query     string  true  "user to be assigned to fqan/affiliation"
+// @Param        lastupdated    query     string  false  "limit results to records  updated since"  Format(date)
+// @Param        resourcename   query     string  true   "compute resource to aquire data for"
+// @Param        username       query     string  true   "limits results to a specific user"
 // @Success      200  {object}  main.userShellAndHomeDir
 // @Failure      400  {object}  main.jsonOutput
 // @Failure      401  {object}  main.jsonOutput
