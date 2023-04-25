@@ -245,9 +245,9 @@ func IncludeGroupAPIs(c *APICollection) {
 // @Tags         Groups
 // @Accept       html
 // @Produce      json
-// @Param        gid             query     int     true  "gid of this group"
-// @Param        groupname       query     string  true  "name of the group"
-// @Param        grouptype       query     string  true  "one of ApplicationGroup BatchSuperusers PhysicsGroup WilsonCluster UnixGroup"
+// @Param        gid             query     int     false  "gid of this group"
+// @Param        groupname       query     string  true   "name of the group"
+// @Param        grouptype       query     string  false  "one of ApplicationGroup BatchSuperusers PhysicsGroup WilsonCluster UnixGroup"
 // @Success      200  {object}  main.jsonOutput
 // @Failure      400  {object}  main.jsonOutput
 // @Failure      401  {object}  main.jsonOutput
