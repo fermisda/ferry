@@ -37,8 +37,7 @@ var serverRole string
 func handler(w http.ResponseWriter, r *http.Request) {
 	var c APIContext
 	c.StartTime = time.Now()
-	log.WithFields(QueryFields(c)).Debug(r.URL.Path)
-	fmt.Fprintf(w, "This is a placeholder for paths like %s!", r.URL.Path[1:])
+	fmt.Fprintf(w, "Access to '/' is not supported.  Please use an API endpoint.  For documentation see /docs, via a browser.")
 }
 
 // QueryFields builds fields for a logger from an http request
