@@ -864,7 +864,7 @@ func setGroupLeader(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
-// setGroupLeader godoc
+// removeGroupLeader godoc
 // @Summary      Removes the group leadership privilege from a user.
 // @Description  Removes the group leadership privilege from a user.  The user's association with the group is not altered.
 // @Tags         Groups
@@ -876,7 +876,7 @@ func setGroupLeader(c APIContext, i Input) (interface{}, []APIError) {
 // @Success      200  {object}  main.jsonOutput
 // @Failure      400  {object}  main.jsonOutput
 // @Failure      401  {object}  main.jsonOutput
-// @Router /setGroupLeader [put]
+// @Router /removeGroupLeader [put]
 func removeGroupLeader(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
