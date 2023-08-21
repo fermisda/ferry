@@ -314,7 +314,6 @@ func IncludeUserAPIs(c *APICollection) {
 	getMemberAffiliations := BaseAPI{
 		InputModel{
 			Parameter{UserName, true},
-			Parameter{Experiment, false},
 			Parameter{LastUpdated, false},
 		},
 		getMemberAffiliations,
@@ -1857,7 +1856,6 @@ func createUser(c APIContext, i Input) (interface{}, []APIError) {
 // @Tags         Users
 // @Accept       html
 // @Produce      json
-// @Param        experiment     query     string  true  "limit results to a specific affiliation"
 // @Param        username       query     string  true  "user to list whose membership will be listed"
 // @Success      200  {object}  main.userMemberAffiliations
 // @Failure      400  {object}  main.jsonOutput
@@ -1867,7 +1865,6 @@ func getMemberAffiliations(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
 	uid := NewNullAttribute(UID)
-	experiment := i[Experiment].Default(false)
 
 	err := c.DBtx.QueryRow(`select uid from users where uname = $1`, i[UserName]).Scan(&uid)
 	if err != nil && err != sql.ErrNoRows {
@@ -1881,13 +1878,11 @@ func getMemberAffiliations(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	rows, err := DBptr.Query(`select distinct name, alternative_name from affiliation_units
-							  join affiliation_unit_user_certificate as ac using(unitid)
-							  join user_certificates using(dnid)
-							  where uid = $1 and (
-								  (((unitid in (select unitid from voms_url)) = $2) or not $2)
-								  and (ac.last_updated >= $3 or $3 is null)
-							  )`, uid, experiment, i[LastUpdated])
+	rows, err := DBptr.Query(`select distinct name, alternative_name
+							  from affiliation_units
+							    join affiliation_unit_user_certificate as ac using(unitid)
+							    join user_certificates using(dnid)
+							  where uid = $1 and (ac.last_updated >= $2 or $2 is null)`, uid, i[LastUpdated])
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
