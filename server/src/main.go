@@ -354,6 +354,7 @@ func main() {
 	grouter.HandleFunc("/testWrapper", APIs["testWrapper"].Run)
 	grouter.HandleFunc("/addUserToExperiment", APIs["addUserToExperiment"].Run) //Added to fix missed init-cap on next line
 	grouter.HandleFunc("/addUsertoExperiment", APIs["addUserToExperiment"].Run)
+	grouter.HandleFunc("/removeUserFromExperiment", APIs["removeUserFromExperiment"].Run)
 	grouter.HandleFunc("/setLPCStorageAccess", APIs["setLPCStorageAccess"].Run)
 	grouter.HandleFunc("/createExperiment", APIs["createExperiment"].Run)
 	grouter.HandleFunc("/addLPCConvener", APIs["addLPCConvener"].Run)

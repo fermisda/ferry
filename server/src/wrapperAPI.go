@@ -21,6 +21,16 @@ func IncludeWrapperAPIs(c *APICollection) {
 	}
 	c.Add("addUserToExperiment", &addUserToExperiment)
 
+	removeUserFromExperiment := BaseAPI{
+		InputModel{
+			Parameter{UserName, true},
+			Parameter{UnitName, true},
+		},
+		removeUserFromExperiment,
+		RoleWrite,
+	}
+	c.Add("removeUserFromExperiment", &removeUserFromExperiment)
+
 	addLPCCollaborationGroup := BaseAPI{
 		InputModel{
 			Parameter{GroupName, true},
@@ -357,6 +367,113 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 			}
 		}
 	}
+
+	return nil, nil
+}
+
+// removeUserFromExperiment godoc
+// @Summary      Removes a user from an experiment.
+// @Description  Removes a user from an experiment. Specifically, this removes the user's relationships to the experiment's resources, FQANs, certificates and storage quotas from the specified user. NOTE: it deos not remove the user from groups due to the schema layout.
+// @Tags         Users
+// @Accept       html
+// @Produce      json
+// @Param        unitname       query     string  true  "name of the experiment to remove the user from"
+// @Param        username       query     string  true  "user name of the user to remove from the experiment"
+// @Success      200  {object}  jsonOutput
+// @Failure      400  {object}  jsonOutput
+// @Failure      401  {object}  jsonOutput
+// @Router /removeUserFromExperiment [put]
+func removeUserFromExperiment(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+
+	// Removes the user from the experiment's resources, FQANs, certificates and storage quotas from the specified user.
+	// NOTE: it does not remove the user from any groups.  Why?  User's are connected to groups, which in turn can be connected to
+	//       multiple experiments.   There is no way for the program to determine if the user should be removed from the group. It
+	//       won't matter as they have no access to anything.
+
+	unitid := NewNullAttribute(UnitName)
+	uid := NewNullAttribute(UID)
+
+	err := c.DBtx.QueryRow("select uid from users where uname = $1", i[UserName]).Scan(&uid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	err = c.DBtx.QueryRow("select unitid from affiliation_units where name = $1", i[UnitName]).Scan(&unitid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !uid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UserName))
+	}
+	if !unitid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	// Remove user from all compute resources for this experiment
+	_, err = c.DBtx.Exec(`delete from compute_access_group
+	                      where uid=$1
+	                        and compid in (select compid
+					                       from compute_resources
+					                       where unitid=$2)`, uid, unitid)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+	_, err = c.DBtx.Exec(`delete from compute_access
+	                      where uid=$1
+	                        and compid in (select compid
+					                       from compute_resources
+					                       where unitid=$2)`, uid, unitid)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	// Remove the FQANs assigned to the user for this exp
+	_, err = c.DBtx.Exec(`delete from grid_access
+						  where uid = $1
+	  						and fqanid in (select fqanid
+										   from grid_fqan
+										   where unitid = $2)`, uid, unitid)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	// Remove the user's certs from this exp
+	_, err = c.DBtx.Exec(`delete from affiliation_unit_user_certificate
+						  where unitid = $1
+	  						and dnid in (select dnid
+		  								 from user_certificates
+		  								 where uid = $2)`, unitid, uid)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	//Storage Resources
+	_, err = c.DBtx.Exec(`delete from storage_quota
+						  where unitid = $1 and uid = $2)`, unitid, uid)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	//User Groups
 
 	return nil, nil
 }
