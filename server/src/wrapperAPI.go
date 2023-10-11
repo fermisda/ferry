@@ -373,7 +373,7 @@ func addUserToExperiment(c APIContext, i Input) (interface{}, []APIError) {
 
 // removeUserFromExperiment godoc
 // @Summary      Removes a user from an experiment.
-// @Description  Removes a user from an experiment. Specifically, this removes the user's relationships to the experiment's resources, FQANs, certificates and storage quotas from the specified user. NOTE: it deos not remove the user from groups due to the schema layout.
+// @Description  Removes a user from an experiment. Specifically, this removes the user's relationships to the experiment's resources, FQANs, certificates and storage quotas from the specified user. NOTE: API is unable to remove the user from groups as a group may be connected to multiple affiliations.
 // @Tags         Users
 // @Accept       html
 // @Produce      json
