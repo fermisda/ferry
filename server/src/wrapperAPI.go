@@ -391,7 +391,7 @@ func removeUserFromExperiment(c APIContext, i Input) (interface{}, []APIError) {
 	//       multiple experiments.   There is no way for the program to determine if the user should be removed from the group. It
 	//       won't matter as they have no access to anything.
 
-	unitid := NewNullAttribute(UnitName)
+	unitid := NewNullAttribute(UnitID)
 	uid := NewNullAttribute(UID)
 
 	err := c.DBtx.QueryRow("select uid from users where uname = $1", i[UserName]).Scan(&uid)
@@ -465,8 +465,7 @@ func removeUserFromExperiment(c APIContext, i Input) (interface{}, []APIError) {
 	}
 
 	//Storage Resources
-	_, err = c.DBtx.Exec(`delete from storage_quota
-						  where unitid = $1 and uid = $2)`, unitid, uid)
+	_, err = c.DBtx.Exec(`delete from storage_quota where unitid = $1 and uid = $2`, unitid, uid)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
