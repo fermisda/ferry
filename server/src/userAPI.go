@@ -2447,7 +2447,7 @@ func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIEr
 	}
 	if priCount == 0 {
 		_, err = c.DBtx.Exec(`update compute_access_group set is_primary=true
-								where uid = $1 and compid = $2`, uid, compid)
+								where uid = $1 and compid = $2 and groupid = $3`, uid, compid, groupid)
 		if err != nil {
 			log.WithFields(QueryFields(c)).Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))

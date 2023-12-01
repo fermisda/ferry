@@ -593,9 +593,9 @@ func setPrimaryStatusGroup(c APIContext, i Input) (interface{}, []APIError) {
 // @Tags         Groups
 // @Accept       html
 // @Produce      json
-// @Param        groupname      query     string  true  "fqan to assign user too"
-// @Param        grouptype      query     string  true  "affiliation to limit assignment too"
-// @Param        leader         query     bool    false "display leader flag - default false"
+// @Param        groupname      query     string  true  "group to limit the results to"
+// @Param        grouptype      query     string  true  "specific type of group to show results for - case sensitive"
+// @Param        leader         query     bool    false "display if user is a leader for the group - default false"
 // @Success      200  {object}  main.jsonOutput
 // @Failure      400  {object}  main.jsonOutput
 // @Failure      401  {object}  main.jsonOutput
