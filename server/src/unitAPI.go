@@ -378,7 +378,7 @@ func getAffiliationUnitMembers(c APIContext, i Input) (interface{}, []APIError) 
 // @Tags         Affiliation/Experiment
 // @Accept       html
 // @Produce      json
-// @Param        unitname       query     string  true   "affiliation to return group the members of"
+// @Param        unitname       query     string  true   "affiliation to limit the results too"
 // @Success      200  {object}  unitAffMemberList
 // @Failure      400  {object}  jsonOutput
 // @Failure      401  {object}  jsonOutput
