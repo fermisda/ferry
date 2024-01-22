@@ -594,7 +594,7 @@ func setPrimaryStatusGroup(c APIContext, i Input) (interface{}, []APIError) {
 // @Accept       html
 // @Produce      json
 // @Param        groupname      query     string  true  "group to limit the results to"
-// @Param        grouptype      query     string  true  "specific type of group to show results for - case sensitive"
+// @Param        grouptype      query     string  false "specific type of group to show results for - case sensitive"
 // @Param        leader         query     bool    false "display if user is a leader for the group - default false"
 // @Success      200  {object}  main.jsonOutput
 // @Failure      400  {object}  main.jsonOutput

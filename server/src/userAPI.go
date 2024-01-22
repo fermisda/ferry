@@ -836,7 +836,7 @@ func addUserToGroup(c APIContext, i Input) (interface{}, []APIError) {
 // @Tags         Users
 // @Accept       html
 // @Produce      json
-// @Param        group          query     string  true  "the group to remove the user from"
+// @Param        groupname      query     string  true  "the group to remove the user from"
 // @Param        grouptype      query     string  true  "the specific type of group"
 // @Param        username       query     string  true  "user to remove from membership in the group"
 // @Success      200  {object}  main.jsonOutput
@@ -1708,7 +1708,7 @@ func removeUserCertificateDN(c APIContext, i Input) (interface{}, []APIError) {
 // @Produce      json
 // @Param        expirationdate query     string  false  "date the user's account expires" Format(date)
 // @Param        fullname       query     string  false  "proper name of the user"
-// @Param        groupaccount   query     boolean false  "true is this is a group account - default is false"
+// @Param        groupaccount   query     boolean false  "true if this is to be a group account - default is false"
 // @Param        status         query     string  false  "false to deactivate the account - default is true"
 // @Param        username       query     string  true   "user whose attributes are to be set"
 // @Success      200  {object}  main.jsonOutput
@@ -1791,7 +1791,7 @@ func setUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 // @Produce      json
 // @Param        expirationdate query     string  false  "date the user's account expires" Format(date)
 // @Param        fullname       query     string  true   "proper name of the user"
-// @Param        groupaccount   query     boolean true   "true is this is a group account - default is false"
+// @Param        groupaccount   query     boolean false  "true if this is to be a group account - default is false"
 // @Param        status         query     string  true   "false to deactivate the account - default is true"
 // @Param        uid            query     int     true   "the uid for of this new user"
 // @Param        username       query     string  true   "user's account name"
@@ -1856,7 +1856,7 @@ func createUser(c APIContext, i Input) (interface{}, []APIError) {
 // @Tags         Users
 // @Accept       html
 // @Produce      json
-// @Param        username       query     string  true  "user to list whose membership will be listed"
+// @Param        username       query     string  true  "user whose membership are to be listed"
 // @Success      200  {object}  main.userMemberAffiliations
 // @Failure      400  {object}  main.jsonOutput
 // @Failure      401  {object}  main.jsonOutput
