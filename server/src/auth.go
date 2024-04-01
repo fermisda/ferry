@@ -164,7 +164,7 @@ func loadCerts(certs []string) (*x509.CertPool, error) {
 	return pool, nil
 }
 
-//parseDN parses a []pkix.AttributeTypeAndValue into a string.
+// parseDN parses a []pkix.AttributeTypeAndValue into a string.
 func parseDN(names []pkix.AttributeTypeAndValue, sep string) string {
 	var oid = map[string]string{
 		"2.5.4.3":                    "CN",
