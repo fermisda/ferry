@@ -170,7 +170,6 @@ func main() {
 	IncludeMiscAPIs(&APIs)
 	IncludeWrapperAPIs(&APIs)
 	IncludeUnitAPIs(&APIs)
-	IncludeResourceAPIs(&APIs)
 	IncludeLdapAPIs(&APIs)
 
 	log.Debug("Here we go...")
@@ -360,13 +359,6 @@ func main() {
 	grouter.HandleFunc("/addLPCConvener", APIs["addLPCConvener"].Run)
 	grouter.HandleFunc("/removeLPCConvener", APIs["removeLPCConvener"].Run)
 	grouter.HandleFunc("/addLPCCollaborationGroup", APIs["addLPCCollaborationGroup"].Run)
-
-	// resource API calls
-	grouter.HandleFunc("/getUsersForSharedAccountComputeResource", APIs["getUsersForSharedAccountComputeResource"].Run)
-	grouter.HandleFunc("/addUserToSharedAccountComputeResource", APIs["addUserToSharedAccountComputeResource"].Run)
-	grouter.HandleFunc("/removeUserFromSharedAccountComputeResource", APIs["removeUserFromSharedAccountComputeResource"].Run)
-	grouter.HandleFunc("/setSharedAccountComputeResourceApprover", APIs["setSharedAccountComputeResourceApprover"].Run)
-	grouter.HandleFunc("/getSharedAccountForComputeResource", APIs["getSharedAccountForComputeResource"].Run)
 
 	// ldap API Calls
 	grouter.HandleFunc("/syncLdapWithFerry", APIs["syncLdapWithFerry"].Run)
