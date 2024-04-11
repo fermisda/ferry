@@ -171,6 +171,7 @@ func main() {
 	IncludeWrapperAPIs(&APIs)
 	IncludeUnitAPIs(&APIs)
 	IncludeLdapAPIs(&APIs)
+	IncludeAllocationAPIs(&APIs)
 
 	log.Debug("Here we go...")
 
@@ -377,8 +378,15 @@ func main() {
 	grouter.HandleFunc("/updateLdapForCapabilitySet", APIs["updateLdapForCapabilitySet"].Run)
 	grouter.HandleFunc("/modifyUserLdapAttributes", APIs["modifyUserLdapAttributes"].Run)
 
+	// Allocation API Calls
+	grouter.HandleFunc("/createAllocation", APIs["createAllocation"].Run)
+	grouter.HandleFunc("/addAdjustment", APIs["addAdjustment"].Run)
+	grouter.HandleFunc("/deleteAllocation", APIs["deleteAllocation"].Run)
+	grouter.HandleFunc("/deleteAdjustment", APIs["deleteAdjustment"].Run)
+	grouter.HandleFunc("/getAllocations", APIs["getAllocations"].Run)
+
 	Mainsrv = &http.Server{
-		Addr:        fmt.Sprintf("%s", srvConfig["port"]),
+		Addr:        srvConfig["port"],
 		ReadTimeout: 10 * time.Second,
 		Handler:     grouter,
 		ConnState:   gatekeeper,
