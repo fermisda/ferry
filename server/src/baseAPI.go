@@ -271,6 +271,11 @@ const (
 	ExternalAttribute Attribute = "externalattribute"
 	VoPersonID        Attribute = "vopersonid"
 	InLDAP            Attribute = "inldap"
+	FiscalYear        Attribute = "fiscalyear"
+	AllocationType    Attribute = "allocationtype"
+	Hours             Attribute = "hours"
+	Comments          Attribute = "comments"
+	CreateDate        Attribute = "createdate"
 )
 
 // Type returns the type of the Attribute
@@ -332,6 +337,11 @@ func (a Attribute) Type() AttributeType {
 		PasswdMode:        TypeFlag,
 		Standalone:        TypeFlag,
 		RemoveGroup:       TypeFlag,
+		FiscalYear:        TypeInt,
+		AllocationType:    TypeSstring,
+		Hours:             TypeFloat,
+		Comments:          TypeSstring,
+		CreateDate:        TypeDate,
 	}
 
 	return AttributeType[a]
