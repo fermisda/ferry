@@ -201,3 +201,13 @@ func stringInSlice(a string, list []string) bool {
 	}
 	return false
 }
+
+func fiscalYear() int64 {
+	currTime := time.Now()
+	currYear := int64(currTime.Year())
+	currMonth := int64(currTime.Month())
+	if currMonth < 10 {
+		return currYear
+	}
+	return currYear + 1
+}
