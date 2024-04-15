@@ -12,6 +12,6 @@ type allocations struct {
 	FiscalYear     int           `json:"fiscalyear"`
 	AllocationType string        `json:"allocationtype"`
 	OriginalHours  float32       `json:"originalhours"`
-	AdjustedHours  float32       `json:"sumhoursandadjs"`
+	AdjustedHours  float32       `json:"nethours"`
 	Adjustments    []adjustments `json:"adjustments"`
 }
