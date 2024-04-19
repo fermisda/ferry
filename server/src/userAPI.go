@@ -381,7 +381,8 @@ func IncludeUserAPIs(c *APICollection) {
 // @Summary      Stops a user from access via FERRY.
 // @Description  Fully bans the user from ALL FERRY use!!  Upon execution, the user will be immediately removed
 // @Description  from LDAP and their status will be set to inactive.  The account will be locked so that no method, except this one,
-// @Description  can remove the ban.  The ban must be removed for the user's status to be changed.
+// @Description  can remove the ban.  The ban must be removed for the user's status to be changed.  Removing a ban will NOT set the
+// @Description  user status to active, or put them back in LDAP, use setUserInfo for that.
 // @Tags         Users
 // @Accept       html
 // @Produce      json
@@ -422,7 +423,8 @@ func banUser(c APIContext, i Input) (interface{}, []APIError) {
 			return nil, apiErr
 		}
 	} else {
-		_, err = c.DBtx.Exec(`update users set is_banned = false, status = true where uid = $1`, uid.Data)
+		// Just because a ban is lifted, you don't set status back to true.  Let them call setUserInfo for that.
+		_, err = c.DBtx.Exec(`update users set is_banned = false where uid = $1`, uid.Data)
 		if err != nil {
 			log.WithFields(QueryFields(c)).Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
