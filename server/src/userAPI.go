@@ -422,8 +422,7 @@ func banUser(c APIContext, i Input) (interface{}, []APIError) {
 			return nil, apiErr
 		}
 	} else {
-		// Just because a ban is lifted, you don't set status back to true.  Let them call setUserInfo for that.
-		_, err = c.DBtx.Exec(`update users set is_banned = false where uid = $1`, uid.Data)
+		_, err = c.DBtx.Exec(`update users set is_banned = false, status = true where uid = $1`, uid.Data)
 		if err != nil {
 			log.WithFields(QueryFields(c)).Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
