@@ -295,6 +295,7 @@ func IncludeUserAPIs(c *APICollection) {
 		InputModel{
 			Parameter{Status, false},
 			Parameter{LastUpdated, false},
+			Parameter{Banned, false},
 		},
 		getAllUsers,
 		RoleRead,
@@ -381,7 +382,8 @@ func IncludeUserAPIs(c *APICollection) {
 // @Summary      Stops a user from access via FERRY.
 // @Description  Fully bans the user from ALL FERRY use!!  Upon execution, the user will be immediately removed
 // @Description  from LDAP and their status will be set to inactive.  The account will be locked so that no method, except this one,
-// @Description  can remove the ban.  The ban must be removed for the user's status to be changed.
+// @Description  can remove the ban.  The ban must be removed for the user's status to be changed.  Removing a ban will NOT set the
+// @Description  user status to active, or put them back in LDAP, use setUserInfo for that.
 // @Tags         Users
 // @Accept       html
 // @Produce      json
@@ -2466,6 +2468,7 @@ func setUserAccessToComputeResource(c APIContext, i Input) (interface{}, []APIEr
 // @Produce      json
 // @Param        status         query     boolean false  "return only those with the specified status"  Format(true/false)
 // @Param        lastupdated    query     string  false  "return those updated since"  Format(date)
+// @Param        banned         query     boolean false  "If supplied, only users of that type will be returned."
 // @Success      200  {object}  allUsersAttributes
 // @Failure      400  {object}  jsonOutput
 // @Failure      401  {object}  jsonOutput
@@ -2479,7 +2482,8 @@ func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 							  from users
 							  where (status=$1 or not $1)
 							    and (last_updated>=$2 or $2 is null)
-							  order by uname`, status, i[LastUpdated])
+								and (is_banned=$3 or $3 is null)
+							  order by uname`, status, i[LastUpdated], i[Banned])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
