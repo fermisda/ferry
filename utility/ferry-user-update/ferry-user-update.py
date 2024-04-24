@@ -257,6 +257,9 @@ def fetch_userdb(ferryUsers):
 
     logging.debug("reading gid.lis")
     gidLines = re.findall(r"(\d+)\t(.+)\t\t.*", open(files["gid.lis"], "r").read())
+    # NEW upcoming FORMAT -- Matt Arena is the one to talk to for more info.  Schedule release date is not yet known.
+    #gidfile = open(files["gid.lis"], "r").read()
+    #gidLines = re.findall(r"(\d+)\t(.+)\t.*", gidfile)
     for line in gidLines:
         gid, name = line
         gid = gid
@@ -265,6 +268,9 @@ def fetch_userdb(ferryUsers):
 
     logging.debug("reading uid.lis")
     uidLines = re.findall(r"(\d+)\t\t(\d+)\t\t(.+)\t\t(.+)\t\t(.+)", open(files["uid.lis"], "r").read())
+    # NEW upcoming FORMAT -- Matt Arena is the one to talk to for more info.  Schedule release date is not yet known.
+    #uidfile = open(files["uid.lis"], "r").read()
+    #uidLines = re.findall(r"(\d+)\t(\d+)\t\t(.+)\t(.+)\t(.+)", uidfile)
     for line in uidLines:
         uid, gid, last_name, first_name, uname = line
         uid = uid
@@ -587,6 +593,8 @@ def update_groups():
         logging.info("Groups are up to date")
 
 # Updates users certificates with data from services-users.csv
+# It makes sure each user has a personal cert tied to their account.  If not it adds it.  It only checks for the
+# user's own cert, it does not deal with all the others which may be tied to the user. (services, hosts)
 def update_certificates():
     changes = False
     for user in userdbUsers.values():
