@@ -380,6 +380,7 @@ func main() {
 
 	// Allocation API Calls
 	grouter.HandleFunc("/createAllocation", APIs["createAllocation"].Run)
+	grouter.HandleFunc("/editAllocation", APIs["editAllocation"].Run)
 	grouter.HandleFunc("/addAdjustment", APIs["addAdjustment"].Run)
 	grouter.HandleFunc("/deleteAllocation", APIs["deleteAllocation"].Run)
 	grouter.HandleFunc("/deleteAdjustment", APIs["deleteAdjustment"].Run)
