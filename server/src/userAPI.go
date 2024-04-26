@@ -528,8 +528,8 @@ func getUserCertificateDNs(c APIContext, i Input) (interface{}, []APIError) {
 // @Accept       html
 // @Produce      json
 // @Param        lastupdated    query     string  false  "return those updated since"  Format(date)
-// @Param        status         query     string  false  "return DNs for inactive users, default active"
-// @Param        username       query     string  false  "return DNs for specific affiliations"
+// @Param        status         query     string  false  "return DNs only for inactive users, default active"
+// @Param        unitname       query     string  false  "restricts results to the specific affiliation"
 // @Success      200  {object}  main.userCertificates
 // @Failure      400  {object}  main.jsonOutput
 // @Failure      401  {object}  main.jsonOutput
