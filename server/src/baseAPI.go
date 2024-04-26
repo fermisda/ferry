@@ -273,7 +273,9 @@ const (
 	InLDAP            Attribute = "inldap"
 	FiscalYear        Attribute = "fiscalyear"
 	AllocationType    Attribute = "allocationtype"
-	Hours             Attribute = "hours"
+	OriginalHours     Attribute = "originalhours"
+	AdjustedHours     Attribute = "adjustedhours"
+	UsedHours         Attribute = "usedhours"
 	Comments          Attribute = "comments"
 	CreateDate        Attribute = "createdate"
 )
@@ -339,7 +341,9 @@ func (a Attribute) Type() AttributeType {
 		RemoveGroup:       TypeFlag,
 		FiscalYear:        TypeInt,
 		AllocationType:    TypeSstring,
-		Hours:             TypeFloat,
+		OriginalHours:     TypeFloat,
+		AdjustedHours:     TypeFloat,
+		UsedHours:         TypeFloat,
 		Comments:          TypeSstring,
 		CreateDate:        TypeDate,
 	}
