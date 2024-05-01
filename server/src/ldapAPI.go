@@ -365,7 +365,6 @@ func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 							  from users as u
 							  where u.status is true
 								and u.is_groupaccount is false
-								and u.is_sharedaccount is false
 							  order by u.uid`)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
