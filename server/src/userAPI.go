@@ -528,8 +528,8 @@ func getUserCertificateDNs(c APIContext, i Input) (interface{}, []APIError) {
 // @Accept       html
 // @Produce      json
 // @Param        lastupdated    query     string  false  "return those updated since"  Format(date)
-// @Param        status         query     string  false  "return DNs for inactive users, default active"
-// @Param        username       query     string  false  "return DNs for specific affiliations"
+// @Param        status         query     string  false  "return DNs only for inactive users, default active"
+// @Param        unitname       query     string  false  "restricts results to the specific affiliation"
 // @Success      200  {object}  main.userCertificates
 // @Failure      400  {object}  main.jsonOutput
 // @Failure      401  {object}  main.jsonOutput
@@ -2017,7 +2017,6 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	const jExpirationDate Attribute = "expiration_date"
 	const jFullName Attribute = "full_name"
 	const jGroupAccount Attribute = "is_groupaccount"
-	const jSharedAccount Attribute = "is_sharedaccount"
 	const jVoPersonID Attribute = "vopersonid"
 
 	type jsonentry map[Attribute]interface{}
@@ -2066,12 +2065,11 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	lastUpdated := NewNullAttribute(LastUpdated)
 	fullName := NewNullAttribute(FullName)
 	isGroup := NewNullAttribute(GroupAccount)
-	isShared := NewNullAttribute(SharedAccount)
 	voPersonID := NewNullAttribute(VoPersonID)
 
-	err = c.DBtx.tx.QueryRow(`select uid, uname, status, expiration_date, last_updated, full_name, is_groupaccount, is_sharedaccount, voPersonID
+	err = c.DBtx.tx.QueryRow(`select uid, uname, status, expiration_date, last_updated, full_name, is_groupaccount, voPersonID
 							  from users
-							  where uid = $1`, i[UID]).Scan(&uid, &uname, &status, &expDate, &lastUpdated, &fullName, &isGroup, &isShared, &voPersonID)
+							  where uid = $1`, i[UID]).Scan(&uid, &uname, &status, &expDate, &lastUpdated, &fullName, &isGroup, &voPersonID)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -2086,7 +2084,6 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 		jLastUpdated:    TypeDate,
 		jFullName:       TypeString,
 		jGroupAccount:   TypeBool,
-		jSharedAccount:  TypeBool,
 		jVoPersonID:     TypeString,
 	}
 	r[jUID] = uid.Data
@@ -2096,7 +2093,6 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	r[jLastUpdated] = lastUpdated.Data
 	r[jFullName] = fullName.Data
 	r[jGroupAccount] = isGroup.Data
-	r[jSharedAccount] = isShared.Data
 	r[jVoPersonID] = voPersonID.Data
 
 	jtables[jUsers] = r
