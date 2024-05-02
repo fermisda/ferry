@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/lestrrat-go/jwx/jwt"
@@ -203,7 +204,13 @@ func authorize(c APIContext, r AccessRole) (AccessLevel, string, string) {
 		return LevelPublic, "public role authorized", ""
 	}
 
-	ip := strings.Split(c.R.RemoteAddr, ":")[0]
+	// Is it IP4 or IP6? Either way, drop the port number on the end.
+	re := regexp.MustCompile(`\[(.*?)\]`)
+	ipv6 := re.FindString(c.R.RemoteAddr)
+	ip := ipv6
+	if len(ipv6) == 0 {
+		ip = strings.Split(c.R.RemoteAddr, ":")[0]
+	}
 
 	// Try authorizing using a json web token
 	_, err := jwt.ParseRequest(c.R)
