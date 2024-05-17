@@ -63,7 +63,7 @@ func IncludeAllocationAPIs(c *APICollection) {
 	deleteAdjustment := BaseAPI{
 		InputModel{
 			Parameter{GroupName, true},
-			Parameter{FiscalYear, false},
+			Parameter{FiscalYear, true},
 			Parameter{AllocationType, true},
 			Parameter{CreateDate, true},
 		},
@@ -176,12 +176,12 @@ func editAllocation(c APIContext, i Input) (interface{}, []APIError) {
 	allocId := NewNullAttribute(GroupID)
 	err = c.DBtx.QueryRow(`select allocid from allocations
 						   where groupid=$1 and type=$2 and fiscal_year=$3`, groupid, i[AllocationType], fiscalYear).Scan(&allocId)
-	if err != nil {
+	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
-	} else if !allocId.Valid {
-		apiErr = append(apiErr, DefaultAPIError(ErrorText, "allocation not found"))
+	} else if err == sql.ErrNoRows {
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "allocation record not found"))
 		return nil, apiErr
 	}
 
@@ -318,6 +318,7 @@ func deleteAllocation(c APIContext, i Input) (interface{}, []APIError) {
 // @Param        groupname      query     string  true   "name of the group from which the adjustment will be deleted"
 // @Param        allocationtype query     string  true   "type of the allocation from which the adjustment to be deleted - i.e. 'cpu' or 'gpu'"
 // @Param        fiscalyear     query     string  true   "the fiscal year of the allocation from which the adjustment will be deleted - format YYYY"
+// @Parm         createDate     query     string  true   "the date the adjustment to be deleted was created"
 // @Success      200  {object}  main.jsonOutput
 // @Failure      400  {object}  main.jsonOutput
 // @Failure      401  {object}  main.jsonOutput
