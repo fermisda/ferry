@@ -202,13 +202,13 @@ func stringInSlice(a string, list []string) bool {
 	return false
 }
 
-// Based on fiscal year for lqcd
-func fiscalYear() int64 {
-	currTime := time.Now()
-	currYear := int64(currTime.Year())
-	currMonth := int64(currTime.Month())
-	if currMonth < 7 {
-		return currYear
+func isFiscalYearValid(i Input) bool {
+	if i[FiscalYear].Valid {
+		x := i[FiscalYear].Data.(int64)
+		s := strconv.FormatInt(x, 10)
+		if len(s) != 4 {
+			return false
+		}
 	}
-	return currYear + 1
+	return true
 }

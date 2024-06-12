@@ -7,12 +7,13 @@ type adjustments struct {
 }
 
 type allocations struct {
-	GroupName      string        `json:"groupname"`
-	GID            int           `json:"gid"`
-	FiscalYear     int           `json:"fiscalyear"`
-	AllocationType string        `json:"allocationtype"`
-	OriginalHours  float32       `json:"originalhours"`
-	AdjustedHours  float32       `json:"nethours"`
-	UsedHours      float32       `json:"usedhours"`
-	Adjustments    []adjustments `json:"adjustments"`
+	GroupName       string        `json:"groupname"`
+	GID             int           `json:"gid"`
+	FiscalYear      int           `json:"fiscalyear"`
+	AllocationType  string        `json:"allocationtype"`
+	AllocationClass string        `json:"allocationclass"`
+	OriginalHours   float32       `json:"originalhours"`
+	AdjustedHours   float32       `json:"nethours"`
+	UsedHours       float32       `json:"usedhours"`
+	Adjustments     []adjustments `json:"adjustments"`
 }
