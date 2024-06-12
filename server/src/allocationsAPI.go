@@ -16,6 +16,7 @@ func IncludeAllocationAPIs(c *APICollection) {
 			Parameter{GroupName, true},
 			Parameter{FiscalYear, true},
 			Parameter{AllocationType, true},
+			Parameter{AllocationClass, false},
 			Parameter{OriginalHours, true},
 		},
 		createAllocation,
@@ -28,6 +29,7 @@ func IncludeAllocationAPIs(c *APICollection) {
 			Parameter{GroupName, true},
 			Parameter{FiscalYear, true},
 			Parameter{AllocationType, true},
+			Parameter{AllocationClass, false},
 			Parameter{OriginalHours, false},
 			Parameter{UsedHours, false},
 		},
@@ -77,6 +79,7 @@ func IncludeAllocationAPIs(c *APICollection) {
 			Parameter{GroupName, false},
 			Parameter{FiscalYear, false},
 			Parameter{AllocationType, false},
+			Parameter{AllocationClass, false},
 		},
 		getAllocations,
 		RoleRead,
@@ -87,21 +90,29 @@ func IncludeAllocationAPIs(c *APICollection) {
 
 // createAllocation godoc
 // @Summary      Adds a new allocation record.
-// @Description  Adds a new allocation record.
+// @Description  Adds a new allocation record.  There can be only one allocation for each unique combination of groupname, allocationtype, fiscalyear.
 // @Tags         Allocations
 // @Accept       html
 // @Produce      json
-// @Param        groupname      query     string  true   "name of the group the allocation is created for"
-// @Param        allocationtype query     string  true   "type of allocation to create - i.e. 'cpu' or 'gpu'"
-// @Param        originalhours  query     float64 true   "original number of hours assigned to allocation"
-// @Param        fiscalyear     query     string  true   "the fiscal year YYYY assigned to the allocation - default current year with format YYYY"
-// @Success      200  {object}  main.jsonOutput
-// @Failure      400  {object}  main.jsonOutput
-// @Failure      401  {object}  main.jsonOutput
+// @Param        groupname       query     string  true   "name of the group the allocation is created for"
+// @Param        allocationtype  query     string  true   "type of allocation to create - i.e. 'cpu' or 'gpu'"
+// @Param        allocationclass query     string  false  "class of the allocation"
+// @Param        originalhours   query     float64 true   "original number of hours assigned to allocation"
+// @Param        fiscalyear      query     string  true   "the fiscal year YYYY assigned to the allocation"
+// @Success      200  {object}   main.jsonOutput
+// @Failure      400  {object}   main.jsonOutput
+// @Failure      401  {object}   main.jsonOutput
 // @Router /createAllocation [post]
 func createAllocation(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
+<<<<<<< HEAD
+	if !isFiscalYearValid(i) {
+		return nil, append(apiErr, DefaultAPIError(ErrorText, "fiscalyear must be YYYY"))
+	}
+
+=======
+>>>>>>> 51b9b867fb60a86c0c6b3f12ec6117616aac8327
 	groupid := NewNullAttribute(GroupID)
 	err := c.DBtx.QueryRow(`select groupid from groups where name=$1 and type='UnixGroup'`, i[GroupName]).Scan(&groupid)
 	if err != nil && err != sql.ErrNoRows {
@@ -113,10 +124,14 @@ func createAllocation(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	_, err = c.DBtx.Exec(`insert into allocations (groupid, fiscal_year, type, original_hours)
-						  values ($1, $2, $3, $4)
+	_, err = c.DBtx.Exec(`insert into allocations (groupid, fiscal_year, type, original_hours, alloc_class)
+						  values ($1, $2, $3, $4, $5)
 						  on conflict (groupid, fiscal_year, type) do nothing`,
+<<<<<<< HEAD
+		groupid, i[FiscalYear], i[AllocationType], i[OriginalHours], i[AllocationClass])
+=======
 		groupid, i[FiscalYear], i[AllocationType], i[OriginalHours])
+>>>>>>> 51b9b867fb60a86c0c6b3f12ec6117616aac8327
 	if err != nil {
 		if strings.Contains(err.Error(), "new row for relation \"allocations\" violates check constraint \"check_type\"") {
 			log.WithFields(QueryFields(c)).Error(err)
@@ -138,6 +153,17 @@ func createAllocation(c APIContext, i Input) (interface{}, []APIError) {
 // @Tags         Allocations
 // @Accept       html
 // @Produce      json
+<<<<<<< HEAD
+// @Param        groupname       query     string  true   "name of the group to relate the allocation to"
+// @Param        allocationtype  query     string  true   "type to set the allocation to - i.e. 'cpu' or 'gpu'"
+// @Param        allocationclass query     string  false  "class to set the allocation to"
+// @Param        fiscalyear      query     string  true   "the fiscal year YYYY assigned to the allocation"
+// @Param        originalhours   query     float64 true   "original number of hours assigned to allocation"
+// @Param        usedhours       query     float64 true   "number of hours used by the allocation"
+// @Success      200  {object}   main.jsonOutput
+// @Failure      400  {object}   main.jsonOutput
+// @Failure      401  {object}   main.jsonOutput
+=======
 // @Param        groupname      query     string  true   "name of the group the allocation is created for"
 // @Param        allocationtype query     string  true   "type of allocation to create - i.e. 'cpu' or 'gpu'"
 // @Param        fiscalyear     query     string  true   "the fiscal year YYYY assigned to the allocation - default current year with format YYYY"
@@ -146,12 +172,16 @@ func createAllocation(c APIContext, i Input) (interface{}, []APIError) {
 // @Success      200  {object}  main.jsonOutput
 // @Failure      400  {object}  main.jsonOutput
 // @Failure      401  {object}  main.jsonOutput
+>>>>>>> 51b9b867fb60a86c0c6b3f12ec6117616aac8327
 // @Router /editAllocation [post]
 func editAllocation(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
-	if !i[OriginalHours].Valid && !i[UsedHours].Valid {
-		apiErr = append(apiErr, DefaultAPIError(ErrorText, "originalhours or usedhours must be provided"))
+	if !isFiscalYearValid(i) {
+		return nil, append(apiErr, DefaultAPIError(ErrorText, "fiscalyear must be YYYY"))
+	}
+	if !i[OriginalHours].Valid && !i[UsedHours].Valid && !i[AllocationClass].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "one of originalhours, usedhours, allocationclass must be provided"))
 		return nil, apiErr
 	}
 
@@ -174,7 +204,11 @@ func editAllocation(c APIContext, i Input) (interface{}, []APIError) {
 	allocId := NewNullAttribute(GroupID)
 	err = c.DBtx.QueryRow(`select allocid from allocations
 						   where groupid=$1 and type=$2 and fiscal_year=$3`, groupid, i[AllocationType], i[FiscalYear]).Scan(&allocId)
+<<<<<<< HEAD
+	if err != nil {
+=======
 	if err != nil && err != sql.ErrNoRows {
+>>>>>>> 51b9b867fb60a86c0c6b3f12ec6117616aac8327
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
@@ -183,8 +217,9 @@ func editAllocation(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	_, err = c.DBtx.Exec(`update allocations set original_hours = coalesce($1, original_hours), used_hours = coalesce($2, used_hours)
-	                      where allocid = $3`, i[OriginalHours], i[UsedHours], allocId)
+	_, err = c.DBtx.Exec(`update allocations set original_hours = coalesce($1, original_hours), used_hours = coalesce($2, used_hours),
+	                        alloc_class = coalesce($3, alloc_class)
+	                      where allocid = $4`, i[OriginalHours], i[UsedHours], i[AllocationClass], allocId)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -201,9 +236,15 @@ func editAllocation(c APIContext, i Input) (interface{}, []APIError) {
 // @Produce      json
 // @Param        groupname      query     string  true   "name of the group the adjustment is created for"
 // @Param        allocationtype query     string  true   "type of the allocation against which the adjustment will be recorded - i.e. 'cpu' or 'gpu'"
+<<<<<<< HEAD
+// @Param        adjustedhours          query     float64 true   "number of hours to adjust the allocation by, can be positive or negitive"
+// @Param        fiscalyear     query     string  true   "the fiscal year of the allocation being adjusted"
+// @Param        comments       query     string  true   "optional comments about the adjustment"
+=======
 // @Param        adjustedhours  query     float64 true   "number of hours to adjust the allocation by, can be positive or negitive"
 // @Param        fiscalyear     query     string  true   "the fiscal year of the allocation being adjusted - default is current year with format YYYY"
 // @Param        comments       query     string  false   "optional comments about the adjustment"
+>>>>>>> 51b9b867fb60a86c0c6b3f12ec6117616aac8327
 // @Success      200  {object}  main.jsonOutput
 // @Failure      400  {object}  main.jsonOutput
 // @Failure      401  {object}  main.jsonOutput
@@ -211,6 +252,12 @@ func editAllocation(c APIContext, i Input) (interface{}, []APIError) {
 func addAdjustment(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
+<<<<<<< HEAD
+	if !isFiscalYearValid(i) {
+		return nil, append(apiErr, DefaultAPIError(ErrorText, "fiscalyear must be YYYY"))
+	}
+=======
+>>>>>>> 51b9b867fb60a86c0c6b3f12ec6117616aac8327
 	groupid := NewNullAttribute(GroupID)
 	var typeCnt int64
 	err := c.DBtx.QueryRow(`select (select groupid from groups where name=$1 and type='UnixGroup'),
@@ -272,6 +319,12 @@ func addAdjustment(c APIContext, i Input) (interface{}, []APIError) {
 func deleteAllocation(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
+<<<<<<< HEAD
+	if !isFiscalYearValid(i) {
+		return nil, append(apiErr, DefaultAPIError(ErrorText, "fiscalyear must be YYYY"))
+	}
+=======
+>>>>>>> 51b9b867fb60a86c0c6b3f12ec6117616aac8327
 	groupid := NewNullAttribute(GroupID)
 	var typeCnt int64
 	err := c.DBtx.QueryRow(`select (select groupid from groups where name=$1 and type='UnixGroup'),
@@ -322,6 +375,12 @@ func deleteAllocation(c APIContext, i Input) (interface{}, []APIError) {
 func deleteAdjustment(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
+<<<<<<< HEAD
+	if !isFiscalYearValid(i) {
+		return nil, append(apiErr, DefaultAPIError(ErrorText, "fiscalyear must be YYYY"))
+	}
+=======
+>>>>>>> 51b9b867fb60a86c0c6b3f12ec6117616aac8327
 	groupid := NewNullAttribute(GroupID)
 	allocid := NewNullAttribute(GroupID)
 	var typeCnt int64
@@ -370,21 +429,26 @@ func deleteAdjustment(c APIContext, i Input) (interface{}, []APIError) {
 // @Tags         Allocations
 // @Accept       html
 // @Produce      json
-// @Param        groupname      query     string  false   "limits returned data to a specific group name"
-// @Param        allocationtype query     string  false   "limits returned data to allocations of a specific type - i.e. 'cpu' or 'gpu'"
-// @Param        fiscalyear     query     string  false   "limits returned data to allocations for a specific fiscal year - format YYYY"
-// @Success      200  {object}  main.allocations
-// @Failure      400  {object}  main.jsonOutput
-// @Failure      401  {object}  main.jsonOutput
+// @Param        groupname       query     string  false   "limits returned data to a specific group name"
+// @Param        allocationtype  query     string  false   "limits returned data to allocations of a specific type - i.e. 'cpu' or 'gpu'"
+// @Param        allocationclass query     string  false   "limits returned data to a allocations of a specific class"
+// @Param        fiscalyear      query     string  false   "limits returned data to allocations for a specific fiscal year - format YYYY"
+// @Success      200  {object}   main.allocations
+// @Failure      400  {object}   main.jsonOutput
+// @Failure      401  {object}   main.jsonOutput
 // @Router /getAllocations [get]
 func getAllocations(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
+
+	if !isFiscalYearValid(i) {
+		return nil, append(apiErr, DefaultAPIError(ErrorText, "fiscalyear must be YYYY"))
+	}
 
 	gid := NewNullAttribute(GID)
 	var typeCnt int64
 	if i[GroupName].Valid {
 		err := c.DBtx.QueryRow(`select (select gid from groups where name = $1),
-					     		(select count(*) from allocations where type = $2)`, i[GroupName]).Scan(&gid, &typeCnt)
+					     		       (select count(*) from allocations where type = $2)`, i[GroupName], i[AllocationType]).Scan(&gid, &typeCnt)
 		if err != nil {
 			log.WithFields(QueryFields(c)).Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -398,7 +462,7 @@ func getAllocations(c APIContext, i Input) (interface{}, []APIError) {
 		}
 	}
 
-	rows, err := c.DBtx.Query(`select g.name, g.gid, a.fiscal_year, a.type, a.original_hours, a.used_hours,
+	rows, err := c.DBtx.Query(`select g.name, g.gid, a.fiscal_year, a.type, a.alloc_class, a.original_hours, a.used_hours,
 								 aj.create_date, aj.hours_adjusted, aj.comments
 							   from groups as g
 								 join allocations as a using (groupid)
@@ -406,7 +470,8 @@ func getAllocations(c APIContext, i Input) (interface{}, []APIError) {
 							   where (g.gid = $1 or $1 is null)
 							     and (a.fiscal_year = $2 or $2 is null)
 								 and (a.type = $3 or $3 is null)
-							   order by g.name, a.fiscal_year desc, a.type asc, aj.create_date desc`, gid, i[FiscalYear], i[AllocationType])
+								 and (a.alloc_class = $4 or $4 is null)
+							   order by g.name, a.fiscal_year desc, a.type asc, aj.create_date desc`, gid, i[FiscalYear], i[AllocationType], i[AllocationClass])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -420,7 +485,7 @@ func getAllocations(c APIContext, i Input) (interface{}, []APIError) {
 	for rows.Next() {
 		var allocEntry allocations
 		var adjEntry adjustments
-		rows.Scan(&allocEntry.GroupName, &allocEntry.GID, &allocEntry.FiscalYear, &allocEntry.AllocationType, &allocEntry.OriginalHours,
+		rows.Scan(&allocEntry.GroupName, &allocEntry.GID, &allocEntry.FiscalYear, &allocEntry.AllocationType, &allocEntry.AllocationClass, &allocEntry.OriginalHours,
 			&allocEntry.UsedHours, &adjEntry.CreateDate, &adjEntry.AdjustedHours, &adjEntry.Comments)
 
 		// TODO determine why CreateDate is coming back with T00:00:00Z. For now, hack it.
@@ -430,6 +495,7 @@ func getAllocations(c APIContext, i Input) (interface{}, []APIError) {
 			curAlloc.GID = allocEntry.GID
 			curAlloc.FiscalYear = allocEntry.FiscalYear
 			curAlloc.AllocationType = allocEntry.AllocationType
+			curAlloc.AllocationClass = allocEntry.AllocationClass
 			curAlloc.OriginalHours = allocEntry.OriginalHours
 			curAlloc.UsedHours = allocEntry.UsedHours
 			curAlloc.AdjustedHours = allocEntry.OriginalHours
@@ -449,6 +515,7 @@ func getAllocations(c APIContext, i Input) (interface{}, []APIError) {
 			curAlloc.GID = allocEntry.GID
 			curAlloc.FiscalYear = allocEntry.FiscalYear
 			curAlloc.AllocationType = allocEntry.AllocationType
+			curAlloc.AllocationClass = allocEntry.AllocationClass
 			curAlloc.OriginalHours = allocEntry.OriginalHours
 			if len(adjEntry.CreateDate) > 0 {
 				curAlloc.Adjustments = append(curAlloc.Adjustments, adjEntry)
