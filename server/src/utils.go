@@ -201,3 +201,14 @@ func stringInSlice(a string, list []string) bool {
 	}
 	return false
 }
+
+func isFiscalYearValid(i Input) bool {
+	if i[FiscalYear].Valid {
+		x := i[FiscalYear].Data.(int64)
+		s := strconv.FormatInt(x, 10)
+		if len(s) != 4 {
+			return false
+		}
+	}
+	return true
+}
