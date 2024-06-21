@@ -1023,16 +1023,16 @@ func getAffiliationMembersRoles(c APIContext, i Input) (interface{}, []APIError)
 	out := make(map[string][]jsonentry)
 
 	for rows.Next() {
-		row := NewMapNullAttribute(UnitName, FQAN, UserName, FullName, VoPersonID, UID)
-		rows.Scan(row[UnitName], row[FQAN], row[UserName], row[FullName], row[VoPersonID], row[UID])
+		row := NewMapNullAttribute(UnitName, FQAN, UserName, FullName, TokenSubject, UID)
+		rows.Scan(row[UnitName], row[FQAN], row[UserName], row[FullName], row[TokenSubject], row[UID])
 
 		if row[FQAN].Valid {
 			out[row[UnitName].Data.(string)] = append(out[row[UnitName].Data.(string)], jsonentry{
-				FQAN:     row[FQAN].Data,
-				UserName: row[UserName].Data,
-				FullName: row[FullName].Data,
-				"uuid":   row[VoPersonID].Data,
-				UID:      row[UID].Data,
+				FQAN:         row[FQAN].Data,
+				UserName:     row[UserName].Data,
+				FullName:     row[FullName].Data,
+				TokenSubject: row[TokenSubject].Data,
+				UID:          row[UID].Data,
 			})
 		}
 	}
