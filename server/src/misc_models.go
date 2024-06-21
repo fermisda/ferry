@@ -63,11 +63,11 @@ type miscMappedGidFile []struct {
 }
 
 type miscAffMembRoles map[string][]struct {
-	FQAN       string `json:"fqan"`
-	FullName   string `json:"fullname"`
-	UserName   string `json:"username"`
-	VoPersonID string `json:"UUID"`
-	UID        int    `json:"UID"`
+	FQAN         string `json:"fqan"`
+	FullName     string `json:"fullname"`
+	UserName     string `json:"username"`
+	TokenSubject string `json:"tokensubject"`
+	UID          int    `json:"UID"`
 }
 
 type miscStorageResourceInfo []struct {
