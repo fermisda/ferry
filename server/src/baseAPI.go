@@ -268,7 +268,6 @@ const (
 	TokenSubject      Attribute = "tokensubject"
 	VaultStorageKey   Attribute = "vaultstoragekey"
 	ExternalAttribute Attribute = "externalattribute"
-	VoPersonID        Attribute = "vopersonid"
 	InLDAP            Attribute = "inldap"
 	FiscalYear        Attribute = "fiscalyear"
 	AllocationType    Attribute = "allocationtype"
@@ -312,7 +311,6 @@ func (a Attribute) Type() AttributeType {
 		ExternalAttribute: TypeSstring,
 		CondorGroup:       TypeString,
 		VOName:            TypeString,
-		VoPersonID:        TypeString,
 		UID:               TypeInt,
 		GID:               TypeInt,
 		GroupID:           TypeInt,

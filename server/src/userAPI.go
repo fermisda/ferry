@@ -27,7 +27,7 @@ func IncludeUserAPIs(c *APICollection) {
 		InputModel{
 			Parameter{UserName, false},
 			Parameter{UID, false},
-			Parameter{VoPersonID, false},
+			Parameter{TokenSubject, false},
 		},
 		getUserInfo,
 		RoleRead,
@@ -726,24 +726,24 @@ func getUserGroups(c APIContext, i Input) (interface{}, []APIError) {
 // @Tags         Users
 // @Accept       html
 // @Produce      json
-// @Param        username       query     string  false  "user for whom the attributes are to be returned"
-// @Param        uid            query     int     false  "uid for whom the attributes are to be returned"
-// @Param        vopersonid     query     string  false  "UUID for whom the attributes are to be returned"
+// @Param        username         query     string  false  "user for whom the attributes are to be returned"
+// @Param        uid              query     int     false  "uid for whom the attributes are to be returned"
+// @Param        tokensubject     query     string  false  "UUID for whom the attributes are to be returned"
 // @Success      200  {object}  userAttributes
 // @Failure      400  {object}  jsonOutput
 // @Failure      401  {object}  jsonOutput
 // @Router /getUserInfo [get]
 func getUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
-	if !i[UserName].Valid && !i[UID].Valid && !i[VoPersonID].Valid {
-		apiErr = append(apiErr, DefaultAPIError(ErrorText, "username or uid or vopersonid must be supplied"))
+	if !i[UserName].Valid && !i[UID].Valid && !i[TokenSubject].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "username or uid or tokensubject must be supplied"))
 		return nil, apiErr
 	}
 	rows, err := c.DBtx.Query(`select full_name, uid, status, is_groupaccount, expiration_date, voPersonID, is_banned
 							   from users
 							   where (uname=$1 or $1 is null)
 							     and (uid=$2 or $2 is null)
-								 and (vopersonid=$3 or $3 is null)`, i[UserName], i[UID], i[VoPersonID])
+								 and (vopersonid=$3 or $3 is null)`, i[UserName], i[UID], i[TokenSubject])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -751,9 +751,9 @@ func getUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 	}
 	defer rows.Close()
 	out := make(map[Attribute]interface{})
-	row := NewMapNullAttribute(FullName, UID, Status, GroupAccount, ExpirationDate, VoPersonID, Banned)
+	row := NewMapNullAttribute(FullName, UID, Status, GroupAccount, ExpirationDate, TokenSubject, Banned)
 	for rows.Next() {
-		rows.Scan(row[FullName], row[UID], row[Status], row[GroupAccount], row[ExpirationDate], row[VoPersonID], row[Banned])
+		rows.Scan(row[FullName], row[UID], row[Status], row[GroupAccount], row[ExpirationDate], row[TokenSubject], row[Banned])
 		for _, column := range row {
 			out[column.Attribute] = column.Data
 		}
@@ -1615,6 +1615,13 @@ func addCertificateDNToUser(c APIContext, i Input) (interface{}, []APIError) {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
+	_, err = c.DBtx.Exec(`insert into user_affiliation_units (uid, unitid) values ($1, $2)
+						  on conflict (uid, unitid) do nothing`, uid, unitid)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
 
 	return nil, nil
 }
@@ -2065,7 +2072,7 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	lastUpdated := NewNullAttribute(LastUpdated)
 	fullName := NewNullAttribute(FullName)
 	isGroup := NewNullAttribute(GroupAccount)
-	voPersonID := NewNullAttribute(VoPersonID)
+	voPersonID := NewNullAttribute(TokenSubject)
 
 	err = c.DBtx.tx.QueryRow(`select uid, uname, status, expiration_date, last_updated, full_name, is_groupaccount, voPersonID
 							  from users
@@ -2490,8 +2497,8 @@ func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 	type jsonout map[Attribute]interface{}
 	var out []jsonout
 	for rows.Next() {
-		row := NewMapNullAttribute(UserName, UID, FullName, Status, ExpirationDate, VoPersonID, Banned)
-		rows.Scan(row[UserName], row[UID], row[FullName], row[Status], row[ExpirationDate], row[VoPersonID], row[Banned])
+		row := NewMapNullAttribute(UserName, UID, FullName, Status, ExpirationDate, TokenSubject, Banned)
+		rows.Scan(row[UserName], row[UID], row[FullName], row[Status], row[ExpirationDate], row[TokenSubject], row[Banned])
 		var expirationDate interface{}
 		if row[ExpirationDate].Valid {
 			expirationDate = row[ExpirationDate].Data
@@ -2502,7 +2509,7 @@ func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 			FullName:       row[FullName].Data,
 			Status:         row[Status].Data,
 			ExpirationDate: expirationDate,
-			VoPersonID:     row[VoPersonID].Data,
+			TokenSubject:   row[TokenSubject].Data,
 			Banned:         row[Banned].Data,
 		})
 	}
