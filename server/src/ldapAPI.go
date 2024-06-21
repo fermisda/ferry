@@ -190,7 +190,7 @@ func getUserLdapInfo(c APIContext, i Input) (interface{}, []APIError) {
 		apiErr = append(apiErr, DefaultAPIError(ErrorText, "user is not in LDAP"))
 		return nil, apiErr
 	}
-	lData.VoPersonID = vopid.String
+	lData.TokenSubject = vopid.String
 
 	con, err := LDAPgetConnection(false)
 	if err != nil {
@@ -200,7 +200,7 @@ func getUserLdapInfo(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	lData, err = LDAPgetUserData(lData.VoPersonID, con)
+	lData, err = LDAPgetUserData(lData.TokenSubject, con)
 	if err != nil {
 		con.Close()
 		log.Error(fmt.Sprintf("From LDAPgetUserData: %s", err))
@@ -209,7 +209,7 @@ func getUserLdapInfo(c APIContext, i Input) (interface{}, []APIError) {
 	}
 	con.Close()
 
-	if len(lData.VoPersonID) == 0 {
+	if len(lData.TokenSubject) == 0 {
 		apiErr = append(apiErr, DefaultAPIError(ErrorText, "user is not in LDAP (2)"))
 		return nil, apiErr
 	}
@@ -242,7 +242,7 @@ func addOrUpdateUserInLdap(c APIContext, i Input) (interface{}, []APIError) {
 
 	lData, apiErr := addUserToLdapBase(c, i, con)
 	if apiErr == nil {
-		vops := []string{lData.VoPersonID}
+		vops := []string{lData.TokenSubject}
 		_, apiErr = updateLdapForUserSet(c, vops, con)
 	}
 	con.Close()
@@ -410,8 +410,8 @@ func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 				log.Errorf("ldapAPI: addUsertoLdapBase: error on uname: %s", u.uname)
 				return entry, apiErr
 			}
-			entry[Added] = append(entry[Added].(jsonlist), fmt.Sprintf("uname: %s voPersonID: %s", u.uname, lData.VoPersonID))
-			voPersonIDs = append(voPersonIDs, lData.VoPersonID)
+			entry[Added] = append(entry[Added].(jsonlist), fmt.Sprintf("uname: %s voPersonID: %s", u.uname, lData.TokenSubject))
+			voPersonIDs = append(voPersonIDs, lData.TokenSubject)
 		} else {
 			voPersonIDs = append(voPersonIDs, u.voPersonID)
 		}
@@ -1298,7 +1298,7 @@ func updateLdapForUserSet(c APIContext, voPersonIDs []string, con *ldap.Conn) ([
 			return updated, apiErr
 		}
 		if modified {
-			updated = append(updated, fmt.Sprintf("uname: %s voPersonId: %s", lData.Uid, lData.VoPersonID))
+			updated = append(updated, fmt.Sprintf("uname: %s voPersonId: %s", lData.Uid, lData.TokenSubject))
 		}
 
 	}
