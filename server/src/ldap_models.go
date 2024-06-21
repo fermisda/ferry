@@ -3,7 +3,7 @@ package main
 type LDAPUserData struct {
 	Dn                     string   `json:"dn"`
 	ObjectClass            []string `json:"objectClass"`
-	VoPersonID             string   `json:"voPersonID"`
+	TokenSubject           string   `json:"tokensubject"`
 	VoPersonExternalID     string   `json:"voPersonExternalID"`
 	Uid                    string   `json:"uid"`
 	Sn                     string   `json:"sn"`
