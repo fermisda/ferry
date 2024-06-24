@@ -178,7 +178,7 @@ func getUserLdapInfo(c APIContext, i Input) (interface{}, []APIError) {
 
 	uid := NewNullAttribute(UID)
 
-	err := DBptr.QueryRow(`select uid, vopersonid from users where uname=$1`, i[UserName]).Scan(&uid, &vopid)
+	err := DBptr.QueryRow(`select uid, token_subject from users where uname=$1`, i[UserName]).Scan(&uid, &vopid)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -317,7 +317,7 @@ func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 	for _, voPersonID := range ldapUsers {
 		valueStrings = append(valueStrings, fmt.Sprintf("('%s')", voPersonID))
 	}
-	smt := fmt.Sprintf("INSERT INTO temp_vopersonids (voPersonID) VALUES %s", strings.Join(valueStrings, ","))
+	smt := fmt.Sprintf("INSERT INTO temp_vopersonids (token_subject) VALUES %s", strings.Join(valueStrings, ","))
 	_, err = c.DBtx.Exec(smt)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
@@ -325,9 +325,9 @@ func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	rows, err := c.DBtx.Query(`select voPersonID from temp_voPersonids
+	rows, err := c.DBtx.Query(`select token_subject from temp_voPersonids
 	                           except
-							   select cast(voPersonID as text) from users where voPersonID is not null`)
+							   select cast(token_subject as text) from users where token_subject is not null`)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -361,7 +361,7 @@ func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 	// Second, is to add in all the users that FERRY has registered as in LDAP but are missing.
 
 	// Get Both those FERRY thinks are in LDAP and those that are not but should be
-	rows, err = c.DBtx.Query(`select uname, voPersonID
+	rows, err = c.DBtx.Query(`select uname, token_subject
 							  from users as u
 							  where u.status is true
 								and u.is_groupaccount is false
@@ -436,9 +436,9 @@ func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 
 // removeUserFromLdap godoc
 // @Summary      Removes a user from LDAP.
-// @Description  Removes a user from LDAP, providing the user has a voPersonID stored in FERRY. If not, the LDAP record will
+// @Description  Removes a user from LDAP, providing the user has a tokensubject stored in FERRY. If not, the LDAP record will
 // @Description  need to be removed with direct LDAP commands or by running syncLdapWithFerry. -- Use getUserLdapInfo to verify
-// @Description  the voPersonID exists.  Be aware, syncLdapWithFerry (runs nightly in cron) will restore the LDAP records if
+// @Description  the TokenSubject exists.  Be aware, syncLdapWithFerry (runs nightly in cron) will restore the LDAP records if
 // @Description  the user is active.
 // @Tags         LDAP
 // @Accept       html
@@ -450,7 +450,7 @@ func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 // @Router /removeUserFromLdap [put]
 func removeUserFromLdap(c APIContext, i Input) (interface{}, []APIError) {
 	//********
-	// NEVER remove the voPersonID FROM the DB.  If we need to restore the user, we want the original.
+	// NEVER remove the TokenSubject (vopersonid) FROM the DB.  If we need to restore the user, we want the original.
 	//********
 	var apiErr []APIError
 
@@ -470,7 +470,7 @@ func removeUserFromLdap(c APIContext, i Input) (interface{}, []APIError) {
 
 	var voPersonID string
 
-	err = c.DBtx.QueryRow(`select voPersonID from users where uid=$1 and voPersonId is not null`, uid).Scan(&voPersonID)
+	err = c.DBtx.QueryRow(`select token_subject from users where uid=$1 and voPersonId is not null`, uid).Scan(&voPersonID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			// Ferry says user is not in LDAP
@@ -497,7 +497,7 @@ func removeUserFromLdap(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 	con.Close()
-	log.Infof("removeUserFromLdap - removed from ldap, uname: %s voPersonId: %s", i[UserName].Data, voPersonID)
+	log.Infof("removeUserFromLdap - removed from ldap, uname: %s token_subject: %s", i[UserName].Data, voPersonID)
 
 	return nil, apiErr
 }
@@ -1174,7 +1174,7 @@ func removeCapabilitySetFromFQAN(c APIContext, i Input) (interface{}, []APIError
 	// Before dropping the set from the DB we MUST remove the LDAP entry from those using it.  Hence this query and the
 	// following block of code.  Do not touch the FQAN record until all user's have been updated.  Why?
 	// So, this can be re-run if there are LDAP issues.
-	rows, err := c.DBtx.Query(`select distinct u.vopersonid
+	rows, err := c.DBtx.Query(`select distinct u.token_subject
 							   from users u
 								 join grid_access ga using (uid)
 								 join grid_fqan gf using (fqanid)
@@ -1335,7 +1335,7 @@ func updateLdapForAffiliation(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	rows, err := c.DBtx.Query(`select distinct u.voPersonID
+	rows, err := c.DBtx.Query(`select distinct u.token_subject
 							   from affiliation_unit_group aug
 							   	   join groups using (groupid)
 							       join user_group ug using (groupid)
@@ -1407,7 +1407,7 @@ func updateLdapForCapabilitySet(c APIContext, i Input) (interface{}, []APIError)
 		return nil, apiErr
 	}
 
-	rows, err := c.DBtx.Query(`select distinct u.voPersonID
+	rows, err := c.DBtx.Query(`select distinct u.token_subject
 							   from users u
 								 join grid_access ga using (uid)
 								 join grid_fqan gf using (fqanid)
@@ -1454,7 +1454,7 @@ func modifyUserLdapAttributes(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 	var voPersonID sql.NullString
 
-	err := DBptr.QueryRow(`select voPersonID from users where uname = $1`, i[UserName]).Scan(&voPersonID)
+	err := DBptr.QueryRow(`select token_subject from users where uname = $1`, i[UserName]).Scan(&voPersonID)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
