@@ -722,7 +722,7 @@ func getUserGroups(c APIContext, i Input) (interface{}, []APIError) {
 
 // getUserInfo godoc
 // @Summary      Return attributes for a user.
-// @Description  For a specific user, returns the entity attributes. You must supply ONE of username or uid or vopersonid.
+// @Description  For a specific user, returns the entity attributes. You must supply ONE of username or uid or tokensubject.
 // @Tags         Users
 // @Accept       html
 // @Produce      json
@@ -739,11 +739,11 @@ func getUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 		apiErr = append(apiErr, DefaultAPIError(ErrorText, "username or uid or tokensubject must be supplied"))
 		return nil, apiErr
 	}
-	rows, err := c.DBtx.Query(`select full_name, uid, status, is_groupaccount, expiration_date, voPersonID, is_banned
+	rows, err := c.DBtx.Query(`select full_name, uid, status, is_groupaccount, expiration_date, token_subject, is_banned
 							   from users
 							   where (uname=$1 or $1 is null)
 							     and (uid=$2 or $2 is null)
-								 and (vopersonid=$3 or $3 is null)`, i[UserName], i[UID], i[TokenSubject])
+								 and (token_subject=$3 or $3 is null)`, i[UserName], i[UID], i[TokenSubject])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1832,7 +1832,7 @@ func createUser(c APIContext, i Input) (interface{}, []APIError) {
 	}
 
 	newUUID := uuid.New().String()
-	_, err = c.DBtx.Exec(`insert into users (uname, uid, full_name, status, expiration_date, vopersonid, last_updated)
+	_, err = c.DBtx.Exec(`insert into users (uname, uid, full_name, status, expiration_date, token_subject, last_updated)
 						  values ($1, $2, $3, $4, $5, $6, NOW())`,
 		i[UserName], i[UID], i[FullName], i[Status], expDate, newUUID)
 	if err != nil {
@@ -2024,7 +2024,7 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	const jExpirationDate Attribute = "expiration_date"
 	const jFullName Attribute = "full_name"
 	const jGroupAccount Attribute = "is_groupaccount"
-	const jVoPersonID Attribute = "vopersonid"
+	const jTokenSubject Attribute = "token_subject"
 
 	type jsonentry map[Attribute]interface{}
 	type jsonlist []interface{}
@@ -2072,11 +2072,11 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	lastUpdated := NewNullAttribute(LastUpdated)
 	fullName := NewNullAttribute(FullName)
 	isGroup := NewNullAttribute(GroupAccount)
-	voPersonID := NewNullAttribute(TokenSubject)
+	tokenSubject := NewNullAttribute(TokenSubject)
 
-	err = c.DBtx.tx.QueryRow(`select uid, uname, status, expiration_date, last_updated, full_name, is_groupaccount, voPersonID
+	err = c.DBtx.tx.QueryRow(`select uid, uname, status, expiration_date, last_updated, full_name, is_groupaccount, token_subject
 							  from users
-							  where uid = $1`, i[UID]).Scan(&uid, &uname, &status, &expDate, &lastUpdated, &fullName, &isGroup, &voPersonID)
+							  where uid = $1`, i[UID]).Scan(&uid, &uname, &status, &expDate, &lastUpdated, &fullName, &isGroup, &tokenSubject)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -2091,7 +2091,7 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 		jLastUpdated:    TypeDate,
 		jFullName:       TypeString,
 		jGroupAccount:   TypeBool,
-		jVoPersonID:     TypeString,
+		jTokenSubject:   TypeString,
 	}
 	r[jUID] = uid.Data
 	r[jUserName] = uname.Data
@@ -2100,7 +2100,7 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	r[jLastUpdated] = lastUpdated.Data
 	r[jFullName] = fullName.Data
 	r[jGroupAccount] = isGroup.Data
-	r[jVoPersonID] = voPersonID.Data
+	r[jTokenSubject] = tokenSubject.Data
 
 	jtables[jUsers] = r
 
@@ -2481,7 +2481,7 @@ func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 
 	status := i[Status].Default(false)
 
-	rows, err := DBptr.Query(`select uname, uid, full_name, status, cast(expiration_date as text), voPersonID, is_banned
+	rows, err := DBptr.Query(`select uname, uid, full_name, status, cast(expiration_date as text), token_subject, is_banned
 							  from users
 							  where (status=$1 or not $1)
 							    and (last_updated>=$2 or $2 is null)

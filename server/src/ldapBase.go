@@ -485,7 +485,7 @@ func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (LDAPUserData, []A
 	}
 
 	var vop sql.NullString
-	err = c.DBtx.QueryRow(`select voPersonID from users where uid = $1`, uid).Scan(&vop)
+	err = c.DBtx.QueryRow(`select token_subject from users where uid = $1`, uid).Scan(&vop)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -511,7 +511,7 @@ func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (LDAPUserData, []A
 	// Create a voPersionID iff the DB did not find one for this user.  Always reuse an existing voPersonID.
 	if len(lData.TokenSubject) == 0 {
 		lData.TokenSubject = uuid.New().String()
-		_, err = c.DBtx.Exec(`update users set vopersonid=$1 where uid=$2`, lData.TokenSubject, uid)
+		_, err = c.DBtx.Exec(`update users set token_subject=$1 where uid=$2`, lData.TokenSubject, uid)
 		if err != nil {
 			log.WithFields(QueryFields(c)).Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -532,7 +532,7 @@ func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (LDAPUserData, []A
 		return lData, apiErr
 	}
 
-	log.Infof("addUserToLdapBase - added to ldap, uid: %s set voPersonId to: %s", uid.Data, lData.TokenSubject)
+	log.Infof("addUserToLdapBase - added to ldap, uid: %s set token_subject to: %s", uid.Data, lData.TokenSubject)
 
 	return lData, nil
 }
