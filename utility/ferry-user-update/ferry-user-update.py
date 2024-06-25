@@ -256,10 +256,10 @@ def fetch_userdb(ferryUsers):
     unameUid = {}
 
     logging.debug("reading gid.lis")
-    gidLines = re.findall(r"(\d+)\t(.+)\t\t.*", open(files["gid.lis"], "r").read())
-    # NEW upcoming FORMAT -- Matt Arena is the one to talk to for more info.  Schedule release date is not yet known.
-    #gidfile = open(files["gid.lis"], "r").read()
-    #gidLines = re.findall(r"(\d+)\t(.+)\t.*", gidfile)
+    #old format
+    #gidLines = re.findall(r"(\d+)\t(.+)\t\t.*", open(files["gid.lis"], "r").read())
+    gidfile = open(files["gid.lis"], "r").read()
+    gidLines = re.findall(r"(\d+)\t(.+)\t.*", gidfile)
     for line in gidLines:
         gid, name = line
         gid = gid
@@ -267,12 +267,13 @@ def fetch_userdb(ferryUsers):
         groups[gid] = Group(gid, name)
 
     logging.debug("reading uid.lis")
-    uidLines = re.findall(r"(\d+)\t\t(\d+)\t\t(.+)\t\t(.+)\t\t(.+)", open(files["uid.lis"], "r").read())
-    # NEW upcoming FORMAT -- Matt Arena is the one to talk to for more info.  Schedule release date is not yet known.
-    #uidfile = open(files["uid.lis"], "r").read()
-    #uidLines = re.findall(r"(\d+)\t(\d+)\t\t(.+)\t(.+)\t(.+)", uidfile)
+    #old format
+    #uidLines = re.findall(r"(\d+)\t\t(\d+)\t\t(.+)\t\t(.+)\t\t(.+)", open(files["uid.lis"], "r").read())
+    uidfile = open(files["uid.lis"], "r").read()
+    uidLines = re.findall(r"(\d+)\t(\d+)\t(.+)\t(.+)\t(.+)", uidfile)
     for line in uidLines:
         uid, gid, last_name, first_name, uname = line
+        #print ("uid: <%s>, gid: <%s>, last_name: <%s>, first_name: <%s>, uname: <%s>" % (uid, gid, last_name, first_name, uname))
         uid = uid
         gid = gid
         uname = uname.lower().strip()
