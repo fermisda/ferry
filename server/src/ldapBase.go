@@ -382,12 +382,14 @@ func LdapModifyAttributes(dn string, m map[string]string, con *ldap.Conn) error 
 	for key, value := range m {
 		if key == "givenName" {
 			givenName := []string{value}
+			modify.Replace("givenName", givenName)
 			name := strings.SplitN(value, " ", 2)
 			cn := []string{name[0]}
-			sn := []string{name[1]}
-			modify.Replace("givenName", givenName)
 			modify.Replace("cn", cn)
-			modify.Replace("sn", sn)
+			if len(name) >= 2 {
+				sn := []string{name[1]}
+				modify.Replace("sn", sn)
+			}
 		} else {
 			return fmt.Errorf("attribute %s is not supported", key)
 		}
