@@ -1628,7 +1628,7 @@ func addCertificateDNToUser(c APIContext, i Input) (interface{}, []APIError) {
 
 // removeUserCertificateDN godoc
 // @Summary      Removes a DN certificate from the user.
-// @Description  Removes a DN certificate from, the user, if it exists.
+// @Description  Removes a DN certificate from, the user, if it exists.  Does NOT delete the direct user to affiliations relationship.
 // @Tags         Users
 // @Accept       html
 // @Produce      json
