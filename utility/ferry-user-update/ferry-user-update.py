@@ -205,7 +205,14 @@ def parseFile(fileName, fileType):
             errMsgs.append("RE error parsing line num %s   line: %s" % (i+1, l))
         else:
             lines.append(line.groups())
-    return lines, errMsgs
+    if len(errMsgs):
+        m = "%s lines have errors when parsing %s" % (len(errMsgs), fileName)
+        logging.error(m)
+        postToSlack("Update Script Halted!", m + " see log file for details.")
+        for e in errMsgs:
+            logging.error(e)
+        exit(18)
+    return lines
 
 # Downloads necessary files from UserDB to memory
 def fetch_userdb(ferryUsers):
@@ -281,8 +288,7 @@ def fetch_userdb(ferryUsers):
     unameUid = {}
 
     logging.debug("reading gid.lis")
-    gidLines, errMsgs = parseFile(files["gid.lis"], "gid")
-    x = len(gidLines)
+    gidLines = parseFile(files["gid.lis"], "gid")
     for line in gidLines:
         gid, name, description = line
         gid = gid
@@ -290,8 +296,7 @@ def fetch_userdb(ferryUsers):
         groups[gid] = Group(gid, name)
 
     logging.debug("reading uid.lis")
-    uidLines, errMsgs = parseFile(files["uid.lis"], "uid")
-    x = len(uidLines)
+    uidLines = parseFile(files["uid.lis"], "uid")
     for line in uidLines:
         uid, gid, last_name, first_name, uname = line
         #print ("uid: <%s>, gid: <%s>, last_name: <%s>, first_name: <%s>, uname: <%s>" % (uid, gid, last_name, first_name, uname))
