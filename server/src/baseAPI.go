@@ -265,7 +265,10 @@ const (
 	PasswdMode        Attribute = "passwdmode"
 	Standalone        Attribute = "standalone"
 	RemoveGroup       Attribute = "removegroup"
+	Subject           Attribute = "subject"
 	TokenSubject      Attribute = "tokensubject"
+	SubjectType       Attribute = "subjecttype"
+	JWT               Attribute = "jwt"
 	VaultStorageKey   Attribute = "vaultstoragekey"
 	ExternalAttribute Attribute = "externalattribute"
 	InLDAP            Attribute = "inldap"
@@ -290,7 +293,10 @@ func (a Attribute) Type() AttributeType {
 		ResourceName:      TypeSstring,
 		AlternativeName:   TypeString,
 		SetName:           TypeString,
+		Subject:           TypeString,
+		SubjectType:       TypeString,
 		TokenSubject:      TypeString,
+		JWT:               TypeFlag,
 		VaultStorageKey:   TypeString,
 		Definition:        TypeString,
 		Pattern:           TypeSstring,
