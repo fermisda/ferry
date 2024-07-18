@@ -464,6 +464,15 @@ func removeUserFromExperiment(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
+	// Remove the user's certs from this exp
+	_, err = c.DBtx.Exec(`delete from user_affiliation_units
+						  where unitid = $1 and uid = $2)`, unitid, uid)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
 	//Storage Resources
 	_, err = c.DBtx.Exec(`delete from storage_quota where unitid = $1 and uid = $2`, unitid, uid)
 	if err != nil {

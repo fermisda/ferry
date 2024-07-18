@@ -142,7 +142,7 @@ func LDAPgetUserData(voPersonID string, con *ldap.Conn) (LDAPUserData, error) {
 	if len(result.Entries) == 1 {
 		lData.Dn = result.Entries[0].DN
 		lData.ObjectClass = result.Entries[0].GetAttributeValues("objectClass")
-		lData.VoPersonID = result.Entries[0].GetAttributeValue("voPersonID")
+		lData.TokenSubject = result.Entries[0].GetAttributeValue("voPersonID")
 		lData.VoPersonExternalID = result.Entries[0].GetAttributeValue("voPersonExternalID")
 		lData.Uid = result.Entries[0].GetAttributeValue("uid")
 		lData.Sn = result.Entries[0].GetAttributeValue("sn")
@@ -187,7 +187,7 @@ func LDAPaddUser(lData LDAPUserData, con *ldap.Conn) error {
 	mail := []string{lData.Mail}
 	eduPersonPrincipalName := []string{lData.EduPersonPrincipalName}
 	voPersonExternalID := []string{lData.VoPersonExternalID}
-	voPersonID := []string{lData.VoPersonID}
+	voPersonID := []string{lData.TokenSubject}
 
 	addReq := ldap.NewAddRequest(lData.Dn, []ldap.Control{})
 	addReq.Attribute("objectClass", lData.ObjectClass)
@@ -487,19 +487,19 @@ func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (LDAPUserData, []A
 	}
 
 	var vop sql.NullString
-	err = c.DBtx.QueryRow(`select voPersonID from users where uid = $1`, uid).Scan(&vop)
+	err = c.DBtx.QueryRow(`select token_subject from users where uid = $1`, uid).Scan(&vop)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return lData, apiErr
 	} else if vop.Valid {
-		lData.VoPersonID = vop.String
+		lData.TokenSubject = vop.String
 	}
 
 	// Ensure the user really is in LDAP (we don't have 2 phase commit - so we must test), if a record is in LDAP, we are done.
 	// If not, then use the voPersonID from the DB and add them.  If no voPersonID exists for the use, then create one.
-	if len(lData.VoPersonID) > 0 {
-		llData, err := LDAPgetUserData(lData.VoPersonID, con)
+	if len(lData.TokenSubject) > 0 {
+		llData, err := LDAPgetUserData(lData.TokenSubject, con)
 		if err != nil {
 			log.Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorText, "Unable to get user's LDAP data."))
@@ -511,9 +511,9 @@ func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (LDAPUserData, []A
 		}
 	}
 	// Create a voPersionID iff the DB did not find one for this user.  Always reuse an existing voPersonID.
-	if len(lData.VoPersonID) == 0 {
-		lData.VoPersonID = uuid.New().String()
-		_, err = c.DBtx.Exec(`update users set vopersonid=$1 where uid=$2`, lData.VoPersonID, uid)
+	if len(lData.TokenSubject) == 0 {
+		lData.TokenSubject = uuid.New().String()
+		_, err = c.DBtx.Exec(`update users set token_subject=$1 where uid=$2`, lData.TokenSubject, uid)
 		if err != nil {
 			log.WithFields(QueryFields(c)).Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -521,9 +521,9 @@ func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (LDAPUserData, []A
 		}
 	}
 
-	lData.Dn = fmt.Sprintf("voPersonID=%s,%s", lData.VoPersonID, ldapBaseDN)
+	lData.Dn = fmt.Sprintf("voPersonID=%s,%s", lData.TokenSubject, ldapBaseDN)
 	lData.Mail = fmt.Sprintf("%s@%s", uname.Data, emailSuffix)
-	lData.EduPersonPrincipalName = lData.VoPersonID
+	lData.EduPersonPrincipalName = lData.TokenSubject
 	lData.Uid = uname.Data.(string)
 	lData.VoPersonExternalID = lData.Mail
 
@@ -534,7 +534,7 @@ func addUserToLdapBase(c APIContext, i Input, con *ldap.Conn) (LDAPUserData, []A
 		return lData, apiErr
 	}
 
-	log.Infof("addUserToLdapBase - added to ldap, uid: %s set voPersonId to: %s", uid.Data, lData.VoPersonID)
+	log.Infof("addUserToLdapBase - added to ldap, uid: %s set token_subject to: %s", uid.Data, lData.TokenSubject)
 
 	return lData, nil
 }
