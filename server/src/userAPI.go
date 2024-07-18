@@ -951,9 +951,9 @@ func setUserExperimentFQAN(c APIContext, i Input) (interface{}, []APIError) {
 	}
 
 	var hasCert bool
-	queryerr = c.DBtx.QueryRow(`select count(*) > 0 from affiliation_unit_user_certificate as ac
-							  join user_certificates as uc on ac.dnid = uc.dnid
-							  where uid = $1 and unitid = $2`, uid, unitid).Scan(&hasCert)
+	queryerr = c.DBtx.QueryRow(`select count(*) > 0
+								from user_affiliation_units
+							    where uid = $1 and unitid = $2`, uid, unitid).Scan(&hasCert)
 	if queryerr != nil {
 		log.WithFields(QueryFields(c)).Error(queryerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1887,11 +1887,10 @@ func getMemberAffiliations(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	rows, err := DBptr.Query(`select distinct name, alternative_name
-							  from affiliation_units
-							    join affiliation_unit_user_certificate as ac using(unitid)
-							    join user_certificates using(dnid)
-							  where uid = $1 and (ac.last_updated >= $2 or $2 is null)`, uid, i[LastUpdated])
+	rows, err := DBptr.Query(`select name, alternative_name
+							  from affiliation_units as au
+							    join user_affiliation_units as uau using(unitid)
+							  where uid = $1 and (uau.last_updated >= $2 or $2 is null)`, uid, i[LastUpdated])
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
