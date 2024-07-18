@@ -77,6 +77,8 @@ func IncludeMiscAPIs(c *APICollection) {
 			Parameter{UnitName, false},
 			Parameter{ResourceName, false},
 			Parameter{LastUpdated, false},
+			Parameter{JWT, false},
+			Parameter{Status, false},
 		},
 		getGridMapFile,
 		RoleRead,
@@ -87,6 +89,7 @@ func IncludeMiscAPIs(c *APICollection) {
 		InputModel{
 			Parameter{UnitName, false},
 			Parameter{LastUpdated, false},
+			Parameter{JWT, false},
 		},
 		getGridMapFileByVO,
 		RoleRead,
@@ -503,14 +506,82 @@ func getGroupFile(c APIContext, i Input) (interface{}, []APIError) {
 // @Tags         Authorization Queries
 // @Accept       html
 // @Produce      json
+// @Param        jwt            query     flag    false  "When exists, uses the new token supporting format"
 // @Param        lastupdated    query     string  false  "limit results to records  updated since"  Format(date)
 // @Param        resourcename   query     string  false  "compute resource to return gridmap file data for"
-// @Param        unitname       query     string  false  "affiliation to return gridmap file data for""
+// @Param        unitname       query     string  false  "affiliation to return gridmap file data for"
+// @Param        status         query     bool    false  "when set, limits output to the chosen status"
 // @Success      200  {object}  miscGridMapFile
 // @Failure      400  {object}  jsonOutput
 // @Failure      401  {object}  jsonOutput
 // @Router /getGridMapFile [get]
 func getGridMapFile(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+
+	// Call the new JWT based code which will replace the older method -- at some point.
+	if i[JWT].Valid {
+		return getJWTGridMapFile(c, i)
+	}
+
+	unitid := NewNullAttribute(UnitID)
+	compid := NewNullAttribute(ResourceID)
+	err := c.DBtx.QueryRow(`select (select unitid from affiliation_units where name = $1),
+								   (select compid from compute_resources where name = $2)`,
+		i[UnitName], i[ResourceName]).Scan(&unitid, &compid)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !unitid.Valid && i[UnitName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+	}
+	if !compid.Valid && i[ResourceName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, ResourceName))
+	}
+	if len(apiErr) > 0 {
+		return nil, apiErr
+	}
+
+	rows, err := c.DBtx.Query(`select distinct dn, uname, token_subject, status
+								from affiliation_unit_user_certificate as ac
+								left join user_certificates as uc using(dnid)
+								left join users as us using(uid)
+								left join compute_access as ca using(uid)
+							   where (unitid = $1 or $1 is null)
+							     and (compid = $2 or $2 is null)
+								 and (ac.last_updated>=$3 or uc.last_updated>=$3 or us.last_updated>=$3 or $3 is null)
+								 and (us.status = $4 or $4 is null)`,
+		unitid, compid, i[LastUpdated], i[Status])
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+	defer rows.Close()
+
+	type jsondnmap map[Attribute]interface{}
+	var out []jsondnmap
+
+	for rows.Next() {
+		row := NewMapNullAttribute(DN, UserName, TokenSubject, Status)
+		rows.Scan(row[DN], row[UserName], row[TokenSubject], row[Status])
+		if row[DN].Valid {
+			out = append(out, jsondnmap{
+				DN:           row[DN].Data,
+				UserName:     row[UserName].Data,
+				TokenSubject: row[TokenSubject].Data,
+				Status:       row[Status].Data,
+			})
+		}
+	}
+
+	return out, nil
+}
+
+// Replacement for getGridMapFile.  When it will replace it?  Now there's the question.
+func getJWTGridMapFile(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
 	unitid := NewNullAttribute(UnitID)
@@ -534,14 +605,26 @@ func getGridMapFile(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	rows, err := c.DBtx.Query(`select distinct dn, uname
-								from affiliation_unit_user_certificate as ac
-								left join user_certificates as uc using(dnid)
-								left join users as us using(uid)
-								left join compute_access as ca using(uid)
-							   where (unitid = $1 or $1 is null) and (compid = $2 or $2 is null) and
-									 (ac.last_updated>=$3 or uc.last_updated>=$3 or us.last_updated>=$3 or $3 is null)`,
-		unitid, compid, i[LastUpdated])
+	rows, err := c.DBtx.Query(`select distinct dn as subject, 'dn' as type, uname, status
+							   from affiliation_unit_user_certificate as ac
+								 left join user_certificates as uc using(dnid)
+								 left join users as us using(uid)
+								 left join compute_access as ca using(uid)
+							   where dn not like '/DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=%/CN=UID:%'
+							     and (unitid = $1 or $1 is null)
+							     and (compid = $2 or $2 is null)
+								 and (ac.last_updated>=$3 or uc.last_updated>=$3 or us.last_updated>=$3 or $3 is null)
+								 and (us.status = $4 or $4 is null)
+							   UNION
+							   select distinct token_subject as subject, 'jwt' as type, uname, status
+							   from user_affiliation_units as uac
+								 left join users as us using(uid)
+								 left join compute_access as ca using(uid)
+							   where (unitid = $1 or $1 is null)
+							     and (compid = $2 or $2 is null)
+								 and (uac.last_updated>=$3 or us.last_updated>=$3 or $3 is null)
+								 and (us.status = $4 or $4 is null)`,
+		unitid, compid, i[LastUpdated], i[Status])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -553,14 +636,14 @@ func getGridMapFile(c APIContext, i Input) (interface{}, []APIError) {
 	var out []jsondnmap
 
 	for rows.Next() {
-		row := NewMapNullAttribute(DN, UserName)
-		rows.Scan(row[DN], row[UserName])
-		if row[DN].Valid {
-			out = append(out, jsondnmap{
-				DN:       row[DN].Data,
-				UserName: row[UserName].Data,
-			})
-		}
+		row := NewMapNullAttribute(Subject, SubjectType, UserName, Status)
+		rows.Scan(row[Subject], row[SubjectType], row[UserName], row[Status])
+		out = append(out, jsondnmap{
+			Subject:     row[Subject].Data,
+			SubjectType: row[SubjectType].Data,
+			UserName:    row[UserName].Data,
+			Status:      row[Status].Data,
+		})
 	}
 
 	return out, nil
@@ -572,6 +655,7 @@ func getGridMapFile(c APIContext, i Input) (interface{}, []APIError) {
 // @Tags         Authorization Queries
 // @Accept       html
 // @Produce      json
+// @Param        jwt            query     flag    false  "When exists, uses the new token supporting format"
 // @Param        lastupdated    query     string  false  "limit results to records  updated since"  Format(date)
 // @Param        unitname       query     string  false  "affiliation to return gridmap file data for""
 // @Success      200  {object}  miscGridMapFileByVO
@@ -580,6 +664,11 @@ func getGridMapFile(c APIContext, i Input) (interface{}, []APIError) {
 // @Router /getGridMapFileByVO [get]
 func getGridMapFileByVO(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
+
+	// Call the new JWT based code which will replace the older method -- at some point.
+	if i[JWT].Valid {
+		return getJWTGridMapFileByVO(c, i)
+	}
 
 	unitid := NewNullAttribute(UnitID)
 	err := c.DBtx.QueryRow(`select unitid from affiliation_units where name = $1`, i[UnitName]).Scan(&unitid)
@@ -594,7 +683,7 @@ func getGridMapFileByVO(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	rows, err := c.DBtx.Query(`select name, dn, uname
+	rows, err := c.DBtx.Query(`select name, dn, uname, token_subject, status
 								from  affiliation_unit_user_certificate as ac
 								left join user_certificates as uc using(dnid)
 								left join users as us using(uid)
@@ -613,14 +702,76 @@ func getGridMapFileByVO(c APIContext, i Input) (interface{}, []APIError) {
 	out := make(map[string][]jsondnmap)
 
 	for rows.Next() {
-		row := NewMapNullAttribute(UnitName, DN, UserName)
-		rows.Scan(row[UnitName], row[DN], row[UserName])
+		row := NewMapNullAttribute(UnitName, DN, UserName, TokenSubject, Status)
+		rows.Scan(row[UnitName], row[DN], row[UserName], row[TokenSubject], row[Status])
 		if row[DN].Valid {
 			out[row[UnitName].Data.(string)] = append(out[row[UnitName].Data.(string)], jsondnmap{
-				DN:       row[DN].Data,
-				UserName: row[UserName].Data,
+				DN:           row[DN].Data,
+				UserName:     row[UserName].Data,
+				TokenSubject: row[TokenSubject].Data,
+				Status:       row[Status].Data,
 			})
 		}
+	}
+
+	return out, nil
+}
+
+// Replacement for getGridMapFileByVO.  When it will replace it?  Now there's the question.
+func getJWTGridMapFileByVO(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+
+	unitid := NewNullAttribute(UnitID)
+	err := c.DBtx.QueryRow(`select unitid from affiliation_units where name = $1`, i[UnitName]).Scan(&unitid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+
+	if !unitid.Valid && i[UnitName].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, UnitName))
+		return nil, apiErr
+	}
+
+	rows, err := c.DBtx.Query(`select name, dn as subject, 'dn' as type, uname, status
+							   from affiliation_unit_user_certificate as ac
+								 left join user_certificates as uc using(dnid)
+								 left join users as us using(uid)
+								 left join affiliation_units as au using(unitid)
+							   where dn not like '/DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=%/CN=UID:%'
+							      and (unitid = $1 or $1 is null)
+								  and (ac.last_updated >= $2 or uc.last_updated >= $2
+								       or us.last_updated >= $2 or au.last_updated >= $2 or $2 is null)
+								  and (us.status = $3 or $3 is null)
+							   UNION
+							   select name, token_subject as subject, 'jwt' as type, uname, status
+							   from user_affiliation_units as uac
+								  left join users as us using(uid)
+								  left join affiliation_units as au using(unitid)
+							   where (unitid = $1 or $1 is null)
+								  and (uac.last_updated>=$2 or us.last_updated>=$2 or $2 is null)
+								  and (us.status = $3 or $3 is null)`,
+		unitid, i[LastUpdated], i[Status])
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+	defer rows.Close()
+
+	type jsondnmap map[Attribute]interface{}
+	out := make(map[string][]jsondnmap)
+
+	for rows.Next() {
+		row := NewMapNullAttribute(UnitName, Subject, SubjectType, UserName, Status)
+		rows.Scan(row[UnitName], row[Subject], row[SubjectType], row[UserName], row[Status])
+		out[row[UnitName].Data.(string)] = append(out[row[UnitName].Data.(string)], jsondnmap{
+			Subject:     row[Subject].Data,
+			SubjectType: row[SubjectType].Data,
+			UserName:    row[UserName].Data,
+			Status:      row[Status].Data,
+		})
 	}
 
 	return out, nil
@@ -1023,16 +1174,16 @@ func getAffiliationMembersRoles(c APIContext, i Input) (interface{}, []APIError)
 	out := make(map[string][]jsonentry)
 
 	for rows.Next() {
-		row := NewMapNullAttribute(UnitName, FQAN, UserName, FullName, VoPersonID, UID)
-		rows.Scan(row[UnitName], row[FQAN], row[UserName], row[FullName], row[VoPersonID], row[UID])
+		row := NewMapNullAttribute(UnitName, FQAN, UserName, FullName, TokenSubject, UID)
+		rows.Scan(row[UnitName], row[FQAN], row[UserName], row[FullName], row[TokenSubject], row[UID])
 
 		if row[FQAN].Valid {
 			out[row[UnitName].Data.(string)] = append(out[row[UnitName].Data.(string)], jsonentry{
-				FQAN:     row[FQAN].Data,
-				UserName: row[UserName].Data,
-				FullName: row[FullName].Data,
-				"uuid":   row[VoPersonID].Data,
-				UID:      row[UID].Data,
+				FQAN:         row[FQAN].Data,
+				UserName:     row[UserName].Data,
+				FullName:     row[FullName].Data,
+				TokenSubject: row[TokenSubject].Data,
+				UID:          row[UID].Data,
 			})
 		}
 	}
