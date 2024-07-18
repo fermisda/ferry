@@ -616,7 +616,7 @@ func getJWTGridMapFile(c APIContext, i Input) (interface{}, []APIError) {
 								 and (ac.last_updated>=$3 or uc.last_updated>=$3 or us.last_updated>=$3 or $3 is null)
 								 and (us.status = $4 or $4 is null)
 							   UNION
-							   select distinct token_subject as subject, 'jwt' as type, uname, status
+							   select distinct cast(token_subject as text) as subject, 'jwt' as type, uname, status
 							   from user_affiliation_units as uac
 								 left join users as us using(uid)
 								 left join compute_access as ca using(uid)
