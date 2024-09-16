@@ -13,7 +13,7 @@ ALTER TABLE "public".user_affiliation_units ADD CONSTRAINT fk_user_affiliation_u
   REFERENCES "public".affiliation_units( unitid );
 
 CREATE TRIGGER user_affiliation_units_common_update_stamp BEFORE INSERT OR UPDATE ON public.user_affiliation_units
-  FOR EACH ROW EXECUTE FUNCTION common_update_stamp()
+  FOR EACH ROW EXECUTE FUNCTION common_update_stamp();
 
 ALTER TABLE users RENAME COLUMN vopersonid TO token_subject;
 
