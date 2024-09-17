@@ -27,7 +27,7 @@ func IncludeUserAPIs(c *APICollection) {
 		InputModel{
 			Parameter{UserName, false},
 			Parameter{UID, false},
-			Parameter{VoPersonID, false},
+			Parameter{TokenSubject, false},
 		},
 		getUserInfo,
 		RoleRead,
@@ -722,28 +722,28 @@ func getUserGroups(c APIContext, i Input) (interface{}, []APIError) {
 
 // getUserInfo godoc
 // @Summary      Return attributes for a user.
-// @Description  For a specific user, returns the entity attributes. You must supply ONE of username or uid or vopersonid.
+// @Description  For a specific user, returns the entity attributes. You must supply ONE of username or uid or tokensubject.
 // @Tags         Users
 // @Accept       html
 // @Produce      json
-// @Param        username       query     string  false  "user for whom the attributes are to be returned"
-// @Param        uid            query     int     false  "uid for whom the attributes are to be returned"
-// @Param        vopersonid     query     string  false  "UUID for whom the attributes are to be returned"
+// @Param        username         query     string  false  "user for whom the attributes are to be returned"
+// @Param        uid              query     int     false  "uid for whom the attributes are to be returned"
+// @Param        tokensubject     query     string  false  "UUID for whom the attributes are to be returned"
 // @Success      200  {object}  userAttributes
 // @Failure      400  {object}  jsonOutput
 // @Failure      401  {object}  jsonOutput
 // @Router /getUserInfo [get]
 func getUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
-	if !i[UserName].Valid && !i[UID].Valid && !i[VoPersonID].Valid {
-		apiErr = append(apiErr, DefaultAPIError(ErrorText, "username or uid or vopersonid must be supplied"))
+	if !i[UserName].Valid && !i[UID].Valid && !i[TokenSubject].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "username or uid or tokensubject must be supplied"))
 		return nil, apiErr
 	}
-	rows, err := c.DBtx.Query(`select full_name, uid, status, is_groupaccount, expiration_date, voPersonID, is_banned
+	rows, err := c.DBtx.Query(`select full_name, uid, status, is_groupaccount, expiration_date, token_subject, is_banned
 							   from users
 							   where (uname=$1 or $1 is null)
 							     and (uid=$2 or $2 is null)
-								 and (vopersonid=$3 or $3 is null)`, i[UserName], i[UID], i[VoPersonID])
+								 and (token_subject=$3 or $3 is null)`, i[UserName], i[UID], i[TokenSubject])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -751,9 +751,9 @@ func getUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 	}
 	defer rows.Close()
 	out := make(map[Attribute]interface{})
-	row := NewMapNullAttribute(FullName, UID, Status, GroupAccount, ExpirationDate, VoPersonID, Banned)
+	row := NewMapNullAttribute(FullName, UID, Status, GroupAccount, ExpirationDate, TokenSubject, Banned)
 	for rows.Next() {
-		rows.Scan(row[FullName], row[UID], row[Status], row[GroupAccount], row[ExpirationDate], row[VoPersonID], row[Banned])
+		rows.Scan(row[FullName], row[UID], row[Status], row[GroupAccount], row[ExpirationDate], row[TokenSubject], row[Banned])
 		for _, column := range row {
 			out[column.Attribute] = column.Data
 		}
@@ -951,9 +951,9 @@ func setUserExperimentFQAN(c APIContext, i Input) (interface{}, []APIError) {
 	}
 
 	var hasCert bool
-	queryerr = c.DBtx.QueryRow(`select count(*) > 0 from affiliation_unit_user_certificate as ac
-							  join user_certificates as uc on ac.dnid = uc.dnid
-							  where uid = $1 and unitid = $2`, uid, unitid).Scan(&hasCert)
+	queryerr = c.DBtx.QueryRow(`select count(*) > 0
+								from user_affiliation_units
+							    where uid = $1 and unitid = $2`, uid, unitid).Scan(&hasCert)
 	if queryerr != nil {
 		log.WithFields(QueryFields(c)).Error(queryerr)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -1615,13 +1615,20 @@ func addCertificateDNToUser(c APIContext, i Input) (interface{}, []APIError) {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
+	_, err = c.DBtx.Exec(`insert into user_affiliation_units (uid, unitid) values ($1, $2)
+						  on conflict (uid, unitid) do nothing`, uid, unitid)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
 
 	return nil, nil
 }
 
 // removeUserCertificateDN godoc
 // @Summary      Removes a DN certificate from the user.
-// @Description  Removes a DN certificate from, the user, if it exists.
+// @Description  Removes a DN certificate from, the user, if it exists.  Does NOT delete the direct user to affiliations relationship.
 // @Tags         Users
 // @Accept       html
 // @Produce      json
@@ -1825,7 +1832,7 @@ func createUser(c APIContext, i Input) (interface{}, []APIError) {
 	}
 
 	newUUID := uuid.New().String()
-	_, err = c.DBtx.Exec(`insert into users (uname, uid, full_name, status, expiration_date, vopersonid, last_updated)
+	_, err = c.DBtx.Exec(`insert into users (uname, uid, full_name, status, expiration_date, token_subject, last_updated)
 						  values ($1, $2, $3, $4, $5, $6, NOW())`,
 		i[UserName], i[UID], i[FullName], i[Status], expDate, newUUID)
 	if err != nil {
@@ -1880,11 +1887,10 @@ func getMemberAffiliations(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	rows, err := DBptr.Query(`select distinct name, alternative_name
-							  from affiliation_units
-							    join affiliation_unit_user_certificate as ac using(unitid)
-							    join user_certificates using(dnid)
-							  where uid = $1 and (ac.last_updated >= $2 or $2 is null)`, uid, i[LastUpdated])
+	rows, err := DBptr.Query(`select name, alternative_name
+							  from affiliation_units as au
+							    join user_affiliation_units as uau using(unitid)
+							  where uid = $1 and (uau.last_updated >= $2 or $2 is null)`, uid, i[LastUpdated])
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -2017,7 +2023,7 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	const jExpirationDate Attribute = "expiration_date"
 	const jFullName Attribute = "full_name"
 	const jGroupAccount Attribute = "is_groupaccount"
-	const jVoPersonID Attribute = "vopersonid"
+	const jTokenSubject Attribute = "token_subject"
 
 	type jsonentry map[Attribute]interface{}
 	type jsonlist []interface{}
@@ -2065,11 +2071,11 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	lastUpdated := NewNullAttribute(LastUpdated)
 	fullName := NewNullAttribute(FullName)
 	isGroup := NewNullAttribute(GroupAccount)
-	voPersonID := NewNullAttribute(VoPersonID)
+	tokenSubject := NewNullAttribute(TokenSubject)
 
-	err = c.DBtx.tx.QueryRow(`select uid, uname, status, expiration_date, last_updated, full_name, is_groupaccount, voPersonID
+	err = c.DBtx.tx.QueryRow(`select uid, uname, status, expiration_date, last_updated, full_name, is_groupaccount, token_subject
 							  from users
-							  where uid = $1`, i[UID]).Scan(&uid, &uname, &status, &expDate, &lastUpdated, &fullName, &isGroup, &voPersonID)
+							  where uid = $1`, i[UID]).Scan(&uid, &uname, &status, &expDate, &lastUpdated, &fullName, &isGroup, &tokenSubject)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -2084,7 +2090,7 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 		jLastUpdated:    TypeDate,
 		jFullName:       TypeString,
 		jGroupAccount:   TypeBool,
-		jVoPersonID:     TypeString,
+		jTokenSubject:   TypeString,
 	}
 	r[jUID] = uid.Data
 	r[jUserName] = uname.Data
@@ -2093,7 +2099,7 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	r[jLastUpdated] = lastUpdated.Data
 	r[jFullName] = fullName.Data
 	r[jGroupAccount] = isGroup.Data
-	r[jVoPersonID] = voPersonID.Data
+	r[jTokenSubject] = tokenSubject.Data
 
 	jtables[jUsers] = r
 
@@ -2474,7 +2480,7 @@ func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 
 	status := i[Status].Default(false)
 
-	rows, err := DBptr.Query(`select uname, uid, full_name, status, cast(expiration_date as text), voPersonID, is_banned
+	rows, err := DBptr.Query(`select uname, uid, full_name, status, cast(expiration_date as text), token_subject, is_banned
 							  from users
 							  where (status=$1 or not $1)
 							    and (last_updated>=$2 or $2 is null)
@@ -2490,8 +2496,8 @@ func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 	type jsonout map[Attribute]interface{}
 	var out []jsonout
 	for rows.Next() {
-		row := NewMapNullAttribute(UserName, UID, FullName, Status, ExpirationDate, VoPersonID, Banned)
-		rows.Scan(row[UserName], row[UID], row[FullName], row[Status], row[ExpirationDate], row[VoPersonID], row[Banned])
+		row := NewMapNullAttribute(UserName, UID, FullName, Status, ExpirationDate, TokenSubject, Banned)
+		rows.Scan(row[UserName], row[UID], row[FullName], row[Status], row[ExpirationDate], row[TokenSubject], row[Banned])
 		var expirationDate interface{}
 		if row[ExpirationDate].Valid {
 			expirationDate = row[ExpirationDate].Data
@@ -2502,7 +2508,7 @@ func getAllUsers(c APIContext, i Input) (interface{}, []APIError) {
 			FullName:       row[FullName].Data,
 			Status:         row[Status].Data,
 			ExpirationDate: expirationDate,
-			VoPersonID:     row[VoPersonID].Data,
+			TokenSubject:   row[TokenSubject].Data,
 			Banned:         row[Banned].Data,
 		})
 	}

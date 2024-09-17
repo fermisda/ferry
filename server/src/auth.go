@@ -82,9 +82,9 @@ func queryAccessors(key string) (accessor, bool) {
 		// but are in LDAP through the capability set of that name.
 		_, err = uuid.Parse(acc.name)
 		if err == nil {
-			err = tx.QueryRow(`select uname from users where voPersonId = $1`, acc.name).Scan(&acc.uname)
+			err = tx.QueryRow(`select uname from users where token_subject = $1`, acc.name).Scan(&acc.uname)
 			if err == sql.ErrNoRows {
-				log.Error(fmt.Sprintf("queryAccessors - uuid does not reference a valid user.  uuid: %s", acc.name))
+				log.Error(fmt.Sprintf("queryAccessors - tokensubject does not reference a valid user.  tokensubject: %s", acc.name))
 				found = false
 			} else if err != nil {
 				log.Error(fmt.Sprintf("queryAccessors - query failed (2): %s", err.Error()))

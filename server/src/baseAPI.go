@@ -265,10 +265,12 @@ const (
 	PasswdMode        Attribute = "passwdmode"
 	Standalone        Attribute = "standalone"
 	RemoveGroup       Attribute = "removegroup"
+	Subject           Attribute = "subject"
 	TokenSubject      Attribute = "tokensubject"
+	SubjectType       Attribute = "subjecttype"
+	JWT               Attribute = "jwt"
 	VaultStorageKey   Attribute = "vaultstoragekey"
 	ExternalAttribute Attribute = "externalattribute"
-	VoPersonID        Attribute = "vopersonid"
 	InLDAP            Attribute = "inldap"
 	FiscalYear        Attribute = "fiscalyear"
 	AllocationType    Attribute = "allocationtype"
@@ -291,7 +293,10 @@ func (a Attribute) Type() AttributeType {
 		ResourceName:      TypeSstring,
 		AlternativeName:   TypeString,
 		SetName:           TypeString,
+		Subject:           TypeString,
+		SubjectType:       TypeString,
 		TokenSubject:      TypeString,
+		JWT:               TypeFlag,
 		VaultStorageKey:   TypeString,
 		Definition:        TypeString,
 		Pattern:           TypeSstring,
@@ -312,7 +317,6 @@ func (a Attribute) Type() AttributeType {
 		ExternalAttribute: TypeSstring,
 		CondorGroup:       TypeString,
 		VOName:            TypeString,
-		VoPersonID:        TypeString,
 		UID:               TypeInt,
 		GID:               TypeInt,
 		GroupID:           TypeInt,

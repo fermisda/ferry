@@ -401,7 +401,7 @@ func getAffiliationMembers(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	rows, checkerr := c.DBtx.Query(`select au.name, u.uname, u.uid, u.voPersonID
+	rows, checkerr := c.DBtx.Query(`select au.name, u.uname, u.uid, u.token_subject
 									from affiliation_units au
 										join affiliation_unit_group aug using (unitid)
 										join groups using (groupid)
@@ -425,8 +425,8 @@ func getAffiliationMembers(c APIContext, i Input) (interface{}, []APIError) {
 	users := make([]jsonentry, 0)
 	curexp := ""
 	for rows.Next() {
-		row := NewMapNullAttribute(UnitName, UserName, UID, Value)
-		rows.Scan(row[UnitName], row[UserName], row[UID], row[Value])
+		row := NewMapNullAttribute(UnitName, UserName, UID, TokenSubject)
+		rows.Scan(row[UnitName], row[UserName], row[UID], row[TokenSubject])
 		if curexp == "" {
 			curexp = row[UnitName].Data.(string)
 		} else if curexp != row[UnitName].Data.(string) {
@@ -438,9 +438,9 @@ func getAffiliationMembers(c APIContext, i Input) (interface{}, []APIError) {
 			users = make([]jsonentry, 0)
 		}
 		users = append(users, jsonentry{
-			UserName: row[UserName].Data,
-			UID:      row[UID].Data,
-			"uuid":   row[Value].Data,
+			UserName:     row[UserName].Data,
+			UID:          row[UID].Data,
+			TokenSubject: row[TokenSubject].Data,
 		})
 	}
 	if curexp != "" {
