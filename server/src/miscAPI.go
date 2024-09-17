@@ -1156,7 +1156,7 @@ func getAffiliationMembersRoles(c APIContext, i Input) (interface{}, []APIError)
 		return nil, apiErr
 	}
 
-	rows, err := DBptr.Query(`select name, fqan, uname, full_name, vopersonid, uid
+	rows, err := DBptr.Query(`select name, fqan, uname, full_name, token_subject, uid
 								from grid_access
 								join grid_fqan using(fqanid)
 								join users using(uid)

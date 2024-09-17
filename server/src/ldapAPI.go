@@ -306,7 +306,7 @@ func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	_, err = c.DBtx.Exec(`CREATE TEMPORARY TABLE temp_vopersonids (voPersonID text not null);`)
+	_, err = c.DBtx.Exec(`CREATE TEMPORARY TABLE temp_token_subjects (token_subject text not null);`)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -317,7 +317,7 @@ func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 	for _, voPersonID := range ldapUsers {
 		valueStrings = append(valueStrings, fmt.Sprintf("('%s')", voPersonID))
 	}
-	smt := fmt.Sprintf("INSERT INTO temp_vopersonids (token_subject) VALUES %s", strings.Join(valueStrings, ","))
+	smt := fmt.Sprintf("INSERT INTO temp_token_subjects (token_subject) VALUES %s", strings.Join(valueStrings, ","))
 	_, err = c.DBtx.Exec(smt)
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
@@ -325,7 +325,7 @@ func syncLdapWithFerry(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	rows, err := c.DBtx.Query(`select token_subject from temp_voPersonids
+	rows, err := c.DBtx.Query(`select token_subject from temp_token_subjects
 	                           except
 							   select cast(token_subject as text) from users where token_subject is not null`)
 	if err != nil && err != sql.ErrNoRows {
@@ -1179,7 +1179,7 @@ func removeCapabilitySetFromFQAN(c APIContext, i Input) (interface{}, []APIError
 								 join grid_access ga using (uid)
 								 join grid_fqan gf using (fqanid)
 								 join capability_sets cs using (setid)
-							   where u.vopersonid is not null
+							   where u.token_subject is not null
 								 and gf.fqanid in (select fqanid from grid_fqan join affiliation_units using (unitid)
 								                   where name=$1
 												     and lower(fqan) like lower($2) )`, i[UnitName], role)
@@ -1257,7 +1257,7 @@ func updateLdapForUserSet(c APIContext, voPersonIDs []string, con *ldap.Conn) ([
 										join grid_fqan as gf using(fqanid)
 										join capability_sets as cs using(setid)
 										join affiliation_units as au using(unitid)
-									where u.vopersonid = $1
+									where u.token_subject = $1
 										and ga.is_suspended = false
 									order by cs.name`, voPersonID)
 		if err != nil && err != sql.ErrNoRows {
@@ -1343,8 +1343,8 @@ func updateLdapForAffiliation(c APIContext, i Input) (interface{}, []APIError) {
 							   where aug.unitid = $1
 	                             and aug.is_primary = true
 	                             and u.status = true
-								 and u.voPersonID is not null
-							   order by u.voPersonID`, unitid)
+								 and u.token_subject is not null
+							   order by u.token_subject`, unitid)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			apiErr = append(apiErr, DefaultAPIError(ErrorText, "No voPersonIDs found for affiliation."))
@@ -1415,7 +1415,7 @@ func updateLdapForCapabilitySet(c APIContext, i Input) (interface{}, []APIError)
 							   where ga.is_suspended = false
 								 and u.status = true
 								 and cs.setid = $1
-							   order by u.voPersonID`, &setid)
+							   order by u.token_subject`, &setid)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			apiErr = append(apiErr, DefaultAPIError(ErrorText, "No voPersonIDs found for affiliation."))
