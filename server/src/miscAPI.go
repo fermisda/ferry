@@ -506,7 +506,7 @@ func getGroupFile(c APIContext, i Input) (interface{}, []APIError) {
 // @Tags         Authorization Queries
 // @Accept       html
 // @Produce      json
-// @Param        jwt            query     flag    false  "When exists, uses the new token supporting format"
+// @Param        jwt            query     string  false  "When exists, output the new token supporting format"
 // @Param        lastupdated    query     string  false  "limit results to records  updated since"  Format(date)
 // @Param        resourcename   query     string  false  "compute resource to return gridmap file data for"
 // @Param        unitname       query     string  false  "affiliation to return gridmap file data for"
@@ -655,7 +655,7 @@ func getJWTGridMapFile(c APIContext, i Input) (interface{}, []APIError) {
 // @Tags         Authorization Queries
 // @Accept       html
 // @Produce      json
-// @Param        jwt            query     flag    false  "When exists, uses the new token supporting format"
+// @Param        jwt            query     string  false  "When exists, uses the new token supporting format"
 // @Param        lastupdated    query     string  false  "limit results to records  updated since"  Format(date)
 // @Param        unitname       query     string  false  "affiliation to return gridmap file data for""
 // @Success      200  {object}  miscGridMapFileByVO
