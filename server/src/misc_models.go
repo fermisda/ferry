@@ -21,19 +21,25 @@ type miscGroupFile []struct {
 	Users       []string `json:"users"`
 }
 
-//type miscGroupFile []miscGroup
-
 type miscGridMapFile []struct {
-	DN       string `json:"dn"`
-	UserName string `json:"username"`
+	DN           string `json:"dn"`
+	Status       string `json:"status"`
+	TokenSubject string `json:"tokensubject"`
+	UserName     string `json:"username"`
 }
 
-//type miscGridMapFile []miscGridMap
+type miscJWTGridMapFile struct {
+	Subject     string `json:"subject"`
+	SubjectType string `json:"type"`
+	UserName    string `json:"username"`
+	Status      bool   `json:"status"`
+}
 
-// type miscGridMapFileByVO map[string]miscGridMap // Uses getGridMapFile's struct
 type miscGridMapFileByVO map[string]struct {
-	DN       string `json:"dn"`
-	UserName string `json:"username"`
+	DN           string `json:"dn"`
+	Status       string `json:"status"`
+	TokenSubject string `json:"tokensubject"`
+	UserName     string `json:"username"`
 }
 
 type miscVORoleMapFile []struct {
@@ -63,11 +69,11 @@ type miscMappedGidFile []struct {
 }
 
 type miscAffMembRoles map[string][]struct {
-	FQAN       string `json:"fqan"`
-	FullName   string `json:"fullname"`
-	UserName   string `json:"username"`
-	VoPersonID string `json:"UUID"`
-	UID        int    `json:"UID"`
+	FQAN         string `json:"fqan"`
+	FullName     string `json:"fullname"`
+	UserName     string `json:"username"`
+	TokenSubject string `json:"tokensubject"`
+	UID          int    `json:"UID"`
 }
 
 type miscStorageResourceInfo []struct {

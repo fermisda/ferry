@@ -7,7 +7,7 @@ type userAttributes struct {
 	GroupAccount   string `json:"groupaccount"`
 	Status         bool   `json:"status"`
 	UID            int    `json:"uid"`
-	VoPersonID     string `json:"vopersonid"`
+	TokenSubject   string `json:"tokensubject"`
 }
 
 type allUsersAttributes struct {
@@ -17,7 +17,7 @@ type allUsersAttributes struct {
 	Status         bool   `json:"status"`
 	UID            int    `json:"uid"`
 	UserName       string `json:"username"`
-	VoPersonID     string `json:"vopersonid"`
+	TokenSubject   string `json:"tokensubject"`
 }
 
 type userCertificates struct {
