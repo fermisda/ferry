@@ -109,7 +109,7 @@ def archive(cursor, uid, uname):
         "affiliation_unit_user_certificate", "user_certificates",
         "external_affiliation_attribute", "grid_access",
         "compute_access_group", "compute_access",
-        "user_group", "users",
+        "user_group", "user_affiliation_units", "users",
     ]
 
     for table in schema:
