@@ -13,7 +13,9 @@ type allocations struct {
 	AllocationType  string        `json:"allocationtype"`
 	AllocationClass string        `json:"allocationclass"`
 	OriginalHours   float32       `json:"originalhours"`
-	AdjustedHours   float32       `json:"nethours"`
+	NetHours        float32       `json:"nethours"`
 	UsedHours       float32       `json:"usedhours"`
+	Piname          string        `json:"piname"`
+	Email           NullAttribute `json:"email"`
 	Adjustments     []adjustments `json:"adjustments"`
 }

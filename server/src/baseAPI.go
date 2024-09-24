@@ -277,6 +277,8 @@ const (
 	AllocationClass   Attribute = "allocationclass"
 	OriginalHours     Attribute = "originalhours"
 	AdjustedHours     Attribute = "adjustedhours"
+	Email             Attribute = "email"
+	Piname            Attribute = "piname"
 	UsedHours         Attribute = "usedhours"
 	Comments          Attribute = "comments"
 	CreateDate        Attribute = "createdate"
@@ -347,6 +349,8 @@ func (a Attribute) Type() AttributeType {
 		AllocationClass:   TypeString,
 		OriginalHours:     TypeFloat,
 		AdjustedHours:     TypeFloat,
+		Email:             TypeString,
+		Piname:            TypeString,
 		UsedHours:         TypeFloat,
 		Comments:          TypeSstring,
 		CreateDate:        TypeDate,
