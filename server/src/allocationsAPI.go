@@ -18,6 +18,8 @@ func IncludeAllocationAPIs(c *APICollection) {
 			Parameter{AllocationType, true},
 			Parameter{AllocationClass, false},
 			Parameter{OriginalHours, true},
+			Parameter{Email, false},
+			Parameter{Piname, false},
 		},
 		createAllocation,
 		RoleWrite,
@@ -32,6 +34,8 @@ func IncludeAllocationAPIs(c *APICollection) {
 			Parameter{AllocationClass, false},
 			Parameter{OriginalHours, false},
 			Parameter{UsedHours, false},
+			Parameter{Email, false},
+			Parameter{Piname, false},
 		},
 		editAllocation,
 		RoleWrite,
@@ -99,6 +103,8 @@ func IncludeAllocationAPIs(c *APICollection) {
 // @Param        allocationclass query     string  false  "class of the allocation"
 // @Param        originalhours   query     float64 true   "original number of hours assigned to allocation"
 // @Param        fiscalyear      query     string  true   "the fiscal year YYYY assigned to the allocation"
+// @Param        piname          query     string  false  "name of the irincipal investigator, point of contact for the project"
+// @Param        email           query     string  false  "email address for the point of contact"
 // @Success      200  {object}   main.jsonOutput
 // @Failure      400  {object}   main.jsonOutput
 // @Failure      401  {object}   main.jsonOutput
@@ -121,10 +127,10 @@ func createAllocation(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	_, err = c.DBtx.Exec(`insert into allocations (groupid, fiscal_year, type, original_hours, alloc_class)
-						  values ($1, $2, $3, $4, $5)
+	_, err = c.DBtx.Exec(`insert into allocations (groupid, fiscal_year, type, original_hours, alloc_class, email, piname)
+						  values ($1, $2, $3, $4, $5, $6, $7)
 						  on conflict (groupid, fiscal_year, type) do nothing`,
-		groupid, i[FiscalYear], i[AllocationType], i[OriginalHours], i[AllocationClass])
+		groupid, i[FiscalYear], i[AllocationType], i[OriginalHours], i[AllocationClass], i[Email], i[Piname])
 	if err != nil {
 		if strings.Contains(err.Error(), "new row for relation \"allocations\" violates check constraint \"check_type\"") {
 			log.WithFields(QueryFields(c)).Error(err)
@@ -150,8 +156,10 @@ func createAllocation(c APIContext, i Input) (interface{}, []APIError) {
 // @Param        allocationtype  query     string  true   "type to set the allocation to - i.e. 'cpu' or 'gpu'"
 // @Param        allocationclass query     string  false  "class to set the allocation to"
 // @Param        fiscalyear      query     string  true   "the fiscal year YYYY assigned to the allocation"
-// @Param        originalhours   query     float64 true   "original number of hours assigned to allocation"
-// @Param        usedhours       query     float64 true   "number of hours used by the allocation"
+// @Param        originalhours   query     float64 false  "original number of hours assigned to allocation"
+// @Param        usedhours       query     float64 false  "number of hours used by the allocation"
+// @Param        piname          query     string  false  "name of the irincipal investigator, point of contact for the project"
+// @Param        email           query     string  false  "email address for the point of contact"
 // @Success      200  {object}   main.jsonOutput
 // @Failure      400  {object}   main.jsonOutput
 // @Failure      401  {object}   main.jsonOutput
@@ -162,8 +170,8 @@ func editAllocation(c APIContext, i Input) (interface{}, []APIError) {
 	if !isFiscalYearValid(i) {
 		return nil, append(apiErr, DefaultAPIError(ErrorText, "fiscalyear must be YYYY"))
 	}
-	if !i[OriginalHours].Valid && !i[UsedHours].Valid && !i[AllocationClass].Valid {
-		apiErr = append(apiErr, DefaultAPIError(ErrorText, "one of originalhours, usedhours, allocationclass must be provided"))
+	if !i[OriginalHours].Valid && !i[UsedHours].Valid && !i[AllocationClass].Valid && !i[Piname].Valid && !i[Email].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "at least one parameter to change must be provided"))
 		return nil, apiErr
 	}
 
@@ -196,8 +204,8 @@ func editAllocation(c APIContext, i Input) (interface{}, []APIError) {
 	}
 
 	_, err = c.DBtx.Exec(`update allocations set original_hours = coalesce($1, original_hours), used_hours = coalesce($2, used_hours),
-	                        alloc_class = coalesce($3, alloc_class)
-	                      where allocid = $4`, i[OriginalHours], i[UsedHours], i[AllocationClass], allocId)
+	                        alloc_class = coalesce($3, alloc_class), email = coalesce($5, email), piname = coalesce($6, piname)
+	                      where allocid = $4`, i[OriginalHours], i[UsedHours], i[AllocationClass], allocId, i[Email], i[Piname])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -425,7 +433,8 @@ func getAllocations(c APIContext, i Input) (interface{}, []APIError) {
 		}
 	}
 
-	rows, err := c.DBtx.Query(`select g.name, g.gid, a.fiscal_year, a.type, a.alloc_class, a.original_hours, a.used_hours,
+	rows, err := c.DBtx.Query(`select g.name, g.gid,
+								 a.fiscal_year, a.type, a.alloc_class, a.original_hours, a.used_hours, a.piname, a.email,
 								 aj.create_date, aj.hours_adjusted, aj.comments
 							   from groups as g
 								 join allocations as a using (groupid)
@@ -442,55 +451,97 @@ func getAllocations(c APIContext, i Input) (interface{}, []APIError) {
 	}
 	defer rows.Close()
 
-	out := make([]allocations, 0)
-	var curAlloc allocations
-	firstRec := true
-	for rows.Next() {
-		var allocEntry allocations
-		var adjEntry adjustments
-		rows.Scan(&allocEntry.GroupName, &allocEntry.GID, &allocEntry.FiscalYear, &allocEntry.AllocationType, &allocEntry.AllocationClass, &allocEntry.OriginalHours,
-			&allocEntry.UsedHours, &adjEntry.CreateDate, &adjEntry.AdjustedHours, &adjEntry.Comments)
+	type jsonentry map[Attribute]interface{}
+	type jsonlist []interface{}
 
-		// TODO determine why CreateDate is coming back with T00:00:00Z. For now, hack it.
-		adjEntry.CreateDate = strings.Split(adjEntry.CreateDate, "T")[0]
-		if firstRec {
-			curAlloc.GroupName = allocEntry.GroupName
-			curAlloc.GID = allocEntry.GID
-			curAlloc.FiscalYear = allocEntry.FiscalYear
-			curAlloc.AllocationType = allocEntry.AllocationType
-			curAlloc.AllocationClass = allocEntry.AllocationClass
-			curAlloc.OriginalHours = allocEntry.OriginalHours
-			curAlloc.UsedHours = allocEntry.UsedHours
-			curAlloc.AdjustedHours = allocEntry.OriginalHours
-			if len(adjEntry.CreateDate) > 0 {
-				curAlloc.Adjustments = append(curAlloc.Adjustments, adjEntry)
-				curAlloc.AdjustedHours = curAlloc.AdjustedHours + adjEntry.AdjustedHours
+	const NetHours Attribute = "nethours"
+	const Adjustments Attribute = "adjustments"
+
+	adjustment := jsonentry{
+		CreateDate:    "",
+		AdjustedHours: "",
+		Comments:      "",
+	}
+
+	allocation := jsonentry{
+		GroupName:       "",
+		GID:             "",
+		FiscalYear:      "",
+		AllocationType:  "",
+		AllocationClass: "",
+		OriginalHours:   0.0,
+		NetHours:        0.0,
+		UsedHours:       0.0,
+		Piname:          "",
+		Email:           "",
+		Adjustments:     make(jsonlist, 0),
+	}
+
+	out := make([]jsonentry, 0)
+
+	row := NewMapNullAttribute(GroupName, GID, FiscalYear, AllocationType, AllocationClass, OriginalHours, UsedHours, Piname, Email,
+		CreateDate, AdjustedHours, Comments)
+
+	firstRec := true
+	totalAdj := 0.0
+
+	for rows.Next() {
+		rows.Scan(row[GroupName], row[GID], row[FiscalYear], row[AllocationType], row[AllocationClass], row[OriginalHours],
+			row[UsedHours], row[Piname], row[Email], row[CreateDate], row[AdjustedHours], row[Comments])
+
+		if firstRec || (allocation[GID] != row[GID].Data) || (allocation[FiscalYear] != row[FiscalYear].Data) ||
+			(allocation[AllocationType] != row[AllocationType].Data) {
+			if !firstRec {
+				allocation[NetHours] = allocation[OriginalHours].(float64) + totalAdj
+				out = append(out, allocation)
+				totalAdj = 0.0
+				allocation = jsonentry{
+					GroupName:       "",
+					GID:             "",
+					FiscalYear:      "",
+					AllocationType:  "",
+					AllocationClass: "",
+					OriginalHours:   0.0,
+					NetHours:        0.0,
+					UsedHours:       0.0,
+					Piname:          "",
+					Email:           "",
+					Adjustments:     make(jsonlist, 0),
+				}
 			}
 			firstRec = false
-		} else if (curAlloc.GID != allocEntry.GID) || (curAlloc.FiscalYear != allocEntry.FiscalYear) ||
-			(curAlloc.AllocationType != allocEntry.AllocationType) {
-			out = append(out, curAlloc)
-			var n []adjustments
-			curAlloc.Adjustments = n
-			curAlloc.AdjustedHours = allocEntry.OriginalHours
-			curAlloc.UsedHours = allocEntry.UsedHours
-			curAlloc.GroupName = allocEntry.GroupName
-			curAlloc.GID = allocEntry.GID
-			curAlloc.FiscalYear = allocEntry.FiscalYear
-			curAlloc.AllocationType = allocEntry.AllocationType
-			curAlloc.AllocationClass = allocEntry.AllocationClass
-			curAlloc.OriginalHours = allocEntry.OriginalHours
-			if len(adjEntry.CreateDate) > 0 {
-				curAlloc.Adjustments = append(curAlloc.Adjustments, adjEntry)
-				curAlloc.AdjustedHours = curAlloc.AdjustedHours + adjEntry.AdjustedHours
+			allocation[GroupName] = row[GroupName].Data
+			allocation[GID] = row[GID].Data
+			allocation[FiscalYear] = row[FiscalYear].Data
+			allocation[AllocationType] = row[AllocationType].Data
+			allocation[AllocationClass] = row[AllocationClass].Data
+			allocation[OriginalHours] = row[OriginalHours].Data
+			allocation[UsedHours] = row[UsedHours].Data
+			allocation[Piname] = row[Piname].Data
+			allocation[Email] = row[Email].Data
+			if row[CreateDate].Valid {
+				adjustment[CreateDate] = row[CreateDate].Data
+				adjustment[AdjustedHours] = row[AdjustedHours].Data
+				adjustment[Comments] = row[Comments].Data
+				allocation[Adjustments] = append(allocation[Adjustments].(jsonlist), adjustment)
+				totalAdj += row[AdjustedHours].Data.(float64)
 			}
-		} else if len(adjEntry.CreateDate) > 0 {
-			curAlloc.Adjustments = append(curAlloc.Adjustments, adjEntry)
-			curAlloc.AdjustedHours = curAlloc.AdjustedHours + adjEntry.AdjustedHours
+		} else if row[CreateDate].Valid {
+			adjustment[CreateDate] = row[CreateDate].Data
+			adjustment[AdjustedHours] = row[AdjustedHours].Data
+			adjustment[Comments] = row[Comments].Data
+			allocation[Adjustments] = append(allocation[Adjustments].(jsonlist), adjustment)
+			totalAdj += row[AdjustedHours].Data.(float64)
+		}
+		adjustment = jsonentry{
+			CreateDate:    "",
+			AdjustedHours: "",
+			Comments:      "",
 		}
 	}
-	if curAlloc.GID > 0 {
-		out = append(out, curAlloc)
+	if allocation[OriginalHours].(float64) != 0.0 {
+		allocation[NetHours] = allocation[OriginalHours].(float64) + totalAdj
 	}
+	out = append(out, allocation)
 	return out, nil
 }
