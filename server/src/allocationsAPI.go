@@ -492,7 +492,7 @@ func getAllocations(c APIContext, i Input) (interface{}, []APIError) {
 		if firstRec || (allocation[GID] != row[GID].Data) || (allocation[FiscalYear] != row[FiscalYear].Data) ||
 			(allocation[AllocationType] != row[AllocationType].Data) {
 			if !firstRec {
-				allocation[NetHours] = allocation[OriginalHours].(float64) + totalAdj
+				allocation[NetHours] = allocation[OriginalHours].(float64) + totalAdj - allocation[UsedHours].(float64)
 				out = append(out, allocation)
 				totalAdj = 0.0
 				allocation = jsonentry{
@@ -539,9 +539,7 @@ func getAllocations(c APIContext, i Input) (interface{}, []APIError) {
 			Comments:      "",
 		}
 	}
-	if allocation[OriginalHours].(float64) != 0.0 {
-		allocation[NetHours] = allocation[OriginalHours].(float64) + totalAdj
-	}
+	allocation[NetHours] = allocation[OriginalHours].(float64) + totalAdj - allocation[UsedHours].(float64)
 	out = append(out, allocation)
 	return out, nil
 }
