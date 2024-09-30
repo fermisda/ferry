@@ -4,6 +4,7 @@ type adjustments struct {
 	CreateDate    string  `json:"createdate"`
 	AdjustedHours float32 `json:"adjustedhours"`
 	Comments      string  `json:"comments"`
+	//LastUpdated   string  `json:"lastupdated"`
 }
 
 type allocations struct {
@@ -17,5 +18,6 @@ type allocations struct {
 	UsedHours       float32       `json:"usedhours"`
 	Piname          string        `json:"piname"`
 	Email           NullAttribute `json:"email"`
-	Adjustments     []adjustments `json:"adjustments"`
+	//LastUpdated     string        `json:"lastupdated"`
+	Adjustments []adjustments `json:"adjustments"`
 }

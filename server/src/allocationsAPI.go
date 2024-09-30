@@ -433,9 +433,9 @@ func getAllocations(c APIContext, i Input) (interface{}, []APIError) {
 		}
 	}
 
-	rows, err := c.DBtx.Query(`select g.name, g.gid,
-								 a.fiscal_year, a.type, a.alloc_class, a.original_hours, a.used_hours, a.piname, a.email,
-								 aj.create_date, aj.hours_adjusted, aj.comments
+	rows, err := c.DBtx.Query(`select g.name, g.gid, a.fiscal_year,
+								 a.type, a.alloc_class, a.original_hours, a.used_hours, a.piname, a.email, a.last_updated,
+								 aj.create_date, aj.hours_adjusted, aj.comments, aj.last_updated
 							   from groups as g
 								 join allocations as a using (groupid)
 								 left outer join adjustments as aj using (allocid)
@@ -456,11 +456,13 @@ func getAllocations(c APIContext, i Input) (interface{}, []APIError) {
 
 	const NetHours Attribute = "nethours"
 	const Adjustments Attribute = "adjustments"
+	const AdjLastUpdated Attribute = "adjlastupdated"
 
 	adjustment := jsonentry{
 		CreateDate:    "",
 		AdjustedHours: "",
 		Comments:      "",
+		LastUpdated:   "",
 	}
 
 	allocation := jsonentry{
@@ -474,20 +476,22 @@ func getAllocations(c APIContext, i Input) (interface{}, []APIError) {
 		UsedHours:       0.0,
 		Piname:          "",
 		Email:           "",
+		LastUpdated:     "",
 		Adjustments:     make(jsonlist, 0),
 	}
 
 	out := make([]jsonentry, 0)
 
-	row := NewMapNullAttribute(GroupName, GID, FiscalYear, AllocationType, AllocationClass, OriginalHours, UsedHours, Piname, Email,
-		CreateDate, AdjustedHours, Comments)
+	row := NewMapNullAttribute(GroupName, GID, FiscalYear, AllocationType, AllocationClass, OriginalHours,
+		UsedHours, Piname, Email, LastUpdated,
+		CreateDate, AdjustedHours, Comments, AdjLastUpdated)
 
 	firstRec := true
 	totalAdj := 0.0
 
 	for rows.Next() {
-		rows.Scan(row[GroupName], row[GID], row[FiscalYear], row[AllocationType], row[AllocationClass], row[OriginalHours],
-			row[UsedHours], row[Piname], row[Email], row[CreateDate], row[AdjustedHours], row[Comments])
+		rows.Scan(row[GroupName], row[GID], row[FiscalYear], row[AllocationType], row[AllocationClass], row[OriginalHours], row[UsedHours],
+			row[Piname], row[Email], row[LastUpdated], row[CreateDate], row[AdjustedHours], row[Comments], row[AdjLastUpdated])
 
 		if firstRec || (allocation[GID] != row[GID].Data) || (allocation[FiscalYear] != row[FiscalYear].Data) ||
 			(allocation[AllocationType] != row[AllocationType].Data) {
@@ -506,6 +510,7 @@ func getAllocations(c APIContext, i Input) (interface{}, []APIError) {
 					UsedHours:       0.0,
 					Piname:          "",
 					Email:           "",
+					LastUpdated:     "",
 					Adjustments:     make(jsonlist, 0),
 				}
 			}
@@ -519,6 +524,7 @@ func getAllocations(c APIContext, i Input) (interface{}, []APIError) {
 			allocation[UsedHours] = row[UsedHours].Data
 			allocation[Piname] = row[Piname].Data
 			allocation[Email] = row[Email].Data
+			allocation[LastUpdated] = row[LastUpdated].Data
 			if row[CreateDate].Valid {
 				adjustment[CreateDate] = row[CreateDate].Data
 				adjustment[AdjustedHours] = row[AdjustedHours].Data
@@ -530,6 +536,7 @@ func getAllocations(c APIContext, i Input) (interface{}, []APIError) {
 			adjustment[CreateDate] = row[CreateDate].Data
 			adjustment[AdjustedHours] = row[AdjustedHours].Data
 			adjustment[Comments] = row[Comments].Data
+			adjustment[LastUpdated] = row[AdjLastUpdated].Data
 			allocation[Adjustments] = append(allocation[Adjustments].(jsonlist), adjustment)
 			totalAdj += row[AdjustedHours].Data.(float64)
 		}
@@ -537,9 +544,13 @@ func getAllocations(c APIContext, i Input) (interface{}, []APIError) {
 			CreateDate:    "",
 			AdjustedHours: "",
 			Comments:      "",
+			LastUpdated:   "",
 		}
 	}
-	allocation[NetHours] = allocation[OriginalHours].(float64) + totalAdj - allocation[UsedHours].(float64)
-	out = append(out, allocation)
+	// if firstrec is true then no records were found
+	if !firstRec {
+		allocation[NetHours] = allocation[OriginalHours].(float64) + totalAdj - allocation[UsedHours].(float64)
+		out = append(out, allocation)
+	}
 	return out, nil
 }
