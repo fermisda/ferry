@@ -470,7 +470,7 @@ func removeUserFromLdap(c APIContext, i Input) (interface{}, []APIError) {
 
 	var voPersonID string
 
-	err = c.DBtx.QueryRow(`select token_subject from users where uid=$1 and voPersonId is not null`, uid).Scan(&voPersonID)
+	err = c.DBtx.QueryRow(`select token_subject from users where uid=$1 and token_subject is not null`, uid).Scan(&voPersonID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			// Ferry says user is not in LDAP
