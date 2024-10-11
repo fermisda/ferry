@@ -247,7 +247,7 @@ func IncludeGroupAPIs(c *APICollection) {
 // @Produce      json
 // @Param        gid             query     int     false  "gid of this group"
 // @Param        groupname       query     string  true   "name of the group"
-// @Param        grouptype       query     string  false  "one of ApplicationGroup BatchSuperusers PhysicsGroup WilsonCluster UnixGroup"
+// @Param        grouptype       query     string  false  "one of ApplicationGroup BatchSuperusers PhysicsGroup  UnixGroup"
 // @Success      200  {object}  main.jsonOutput
 // @Failure      400  {object}  main.jsonOutput
 // @Failure      401  {object}  main.jsonOutput
@@ -269,7 +269,7 @@ func createGroup(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	if !validType {
+	if !validType || (i[GroupType].Data.(string) == "WilsonCluster") {
 		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, GroupType))
 		return nil, apiErr
 	}
