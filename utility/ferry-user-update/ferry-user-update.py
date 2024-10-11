@@ -537,15 +537,21 @@ def update_users():
                 auxUser = ferryUsers[user.uid]
                 params = {"username": user.uname}
                 if "full_name" in diff:
+                    msg = "User %s full_name has changed from %s to %s" % (user.uid, ferryUsers[user.uid].full_name, user.full_name)
+                    logging.warning(msg)
                     params["fullname"] = user.full_name
                     auxUser.full_name = user.full_name
                 if "expiration_date" in diff:
+                    msg = "User %s expiration_date has changed from %s to %s" % (user.uid, ferryUsers[user.uid].expiration_date, user.expiration_date)
+                    logging.warning(msg)
                     if user.expiration_date == "":
                         params["expirationdate"] = "null"
                     else:
                         params["expirationdate"] = user.expiration_date
                     auxUser.expiration_date = user.expiration_date
                 if "status" in diff:
+                    msg = "User %s status has changed from %s to %s" % (user.uid, ferryUsers[user.uid].status, str(user.status))
+                    logging.warning(msg)
                     params["status"] = str(user.status)
                     auxUser.status = user.status
                 # Never change anything if the user has been banned as it will fail and you will ping #ferryalerts
