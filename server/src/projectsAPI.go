@@ -92,6 +92,7 @@ func IncludeAllocationAPIs(c *APICollection) {
 			Parameter{GroupName, true},
 			Parameter{FiscalYear, true},
 			Parameter{AllocationType, true},
+			Parameter{CreateDate, false},
 			Parameter{AdjustedHours, true},
 			Parameter{Comments, false},
 		},
@@ -280,7 +281,7 @@ func deleteProject(c APIContext, i Input) (interface{}, []APIError) {
 // @Param        fiscalyear      query     string  true   "the fiscal year YYYY assigned project's allocation"
 // @Param        allocationtype  query     string  true   "type of the project's allocation - i.e. 'cpu' or 'gpu'"
 // @Param        originalhours   query     string  true   "the number of hours orignally assigned to the allocation/type for the fiscal year"
-// @Router /createProject [post]
+// @Router /createAllocation [post]
 func createAllocation(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
@@ -447,6 +448,7 @@ func deleteAllocation(c APIContext, i Input) (interface{}, []APIError) {
 // @Param        groupname      query     string  true   "name of the group the adjustment is created for"
 // @Param        fiscalyear     query     string  true   "the fiscal year of the allocation being adjusted"
 // @Param        allocationtype query     string  true   "type of the allocation against which the adjustment will be recorded - i.e. 'cpu' or 'gpu'"
+// @Param        createdate     query     string  false  "the date for the adjustment - the default is today"
 // @Param        adjustedhours  query     float64 true   "number of hours to adjust the allocation by, can be positive or negitive"
 // @Param        comments       query     string  true   "optional comments about the adjustment"
 // @Router /addAdjustment [put]
@@ -490,11 +492,18 @@ func addAdjustment(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
+	// Use CreateDate if passed in otherwise create createDate with today's date.
+	createDate := time.Now().Format(DateFormat)
+	if i[CreateDate].Valid {
+		parsedValue, _ := i[CreateDate].Data.(time.Time)
+		createDate = parsedValue.Format(DateFormat)
+	}
+
 	_, err = c.DBtx.Exec(`insert into adjustments (allocid, create_date, hours_adjusted, comments)
-							values ($1, now()::date, $2, $3)`, allocid.Data, i[AdjustedHours], i[Comments])
+							values ($1, $2, $3, $4)`, allocid.Data, createDate, i[AdjustedHours], i[Comments])
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key value violates unique constraint \"pk_adjustments\"") {
-			apiErr = append(apiErr, DefaultAPIError(ErrorText, "adjustment already exists for today"))
+			apiErr = append(apiErr, DefaultAPIError(ErrorText, "adjustment already exists for createdate"))
 		} else {
 			log.WithFields(QueryFields(c)).Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -629,7 +638,6 @@ func getProjects(c APIContext, i Input) (interface{}, []APIError) {
 	const Allocations Attribute = "allocations"
 	const Adjustments Attribute = "adjustments"
 	const NetHours Attribute = "nethours"
-	const DateFormat = "2006-01-02"
 
 	type jsonAdj map[Attribute]interface{}
 	type jsonAlloc map[Attribute]interface{}
