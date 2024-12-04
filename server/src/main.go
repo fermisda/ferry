@@ -378,13 +378,16 @@ func main() {
 	grouter.HandleFunc("/updateLdapForCapabilitySet", APIs["updateLdapForCapabilitySet"].Run)
 	grouter.HandleFunc("/modifyUserLdapAttributes", APIs["modifyUserLdapAttributes"].Run)
 
-	// Allocation API Calls
+	// Project API Calls
+	grouter.HandleFunc("/createProject", APIs["createProject"].Run)
+	grouter.HandleFunc("/editProject", APIs["editProject"].Run)
+	grouter.HandleFunc("/deleteProject", APIs["deleteProject"].Run)
 	grouter.HandleFunc("/createAllocation", APIs["createAllocation"].Run)
 	grouter.HandleFunc("/editAllocation", APIs["editAllocation"].Run)
-	grouter.HandleFunc("/addAdjustment", APIs["addAdjustment"].Run)
 	grouter.HandleFunc("/deleteAllocation", APIs["deleteAllocation"].Run)
+	grouter.HandleFunc("/addAdjustment", APIs["addAdjustment"].Run)
 	grouter.HandleFunc("/deleteAdjustment", APIs["deleteAdjustment"].Run)
-	grouter.HandleFunc("/getAllocations", APIs["getAllocations"].Run)
+	grouter.HandleFunc("/getProjects", APIs["getProjects"].Run)
 
 	Mainsrv = &http.Server{
 		Addr:        srvConfig["port"],
