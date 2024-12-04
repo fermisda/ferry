@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"strings"
+	"time"
 
 	_ "github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
@@ -11,15 +12,51 @@ import (
 // IncludeAllocationAPIs includes all APIs described in this file in an APICollection
 func IncludeAllocationAPIs(c *APICollection) {
 
+	createProject := BaseAPI{
+		InputModel{
+			Parameter{GroupName, true},
+			Parameter{FiscalYear, true},
+			Parameter{ProjectClass, false},
+			Parameter{Email, false},
+			Parameter{Piname, false},
+		},
+		createProject,
+		RoleWrite,
+	}
+	c.Add("createProject", &createProject)
+
+	editProject := BaseAPI{
+		InputModel{
+			Parameter{GroupName, true},
+			Parameter{FiscalYear, true},
+			Parameter{ProjectClass, false},
+			Parameter{Email, false},
+			Parameter{Piname, false},
+		},
+		editProject,
+		RoleWrite,
+	}
+	c.Add("editProject", &editProject)
+
+	deleteProject := BaseAPI{
+		InputModel{
+			Parameter{GroupName, true},
+			Parameter{FiscalYear, true},
+			Parameter{ProjectClass, false},
+			Parameter{Email, false},
+			Parameter{Piname, false},
+		},
+		deleteProject,
+		RoleWrite,
+	}
+	c.Add("deleteProject", &deleteProject)
+
 	createAllocation := BaseAPI{
 		InputModel{
 			Parameter{GroupName, true},
 			Parameter{FiscalYear, true},
 			Parameter{AllocationType, true},
-			Parameter{AllocationClass, false},
 			Parameter{OriginalHours, true},
-			Parameter{Email, false},
-			Parameter{Piname, false},
 		},
 		createAllocation,
 		RoleWrite,
@@ -31,16 +68,24 @@ func IncludeAllocationAPIs(c *APICollection) {
 			Parameter{GroupName, true},
 			Parameter{FiscalYear, true},
 			Parameter{AllocationType, true},
-			Parameter{AllocationClass, false},
 			Parameter{OriginalHours, false},
 			Parameter{UsedHours, false},
-			Parameter{Email, false},
-			Parameter{Piname, false},
 		},
 		editAllocation,
 		RoleWrite,
 	}
 	c.Add("editAllocation", &editAllocation)
+
+	deleteAllocation := BaseAPI{
+		InputModel{
+			Parameter{GroupName, true},
+			Parameter{FiscalYear, true},
+			Parameter{AllocationType, true},
+		},
+		deleteAllocation,
+		RoleWrite,
+	}
+	c.Add("deleteAllocation", &deleteAllocation)
 
 	addAdjustment := BaseAPI{
 		InputModel{
@@ -55,17 +100,6 @@ func IncludeAllocationAPIs(c *APICollection) {
 	}
 	c.Add("addAdjustment", &addAdjustment)
 
-	deleteAllocation := BaseAPI{
-		InputModel{
-			Parameter{GroupName, true},
-			Parameter{FiscalYear, true},
-			Parameter{AllocationType, true},
-		},
-		deleteAllocation,
-		RoleWrite,
-	}
-	c.Add("deleteAllocation", &deleteAllocation)
-
 	deleteAdjustment := BaseAPI{
 		InputModel{
 			Parameter{GroupName, true},
@@ -78,38 +112,32 @@ func IncludeAllocationAPIs(c *APICollection) {
 	}
 	c.Add("deleteAdjustment", &deleteAdjustment)
 
-	getAllocations := BaseAPI{
+	getProjects := BaseAPI{
 		InputModel{
 			Parameter{GroupName, false},
 			Parameter{FiscalYear, false},
 			Parameter{AllocationType, false},
-			Parameter{AllocationClass, false},
+			Parameter{ProjectClass, false},
 		},
-		getAllocations,
+		getProjects,
 		RoleRead,
 	}
-
-	c.Add("getAllocations", &getAllocations)
+	c.Add("getProjects", &getProjects)
 }
 
-// createAllocation godoc
-// @Summary      Adds a new allocation record.
-// @Description  Adds a new allocation record.  There can be only one allocation for each unique combination of groupname, allocationtype, fiscalyear.
-// @Tags         Allocations
+// createProject godoc
+// @Summary      Adds a new project record.
+// @Description  Adds a new project record.  There can be only one project for each unique combination of groupname and fiscalyear.
+// @Tags         Projects
 // @Accept       html
 // @Produce      json
-// @Param        groupname       query     string  true   "name of the group the allocation is created for"
-// @Param        allocationtype  query     string  true   "type of allocation to create - i.e. 'cpu' or 'gpu'"
-// @Param        allocationclass query     string  false  "class of the allocation"
-// @Param        originalhours   query     float64 true   "original number of hours assigned to allocation"
-// @Param        fiscalyear      query     string  true   "the fiscal year YYYY assigned to the allocation"
-// @Param        piname          query     string  false  "name of the irincipal investigator, point of contact for the project"
+// @Param        groupname       query     string  true   "name of the group the project is created for"
+// @Param        ProjectClass    query     string  false  "class of the project"
+// @Param        fiscalyear      query     string  true   "the fiscal year YYYY assigned to the project"
+// @Param        piname          query     string  false  "name of the principal investigator, point of contact for the project"
 // @Param        email           query     string  false  "email address for the point of contact"
-// @Success      200  {object}   main.jsonOutput
-// @Failure      400  {object}   main.jsonOutput
-// @Failure      401  {object}   main.jsonOutput
-// @Router /createAllocation [post]
-func createAllocation(c APIContext, i Input) (interface{}, []APIError) {
+// @Router /createProject [post]
+func createProject(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
 	if !isFiscalYearValid(i) {
@@ -127,14 +155,13 @@ func createAllocation(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, apiErr
 	}
 
-	_, err = c.DBtx.Exec(`insert into allocations (groupid, fiscal_year, type, original_hours, alloc_class, email, piname)
-						  values ($1, $2, $3, $4, $5, $6, $7)
-						  on conflict (groupid, fiscal_year, type) do nothing`,
-		groupid, i[FiscalYear], i[AllocationType], i[OriginalHours], i[AllocationClass], i[Email], i[Piname])
+	_, err = c.DBtx.Exec(`insert into projects (groupid, fiscal_year, project_class, email, piname)
+						  values ($1, $2, $3, $4, $5)`,
+		groupid, i[FiscalYear], i[ProjectClass], i[Email], i[Piname])
 	if err != nil {
-		if strings.Contains(err.Error(), "new row for relation \"allocations\" violates check constraint \"check_type\"") {
+		if strings.Contains(err.Error(), "duplicate key value violates unique constraint \"unq_projects\"") {
 			log.WithFields(QueryFields(c)).Error(err)
-			apiErr = append(apiErr, DefaultAPIError(ErrorText, "invalid allocationtype"))
+			apiErr = append(apiErr, DefaultAPIError(ErrorDuplicateData, "project"))
 			return nil, apiErr
 		} else {
 			log.WithFields(QueryFields(c)).Error(err)
@@ -146,23 +173,169 @@ func createAllocation(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
-// editAllocation godoc
-// @Summary      Allows limited changes to an allocation record.
-// @Description  Allows limited changes to an allocation record.
-// @Tags         Allocations
+// editProject godoc
+// @Summary      Allows limited changes to a project.
+// @Description  Allows limited changes to a project.
+// @Tags         Projects
 // @Accept       html
 // @Produce      json
-// @Param        groupname       query     string  true   "name of the group to relate the allocation to"
-// @Param        allocationtype  query     string  true   "type to set the allocation to - i.e. 'cpu' or 'gpu'"
-// @Param        allocationclass query     string  false  "class to set the allocation to"
+// @Param        groupname       query     string  true   "name of the group to relate the project to"
+// @Param        ProjectClass    query     string  false  "class to set the project to"
 // @Param        fiscalyear      query     string  true   "the fiscal year YYYY assigned to the allocation"
-// @Param        originalhours   query     float64 false  "original number of hours assigned to allocation"
-// @Param        usedhours       query     float64 false  "number of hours used by the allocation"
 // @Param        piname          query     string  false  "name of the irincipal investigator, point of contact for the project"
 // @Param        email           query     string  false  "email address for the point of contact"
-// @Success      200  {object}   main.jsonOutput
-// @Failure      400  {object}   main.jsonOutput
-// @Failure      401  {object}   main.jsonOutput
+// @Router /editProject [post]
+func editProject(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+
+	if !isFiscalYearValid(i) {
+		return nil, append(apiErr, DefaultAPIError(ErrorText, "fiscalyear must be YYYY"))
+	}
+	if !i[ProjectClass].Valid && !i[Piname].Valid && !i[Email].Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "at least one parameter to change must be provided"))
+		return nil, apiErr
+	}
+
+	groupid := NewNullAttribute(GroupID)
+	err := c.DBtx.QueryRow(`select (select groupid from groups where name=$1 and type='UnixGroup')`, i[GroupName]).Scan(&groupid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	} else if !groupid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
+		return nil, apiErr
+	}
+
+	projId := NewNullAttribute(GroupID)
+	err = c.DBtx.QueryRow(`select projid from projects where groupid=$1 and fiscal_year=$2`, groupid, i[FiscalYear]).Scan(&projId)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	} else if err == sql.ErrNoRows {
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "project not found"))
+		return nil, apiErr
+	}
+
+	_, err = c.DBtx.Exec(`update projects set project_class = coalesce($1, project_class), email = coalesce($2, email), piname = coalesce($3, piname)
+	                      where projid = $4`, i[ProjectClass], i[Email], i[Piname], projId)
+	if err != nil {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	}
+	return nil, nil
+}
+
+// deleteProject godoc
+// @Summary      Deletes an existing project from the database.  This is a non-recoverable operation.
+// @Description  Deletes an existing project.  This is a non-recoverable operation.  The call will fail if any allocations exist for the project.
+// @Tags         Projects
+// @Accept       html
+// @Produce      json
+// @Param        groupname      query     string  true   "name of the group from which the project will be deleted"
+// @Param        fiscalyear     query     string  true   "the fiscal year of the project to be deleted - format YYYY"
+// @Router /deleteProject [put]
+func deleteProject(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+
+	if !isFiscalYearValid(i) {
+		return nil, append(apiErr, DefaultAPIError(ErrorText, "fiscalyear must be YYYY"))
+	}
+	groupid := NewNullAttribute(GroupID)
+	err := c.DBtx.QueryRow(`select groupid from groups where name=$1 and type='UnixGroup'`, i[GroupName]).Scan(&groupid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	} else if !groupid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
+		return nil, apiErr
+	}
+
+	_, err = c.DBtx.Exec(`delete from projects
+						  where groupid = $1
+						     and fiscal_year = $2`, groupid.Data, i[FiscalYear])
+	if err != nil {
+		if strings.Contains(err.Error(), "update or delete on table \"projects\" violates foreign key constraint \"fk_allocations_projects\"") {
+			apiErr = append(apiErr, DefaultAPIError(ErrorText, "cannot delete project, allocations exist"))
+		} else {
+			log.WithFields(QueryFields(c)).Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		}
+		return nil, apiErr
+	}
+
+	return nil, nil
+}
+
+// createAllocation godoc
+// @Summary      Adds a new allocation to a project.
+// @Description  Adds a new allocation to a project.  Each project can only have one allocation of a specific type for a fiscal year.
+// @Tags         Projects
+// @Accept       html
+// @Produce      json
+// @Param        groupname       query     string  true   "name of the group for the project's allocation"
+// @Param        fiscalyear      query     string  true   "the fiscal year YYYY assigned project's allocation"
+// @Param        allocationtype  query     string  true   "type of the project's allocation - i.e. 'cpu' or 'gpu'"
+// @Param        originalhours   query     string  true   "the number of hours orignally assigned to the allocation/type for the fiscal year"
+// @Router /createProject [post]
+func createAllocation(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+
+	if !isFiscalYearValid(i) {
+		return nil, append(apiErr, DefaultAPIError(ErrorText, "fiscalyear must be YYYY"))
+	}
+	groupid := NewNullAttribute(GroupID)
+	projid := NewNullAttribute(GroupID)
+	err := c.DBtx.QueryRow(`select (select groupid from groups where name=$1 and type='UnixGroup'),
+								   (select projid from projects where fiscal_year=$2 and groupid = (
+								       select groupid from groups where name=$1 and type='UnixGroup'))`, i[GroupName], i[FiscalYear]).Scan(&groupid, &projid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	} else if !groupid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
+		return nil, apiErr
+	} else if !projid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "project not found for groupname with the supplied fiscalyear"))
+		return nil, apiErr
+	}
+
+	_, err = c.DBtx.Exec(`insert into allocations (projid, type, original_hours) values ($1, $2, $3)`,
+		projid, i[AllocationType], i[OriginalHours])
+	if err != nil {
+		if strings.Contains(err.Error(), "duplicate key value violates unique constraint \"unq_allocations\"") {
+			log.WithFields(QueryFields(c)).Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDuplicateData, "allocation"))
+			return nil, apiErr
+		} else if strings.Contains(err.Error(), "new row for relation \"allocations\" violates check constraint \"check_type\"") {
+			log.WithFields(QueryFields(c)).Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, AllocationType))
+			return nil, apiErr
+		} else {
+			log.WithFields(QueryFields(c)).Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+			return nil, apiErr
+		}
+	}
+
+	return nil, apiErr
+}
+
+// editAllocation godoc
+// @Summary      Allows limited changes to an allocation.
+// @Description  Allows limited changes to an allocation.
+// @Tags         Projects
+// @Accept       html
+// @Produce      json
+// @Param        groupname       query     string  true   "name of the group for the project's allocation"
+// @Param        fiscalyear      query     string  true   "the fiscal year YYYY assigned project's allocation"
+// @Param        allocationtype  query     string  true   "type of allocation for the project - i.e. 'cpu' or 'gpu'"
+// @Param        originalhours   query     string  true   "the number of hours orignally assigned to the allocation"
+// @Param        usedhours       query     string  true   "number of the allocations's hours that have been used"
 // @Router /editAllocation [post]
 func editAllocation(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
@@ -170,15 +343,17 @@ func editAllocation(c APIContext, i Input) (interface{}, []APIError) {
 	if !isFiscalYearValid(i) {
 		return nil, append(apiErr, DefaultAPIError(ErrorText, "fiscalyear must be YYYY"))
 	}
-	if !i[OriginalHours].Valid && !i[UsedHours].Valid && !i[AllocationClass].Valid && !i[Piname].Valid && !i[Email].Valid {
+
+	if !i[OriginalHours].Valid && !i[UsedHours].Valid {
 		apiErr = append(apiErr, DefaultAPIError(ErrorText, "at least one parameter to change must be provided"))
 		return nil, apiErr
 	}
 
 	groupid := NewNullAttribute(GroupID)
-	var allocCnt int
+	projid := NewNullAttribute(GroupID)
 	err := c.DBtx.QueryRow(`select (select groupid from groups where name=$1 and type='UnixGroup'),
-							(select count(*) from allocations where type = $2)`, i[GroupName], i[AllocationType]).Scan(&groupid, &allocCnt)
+								   (select projid from projects where fiscal_year=$2 and groupid = (
+								       select groupid from groups where name=$1 and type='UnixGroup'))`, i[GroupName], i[FiscalYear]).Scan(&groupid, &projid)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -186,112 +361,37 @@ func editAllocation(c APIContext, i Input) (interface{}, []APIError) {
 	} else if !groupid.Valid {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
 		return nil, apiErr
-	} else if allocCnt == 0 {
-		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, AllocationType))
+	} else if !projid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "project not found for group/fiscal year"))
 		return nil, apiErr
 	}
 
-	allocId := NewNullAttribute(GroupID)
-	err = c.DBtx.QueryRow(`select allocid from allocations
-						   where groupid=$1 and type=$2 and fiscal_year=$3`, groupid, i[AllocationType], i[FiscalYear]).Scan(&allocId)
-	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c)).Error(err)
-		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-		return nil, apiErr
-	} else if err == sql.ErrNoRows {
-		apiErr = append(apiErr, DefaultAPIError(ErrorText, "allocation record not found"))
-		return nil, apiErr
-	}
-
-	_, err = c.DBtx.Exec(`update allocations set original_hours = coalesce($1, original_hours), used_hours = coalesce($2, used_hours),
-	                        alloc_class = coalesce($3, alloc_class), email = coalesce($5, email), piname = coalesce($6, piname)
-	                      where allocid = $4`, i[OriginalHours], i[UsedHours], i[AllocationClass], allocId, i[Email], i[Piname])
+	_, err = c.DBtx.Exec(`update allocations set original_hours = coalesce($1, original_hours), used_hours = coalesce($2, used_hours) where projid=$3 and type=$4`,
+		i[OriginalHours], i[UsedHours], projid, i[AllocationType])
 	if err != nil {
-		log.WithFields(QueryFields(c)).Error(err)
-		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-		return nil, apiErr
-	}
-	return nil, nil
-}
-
-// addAdjustment godoc
-// @Summary      Records an adjustment to an allocation record.
-// @Description  Records an adjustment to an allocation record, the record with the original hours is not changed.
-// @Tags         Allocations
-// @Accept       html
-// @Produce      json
-// @Param        groupname      query     string  true   "name of the group the adjustment is created for"
-// @Param        allocationtype query     string  true   "type of the allocation against which the adjustment will be recorded - i.e. 'cpu' or 'gpu'"
-// @Param        adjustedhours  query     float64 true   "number of hours to adjust the allocation by, can be positive or negitive"
-// @Param        fiscalyear     query     string  true   "the fiscal year of the allocation being adjusted"
-// @Param        comments       query     string  true   "optional comments about the adjustment"
-// @Success      200  {object}  main.jsonOutput
-// @Failure      400  {object}  main.jsonOutput
-// @Failure      401  {object}  main.jsonOutput
-// @Router /addAdjustment [put]
-func addAdjustment(c APIContext, i Input) (interface{}, []APIError) {
-	var apiErr []APIError
-
-	if !isFiscalYearValid(i) {
-		return nil, append(apiErr, DefaultAPIError(ErrorText, "fiscalyear must be YYYY"))
-	}
-	groupid := NewNullAttribute(GroupID)
-	var typeCnt int64
-	err := c.DBtx.QueryRow(`select (select groupid from groups where name=$1 and type='UnixGroup'),
-							(select count(*) from allocations where type = $2)`, i[GroupName], i[AllocationType]).Scan(&groupid, &typeCnt)
-	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c)).Error(err)
-		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-		return nil, apiErr
-	} else if !groupid.Valid {
-		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
-		return nil, apiErr
-	} else if typeCnt == 0 {
-		apiErr = append(apiErr, DefaultAPIError(ErrorText, "invalid allocation type"))
-		return nil, apiErr
-	}
-
-	allocid := NewNullAttribute(GroupID)
-	err = c.DBtx.QueryRow(`select allocid from allocations
-						   where groupid = $1
-						     and fiscal_year = $2
-							 and type = $3`, groupid, i[FiscalYear], i[AllocationType]).Scan(&allocid)
-	if err != nil && err != sql.ErrNoRows {
-		log.WithFields(QueryFields(c)).Error(err)
-		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-		return nil, apiErr
-	} else if !allocid.Valid {
-		apiErr = append(apiErr, DefaultAPIError(ErrorText, "allocation does not exist"))
-		return nil, apiErr
-	}
-
-	_, err = c.DBtx.Exec(`insert into adjustments (allocid, create_date, hours_adjusted, comments)
-							values ($1, now(), $2, $3)`, allocid.Data, i[AdjustedHours], i[Comments])
-	if err != nil {
-		if strings.Contains(err.Error(), "duplicate key value violates unique constraint \"pk_adjustments\"") {
-			apiErr = append(apiErr, DefaultAPIError(ErrorDuplicateData, "create_date"))
+		if strings.Contains(err.Error(), "duplicate key value violates unique constraint \"unq_allocations\"") {
+			log.WithFields(QueryFields(c)).Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDuplicateData, "allocation"))
+			return nil, apiErr
 		} else {
 			log.WithFields(QueryFields(c)).Error(err)
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+			return nil, apiErr
 		}
-		return nil, apiErr
 	}
 
-	return nil, nil
+	return nil, apiErr
 }
 
 // deleteAllocation godoc
 // @Summary      Deletes an existing allocation from the database.  This is a non-recoverable operation.
-// @Description  Deletes an existing allocation.  This is a non-recoverable operation.  The call will fail if any adjustments exist for the allocation. See deleteAdjustment.
-// @Tags         Allocations
+// @Description  Deletes an existing allocation.  This is a non-recoverable operation.  The call will fail if any adjustments exist for the allocation.
+// @Tags         Projects
 // @Accept       html
 // @Produce      json
 // @Param        groupname      query     string  true   "name of the group from which the allocation will be deleted"
-// @Param        allocationtype query     string  true   "type of the allocation to be deleted - i.e. 'cpu' or 'gpu'"
 // @Param        fiscalyear     query     string  true   "the fiscal year of the allocation to delete - format YYYY"
-// @Success      200  {object}  main.jsonOutput
-// @Failure      400  {object}  main.jsonOutput
-// @Failure      401  {object}  main.jsonOutput
+// @Param        allocationtype query     string  true   "type of the allocation to be deleted - i.e. 'cpu' or 'gpu'"
 // @Router /deleteAllocation [put]
 func deleteAllocation(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
@@ -300,9 +400,13 @@ func deleteAllocation(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, append(apiErr, DefaultAPIError(ErrorText, "fiscalyear must be YYYY"))
 	}
 	groupid := NewNullAttribute(GroupID)
-	var typeCnt int64
+	projid := NewNullAttribute(GroupID)
+	allocExists := NewNullAttribute(AllocationType)
 	err := c.DBtx.QueryRow(`select (select groupid from groups where name=$1 and type='UnixGroup'),
-								   (select count(*) from allocations where type = $2)`, i[GroupName], i[AllocationType]).Scan(&groupid, &typeCnt)
+								   (select projid from projects where fiscal_year=$2 and groupid = (
+								       select groupid from groups where name=$1 and type='UnixGroup')),
+								   (select 'exists' from allocations where type=$3 limit 1)`,
+		i[GroupName], i[FiscalYear], i[AllocationType]).Scan(&groupid, &projid, &allocExists)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -310,15 +414,17 @@ func deleteAllocation(c APIContext, i Input) (interface{}, []APIError) {
 	} else if !groupid.Valid {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
 		return nil, apiErr
-	} else if typeCnt == 0 {
-		apiErr = append(apiErr, DefaultAPIError(ErrorText, "invalid allocation type"))
+	} else if !projid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "project not found for group/fiscal year"))
+		return nil, apiErr
+	} else if !allocExists.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, AllocationType))
 		return nil, apiErr
 	}
 
 	_, err = c.DBtx.Exec(`delete from allocations
-						  where groupid = $1
-						     and type = $2
-						     and fiscal_year = $3`, groupid.Data, i[AllocationType], i[FiscalYear])
+						  where projid = $1
+						     and type = $2`, projid, i[AllocationType])
 	if err != nil {
 		if strings.Contains(err.Error(), "update or delete on table \"allocations\" violates foreign key constraint \"fk_adjustments_allocations\"") {
 			apiErr = append(apiErr, DefaultAPIError(ErrorText, "cannot delete, adjustments exist"))
@@ -332,19 +438,83 @@ func deleteAllocation(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
+// addAdjustment godoc
+// @Summary      Records an adjustment to an allocation record.
+// @Description  Records an adjustment to an allocation record, the record with the original hours is not changed.
+// @Tags         Projects
+// @Accept       html
+// @Produce      json
+// @Param        groupname      query     string  true   "name of the group the adjustment is created for"
+// @Param        fiscalyear     query     string  true   "the fiscal year of the allocation being adjusted"
+// @Param        allocationtype query     string  true   "type of the allocation against which the adjustment will be recorded - i.e. 'cpu' or 'gpu'"
+// @Param        adjustedhours  query     float64 true   "number of hours to adjust the allocation by, can be positive or negitive"
+// @Param        comments       query     string  true   "optional comments about the adjustment"
+// @Router /addAdjustment [put]
+func addAdjustment(c APIContext, i Input) (interface{}, []APIError) {
+	var apiErr []APIError
+
+	if !isFiscalYearValid(i) {
+		return nil, append(apiErr, DefaultAPIError(ErrorText, "fiscalyear must be YYYY"))
+	}
+	groupid := NewNullAttribute(GroupID)
+	projid := NewNullAttribute(GroupID)
+	allocExists := NewNullAttribute(AllocationType)
+	err := c.DBtx.QueryRow(`select (select groupid from groups where name=$1 and type='UnixGroup'),
+								   (select projid from projects where fiscal_year=$2 and groupid =
+								       (select groupid from groups where name=$1 and type='UnixGroup')),
+								   (select 'exists' from allocations where type=$3 limit 1)`,
+		i[GroupName], i[FiscalYear], i[AllocationType]).Scan(&groupid, &projid, &allocExists)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	} else if !groupid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
+		return nil, apiErr
+	} else if !projid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "project not found for group/fiscal year"))
+		return nil, apiErr
+	} else if !allocExists.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, AllocationType))
+		return nil, apiErr
+	}
+
+	allocid := NewNullAttribute(GroupID)
+	err = c.DBtx.QueryRow(`select allocid from allocations where projid = $1 and type = $2`, projid, i[AllocationType]).Scan(&allocid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	} else if !allocid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "allocation does not exist"))
+		return nil, apiErr
+	}
+
+	_, err = c.DBtx.Exec(`insert into adjustments (allocid, create_date, hours_adjusted, comments)
+							values ($1, now()::date, $2, $3)`, allocid.Data, i[AdjustedHours], i[Comments])
+	if err != nil {
+		if strings.Contains(err.Error(), "duplicate key value violates unique constraint \"pk_adjustments\"") {
+			apiErr = append(apiErr, DefaultAPIError(ErrorText, "adjustment already exists for today"))
+		} else {
+			log.WithFields(QueryFields(c)).Error(err)
+			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		}
+		return nil, apiErr
+	}
+
+	return nil, nil
+}
+
 // deleteAdjustment godoc
 // @Summary      Deletes an existing adjustment from an allocation.  This is a non-recoverable operation.
 // @Description  Deletes an existing adjustment from an allocation.  This is a non-recoverable operation.
-// @Tags         Allocations
+// @Tags         Projects
 // @Accept       html
 // @Produce      json
 // @Param        groupname      query     string  true   "name of the group from which the adjustment will be deleted"
-// @Param        allocationtype query     string  true   "type of the allocation from which the adjustment to be deleted - i.e. 'cpu' or 'gpu'"
 // @Param        fiscalyear     query     string  true   "the fiscal year of the allocation from which the adjustment will be deleted - format YYYY"
+// @Param        allocationtype query     string  true   "type of the allocation from which the adjustment to be deleted - i.e. 'cpu' or 'gpu'"
 // @Parm         createDate     query     string  true   "the date the adjustment to be deleted was created"
-// @Success      200  {object}  main.jsonOutput
-// @Failure      400  {object}  main.jsonOutput
-// @Failure      401  {object}  main.jsonOutput
 // @Router /deleteAdjustment [put]
 func deleteAdjustment(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
@@ -353,17 +523,13 @@ func deleteAdjustment(c APIContext, i Input) (interface{}, []APIError) {
 		return nil, append(apiErr, DefaultAPIError(ErrorText, "fiscalyear must be YYYY"))
 	}
 	groupid := NewNullAttribute(GroupID)
-	allocid := NewNullAttribute(GroupID)
-	var typeCnt int64
+	projid := NewNullAttribute(GroupID)
+	allocExists := NewNullAttribute(AllocationType)
 	err := c.DBtx.QueryRow(`select (select groupid from groups where name=$1 and type='UnixGroup'),
-								   (select count(*) from allocations where type = $2),
-								   (select allocid from allocations as a
-									join groups as g using (groupid)
-									where g.name=$1
-									  and g.type = 'UnixGroup'
-									  and a.groupid = g.groupid
-									  and a.type=$2
-									  and a.fiscal_year=$3)`, i[GroupName], i[AllocationType], i[FiscalYear]).Scan(&groupid, &typeCnt, &allocid)
+								   (select projid from projects where fiscal_year=$2 and groupid =
+								   		(select groupid from groups where name=$1 and type='UnixGroup')),
+								   (select 'exists' from allocations where type=$3 limit 1)`,
+		i[GroupName], i[FiscalYear], i[AllocationType]).Scan(&groupid, &projid, &allocExists)
 	if err != nil && err != sql.ErrNoRows {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -371,20 +537,26 @@ func deleteAdjustment(c APIContext, i Input) (interface{}, []APIError) {
 	} else if !groupid.Valid {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
 		return nil, apiErr
-	} else if i[AllocationType].Data != "cpu" && i[AllocationType].Data != "gpu" {
-		apiErr = append(apiErr, DefaultAPIError(ErrorText, "invalid allocation type"))
+	} else if !projid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "project not found for group/fiscal year"))
 		return nil, apiErr
-	} else if !allocid.Valid {
-		apiErr = append(apiErr, DefaultAPIError(ErrorText, "allocation not found"))
-		return nil, apiErr
-	} else if typeCnt == 0 {
-		apiErr = append(apiErr, DefaultAPIError(ErrorText, "invalid allocation type"))
+	} else if !allocExists.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, AllocationType))
 		return nil, apiErr
 	}
 
-	_, err = c.DBtx.Exec(`delete from adjustments
-						  where allocid = $1
-							 and create_date = $2`, allocid.Data, i[CreateDate])
+	allocid := NewNullAttribute(GroupID)
+	err = c.DBtx.QueryRow(`select allocid from allocations where projid = $1 and type = $2`, projid, i[AllocationType]).Scan(&allocid)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	} else if !allocid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorText, "allocation does not exist"))
+		return nil, apiErr
+	}
+
+	_, err = c.DBtx.Exec(`delete from adjustments where allocid = $1 and create_date = $2`, allocid.Data, i[CreateDate])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -394,56 +566,59 @@ func deleteAdjustment(c APIContext, i Input) (interface{}, []APIError) {
 	return nil, nil
 }
 
-// getAllocations godoc
-// @Summary      Returns allocations with all their adjustments.
-// @Description  Returns allocations with all their adjustments.  A sum of the original hours with adjustments is provided.
-// @Tags         Allocations
+// getProjects godoc
+// @Summary      Returns projects with all their allocations and respective adjustments.
+// @Description  Returns projects with all their allocations and respective adjustments.  A sum of the original hours with adjustments is provided.
+// @Tags         Projects
 // @Accept       html
 // @Produce      json
-// @Param        groupname       query     string  false   "limits returned data to a specific group name"
-// @Param        allocationtype  query     string  false   "limits returned data to allocations of a specific type - i.e. 'cpu' or 'gpu'"
-// @Param        allocationclass query     string  false   "limits returned data to a allocations of a specific class"
-// @Param        fiscalyear      query     string  false   "limits returned data to allocations for a specific fiscal year - format YYYY"
-// @Success      200  {object}   main.allocations
-// @Failure      400  {object}   main.jsonOutput
-// @Failure      401  {object}   main.jsonOutput
-// @Router /getAllocations [get]
-func getAllocations(c APIContext, i Input) (interface{}, []APIError) {
+// @Param        groupname       query     string  false   "limits returned data to a specific group"
+// @Param        fiscalyear      query     string  false   "limits returned data to projects of a specific fiscal year - format YYYY"
+// @Param        projectclass    query     string  false   "limits returned data to projects allocations of a specific class"
+// @Param        allocationtype  query     string  false   "limits all project's allocation data returned to a specific type - i.e. 'cpu' or 'gpu'"
+// @Router /getProjects [get]
+func getProjects(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
 
 	if !isFiscalYearValid(i) {
 		return nil, append(apiErr, DefaultAPIError(ErrorText, "fiscalyear must be YYYY"))
 	}
 
-	gid := NewNullAttribute(GID)
-	var typeCnt int64
-	if i[GroupName].Valid {
-		err := c.DBtx.QueryRow(`select (select gid from groups where name = $1),
-					     		       (select count(*) from allocations where type = $2)`, i[GroupName], i[AllocationType]).Scan(&gid, &typeCnt)
-		if err != nil {
-			log.WithFields(QueryFields(c)).Error(err)
-			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
-			return nil, apiErr
-		} else if !gid.Valid {
-			apiErr = append(apiErr, DefaultAPIError(ErrorInvalidData, GroupName))
-			return nil, apiErr
-		} else if typeCnt == 0 {
-			apiErr = append(apiErr, DefaultAPIError(ErrorText, "invalid allocation type"))
-			return nil, apiErr
-		}
+	groupid := NewNullAttribute(GroupID)
+	projid := NewNullAttribute(GroupID)
+	allocExists := NewNullAttribute(AllocationType)
+	err := c.DBtx.QueryRow(`select (select groupid from groups where name=$1 and type='UnixGroup'),
+								   (select projid from projects where fiscal_year=$2 limit 1),
+								   (select 'exists' from allocations where type=$3 limit 1)`,
+		i[GroupName], i[FiscalYear], i[AllocationType]).Scan(&groupid, &projid, &allocExists)
+	if err != nil && err != sql.ErrNoRows {
+		log.WithFields(QueryFields(c)).Error(err)
+		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
+		return nil, apiErr
+	} else if i[GroupName].Valid && !groupid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, GroupName))
+		return nil, apiErr
+	} else if i[FiscalYear].Valid && !projid.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, FiscalYear))
+		return nil, apiErr
+	} else if i[AllocationType].Valid && !allocExists.Valid {
+		apiErr = append(apiErr, DefaultAPIError(ErrorDataNotFound, AllocationType))
+		return nil, apiErr
 	}
 
-	rows, err := c.DBtx.Query(`select g.name, g.gid, a.fiscal_year,
-								 a.type, a.alloc_class, a.original_hours, a.used_hours, a.piname, a.email, a.last_updated,
-								 aj.create_date, aj.hours_adjusted, aj.comments
-							   from groups as g
-								 join allocations as a using (groupid)
-								 left outer join adjustments as aj using (allocid)
-							   where (g.gid = $1 or $1 is null)
-							     and (a.fiscal_year = $2 or $2 is null)
-								 and (a.type = $3 or $3 is null)
-								 and (a.alloc_class = $4 or $4 is null)
-							   order by g.name, a.fiscal_year desc, a.type asc, aj.create_date desc`, gid, i[FiscalYear], i[AllocationType], i[AllocationClass])
+	rows, err := c.DBtx.Query(`select g.name, p.projid, p.fiscal_year, p.project_class, p.piname, p.email,
+							   a.type, a.original_hours, a.used_hours, a.last_updated,
+							   aj.create_date, aj.hours_adjusted, aj.comments
+							   from projects as p
+							     join groups as g using (groupid)
+							     left outer join allocations as a using (projid)
+							     left outer join adjustments as aj using (allocid)
+							   where (g.name = $1 or $1 is null)
+							     and (p.fiscal_year = $2 or $2 is null)
+							     and (p.project_class = $3 or $3 is null)
+							     and (a.type = $4 or $4 is null)
+							    order by g.name, p.fiscal_year desc, a.type asc, aj.create_date desc`,
+		i[GroupName], i[FiscalYear], i[ProjectClass], i[AllocationType])
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
@@ -451,102 +626,69 @@ func getAllocations(c APIContext, i Input) (interface{}, []APIError) {
 	}
 	defer rows.Close()
 
-	type jsonentry map[Attribute]interface{}
-	type jsonlist []interface{}
-
-	const NetHours Attribute = "nethours"
+	const Allocations Attribute = "allocations"
 	const Adjustments Attribute = "adjustments"
+	const NetHours Attribute = "nethours"
+	const DateFormat = "2006-01-02"
 
-	adjustment := jsonentry{
-		CreateDate:    "",
-		AdjustedHours: "",
-		Comments:      "",
-	}
+	type jsonAdj map[Attribute]interface{}
+	type jsonAlloc map[Attribute]interface{}
+	type jsonProj map[Attribute]interface{}
+	var out []jsonProj
+	var projAlloc []jsonAlloc
+	var allocAdj []jsonAdj
 
-	allocation := jsonentry{
-		GroupName:       "",
-		GID:             "",
-		FiscalYear:      "",
-		AllocationType:  "",
-		AllocationClass: "",
-		OriginalHours:   0.0,
-		NetHours:        0.0,
-		UsedHours:       0.0,
-		Piname:          "",
-		Email:           "",
-		LastUpdated:     "",
-		Adjustments:     make(jsonlist, 0),
-	}
+	proj := make(jsonProj)
+	alloc := make(jsonAlloc)
 
-	out := make([]jsonentry, 0)
-
-	row := NewMapNullAttribute(GroupName, GID, FiscalYear, AllocationType, AllocationClass, OriginalHours,
-		UsedHours, Piname, Email, LastUpdated,
+	row := NewMapNullAttribute(GroupName, GID, FiscalYear, ProjectClass, Piname, Email,
+		AllocationType, OriginalHours, UsedHours, LastUpdated,
 		CreateDate, AdjustedHours, Comments)
 
-	firstRec := true
-	totalAdj := 0.0
-
+	prevProjId := NewNullAttribute(GID) // There is no ProjID and I can't see making one for this.
+	prevType := NewNullAttribute(AllocationType)
 	for rows.Next() {
-		rows.Scan(row[GroupName], row[GID], row[FiscalYear], row[AllocationType], row[AllocationClass], row[OriginalHours], row[UsedHours],
-			row[Piname], row[Email], row[LastUpdated], row[CreateDate], row[AdjustedHours], row[Comments])
+		rows.Scan(row[GroupName], row[GID], row[FiscalYear], row[ProjectClass], row[Piname], row[Email],
+			row[AllocationType], row[OriginalHours], row[UsedHours], row[LastUpdated],
+			row[CreateDate], row[AdjustedHours], row[Comments])
+		if prevProjId != *row[GID] {
+			proj = make(jsonProj)
+			proj[GroupName] = row[GroupName].Data
+			proj[FiscalYear] = row[FiscalYear].Data
+			proj[ProjectClass] = row[ProjectClass].Data
+			proj[Piname] = row[Piname].Data
+			proj[Email] = row[Email].Data
+			proj[Allocations] = make([]jsonAlloc, 0)
+			out = append(out, proj)
+			prevProjId = *row[GID]
+			projAlloc = nil
+		}
+		if (prevType != *row[AllocationType]) && row[AllocationType].Valid {
+			alloc = make(jsonAlloc)
+			alloc[AllocationType] = row[AllocationType].Data
+			alloc[OriginalHours] = row[OriginalHours].Data
+			alloc[UsedHours] = row[UsedHours].Data
+			parsedValue, _ := row[LastUpdated].Data.(time.Time)
+			alloc[LastUpdated] = parsedValue.Format(DateFormat)
+			alloc[Adjustments] = make([]jsonAdj, 0)
+			alloc[NetHours] = row[OriginalHours].Data.(float64) - row[UsedHours].Data.(float64)
+			projAlloc = append(projAlloc, alloc)
+			proj[Allocations] = projAlloc
+			prevType = *row[AllocationType]
+			allocAdj = nil
+		}
+		if row[CreateDate].Valid {
+			adj := make(jsonAdj)
+			parsedValue, _ := row[CreateDate].Data.(time.Time)
+			adj[CreateDate] = parsedValue.Format(DateFormat)
+			adj[AdjustedHours] = row[AdjustedHours].Data
+			adj[Comments] = row[Comments].Data
+			alloc[NetHours] = alloc[NetHours].(float64) + row[AdjustedHours].Data.(float64)
+			allocAdj = append(allocAdj, adj)
+			alloc[Adjustments] = allocAdj
 
-		if firstRec || (allocation[GID] != row[GID].Data) || (allocation[FiscalYear] != row[FiscalYear].Data) ||
-			(allocation[AllocationType] != row[AllocationType].Data) {
-			if !firstRec {
-				allocation[NetHours] = allocation[OriginalHours].(float64) + totalAdj - allocation[UsedHours].(float64)
-				out = append(out, allocation)
-				totalAdj = 0.0
-				allocation = jsonentry{
-					GroupName:       "",
-					GID:             "",
-					FiscalYear:      "",
-					AllocationType:  "",
-					AllocationClass: "",
-					OriginalHours:   0.0,
-					NetHours:        0.0,
-					UsedHours:       0.0,
-					Piname:          "",
-					Email:           "",
-					LastUpdated:     "",
-					Adjustments:     make(jsonlist, 0),
-				}
-			}
-			firstRec = false
-			allocation[GroupName] = row[GroupName].Data
-			allocation[GID] = row[GID].Data
-			allocation[FiscalYear] = row[FiscalYear].Data
-			allocation[AllocationType] = row[AllocationType].Data
-			allocation[AllocationClass] = row[AllocationClass].Data
-			allocation[OriginalHours] = row[OriginalHours].Data
-			allocation[UsedHours] = row[UsedHours].Data
-			allocation[Piname] = row[Piname].Data
-			allocation[Email] = row[Email].Data
-			allocation[LastUpdated] = row[LastUpdated].Data
-			if row[CreateDate].Valid {
-				adjustment[CreateDate] = row[CreateDate].Data
-				adjustment[AdjustedHours] = row[AdjustedHours].Data
-				adjustment[Comments] = row[Comments].Data
-				allocation[Adjustments] = append(allocation[Adjustments].(jsonlist), adjustment)
-				totalAdj += row[AdjustedHours].Data.(float64)
-			}
-		} else if row[CreateDate].Valid {
-			adjustment[CreateDate] = row[CreateDate].Data
-			adjustment[AdjustedHours] = row[AdjustedHours].Data
-			adjustment[Comments] = row[Comments].Data
-			allocation[Adjustments] = append(allocation[Adjustments].(jsonlist), adjustment)
-			totalAdj += row[AdjustedHours].Data.(float64)
-		}
-		adjustment = jsonentry{
-			CreateDate:    "",
-			AdjustedHours: "",
-			Comments:      "",
 		}
 	}
-	// if firstrec is true then no records were found
-	if !firstRec {
-		allocation[NetHours] = allocation[OriginalHours].(float64) + totalAdj - allocation[UsedHours].(float64)
-		out = append(out, allocation)
-	}
+
 	return out, nil
 }
