@@ -27,4 +27,28 @@ insert into user_affiliation_units (uid, unitid)
      join affiliation_units as au using (unitid)
      join users as u using (uid)
    where dn like '/DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=%/CN=UID:%')
+on conflict do nothing
+;
+
+insert into user_affiliation_units (uid, unitid)
+  (select distinct u.uid, au.unitid
+   from user_certificates as uc
+     join affiliation_unit_user_certificate as auuc using (dnid)
+     join affiliation_units as au using (unitid)
+     join users as u using (uid)
+   where dn like '/DC=ch/DC=cern/OU=Organic Units/OU=Users/CN=%/CN=%/CN=%')
+on conflict do nothing
+;
+
+-- should have done it this way first.  Could have done it in one insert.
+insert into user_affiliation_units (uid, unitid)
+  (select distinct uid, unitid
+   from affiliation_units
+     join affiliation_unit_user_certificate using (unitid)
+     join user_certificates using (dnid)
+     join users using (uid)
+   where name='cms'
+     and dn not like '/DC=org/DC=cilogon/C=US/O=Fermi National Accelerator Laboratory/OU=People/CN=%/CN=UID:%'
+     and dn not like '/DC=ch/DC=cern/OU=Organic Units/OU=Users/CN=%/CN=%/CN=%')
+on conflict do nothing
 ;
