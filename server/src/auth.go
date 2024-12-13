@@ -41,6 +41,7 @@ func AuthInitialize() error {
 			return errors.New("at least one 'issuers' must exist in the config file")
 		}
 		var err error
+		// NewEnforcerDaemon has its own internal cache to avoid calling the issuers for the same token.
 		enforcer, err = scitokens.NewEnforcerDaemon(ctx, viper.GetStringSlice("issuers")...)
 		if err != nil {
 			return fmt.Errorf("auth.AuthInitilize NewEnforcerDeamon error: %s", err.Error())
