@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
@@ -1988,7 +1989,7 @@ func getUserUID(c APIContext, i Input) (interface{}, []APIError) {
 // @Tags         Users
 // @Accept       html
 // @Produce      json
-// @Param        username       query     string  true  "user to be deleted"
+// @Param        uid       query     string  true  "user id of the user to be deleted"
 // @Success      200  {object}  main.jsonOutput
 // @Failure      400  {object}  main.jsonOutput
 // @Failure      401  {object}  main.jsonOutput
@@ -2007,6 +2008,8 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
+	constraintErr := fmt.Errorf("cannot drop, associations exist which must be archived - uid: %d username %s ",
+		i[UID].Data.(int64), uname.Data.(string))
 
 	// Must use the table columns in the json output to match what is
 	// in the user_archives table.
@@ -2114,7 +2117,7 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		if strings.Contains(err.Error(), "violates foreign key constraint") {
-			apiErr = append(apiErr, APIError{errors.New("cannot drop as this user has associations which must be archived"), ErrorAPIRequirement})
+			apiErr = append(apiErr, APIError{constraintErr, ErrorAPIRequirement})
 		} else {
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		}
@@ -2125,7 +2128,7 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		if strings.Contains(err.Error(), "violates foreign key constraint") {
-			apiErr = append(apiErr, APIError{errors.New("cannot drop as this user has associations which must be archived"), ErrorAPIRequirement})
+			apiErr = append(apiErr, APIError{constraintErr, ErrorAPIRequirement})
 		} else {
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		}
