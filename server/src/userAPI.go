@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
@@ -739,7 +740,7 @@ func getUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 		apiErr = append(apiErr, DefaultAPIError(ErrorText, "username or uid or tokensubject must be supplied"))
 		return nil, apiErr
 	}
-	rows, err := c.DBtx.Query(`select full_name, uid, status, is_groupaccount, expiration_date, token_subject, is_banned
+	rows, err := c.DBtx.Query(`select full_name, uid, status, is_groupaccount, expiration_date, token_subject, is_banned, uname
 							   from users
 							   where (uname=$1 or $1 is null)
 							     and (uid=$2 or $2 is null)
@@ -751,9 +752,10 @@ func getUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 	}
 	defer rows.Close()
 	out := make(map[Attribute]interface{})
-	row := NewMapNullAttribute(FullName, UID, Status, GroupAccount, ExpirationDate, TokenSubject, Banned)
+	row := NewMapNullAttribute(FullName, UID, Status, GroupAccount, ExpirationDate, TokenSubject, Banned, UserName)
 	for rows.Next() {
-		rows.Scan(row[FullName], row[UID], row[Status], row[GroupAccount], row[ExpirationDate], row[TokenSubject], row[Banned])
+		rows.Scan(row[FullName], row[UID], row[Status], row[GroupAccount], row[ExpirationDate], row[TokenSubject],
+			row[Banned], row[UserName])
 		for _, column := range row {
 			out[column.Attribute] = column.Data
 		}
@@ -1988,7 +1990,7 @@ func getUserUID(c APIContext, i Input) (interface{}, []APIError) {
 // @Tags         Users
 // @Accept       html
 // @Produce      json
-// @Param        username       query     string  true  "user to be deleted"
+// @Param        uid       query     string  true  "user id of the user to be deleted"
 // @Success      200  {object}  main.jsonOutput
 // @Failure      400  {object}  main.jsonOutput
 // @Failure      401  {object}  main.jsonOutput
@@ -2007,6 +2009,8 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 		apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		return nil, apiErr
 	}
+	constraintErr := fmt.Errorf("cannot drop, associations exist which must be archived - uid: %d username %s ",
+		i[UID].Data.(int64), uname.Data.(string))
 
 	// Must use the table columns in the json output to match what is
 	// in the user_archives table.
@@ -2114,7 +2118,7 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		if strings.Contains(err.Error(), "violates foreign key constraint") {
-			apiErr = append(apiErr, APIError{errors.New("cannot drop as this user has associations which must be archived"), ErrorAPIRequirement})
+			apiErr = append(apiErr, APIError{constraintErr, ErrorAPIRequirement})
 		} else {
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		}
@@ -2125,7 +2129,7 @@ func dropUser(c APIContext, i Input) (interface{}, []APIError) {
 	if err != nil {
 		log.WithFields(QueryFields(c)).Error(err)
 		if strings.Contains(err.Error(), "violates foreign key constraint") {
-			apiErr = append(apiErr, APIError{errors.New("cannot drop as this user has associations which must be archived"), ErrorAPIRequirement})
+			apiErr = append(apiErr, APIError{constraintErr, ErrorAPIRequirement})
 		} else {
 			apiErr = append(apiErr, DefaultAPIError(ErrorDbQuery, nil))
 		}
