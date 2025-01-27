@@ -133,7 +133,7 @@ func IncludeAllocationAPIs(c *APICollection) {
 // @Accept       html
 // @Produce      json
 // @Param        groupname       query     string  true   "name of the group the project is created for"
-// @Param        ProjectClass    query     string  false  "class of the project"
+// @Param        projectclass    query     string  false  "class of the project"
 // @Param        fiscalyear      query     string  true   "the fiscal year YYYY assigned to the project"
 // @Param        piname          query     string  false  "name of the principal investigator, point of contact for the project"
 // @Param        email           query     string  false  "email address for the point of contact"
