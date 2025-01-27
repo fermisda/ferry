@@ -740,7 +740,7 @@ func getUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 		apiErr = append(apiErr, DefaultAPIError(ErrorText, "username or uid or tokensubject must be supplied"))
 		return nil, apiErr
 	}
-	rows, err := c.DBtx.Query(`select full_name, uid, status, is_groupaccount, expiration_date, token_subject, is_banned
+	rows, err := c.DBtx.Query(`select full_name, uid, status, is_groupaccount, expiration_date, token_subject, is_banned, uname
 							   from users
 							   where (uname=$1 or $1 is null)
 							     and (uid=$2 or $2 is null)
@@ -752,9 +752,10 @@ func getUserInfo(c APIContext, i Input) (interface{}, []APIError) {
 	}
 	defer rows.Close()
 	out := make(map[Attribute]interface{})
-	row := NewMapNullAttribute(FullName, UID, Status, GroupAccount, ExpirationDate, TokenSubject, Banned)
+	row := NewMapNullAttribute(FullName, UID, Status, GroupAccount, ExpirationDate, TokenSubject, Banned, UserName)
 	for rows.Next() {
-		rows.Scan(row[FullName], row[UID], row[Status], row[GroupAccount], row[ExpirationDate], row[TokenSubject], row[Banned])
+		rows.Scan(row[FullName], row[UID], row[Status], row[GroupAccount], row[ExpirationDate], row[TokenSubject],
+			row[Banned], row[UserName])
 		for _, column := range row {
 			out[column.Attribute] = column.Data
 		}
