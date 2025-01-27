@@ -181,7 +181,7 @@ func createProject(c APIContext, i Input) (interface{}, []APIError) {
 // @Accept       html
 // @Produce      json
 // @Param        groupname       query     string  true   "name of the group to relate the project to"
-// @Param        ProjectClass    query     string  false  "class to set the project to"
+// @Param        projectclass    query     string  false  "class to set the project to"
 // @Param        fiscalyear      query     string  true   "the fiscal year YYYY assigned to the allocation"
 // @Param        piname          query     string  false  "name of the irincipal investigator, point of contact for the project"
 // @Param        email           query     string  false  "email address for the point of contact"
