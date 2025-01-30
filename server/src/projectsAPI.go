@@ -523,7 +523,7 @@ func addAdjustment(c APIContext, i Input) (interface{}, []APIError) {
 // @Param        groupname      query     string  true   "name of the group from which the adjustment will be deleted"
 // @Param        fiscalyear     query     string  true   "the fiscal year of the allocation from which the adjustment will be deleted - format YYYY"
 // @Param        allocationtype query     string  true   "type of the allocation from which the adjustment to be deleted - i.e. 'cpu' or 'gpu'"
-// @Parm         createDate     query     string  true   "the date the adjustment to be deleted was created"
+// @Param        createdate     query     string  true   "the date the adjustment to be deleted was created"
 // @Router /deleteAdjustment [put]
 func deleteAdjustment(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
