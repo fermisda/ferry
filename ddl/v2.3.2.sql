@@ -29,7 +29,7 @@ CREATE  TABLE "public".allocations (
 	CONSTRAINT unq_allocations UNIQUE ( projid, "type" )
  ) ;
 
-ALTER TABLE "public".allocations ADD CONSTRAINT check_type CHECK ( ( (type = 'cpu':: text) OR (type = 'gpu':: text)) ) ;
+-- ALTER TABLE "public".allocations ADD CONSTRAINT check_type CHECK ( ( (type = 'cpu':: text) OR (type = 'gpu':: text)) ) ;
 
 CREATE  TABLE "public".adjustments (
 	allocid              integer  NOT NULL  ,
