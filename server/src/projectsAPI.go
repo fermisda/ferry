@@ -133,7 +133,7 @@ func IncludeAllocationAPIs(c *APICollection) {
 // @Accept       html
 // @Produce      json
 // @Param        groupname       query     string  true   "name of the group the project is created for"
-// @Param        ProjectClass    query     string  false  "class of the project"
+// @Param        projectclass    query     string  false  "class of the project"
 // @Param        fiscalyear      query     string  true   "the fiscal year YYYY assigned to the project"
 // @Param        piname          query     string  false  "name of the principal investigator, point of contact for the project"
 // @Param        email           query     string  false  "email address for the point of contact"
@@ -181,7 +181,7 @@ func createProject(c APIContext, i Input) (interface{}, []APIError) {
 // @Accept       html
 // @Produce      json
 // @Param        groupname       query     string  true   "name of the group to relate the project to"
-// @Param        ProjectClass    query     string  false  "class to set the project to"
+// @Param        projectclass    query     string  false  "class to set the project to"
 // @Param        fiscalyear      query     string  true   "the fiscal year YYYY assigned to the allocation"
 // @Param        piname          query     string  false  "name of the irincipal investigator, point of contact for the project"
 // @Param        email           query     string  false  "email address for the point of contact"
@@ -279,7 +279,7 @@ func deleteProject(c APIContext, i Input) (interface{}, []APIError) {
 // @Produce      json
 // @Param        groupname       query     string  true   "name of the group for the project's allocation"
 // @Param        fiscalyear      query     string  true   "the fiscal year YYYY assigned project's allocation"
-// @Param        allocationtype  query     string  true   "type of the project's allocation - i.e. 'cpu' or 'gpu'"
+// @Param        allocationtype  query     string  true   "type of the project's allocation - example 'cpu' or 'gpu'"
 // @Param        originalhours   query     string  true   "the number of hours orignally assigned to the allocation/type for the fiscal year"
 // @Router /createAllocation [post]
 func createAllocation(c APIContext, i Input) (interface{}, []APIError) {
@@ -334,7 +334,7 @@ func createAllocation(c APIContext, i Input) (interface{}, []APIError) {
 // @Produce      json
 // @Param        groupname       query     string  true   "name of the group for the project's allocation"
 // @Param        fiscalyear      query     string  true   "the fiscal year YYYY assigned project's allocation"
-// @Param        allocationtype  query     string  true   "type of allocation for the project - i.e. 'cpu' or 'gpu'"
+// @Param        allocationtype  query     string  true   "type of allocation for the project - example 'cpu' or 'gpu'"
 // @Param        originalhours   query     string  true   "the number of hours orignally assigned to the allocation"
 // @Param        usedhours       query     string  true   "number of the allocations's hours that have been used"
 // @Router /editAllocation [post]
@@ -392,7 +392,7 @@ func editAllocation(c APIContext, i Input) (interface{}, []APIError) {
 // @Produce      json
 // @Param        groupname      query     string  true   "name of the group from which the allocation will be deleted"
 // @Param        fiscalyear     query     string  true   "the fiscal year of the allocation to delete - format YYYY"
-// @Param        allocationtype query     string  true   "type of the allocation to be deleted - i.e. 'cpu' or 'gpu'"
+// @Param        allocationtype query     string  true   "type of the allocation to be deleted - example 'cpu' or 'gpu'"
 // @Router /deleteAllocation [put]
 func deleteAllocation(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
@@ -447,7 +447,7 @@ func deleteAllocation(c APIContext, i Input) (interface{}, []APIError) {
 // @Produce      json
 // @Param        groupname      query     string  true   "name of the group the adjustment is created for"
 // @Param        fiscalyear     query     string  true   "the fiscal year of the allocation being adjusted"
-// @Param        allocationtype query     string  true   "type of the allocation against which the adjustment will be recorded - i.e. 'cpu' or 'gpu'"
+// @Param        allocationtype query     string  true   "type of the allocation against which the adjustment will be recorded - example 'cpu' or 'gpu'"
 // @Param        createdate     query     string  false  "the date for the adjustment - the default is today"
 // @Param        adjustedhours  query     float64 true   "number of hours to adjust the allocation by, can be positive or negitive"
 // @Param        comments       query     string  true   "optional comments about the adjustment"
@@ -522,8 +522,8 @@ func addAdjustment(c APIContext, i Input) (interface{}, []APIError) {
 // @Produce      json
 // @Param        groupname      query     string  true   "name of the group from which the adjustment will be deleted"
 // @Param        fiscalyear     query     string  true   "the fiscal year of the allocation from which the adjustment will be deleted - format YYYY"
-// @Param        allocationtype query     string  true   "type of the allocation from which the adjustment to be deleted - i.e. 'cpu' or 'gpu'"
-// @Parm         createDate     query     string  true   "the date the adjustment to be deleted was created"
+// @Param        allocationtype query     string  true   "type of the allocation from which the adjustment to be deleted - example 'cpu' or 'gpu'"
+// @Param        createdate     query     string  true   "the date the adjustment to be deleted was created"
 // @Router /deleteAdjustment [put]
 func deleteAdjustment(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
@@ -584,7 +584,7 @@ func deleteAdjustment(c APIContext, i Input) (interface{}, []APIError) {
 // @Param        groupname       query     string  false   "limits returned data to a specific group"
 // @Param        fiscalyear      query     string  false   "limits returned data to projects of a specific fiscal year - format YYYY"
 // @Param        projectclass    query     string  false   "limits returned data to projects allocations of a specific class"
-// @Param        allocationtype  query     string  false   "limits all project's allocation data returned to a specific type - i.e. 'cpu' or 'gpu'"
+// @Param        allocationtype  query     string  false   "limits all project's allocation data returned to a specific type - example 'cpu' or 'gpu'"
 // @Router /getProjects [get]
 func getProjects(c APIContext, i Input) (interface{}, []APIError) {
 	var apiErr []APIError
@@ -653,7 +653,7 @@ func getProjects(c APIContext, i Input) (interface{}, []APIError) {
 		AllocationType, OriginalHours, UsedHours, LastUpdated,
 		CreateDate, AdjustedHours, Comments)
 
-	prevProjId := NewNullAttribute(GID) // There is no ProjID and I can't see making one for this.
+	prevProjId := NewNullAttribute(GID) // Container for last projId (ProjId does not exist in baseAPI.go, why add it for this?)
 	prevType := NewNullAttribute(AllocationType)
 	for rows.Next() {
 		rows.Scan(row[GroupName], row[GID], row[FiscalYear], row[ProjectClass], row[Piname], row[Email],
@@ -670,6 +670,7 @@ func getProjects(c APIContext, i Input) (interface{}, []APIError) {
 			out = append(out, proj)
 			prevProjId = *row[GID]
 			projAlloc = nil
+			prevType = NewNullAttribute(AllocationType)
 		}
 		if (prevType != *row[AllocationType]) && row[AllocationType].Valid {
 			alloc = make(jsonAlloc)
