@@ -768,6 +768,7 @@ if __name__ == "__main__":
     if not opts.ip_address:
         # Skip these ferryContext lines out if you want to verify by IP address.
         ferryContext.verify_mode = ssl.CERT_REQUIRED
+        #ferryContext.verify_mode = ssl.CERT_NONE
         ferryContext.load_cert_chain(config.get("ferry", "cert"), config.get("ferry", "key"))
         ferryContext.load_verify_locations(capath=config.get("ferry", "ca"))
 
