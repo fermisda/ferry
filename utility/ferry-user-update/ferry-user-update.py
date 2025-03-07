@@ -223,10 +223,6 @@ def fetch_userdb(ferryUsers):
             outFile.write(out)
             outFile.close()
 
-    # TO BE REMOVED
-    # This section of the code is to identify pottential problems with services-users.csv
-    os.system("curl -s https://metrics.fnal.gov/authentication/datafiles/services-users.csv > cache/services-users.csv.debug")
-
     timestamp = datetime.datetime.now().strftime("%Y%m%d%H%m")
     for f, url in config.items("userdb"):
         if f not in ["uid.lis", "gid.lis", "services-users.csv"]:
@@ -781,6 +777,16 @@ if __name__ == "__main__":
 
     logging.info("Fetching UserDB files...")
     userdbUsers, userdbGroups = fetch_userdb(len(ferryUsers))
+    if len(userdbUsers) < 20000:
+        msg = "uid.lis file appears truncated, len(userdbUsers): %s" % len(userdbUsers)
+        logging.error(msg)
+        postToSlack("Update Script Halted!", msg)
+        exit(15)
+    if len(userdbGroups) < 1000:
+        msg = "gid.lis file appears truncated, len(userdbUsers): %s" % len(userdbUsers)
+        postToSlack("Update Script Halted!", msg)
+        logging.error(msg)
+        exit(16)
 
     logging.info("Cleanup users...")
     cleanup_users()
