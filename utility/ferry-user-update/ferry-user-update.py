@@ -415,21 +415,21 @@ def fetch_ferry():
         ferryOut[id] = readFromFerry(action, params)
 
     if opts.single_thread:
-        work("api_get_users")
-        work("api_get_certificates", {"unitname" : "fermilab"})
-        work("api_get_groups")
-        work("api_get_group_members")
-        work("api_get_users_fqans")
+        work("getAllUsers")
+        work("getAllUsersCertificateDNs", {"unitname" : "fermilab"})
+        work("getAllGroups")
+        work("getAllGroupsMembers")
+        work("getAllUsersFQANs")
     else:
-        threads.append(Thread(target=work, args=["api_get_users"]))
-        threads.append(Thread(target=work, args=["api_get_certificates", {"unitname" : "fermilab"}]))
-        threads.append(Thread(target=work, args=["api_get_groups"]))
-        threads.append(Thread(target=work, args=["api_get_group_members"]))
-        threads.append(Thread(target=work, args=["api_get_users_fqans"]))
+        threads.append(Thread(target=work, args=["getAllUsers"]))
+        threads.append(Thread(target=work, args=["getAllUsersCertificateDNs", {"unitname" : "fermilab"}]))
+        threads.append(Thread(target=work, args=["getAllGroups"]))
+        threads.append(Thread(target=work, args=["getAllGroupsMembers"]))
+        threads.append(Thread(target=work, args=["getAllUsersFQANs"]))
 
         for accessString in source["compute_resources"].split(";"):
             resource = accessString.split(":")[0]
-            threads.append(Thread(target=work, args=["api_get_passwd_file", {"resourcename": resource}, resource]))
+            threads.append(Thread(target=work, args=["getPasswdFile", {"resourcename": resource}, resource]))
 
         for thread in threads:
             thread.start()
@@ -437,38 +437,38 @@ def fetch_ferry():
             thread.join()
 
     logging.debug("reading ferry users")
-    if not ferryOut["api_get_users"]:
+    if not ferryOut["getAllUsers"]:
             exit(9)
-    for jUser in ferryOut["api_get_users"]:
+    for jUser in ferryOut["getAllUsers"]:
         users[str(jUser["uid"])] = User(str(jUser["uid"]), jUser["username"], jUser["fullname"], jUser["status"], dateSwitcher(jUser["expirationdate"]), jUser["banned"])
         unameUid[jUser["username"]] = str(jUser["uid"])
 
     logging.debug("reading ferry certificates")
-    if not ferryOut["api_get_certificates"]:
+    if not ferryOut["getAllUsersCertificateDNs"]:
             exit(10)
-    for jUser in ferryOut["api_get_certificates"]:
+    for jUser in ferryOut["getAllUsersCertificateDNs"]:
         for jCert in jUser["certificates"]:
             users[unameUid[jUser["username"]]].certificates.append(jCert["dn"])
 
     logging.debug("reading ferry groups")
-    if not ferryOut["api_get_groups"]:
+    if not ferryOut["getAllGroups"]:
             exit(11)
-    for jGroup in ferryOut["api_get_groups"]:
+    for jGroup in ferryOut["getAllGroups"]:
         groups[str(jGroup["gid"])] = Group(str(jGroup["gid"]), jGroup["groupname"], jGroup["grouptype"])
 
     logging.debug("reading ferry group members")
-    if not ferryOut["api_get_group_members"]:
+    if not ferryOut["getAllGroupsMembers"]:
             exit(12)
-    for jGroup in ferryOut["api_get_group_members"]:
+    for jGroup in ferryOut["getAllGroupsMembers"]:
         if jGroup["members"] != None:
             for jUser in jGroup["members"]:
                 if not jGroup["gid"]:
                     continue
                 groups[str(jGroup["gid"])].members.append(str(jUser["uid"]))
 
-    if not ferryOut["api_get_users_fqans"]:
+    if not ferryOut["getAllUsers_fqans"]:
             exit(13)
-    for uname, items in ferryOut["api_get_users_fqans"].items():
+    for uname, items in ferryOut["getAllUsers_fqans"].items():
         for item in items:
             users[unameUid[uname]].fqans.append((item["fqan"], item["unitname"]))
 
@@ -509,7 +509,7 @@ def update_users():
                     "groupname": userdbGroups[user.gid].name,
                     "grouptype": userdbGroups[user.gid].type
                 }
-                if writeToFerry("api_create_group", params):
+                if writeToFerry("createGroup", params):
                     ferryGroups[user.gid] = Group(user.gid, userdbGroups[user.gid].name)
                 changes = True
             params = {
@@ -522,7 +522,7 @@ def update_users():
             }
             if user.expiration_date == "":
                 params.__delitem__("expirationdate")
-            if writeToFerry("api_create_user", params):
+            if writeToFerry("createUser", params):
                 ferryUsers[user.uid] = User(user.uid, user.uname, user.full_name, user.status, user.expiration_date)
                 ferryGroups[user.gid].members.append(user.uid)
             changes = True
@@ -556,7 +556,7 @@ def update_users():
                     auxUser.status = user.status
                 # Never change anything if the user has been banned as it will fail and you will ping #ferryalerts
                 # every 30 min until the user is set to inactive in services-users.csv.
-                if ferryUsers[user.uid].banned != True and writeToFerry("api_set_user_info", params):
+                if ferryUsers[user.uid].banned != True and writeToFerry("setUserInfo", params):
                     ferryUsers[user.uid] = auxUser
                 changes = True
     if not changes:
@@ -581,7 +581,7 @@ def cleanup_users():
             params = {
                 "uid": uid,
             }
-            if writeToFerry("api_drop_user", params):
+            if writeToFerry("dropUser", params):
                 logging.info("User '%s, %s, %s' %s dropped",
                              uid,
                              ferryUsers[uid].uname,
@@ -604,7 +604,7 @@ def update_groups():
                 "groupname": group.name,
                 "grouptype": group.type
             }
-            if writeToFerry("api_create_group", params):
+            if writeToFerry("createGroup", params):
                 ferryGroups[group.gid] = Group(group.gid, group.name)
             changes = True
 
@@ -622,7 +622,7 @@ def update_groups():
                         "groupname": group.name,
                         "grouptype": group.type
                     }
-                    if writeToFerry("api_add_group_member", params):
+                    if writeToFerry("addUserToGroup", params):
                         ferryGroups[group.gid].members.append(member)
                     changes = True
     if not changes:
@@ -644,7 +644,7 @@ def update_certificates():
                     if "," in certificate:
                         logging.warning("Certificate \"%s\" contains illegal characters" % certificate)
                         continue
-                    jUnits = readFromFerry("api_get_user_affiliations", {"username": user.uname})
+                    jUnits = readFromFerry("getMemberAffiliations", {"username": user.uname})
                     if not jUnits:
                         logging.debug("could not fetch affiliation units for %s" % user.uname)
                         jUnits = []
@@ -664,7 +664,7 @@ def update_certificates():
                             "unitname": unit["unitname"],
                             "dn": certificate
                         }
-                        if writeToFerry("api_add_user_certificate", params):
+                        if writeToFerry("addCertificateDNToUser", params):
                             ferryUsers[user.uid].certificates.append(certificate)
                     changes = True
     if not changes:
@@ -685,7 +685,7 @@ def update_fqans():
                         "fqan": fqan[0],
                         "unitname": fqan[1]
                     }
-                    if writeToFerry("api_set_user_fqan", params):
+                    if writeToFerry("setUserExperimentFQAN", params):
                         ferryUsers[user.uid].fqans.append(fqan)
                     changes = True
     if not changes:
@@ -701,7 +701,7 @@ def update_compute_access():
         if "compute_access" in diff:
             for resource, params in user.compute_access.items():
                 if resource not in ferryUsers[user.uid].compute_access.keys():
-                    if writeToFerry("api_set_compute_access", params):
+                    if writeToFerry("setUserAccessToComputeResource", params):
                         ferryUsers[user.uid].compute_access[resource] = params
                     changes = True
     if not changes:
@@ -709,12 +709,12 @@ def update_compute_access():
 
 # Cleans expired storage quotas
 def clean_storage_quotas():
-    if writeToFerry("api_clean_storage_quotas"):
+    if writeToFerry("cleanStorageQuotas"):
         logging.info("Done")
 
 # Cleans expired condor quotas
 def clean_condor_quotas():
-    if writeToFerry("api_clean_condor_quotas"):
+    if writeToFerry("cleanCondorQuotas"):
         logging.info("Done")
 
 if __name__ == "__main__":
