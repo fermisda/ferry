@@ -124,7 +124,8 @@ def resources(resourcesString):
 
 def readFromFerry(action, params = None):
     source = dict(config.items("ferry"))
-    url = source["hostname"] + source[action]
+    #url = source["hostname"] + source[action]
+    url = source["hostname"] + action
     if params:
         url += "?" + urllib.parse.urlencode(params)
     logging.debug("downloading from url: %s" % url)
@@ -141,7 +142,7 @@ def writeToFerry(action, params=None):
         if params and item in params and params[item] in skipList:
             return
     target = dict(config.items("ferry"))
-    url = target["hostname"] + target[action]
+    url = target["hostname"] + action
     if params:
         url += "?" + urllib.parse.urlencode(params)
     if not opts.dry_run:
@@ -462,9 +463,9 @@ def fetch_ferry():
                     continue
                 groups[str(jGroup["gid"])].members.append(str(jUser["uid"]))
 
-    if not ferryOut["getAllUsers_fqans"]:
+    if not ferryOut["getAllUsersFQANs"]:
             exit(13)
-    for uname, items in ferryOut["getAllUsers_fqans"].items():
+    for uname, items in ferryOut["getAllUsersFQANs"].items():
         for item in items:
             users[unameUid[uname]].fqans.append((item["fqan"], item["unitname"]))
 
