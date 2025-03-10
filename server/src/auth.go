@@ -65,7 +65,7 @@ func queryAccessors(key string) (accessor, bool) {
 		return acc, false
 	}
 
-	log.Debugf("queryAccessors - key: %s", key)
+	// log.Infof("queryAccessors - key: %s", key)
 	err = tx.QueryRow(`select accid, name, active, write, type from accessors where name = $1 and active = true`,
 		key).Scan(&acc.accid, &acc.name, &acc.active, &acc.write, &acc.accType)
 	if err == sql.ErrNoRows {
@@ -205,12 +205,14 @@ func authorize(c APIContext, r AccessRole) (AccessLevel, string, string) {
 		return LevelPublic, "public role authorized", ""
 	}
 
-	// Is it IP4 or IP6? Either way, drop the port number on the end.
+	// Is it IPv4 or IPv6? Either way, drop the port number on the end.  Remove [] for IPv6.
 	re := regexp.MustCompile(`\[(.*?)\]`)
 	ipv6 := re.FindString(c.R.RemoteAddr)
 	ip := ipv6
 	if len(ipv6) == 0 {
 		ip = strings.Split(c.R.RemoteAddr, ":")[0]
+	} else {
+		ip = ipv6[1 : len(ipv6)-1]
 	}
 
 	// Try authorizing using a json web token
@@ -231,7 +233,6 @@ func authorize(c APIContext, r AccessRole) (AccessLevel, string, string) {
 				return LevelDenied, e.Error(), ""
 			}
 		}
-		log.Debugf("authorize - calling getAccessor by uuid: %s ip: %s", uuid, ip)
 		acc, found := getAccessor(uuid, ip)
 		if found {
 			// authorize JWT roles
@@ -277,7 +278,6 @@ func authorize(c APIContext, r AccessRole) (AccessLevel, string, string) {
 func checkClientIP(client *tls.ClientHelloInfo) (*tls.Config, error) {
 	ip := client.Conn.RemoteAddr().String()
 	ip = strings.Split(ip, ":")[0]
-	log.Debugf("checkClientIP - calling getAccessor uuid: %s ip: %s", ip, ip)
 	_, found := getAccessor(ip, ip)
 
 	if found {
